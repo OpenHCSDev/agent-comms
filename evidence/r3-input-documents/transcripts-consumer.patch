@@ -1,0 +1,72 @@
+diff --git a/src/agent_comms/transcripts.py b/src/agent_comms/transcripts.py
+index d88ee7a..b7990a4 100644
+--- a/src/agent_comms/transcripts.py
++++ b/src/agent_comms/transcripts.py
+@@ -542,13 +542,14 @@ class Transcripts:
+         bindings. A prompt prefix or a matching body alone is not evidence.
+         No transcript, input disposition, delivery/read cursor, or model is changed.
+         """
++        from .input_attempt import InputAttempt
+         from .input_disposition import InputDispositions
+         from .routing import ScheduledTurn
+ 
+-        rows = InputDispositions(self.root).bound_bus_inputs()
++        rows = InputDispositions(self.root / InputDispositions.filename).read().bound_bus_inputs()
+         existing = self.routes.input_bindings()
+-        groups: dict[str, list[dict[str, Any]]] = {}
+-        needed = {row["sequence"] for row in rows}
++        groups: dict[str, list[InputAttempt]] = {}
++        needed = {row.sequence for row in rows}
+         envelopes: dict[int, Message] = {}
+         aliases = self.registry.snapshot().aliases
+         report: dict[str, int | bool] = {
+@@ -560,30 +561,28 @@ class Transcripts:
+             "conflicts": 0,
+         }
+         for row in rows:
+-            groups.setdefault(row["native_id"], []).append(row)
++            groups.setdefault(row.native_id, []).append(row)
+         with self.bus.log.full_history_snapshot() as (_, messages):
+             for message in messages:
+                 if message.seq in needed:
+                     envelopes[message.seq] = message
+         for native_id, group in groups.items():
+-            group.sort(key=lambda row: row["sequence"])
+-            proof = {
+-                (row["owner"], row["admission"], row["turn_id"], row["sent_text"]) for row in group
+-            }
++            group.sort(key=lambda row: row.sequence)
++            proof = {(row.owner, row.admission, row.turn_id, row.sent_text) for row in group}
+             if (
+                 len(proof) != 1
+-                or len({row["sequence"] for row in group}) != len(group)
+-                or (len(group) > 1 and not all(is_channel_target(row["target"]) for row in group))
++                or len({row.sequence for row in group}) != len(group)
++                or (len(group) > 1 and not all(is_channel_target(row.target) for row in group))
+             ):
+                 report["conflicts"] += 1
+                 continue
+             origins: list[Message] = []
+             for row in group:
+-                candidate = envelopes.get(row["sequence"])
++                candidate = envelopes.get(row.sequence)
+                 if (
+                     candidate is None
+-                    or row["target"] != candidate.target
+-                    or row["source_text"]
++                    or row.target != candidate.target
++                    or row.source_text
+                     not in {
+                         ScheduledTurn.incoming(candidate).prompt,
+                         ScheduledTurn.incoming(candidate, aliases=aliases).prompt,
+@@ -591,8 +590,8 @@ class Transcripts:
+                 ):
+                     break
+                 origins.append(candidate)
+-            source = "\n\n".join(row["source_text"] for row in group)
+-            sent_text = group[0]["sent_text"]
++            source = "\n\n".join(row.source_text for row in group)
++            sent_text = group[0].sent_text
+             if len(origins) != len(group) or not sent_text.endswith(source):
+                 report["skipped"] += 1
+                 continue

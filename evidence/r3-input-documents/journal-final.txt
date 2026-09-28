@@ -1,0 +1,391 @@
+.........F...................................................FFFF
+=================================== FAILURES ===================================
+_ test_lost_durable_record_ack_never_advances_or_schedules_then_never_replays __
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/journal-final/test_lost_durable_record_ack_n0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd1d27b1470>
+
+    async def test_lost_durable_record_ack_never_advances_or_schedules_then_never_replays(tmp_path, monkeypatch):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        project = tmp_path / "worker"
+        await agent.new_session(str(project))
+        comms.threads.register(Thread("peer", frozenset(), str(project)))
+        message = comms.messaging.send("peer", "worker", "Exactly one durable input")
+        store = agent.inputs.dispositions
+        cursor_before = agent.inputs.delivery_cursors.path.read_bytes()
+        original = LockedStore._write_unlocked
+        lost = False
+    
+        def lose_ack(self, text):
+            nonlocal lost
+            original(self, text)
+            if self.path == store.path and not lost:
+                lost = True
+                raise OSError("durable input acknowledgement lost")
+    
+        monkeypatch.setattr(LockedStore, "_write_unlocked", lose_ack)
+        try:
+            with pytest.raises(OSError, match="acknowledgement lost"):
+                await agent.inputs.drain_inbox("worker")
+            assert agent.inputs.delivery_cursors.path.read_bytes() == cursor_before
+            assert not agent.inputs.pending_turns.get("worker")
+            assert not agent.inputs.backend_inboxes
+>           row = store.read().rows[f"bus:{message.seq}"]
+                                           ^^^^^^^^^^^
+E           AttributeError: 'str' object has no attribute 'seq'
+
+tests/test_input_documents.py:78: AttributeError
+________ test_reservation_is_durable_unresolved_and_blocks_every_input _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d2648690>, '/home/ts/wt/.r3doc/journal-final/test_r...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d2648690>
+session_file = '/home/ts/wt/.r3doc/journal-final/test_reservation_is_durable_un0/session.jsonl'
+source = {'source': {'witnessRevision': 'dev:ino:size:mtime:ctime', 'turnId': 'turn'}, 'selected': {'provider': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+operation_id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', fresh_session = None
+admission_epoch = None
+
+    def reserve_selected_summary(
+        self,
+        session_file: str,
+        source: dict,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_epoch: int | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
+        private = Path(canonical).is_relative_to(private_sessions)
+        if private and fresh_session is not None:
+            # Never infer coverage from a visible file, missing marker, or an
+            # enrolment SQL row alone after an uncertain fsync/restart. The
+            # original O_EXCL creation object must still be in this process.
+            from .fresh_private_session import FreshPrivateSession
+    
+            if type(fresh_session) is not FreshPrivateSession:
+                raise CompactionJournalError(
+                    "Private selected reservation requires reviewed raw-history coverage floor"
+                )
+            fresh_session.verify_saved_identity()
+            if fresh_session.path != Path(canonical) or (
+                admission_epoch is not None and type(admission_epoch) is not int
+            ):
+                raise CompactionJournalError("Fresh private selected identity changed")
+        if (
+            type(source) is not dict
+            or set(source) != {"source", "selected", "settings"}
+            or any(type(value) is not dict or not value for value in source.values())
+        ):
+            raise ValueError("Source, selected route and settings witnesses required")
+        payload = json.dumps(source, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if len(payload.encode()) > 65536:
+            raise ValueError("Selected summary source exceeds bound")
+        if "reservedRevision" in source["source"]:
+            from .backend import _session_revision
+    
+            revision = _session_revision(canonical)
+            if revision is None or source["source"]["reservedRevision"] != json.loads(
+                json.dumps(revision)
+            ):
+                raise ValueError("Selected summary saved source revision changed")
+        if "originalSha256" in source["source"]:
+            from .input_disposition import InputDispositions
+    
+            witness = source["source"]
+            key = witness.get("ingressKey")
+            row = InputDispositions(self.path.parent / InputDispositions.filename).read().rows.get(key) if type(key) is str else None
+            if (
+                row is None
+                or not row.unresolved
+                or row.native_id is not None
+                or row.owner != witness.get("ownerName")
+                or row.admission != witness.get("admissionGeneration")
+                or hashlib.sha256(row.source_text.encode()).hexdigest()
+                != witness["originalSha256"]
+            ):
+                raise ValueError("Selected summary durable original input changed")
+        try:
+>           with InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs, self._transaction() as db:
+                 ^^^^^^^^^^^^^^^^^
+E           UnboundLocalError: cannot access local variable 'InputDispositions' where it is not associated with a value
+
+src/agent_comms/compaction_journal.py:531: UnboundLocalError
+______ test_raw_send_fence_blocks_every_same_session_status_not_unrelated ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d2648640>, '/home/ts/wt/.r3doc/journal-final/test_r...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved):
+        journal, session, source = reserved
+        other = Path(session).with_name("other.jsonl")
+        other.write_text('{"type":"session","id":"other"}\n')
+        with journal.ordinary_input_send_fence(Path(session)):
+            pass
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d2648640>
+session_file = '/home/ts/wt/.r3doc/journal-final/test_raw_send_fence_blocks_eve0/session.jsonl'
+source = {'source': {'witnessRevision': 'dev:ino:size:mtime:ctime', 'turnId': 'turn'}, 'selected': {'provider': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+operation_id = '8e525a1754c949eeaaea5dbaa8162f47', fresh_session = None
+admission_epoch = None
+
+    def reserve_selected_summary(
+        self,
+        session_file: str,
+        source: dict,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_epoch: int | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
+        private = Path(canonical).is_relative_to(private_sessions)
+        if private and fresh_session is not None:
+            # Never infer coverage from a visible file, missing marker, or an
+            # enrolment SQL row alone after an uncertain fsync/restart. The
+            # original O_EXCL creation object must still be in this process.
+            from .fresh_private_session import FreshPrivateSession
+    
+            if type(fresh_session) is not FreshPrivateSession:
+                raise CompactionJournalError(
+                    "Private selected reservation requires reviewed raw-history coverage floor"
+                )
+            fresh_session.verify_saved_identity()
+            if fresh_session.path != Path(canonical) or (
+                admission_epoch is not None and type(admission_epoch) is not int
+            ):
+                raise CompactionJournalError("Fresh private selected identity changed")
+        if (
+            type(source) is not dict
+            or set(source) != {"source", "selected", "settings"}
+            or any(type(value) is not dict or not value for value in source.values())
+        ):
+            raise ValueError("Source, selected route and settings witnesses required")
+        payload = json.dumps(source, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if len(payload.encode()) > 65536:
+            raise ValueError("Selected summary source exceeds bound")
+        if "reservedRevision" in source["source"]:
+            from .backend import _session_revision
+    
+            revision = _session_revision(canonical)
+            if revision is None or source["source"]["reservedRevision"] != json.loads(
+                json.dumps(revision)
+            ):
+                raise ValueError("Selected summary saved source revision changed")
+        if "originalSha256" in source["source"]:
+            from .input_disposition import InputDispositions
+    
+            witness = source["source"]
+            key = witness.get("ingressKey")
+            row = InputDispositions(self.path.parent / InputDispositions.filename).read().rows.get(key) if type(key) is str else None
+            if (
+                row is None
+                or not row.unresolved
+                or row.native_id is not None
+                or row.owner != witness.get("ownerName")
+                or row.admission != witness.get("admissionGeneration")
+                or hashlib.sha256(row.source_text.encode()).hexdigest()
+                != witness["originalSha256"]
+            ):
+                raise ValueError("Selected summary durable original input changed")
+        try:
+>           with InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs, self._transaction() as db:
+                 ^^^^^^^^^^^^^^^^^
+E           UnboundLocalError: cannot access local variable 'InputDispositions' where it is not associated with a value
+
+src/agent_comms/compaction_journal.py:531: UnboundLocalError
+_________ test_raw_send_fence_serializes_concurrent_direct_reservation _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d264ba20>, '/home/ts/wt/.r3doc/journal-final/test_r...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_raw_send_fence_serializes_concurrent_direct_reservation(reserved):
+        journal, session, source = reserved
+        started, finished = threading.Event(), threading.Event()
+        failures: list[BaseException] = []
+    
+        def reserve() -> None:
+            started.set()
+            try:
+                journal.reserve_selected_summary(session, source)
+            except BaseException as error:
+                failures.append(error)
+            finally:
+                finished.set()
+    
+        worker = threading.Thread(target=reserve, daemon=True)
+        with journal.ordinary_input_send_fence(Path(session)):
+            worker.start()
+            assert started.wait(2)
+>           assert not finished.wait(0.05), "reservation committed during raw-send exclusion"
+E           AssertionError: reservation committed during raw-send exclusion
+E           assert not True
+E            +  where True = wait(0.05)
+E            +    where wait = <threading.Event at 0x7fd1d23ab460: set>.wait
+
+tests/test_selected_summary_journal.py:105: AssertionError
+_ test_legacy_private_session_without_marker_fails_closed_at_selected_reserve __
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d23d7f20>, '/home/ts/wt/.r3doc/journal-final/test_l...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_legacy_private_session_without_marker_fails_closed_at_selected_reserve(reserved):
+        journal, session, source = reserved
+        private_dir = journal.path.parent / "native-sessions" / ("f" * 32)
+        private_dir.mkdir(parents=True)
+        saved = private_dir / "old-pr94-session.jsonl"
+        saved.write_text('{"type":"session","id":"legacy"}\n')
+        # This file can predate marker deployment; absence of a marker never
+        # proves it has no old PR94 raw or UNKNOWN input on the same session.
+        with sqlite3.connect(journal.path) as db:
+            assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
+        with pytest.raises(CompactionJournalError, match="coverage floor"):
+>           journal.reserve_selected_summary(str(saved), source)
+
+tests/test_selected_summary_journal.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.compaction_journal.CompactionJournal object at 0x7fd1d23d7f20>
+session_file = '/home/ts/wt/.r3doc/journal-final/test_legacy_private_session_wi0/native-sessions/ffffffffffffffffffffffffffffffff/old-pr94-session.jsonl'
+source = {'source': {'witnessRevision': 'dev:ino:size:mtime:ctime', 'turnId': 'turn'}, 'selected': {'provider': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+operation_id = 'a4baa6543b0e4fde91d190e837d2e259', fresh_session = None
+admission_epoch = None
+
+    def reserve_selected_summary(
+        self,
+        session_file: str,
+        source: dict,
+        *,
+        operation_id: str | None = None,
+        fresh_session: FreshPrivateSession | None = None,
+        admission_epoch: int | None = None,
+    ) -> str:
+        """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
+    
+        All selected attempts, including terminal-looking ones, remain blocking
+        until separately reviewed exact-ID recovery exists. A failure before
+        writing stdin does not authorize retry.
+        The caller must separately retain owner/turn/ingress authority; this
+        journal is only an exclusion and recovery record, never a bearer grant.
+        """
+        operation_id = uuid4().hex if operation_id is None else operation_id
+        if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+            raise ValueError("Expected exact selected summary operation ID")
+        canonical = str(Path(session_file).resolve(strict=True))
+        info = Path(canonical).lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            # An outward hardlink can alias a private saved inode while its
+            # lexical path evades the private-root floor. Never reserve on a
+            # multiply linked inode, regardless of the supplied path.
+            raise CompactionJournalError("Selected saved session must have one private inode link")
+        private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
+        private = Path(canonical).is_relative_to(private_sessions)
+        if private and fresh_session is not None:
+            # Never infer coverage from a visible file, missing marker, or an
+            # enrolment SQL row alone after an uncertain fsync/restart. The
+            # original O_EXCL creation object must still be in this process.
+            from .fresh_private_session import FreshPrivateSession
+    
+            if type(fresh_session) is not FreshPrivateSession:
+                raise CompactionJournalError(
+                    "Private selected reservation requires reviewed raw-history coverage floor"
+                )
+            fresh_session.verify_saved_identity()
+            if fresh_session.path != Path(canonical) or (
+                admission_epoch is not None and type(admission_epoch) is not int
+            ):
+                raise CompactionJournalError("Fresh private selected identity changed")
+        if (
+            type(source) is not dict
+            or set(source) != {"source", "selected", "settings"}
+            or any(type(value) is not dict or not value for value in source.values())
+        ):
+            raise ValueError("Source, selected route and settings witnesses required")
+        payload = json.dumps(source, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if len(payload.encode()) > 65536:
+            raise ValueError("Selected summary source exceeds bound")
+        if "reservedRevision" in source["source"]:
+            from .backend import _session_revision
+    
+            revision = _session_revision(canonical)
+            if revision is None or source["source"]["reservedRevision"] != json.loads(
+                json.dumps(revision)
+            ):
+                raise ValueError("Selected summary saved source revision changed")
+        if "originalSha256" in source["source"]:
+            from .input_disposition import InputDispositions
+    
+            witness = source["source"]
+            key = witness.get("ingressKey")
+            row = InputDispositions(self.path.parent / InputDispositions.filename).read().rows.get(key) if type(key) is str else None
+            if (
+                row is None
+                or not row.unresolved
+                or row.native_id is not None
+                or row.owner != witness.get("ownerName")
+                or row.admission != witness.get("admissionGeneration")
+                or hashlib.sha256(row.source_text.encode()).hexdigest()
+                != witness["originalSha256"]
+            ):
+                raise ValueError("Selected summary durable original input changed")
+        try:
+>           with InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs, self._transaction() as db:
+                 ^^^^^^^^^^^^^^^^^
+E           UnboundLocalError: cannot access local variable 'InputDispositions' where it is not associated with a value
+
+src/agent_comms/compaction_journal.py:531: UnboundLocalError
+=========================== short test summary info ============================
+FAILED tests/test_input_documents.py::test_lost_durable_record_ack_never_advances_or_schedules_then_never_replays
+FAILED tests/test_selected_summary_journal.py::test_reservation_is_durable_unresolved_and_blocks_every_input
+FAILED tests/test_selected_summary_journal.py::test_raw_send_fence_blocks_every_same_session_status_not_unrelated
+FAILED tests/test_selected_summary_journal.py::test_raw_send_fence_serializes_concurrent_direct_reservation
+FAILED tests/test_selected_summary_journal.py::test_legacy_private_session_without_marker_fails_closed_at_selected_reserve
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+5 failed, 60 passed in 5.19s

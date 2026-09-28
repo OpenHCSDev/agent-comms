@@ -4,6 +4,7 @@ Only PI_COMPACTION_TEST_PACKAGE selects a disposable, patched package. No
 provider calls or installed package edits. Normal unit suites skip this file.
 """
 
+
 import copy
 import hashlib
 import json
@@ -376,7 +377,7 @@ def test_new_correction_send_invalidates_pre_summary_source(native):
 
 def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown(native):
     bridge, owner, epoch, witness = native
-    inputs = InputDispositions(bridge.root)
+    inputs = InputDispositions(bridge.root / InputDispositions.filename)
     inputs.record(
         "acp:queued",
         seq=None,
@@ -389,14 +390,14 @@ def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown
         bridge.capture_source(owner, epoch, witness)
     with pytest.raises(RelationViolationError, match="Unsettled"):
         bridge.commit(owner, epoch, witness, "summary", 42)
-    assert inputs.status("acp:queued") == "unknown"
+    assert inputs.read().rows["acp:queued"].declared_name == "unknown"
     assert bridge.journal.unresolved(witness.session_file) == ()
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_only_exact_unattempted_original_input_can_cross_source_and_commit(native):
     bridge, owner, epoch, witness = native
-    inputs = InputDispositions(bridge.root)
+    inputs = InputDispositions(bridge.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     assert admission is not None
     inputs.record(
@@ -415,13 +416,13 @@ def test_only_exact_unattempted_original_input_can_cross_source_and_commit(nativ
         bridge, owner, epoch, witness, "summary", 42, source=source
     )
     assert result.state.declared_name == "committed"
-    assert inputs.status("acp:original") == "unknown"
-    assert inputs.get("acp:original")["native_id"] is None
+    assert inputs.read().rows["acp:original"].declared_name == "unknown"
+    assert inputs.read().rows.get("acp:original").native_id is None
 
 
 def test_original_input_exception_refuses_other_unknown_or_bound_original(native):
     bridge, owner, epoch, witness = native
-    inputs = InputDispositions(bridge.root)
+    inputs = InputDispositions(bridge.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     assert admission is not None
     inputs.record(
@@ -461,7 +462,7 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
 def test_bus_unknown_cannot_borrow_direct_original_exception(native):
     bridge, owner, epoch, witness = native
     assert owner.active_turn is not None
-    InputDispositions(bridge.root).record(
+    InputDispositions(bridge.root / InputDispositions.filename).record(
         "bus:1",
         seq=1,
         owner=owner.name,
@@ -476,7 +477,7 @@ def test_bus_unknown_cannot_borrow_direct_original_exception(native):
 
 def test_changed_started_input_still_invalidates_pre_summary_source(native):
     bridge, owner, epoch, witness = native
-    inputs = InputDispositions(bridge.root)
+    inputs = InputDispositions(bridge.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     inputs.record(
         "acp:new",
@@ -542,7 +543,7 @@ with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     else:
         raise AssertionError('authority escaped before native write')
 if mutation == 'input':
-    InputDispositions(root).record('acp:late', seq=None, owner='owner', admission=int(sys.argv[3]), target='owner', text='late correction')
+    InputDispositions(root / InputDispositions.filename).record('acp:late', seq=None, owner='owner', admission=int(sys.argv[3]), target='owner', text='late correction')
 else:
     registry = Registration(root / 'registry.json')
     if mutation == 'stop':
@@ -677,7 +678,14 @@ def test_missing_write_reconciles_absence_only_at_unchanged_revision(native, mon
         == "aborted-no-write"
     )
     with pytest.raises(CompactionJournalError):
-        bridge.journal.begin(witness.session_file, {}, commit_id=operation.commit_id)
+        bridge.journal.begin(
+            witness.session_file,
+            {},
+            commit_id=operation.commit_id,
+            inputs=InputDispositions(
+                bridge.journal.path.parent / InputDispositions.filename
+            ).read(),
+        )
 
 
 def test_stopped_owner_refused_before_journal_or_native_mutation(native):

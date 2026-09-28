@@ -136,7 +136,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
                 )
                 InputDrain.schedule_wake(agent.inputs, "parent")
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], timeout=2)
-            assert agent.inputs.dispositions.status(f"bus:{message.seq}") == (
+            assert agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == (
                 "unknown" if wake == "revoked" else "started"
             )
         assert len(calls) == (1 if wake == "revoked" else 2)
@@ -427,7 +427,10 @@ async def test_standby_refuses_reply_that_arrived_before_wait(
     try:
         if already_drained:
             await agent.inputs.drain_inbox("parent")
-            assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
+            assert (
+                agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name
+                == "unknown"
+            )
         with pytest.raises(ValueError, match=f"Dependency reply {message.seq}.*pending or UNKNOWN"):
             comms.goals.update_goal(
                 "parent",

@@ -1,0 +1,170 @@
+....................................FFFF..........................       [100%]
+=================================== FAILURES ===================================
+_____________ test_idle_owner_original_input_continues_active_goal _____________
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/goals/test_idle_owner_original_input0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe606942f90>
+
+    @pytest.mark.asyncio
+    async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeypatch):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+    
+        async def events(*args, **kwargs):
+            native_id = "a" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            session.write_text(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "id": "owner-input",
+                        "message": {
+                            "role": "user",
+                            "inputId": native_id,
+                            "content": [{"type": "text", "text": args[2]}],
+                        },
+                    }
+                )
+                + "\n"
+            )
+            assert kwargs["native_start"](None, native_id, args[2])
+            yield ae.InputStarted(id=None)
+            yield ae.Chunk(text="Read the requested file.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Read the requested file.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            await agent.inputs.run_owned_input("project", "project", "testing steering")
+            rows = disposition_rows(agent)
+>           assert len(rows) == 1 and rows[0]["status"] == "started"
+                                      ^^^^^^^^^^^^^^^^^
+E           TypeError: 'StartedInput' object is not subscriptable
+
+tests/test_acp_goal_original_input.py:78: TypeError
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[activated] _
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/goals/test_changed_goal_before_origi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe6069431c0>
+existing_goal = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        if existing_goal:
+            comms.goals.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
+        original_emit = agent.inputs.emit_input_disposition
+        replacement = None
+        backend_calls = 0
+    
+        async def activate_after_admission(session_id, row):
+            nonlocal replacement
+            await original_emit(session_id, row)
+            if replacement is None:
+                replacement = comms.goals.update_goal(
+                    "project", SetGoalAction(text="New authority"), owner_store=store
+                )
+    
+        async def events(*args, **kwargs):
+            nonlocal backend_calls
+            backend_calls += 1
+            yield ae.Done(ok=False, text="Must not reach backend")
+    
+        monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            with pytest.raises(RequestError) as refused:
+                await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
+            assert refused.value.data == {"reason": "input_authority_changed"}
+            assert backend_calls == 0
+            rows = disposition_rows(agent)
+>           assert len(rows) == 1 and rows[0]["status"] == "unknown"
+                                      ^^^^^^^^^^^^^^^^^
+E           TypeError: 'UnknownInput' object is not subscriptable
+
+tests/test_acp_goal_original_input.py:121: TypeError
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced] __
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/goals/test_changed_goal_before_origi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe605105160>
+existing_goal = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        if existing_goal:
+            comms.goals.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
+        original_emit = agent.inputs.emit_input_disposition
+        replacement = None
+        backend_calls = 0
+    
+        async def activate_after_admission(session_id, row):
+            nonlocal replacement
+            await original_emit(session_id, row)
+            if replacement is None:
+                replacement = comms.goals.update_goal(
+                    "project", SetGoalAction(text="New authority"), owner_store=store
+                )
+    
+        async def events(*args, **kwargs):
+            nonlocal backend_calls
+            backend_calls += 1
+            yield ae.Done(ok=False, text="Must not reach backend")
+    
+        monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            with pytest.raises(RequestError) as refused:
+                await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
+            assert refused.value.data == {"reason": "input_authority_changed"}
+            assert backend_calls == 0
+            rows = disposition_rows(agent)
+>           assert len(rows) == 1 and rows[0]["status"] == "unknown"
+                                      ^^^^^^^^^^^^^^^^^
+E           TypeError: 'UnknownInput' object is not subscriptable
+
+tests/test_acp_goal_original_input.py:121: TypeError
+____________ test_original_goal_input_cannot_send_after_owner_stops ____________
+
+tmp_path = PosixPath('/home/ts/wt/.r3doc/goals/test_original_goal_input_canno0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe605107310>
+
+    @pytest.mark.asyncio
+    async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+        boundaries = []
+    
+        async def events(*args, **kwargs):
+            comms.registry.unregister("project")
+            with kwargs["send_boundary"](None, "b" * 32, args[2]) as allowed:
+                boundaries.append(allowed)
+            yield ae.Done(ok=False, text="Owner stopped before send")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            await agent.inputs.run_owned_input("project", "project", "do not send after stop")
+            assert boundaries == [False]
+            rows = disposition_rows(agent)
+>           assert len(rows) == 1 and rows[0]["status"] == "unknown"
+                                      ^^^^^^^^^^^^^^^^^
+E           TypeError: 'UnknownInput' object is not subscriptable
+
+tests/test_acp_goal_original_input.py:151: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_goal_original_input.py::test_idle_owner_original_input_continues_active_goal
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[activated]
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced]
+FAILED tests/test_acp_goal_original_input.py::test_original_goal_input_cannot_send_after_owner_stops
+4 failed, 62 passed in 15.11s

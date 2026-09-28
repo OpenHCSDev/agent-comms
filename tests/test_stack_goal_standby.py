@@ -251,24 +251,27 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 assert agent.turns.persistent_backends["parent"].proc is first_proc
             else:
                 assert first_proc.returncode is not None
-            assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
+            assert (
+                agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name
+                == "started"
+            )
             for key in pending_keys:
-                row = agent.inputs.dispositions.get(key)
-                assert row["status"] == "unknown" and row["native_id"] is None
-                assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
+                row = agent.inputs.dispositions.read().rows.get(key)
+                assert row.declared_name == "unknown" and row.native_id is None
+                assert row.reviewed_for_goal(goal.id)
             assert comms.registry.require("parent").goal.state.declared_name == "completed"
             assert agent.turns.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()
             session = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in session.read_text().splitlines()]
-            users = [row["message"] for row in rows if row.get("message", {}).get("role") == "user"]
+            users = [row.message for row in rows if row.get("message", {}).get("role") == "user"]
             assert len(users) == 2 and users[1]["inputId"]
             assert message.body in json.dumps(users[1]["content"])
             tool_results = [
-                row["message"]
+                row.message
                 for row in rows
                 if row.get("message", {}).get("toolName") == "comms_goal"
             ]
-            assert len(tool_results) == 2 and not any(row.get("isError") for row in tool_results)
+            assert len(tool_results) == 2 and not any(row.isError for row in tool_results)
         finally:
             await agent.shutdown()
             server.shutdown()

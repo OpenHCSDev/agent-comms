@@ -858,7 +858,7 @@ class TestAgentTurn:
             "text": "lost prompt",
             "reason": "Pi preflight ended before attestation",
         }
-        assert agent.inputs.dispositions.status(key) == "unknown"
+        assert agent.inputs.dispositions.read().rows[key].declared_name == "unknown"
         agent.inputs.dispositions.bind(
             key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
         )

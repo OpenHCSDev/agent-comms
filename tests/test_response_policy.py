@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import Message, MessageType
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn

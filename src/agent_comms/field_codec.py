@@ -37,7 +37,8 @@ def projected(*, view: str, name: str | None = None):
 
 
 class FieldCodec:
-    """Family tags use ``kind``; aliases use field(metadata={"wire_name": ...}).
+    """Family tags use their declared ``family_discriminator`` (default ``kind``); aliases
+    use field(metadata={"wire_name": ...}).
 
     Decoding rejects unknown fields and primitive coercions (including bool as
     int). Missing fields use declared defaults. Tuple fields round-trip as JSON
@@ -54,7 +55,9 @@ class FieldCodec:
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
-        if len(set(keys)) != len(keys) or (issubclass(cls, DeclaredFamily) and "kind" in keys):
+        if len(set(keys)) != len(keys) or (
+            issubclass(cls, DeclaredFamily) and cls.family_discriminator in keys
+        ):
             raise TypeError("Conflicting wire field names.")
         return [
             item
@@ -75,14 +78,24 @@ class FieldCodec:
     @classmethod
     def encode(cls, value: object) -> Any:
         if is_dataclass(value) and not isinstance(value, type):
-            result = {"kind": value.declared_name} if isinstance(value, DeclaredFamily) else {}
+            result = (
+                {value.family_discriminator: value.declared_name} if isinstance(value, DeclaredFamily) else {}
+            )
             result.update(
                 (key, cls.encode(getattr(value, field.name)))
                 for field, key in cls._fields(type(value))
                 if not (
                     field.metadata.get("wire_omit_default")
-                    and field.default is not MISSING
-                    and getattr(value, field.name) == field.default
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
                 )
             )
             return result
@@ -178,11 +191,12 @@ class FieldCodec:
         if isinstance(target, type) and issubclass(target, DeclaredFamily):
             if not isinstance(data, dict):
                 raise ValueError("Expected a family object.")
-            name = data.get("kind")
+            tag = target.family_discriminator
+            name = data.get(tag)
             if not isinstance(name, str):
-                raise ValueError("Expected a string family kind.")
+                raise ValueError(f"Expected a string family {tag}.")
             target = target.decode(name)
-            data = {key: value for key, value in data.items() if key != "kind"}
+            data = {key: value for key, value in data.items() if key != tag}
         if isinstance(target, type) and is_dataclass(target):
             if not isinstance(data, dict):
                 raise ValueError("Expected a record object.")

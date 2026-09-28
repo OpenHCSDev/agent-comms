@@ -127,9 +127,9 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         state = agent.turns.goal_store.snapshot(observed["goal"].id)
         assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
-        assert InputDispositions(comms.root).status(key) == (
-            "unknown" if queued_before_activation else "started"
-        )
+        assert InputDispositions(comms.root / InputDispositions.filename).read().rows[
+            key
+        ].declared_name == ("unknown" if queued_before_activation else "started")
         assert await replay(agent) == ["Set a goal as typed"] + (
             [] if queued_before_activation else ["follow-up as typed"]
         )
@@ -182,9 +182,9 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             "project", "project", "Continue working toward the active goal.", autonomous_goal=True
         )
         key = "acp:" + observed["public_id"]
-        assert InputDispositions(comms.root).status(key) == (
-            "started" if change is None else "unknown"
-        )
+        assert InputDispositions(comms.root / InputDispositions.filename).read().rows[
+            key
+        ].declared_name == ("started" if change is None else "unknown")
         assert await replay(agent) == (["follow-up as typed"] if change is None else [])
         current = comms.registry.require("project").goal
         if change is None:

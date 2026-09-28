@@ -161,8 +161,8 @@ async def maybe_compact_owner_turn(
     if summary_strategy is None:
         assert input_text is not None and on_admission is not None
         revision = _session_revision(owner.session_file)
-        original = bridge.inputs.get(original_input_key)
-        if revision is None or original is None or type(original["source_text"]) is not str:
+        original = bridge.inputs.read().rows.get(original_input_key)
+        if revision is None or original is None:
             raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
         digest = hashlib.sha256(input_text.encode()).hexdigest()
         identity = SelectedAdmissionIdentity(
@@ -174,7 +174,7 @@ async def maybe_compact_owner_turn(
             admission_generation=owner.active_turn.admission_generation,
             correction_witness=f"{owner.active_turn.admission_generation}:{digest}",
             input_sha256=digest,
-            original_sha256=hashlib.sha256(original["source_text"].encode()).hexdigest(),
+            original_sha256=hashlib.sha256(original.source_text.encode()).hexdigest(),
             reserved_revision=revision,
             session_revision=revision,
         )

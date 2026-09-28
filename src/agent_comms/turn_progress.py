@@ -197,9 +197,8 @@ class TurnProgress(events.AgentEventConsumer):
     async def done(self, event: events.Done) -> events.Done:
         execution = self.execution
         self.terminal_failure = asdict(event)
-        unknown_attempts = any(
-            execution.runner.inputs.dispositions.status(key) != "started"
-            for key in execution.runner.inputs.turn_input_keys.get(execution.session_id, set())
+        unknown_attempts = not execution.runner.inputs.dispositions.read().all_started(
+            execution.runner.inputs.turn_input_keys.get(execution.session_id, set())
         )
         if event.ok is True and (
             execution.runner.inputs.forwarded_inputs.get(execution.session_id) or unknown_attempts

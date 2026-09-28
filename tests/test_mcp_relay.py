@@ -479,10 +479,10 @@ input.on('line', async line => {{
     }}}});
   }} else if (row.type==='prompt') {{
     send({{type:'response',id:row.id,command:'prompt',success:true}});
-    const receipt=await liveStatusReceipt(runtime,ctx,row.inputId);
+    const receipt=await liveStatusReceipt(runtime,ctx,row["inputId"]);
     send({{type:'extension_ui_request',id:'early',method:'setStatus',
       statusKey:'pi-mcp/live-v1',statusText:JSON.stringify(receipt)}});
-    send({{type:'message_start',message:{{role:'user',content:row.message,inputId:row.inputId}}}});
+    send({{type:'message_start',message:{{role:'user',content:row.message,inputId:row["inputId"]}}}});
     send({{type:'extension_ui_request',id:'wrong-input',method:'setStatus',
       statusKey:'pi-mcp/live-v1',statusText:JSON.stringify({{...receipt,inputId:'b'.repeat(32)}})}});
     send({{type:'extension_ui_request',id:'live',method:'setStatus',

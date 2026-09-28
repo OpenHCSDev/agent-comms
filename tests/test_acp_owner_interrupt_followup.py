@@ -55,7 +55,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         target=session,
         text="Never replay historical uncertainty",
     )
-    old_row = agent.inputs.dispositions.get(old_key)
+    old_row = agent.inputs.dispositions.read().rows.get(old_key)
 
     async def events(*args, **kwargs):
         native_id = "a" * 32
@@ -141,17 +141,19 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
             direct_interrupt_input_key=queued.direct_interrupt_input_key,
             direct_interrupt_ticket=queued.direct_interrupt_ticket,
         )
-        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
+        assert (
+            agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name == "started"
+        )
         owner_rows = [
             r
-            for k, r in agent.inputs.dispositions._read().items()
+            for k, r in agent.inputs.dispositions.read().rows.items()
             if k.startswith("acp:") and k != old_key
         ]
         assert len(owner_rows) == 1
-        assert owner_rows[0]["status"] == ("started" if change is None else "unknown")
+        assert owner_rows[0].declared_name == ("started" if change is None else "unknown")
         if change is not None:
-            assert owner_rows[0]["native_id"] is None
-        assert agent.inputs.dispositions.get(old_key) == old_row
+            assert owner_rows[0].native_id is None
+        assert agent.inputs.dispositions.read().rows.get(old_key) == old_row
         assert comms.registry.require(session).goal == expected_state["goal"]
         assert comms.goals.goal_wait(session) == expected_state["wait"]
         assert not (comms.root / "goal-private").exists()
@@ -233,7 +235,7 @@ for line in sys.stdin:
         )
         public_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
         await asyncio.wait_for(turn, 5)
-        assert agent.inputs.dispositions.status("acp:" + public_id) == "started"
+        assert agent.inputs.dispositions.read().rows["acp:" + public_id].declared_name == "started"
         commands = [json.loads(line) for line in received.read_text().splitlines()]
         assert len(commands) == 2
         assert commands[1]["message"] == "User follow-up:\nFresh owner request"

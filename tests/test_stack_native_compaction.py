@@ -128,7 +128,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
         if case == "post_compaction_tool_rounds":
             rows = [json.loads(line) for line in session.read_text().splitlines()]
-            rows[1]["message"]["content"][0]["text"] = "LEGACY_DISCARDED_HISTORY " + "x" * 6000
+            rows[1].message["content"][0]["text"] = "LEGACY_DISCARDED_HISTORY " + "x" * 6000
             session.write_text("".join(json.dumps(row) + "\n" for row in rows))
             for index in range(3):
                 (project / f"read-{index}.txt").write_text(f"TOOL_ROUND_{index}\n")
@@ -151,10 +151,10 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                         {
                             "type": "compaction",
                             "id": "compact1",
-                            "parentId": rows[-1]["id"],
+                            "parentId": rows[-1].id,
                             "timestamp": boundary,
                             "summary": "Earlier work completed.",
-                            "firstKeptEntryId": rows[-2 if case == "compacted_resume" else 1]["id"],
+                            "firstKeptEntryId": rows[-2 if case == "compacted_resume" else 1].id,
                             "tokensBefore": 200001,
                         }
                     )
@@ -405,7 +405,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             worker.join(timeout=2)
         kinds = [type(event) for event in events]
         if case == "acp_success":
-            rows = InputDispositions(comms.root)._read()
+            rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
             assert len(rows) == 1
             assert next(iter(rows.values()))["status"] == "started"
             assert len(calls) > 1

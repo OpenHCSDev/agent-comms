@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from .goals import Goal
+from .input_attempt import InputAttempt
 from .locked_store import LockedStore
 from .messages import Message
 from .registry_document import RegistrySnapshot
@@ -49,27 +50,25 @@ class GoalInputReview:
     targets: tuple[GoalWaitTarget, ...]
     owners: frozenset[str]
     senders: frozenset[str]
-    unknown: tuple[dict, ...]
+    unknown: tuple[InputAttempt, ...]
     eligible_keys: frozenset[str]
 
     def public(self) -> dict:
-        from .input_disposition import InputDispositions
-
         eligible, reviewed, excluded = [], [], []
         for row in self.unknown:
-            item = InputDispositions.public(row)
-            if row["key"] not in self.eligible_keys:
+            item = row.public()
+            if row.key not in self.eligible_keys:
                 excluded.append(
                     {
                         **item,
                         "reason": (
                             "owner_input_without_bus_sequence"
-                            if row["sequence"] is None
+                            if row.sequence is None
                             else "not_a_direct_reply_from_declared_dependencies"
                         ),
                     }
                 )
-            elif InputDispositions.reviewed_for_goal(row, self.goal_id):
+            elif row.reviewed_for_goal(self.goal_id):
                 reviewed.append(item)
             else:
                 eligible.append(item)

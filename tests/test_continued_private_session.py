@@ -1,6 +1,7 @@
 """Continued private history must join every user to independent live evidence."""
 
 import json
+from dataclasses import replace
 import os
 import sqlite3
 from pathlib import Path
@@ -34,7 +35,7 @@ def continued(tmp_path):
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     session.chmod(0o600)
-    inputs = InputDispositions(tmp_path)
+    inputs = InputDispositions(tmp_path / InputDispositions.filename)
     inputs.record("acp:old", seq=None, owner="owner", admission=1, target="owner", text="old")
     inputs.bind("acp:old", admission=1, turn_id="old-turn", native_id=native_id, text="old")
     inputs.started("acp:old", turn_id="old-turn", native_id=native_id, text="old")
@@ -78,7 +79,8 @@ def test_continued_private_session_needs_no_fresh_object_and_preserves_history(c
 )
 def test_continued_private_uncertain_or_mismatched_history_never_reserves(continued, damage):
     journal, session, inputs, source = continued
-    rows = inputs._read()
+    saved = json.loads(inputs.path.read_text())
+    rows = saved["rows"]
     entries = [json.loads(line) for line in session.read_text().splitlines()]
     if damage == "unknown":
         rows["acp:old"]["status"] = "unknown"
@@ -96,7 +98,7 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
         entries.append(entries[1])
     if damage == "raw":
         journal.reserve_private_raw_input(session, "b" * 32)
-    inputs._write(rows)
+    inputs.path.write_text(json.dumps(saved))
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     if damage != "revision":
         source["source"]["reservedRevision"] = json.loads(
@@ -105,7 +107,7 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     with pytest.raises((CompactionJournalError, ValueError)):
         journal.reserve_selected_summary(str(session), source)
     assert journal.unresolved_selected_summary(str(session)) == ()
-    assert inputs._read() == rows
+    assert json.loads(inputs.path.read_text())["rows"] == rows
 
 
 @pytest.mark.parametrize("damage", [None, "context", "unsettled", "foreign", "no-marker"])
@@ -113,7 +115,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     from agent_comms.coordinated_runtime_schema import _DDL, _DDL_DIGEST
 
     journal, session, inputs, source = continued
-    inputs._write({"acp:new": inputs.get("acp:new")})
+    inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
     if damage != "no-marker":
         journal.reserve_private_raw_input(session, "a" * 32)
     proof = dict(

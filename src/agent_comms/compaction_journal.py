@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+
+from .input_attempt import InputAttempt
+from .input_disposition import InputDispositions, InputDocument
 import os
 import re
 import sqlite3
@@ -103,7 +106,7 @@ class SelectedSummaryAttempt:
             ) from error
         return cls(operation_id, session, source, state)
 
-    def original_has_started(self, inputs: dict[str, dict[str, Any]]) -> bool:
+    def original_has_started(self, inputs: dict[str, InputAttempt]) -> bool:
         """Completed input evidence retires this barrier, never recreates a send token.
 
         The existing input ledger owns native-start proof. A linked/declined
@@ -119,16 +122,15 @@ class SelectedSummaryAttempt:
                 return False
             row = inputs.get(key)
             return row is not None and (
-                row["status"] == "started"
-                and row["native_id"] is not None
-                and row["sequence"] is None
-                and row["owner"] == row["target"] == source["ownerName"]
-                and row["admission"] == source["admissionGeneration"]
-                and row["turn_id"] == source["turnId"]
-                and row["sent_text"] is not None
-                and hashlib.sha256(row["sent_text"].encode()).hexdigest() == source["inputSha256"]
-                and hashlib.sha256(row["source_text"].encode()).hexdigest()
-                == source["originalSha256"]
+                not row.unresolved
+                and row.native_id is not None
+                and row.sequence is None
+                and row.owner == row.target == source["ownerName"]
+                and row.admission == source["admissionGeneration"]
+                and row.turn_id == source["turnId"]
+                and row.sent_text is not None
+                and hashlib.sha256(row.sent_text.encode()).hexdigest() == source["inputSha256"]
+                and hashlib.sha256(row.source_text.encode()).hexdigest() == source["originalSha256"]
             )
         except (KeyError, TypeError, ValueError):
             return False
@@ -302,8 +304,20 @@ class CompactionJournal:
         finally:
             db.close()
 
-    def begin(self, session_file: str, intent: dict, *, commit_id: str | None = None) -> str:
-        """Durably reserve one operation. Every reused ID is forbidden forever."""
+    def begin(
+        self,
+        session_file: str,
+        intent: dict,
+        *,
+        inputs: InputDocument,
+        commit_id: str | None = None,
+    ) -> str:
+        """Durably reserve under the caller's retained input snapshot lock.
+
+        OwnerCompactionCommit already holds the exclusive disposition lock;
+        consuming that snapshot avoids reacquisition and preserves input-before-
+        journal ordering. Every reused ID is forbidden forever.
+        """
         commit_id = uuid4().hex if commit_id is None else commit_id
         if not re.fullmatch(r"[0-9a-f]{32}", commit_id):
             raise ValueError("Expected exact compaction commit ID")
@@ -313,7 +327,7 @@ class CompactionJournal:
             raise ValueError("Compaction intent exceeds bound")
         try:
             with self._transaction() as db:
-                selected = self._blocking_selected_summary(db, canonical)
+                selected = self._blocking_selected_summary(db, canonical, inputs)
                 if selected and (
                     len(selected) != 1
                     or not selected[0].state.reservable_commit
@@ -504,24 +518,31 @@ class CompactionJournal:
             ):
                 raise ValueError("Selected summary saved source revision changed")
         if "originalSha256" in source["source"]:
-            from .input_disposition import InputDispositions
-
             witness = source["source"]
             key = witness.get("ingressKey")
-            row = InputDispositions(self.path.parent).get(key) if type(key) is str else None
+            row = (
+                InputDispositions(self.path.parent / InputDispositions.filename)
+                .read()
+                .rows.get(key)
+                if type(key) is str
+                else None
+            )
             if (
                 row is None
-                or row["status"] != "unknown"
-                or row["native_id"] is not None
-                or row["owner"] != witness.get("ownerName")
-                or row["admission"] != witness.get("admissionGeneration")
-                or type(row["source_text"]) is not str
-                or hashlib.sha256(row["source_text"].encode()).hexdigest()
-                != witness["originalSha256"]
+                or not row.unresolved
+                or row.native_id is not None
+                or row.owner != witness.get("ownerName")
+                or row.admission != witness.get("admissionGeneration")
+                or hashlib.sha256(row.source_text.encode()).hexdigest() != witness["originalSha256"]
             ):
                 raise ValueError("Selected summary durable original input changed")
         try:
-            with self._transaction() as db:
+            with (
+                InputDispositions(
+                    self.path.parent / InputDispositions.filename
+                ).reading() as inputs,
+                self._transaction() as db,
+            ):
                 if private and fresh_session is not None:
                     assert fresh_session is not None
                     coverage = db.execute(
@@ -569,7 +590,7 @@ class CompactionJournal:
                     (canonical,),
                 ).fetchone():
                     raise CompactionJournalError("Unresolved native commit; no selected summary")
-                if self._blocking_selected_summary(db, canonical) or (
+                if self._blocking_selected_summary(db, canonical, inputs) or (
                     raw_ids and (not private or fresh_session is not None)
                 ):
                     raise CompactionJournalError("Blocked selected summary; never replay")
@@ -605,20 +626,19 @@ class CompactionJournal:
         return tuple(SelectedSummaryAttempt.from_row(row) for row in rows)
 
     def _blocking_selected_summary(
-        self, db: sqlite3.Connection, canonical: str
+        self, db: sqlite3.Connection, canonical: str, inputs: InputDocument
     ) -> tuple[SelectedSummaryAttempt, ...]:
-        from .input_disposition import InputDispositions
-
         rows = db.execute(
             "SELECT * FROM selected_summary_attempts WHERE session_file = ?", (canonical,)
         ).fetchall()
         if not rows:
             return ()
-        inputs = InputDispositions(self.path.parent)._read()
         return tuple(
             attempt
             for row in rows
-            if not (attempt := SelectedSummaryAttempt.from_row(row)).original_has_started(inputs)
+            if not (attempt := SelectedSummaryAttempt.from_row(row)).original_has_started(
+                inputs.rows
+            )
         )
 
     def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
@@ -629,8 +649,11 @@ class CompactionJournal:
         replay while ordinary new inputs and later compactions can proceed.
         """
         canonical = str(Path(session_file).resolve(strict=True))
-        with self._transaction() as db:
-            return self._blocking_selected_summary(db, canonical)
+        with (
+            InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs,
+            self._transaction() as db,
+        ):
+            return self._blocking_selected_summary(db, canonical, inputs)
 
     def reserve_private_raw_input(self, session_file: Path, input_id: str) -> None:
         """Durably mark exact private-session raw input UNKNOWN before any pipe write.
@@ -645,12 +668,17 @@ class CompactionJournal:
             raise CompactionJournalError("Exact private raw input ID required")
         canonical = str(session_file.resolve(strict=False))
         try:
-            with self._transaction() as db:
+            with (
+                InputDispositions(
+                    self.path.parent / InputDispositions.filename
+                ).reading() as inputs,
+                self._transaction() as db,
+            ):
                 if db.execute(
                     "SELECT 1 FROM operations WHERE session_file = ? "
                     f"AND status IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
                     (canonical,),
-                ).fetchone() or self._blocking_selected_summary(db, canonical):
+                ).fetchone() or self._blocking_selected_summary(db, canonical, inputs):
                     raise CompactionJournalError(
                         "Selected or unresolved journal blocks native input"
                     )
@@ -680,12 +708,15 @@ class CompactionJournal:
         private_sessions = (self.path.parent / "native-sessions").resolve(strict=False)
         if Path(canonical).is_relative_to(private_sessions) and private_input_id is None:
             raise CompactionJournalError("Private raw send requires durable prewrite marker")
-        with self._transaction() as db:
+        with (
+            InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs,
+            self._transaction() as db,
+        ):
             if db.execute(
                 "SELECT 1 FROM operations WHERE session_file = ? "
                 f"AND status IN {sql_names(OperationState, unresolved=True)} LIMIT 1",
                 (canonical,),
-            ).fetchone() or self._blocking_selected_summary(db, canonical):
+            ).fetchone() or self._blocking_selected_summary(db, canonical, inputs):
                 raise CompactionJournalError("Selected or unresolved journal blocks native input")
             if private_input_id is not None and db.execute(
                 "SELECT session_file,status FROM private_raw_inputs WHERE input_id = ?",
