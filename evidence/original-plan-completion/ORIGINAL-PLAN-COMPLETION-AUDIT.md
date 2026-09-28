@@ -2,6 +2,10 @@
 
 2026-09-28 · Darwin · read-only source/evidence audit; no implementation or runtime action.
 
+**Current follow-up:** O1 source closure and updated main202 live evidence are in
+`../r7-vocabulary-closure/COMPLETION-AUDIT.md`. This original receipt remains
+historical; its O1/activation-pending findings are superseded there.
+
 ## Verdict
 
 The combined candidate has the original major ownership replacements, including
