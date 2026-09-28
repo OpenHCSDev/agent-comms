@@ -151,7 +151,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     for i in range(6):
         comms.messaging.send("alice", "#team", str(i))
     scope = AlternateMessages("alternating", None)
-    page = comms.bus.channel_display_page(scope)
+    page = comms.bus.display_page(scope)
     basis = comms.bus.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path)
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3

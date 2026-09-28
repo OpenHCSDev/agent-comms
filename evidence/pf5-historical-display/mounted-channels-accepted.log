@@ -1,0 +1,3 @@
+mounted #comms {'mounted_original_rows': 20, 'first_sequence': 1}
+mounted #nra {'mounted_original_rows': 8, 'first_sequence': 6940}
+{"channels": {"#comms": {"mounted_original_rows": 20, "first_sequence": 1}, "#nra": {"mounted_original_rows": 8, "first_sequence": 6940}}, "copied_bus_sequence_unchanged": true}
