@@ -34,7 +34,7 @@ def activate(runtime: Path, package: Path, receipt: Path) -> None:
     if route is None:
         raise ValueError("Expected the existing live route")
     comms = Comms(route.root)
-    if any(thread.process_alive for thread in comms.registry.all_threads()):
+    if any(thread.process_alive for thread in comms.registry.all_threads().values()):
         raise ValueError("Registered owners must be stopped before activation")
     replacement = ActiveRoute(route.root, route.wire_root_id, package)
     _preflight(replacement.root, replacement.wire_root_id, package, True)
