@@ -27,18 +27,11 @@ try {
     if (authority?.parentPid !== process.ppid ||
         String(held.dev) !== authority.device || String(held.ino) !== authority.inode ||
         !held.isFile()) throw new Error('Inherited authority lineage unavailable');
-    // Do not accept legacy sessions that opening could migrate/rewrite before
-    // the guarded CAS. Deployment must prohibit other/unpatched writers.
     const file = request.witness?.sessionFile;
-    if (!file || statSync(file).size > 256 * 1024 * 1024)
-        throw new Error('Bounded native session required');
-    const raw = readFileSync(file, 'utf8');
-    if (!raw.endsWith('\n')) throw new Error('Incomplete session');
-    const rows = raw.trimEnd().split('\n').map(line => JSON.parse(line));
-    if (rows[0]?.type !== 'session' || rows[0]?.version !== 3)
-        throw new Error('Native session migration prohibited in commit helper');
     const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/core/session-manager.js')));
     const manager = SessionManager.open(file);
+    try {
+    manager.entryStore.assertCurrent();
     if (request.action === 'commit') {
         const operations = request.details;
         if (operations !== undefined) {
@@ -70,6 +63,7 @@ try {
             { ...(operations ?? {}), agentCommsCommit: request.commit }, usage);
     } else if (request.action !== 'reconcile') throw new Error('Invalid native commit action');
     console.log(JSON.stringify(manager.reconcileCompactionCommit(request.commit, request.witness)));
+    } finally { manager.entryStore.close(); }
     // Never close the authority FD early. Kernel closes it at process exit.
 } catch (error) {
     // Even an exception that appears pre-write cannot authorize replay. The

@@ -50,6 +50,7 @@ export class EntryStore {
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
     storedAt(file) { throw new Error('EntryStore.storedAt must be implemented'); }
     close() { throw new Error('EntryStore.close must be implemented'); }
+    assertCurrent() { throw new Error('Persisted native session observation required'); }
     has(id) { return this.metadata(id) !== undefined; }
     validate(entry) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
@@ -193,7 +194,8 @@ export class DiskEntryStore extends EntryStore {
                 input_id TEXT, commit_id TEXT, selectors TEXT NOT NULL);
                 CREATE INDEX entry_parent ON entries(parent);
                 CREATE INDEX entry_input ON entries(input_id);
-                CREATE INDEX entry_commit ON entries(commit_id);`);
+                CREATE INDEX entry_commit ON entries(commit_id);
+                CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
             // SQLite has initialized and owns an exclusive open inode. Derived pages
             // live on persistent disk, but no pathname survives reader exit or SIGKILL.
             unlinkSync(index);
@@ -223,13 +225,22 @@ export class DiskEntryStore extends EntryStore {
             SELECT selectors FROM path ORDER BY sequence`).iterate(leafId)) yield EntryMetadata.fromIndex(row);
     }
     *trackedMetadata() {
-        for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE input_id IS NOT NULL ORDER BY sequence').iterate())
+        this.assertCurrent();
+        try { for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE input_id IS NOT NULL ORDER BY sequence').iterate())
             yield EntryMetadata.fromIndex(row);
+        } finally { this.assertCurrent(); }
     }
     trackedInputMetadata(inputId) {
+        this.assertCurrent();
         const rows = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? LIMIT 2').all(inputId);
+        this.assertCurrent();
         if (rows.length > 1) throw new Error('Duplicate native input ID in session');
         return EntryMetadata.fromIndex(rows[0]);
+    }
+    label(id) {
+        const row = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1").get(id);
+        const label = EntryMetadata.fromIndex(row)?.label;
+        return label?.label ? label : undefined;
     }
     *commits(commitId) {
         for (const row of this.#db.prepare('SELECT id FROM entries WHERE commit_id=? ORDER BY sequence').iterate(commitId)) yield this.get(row.id);

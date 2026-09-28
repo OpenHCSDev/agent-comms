@@ -16,3 +16,12 @@ Darwin: EntryStore public nominal base, DiskEntryStore (SQLite-derived offsets/s
 ## Required remaining completion (same PR)
 
 Migrate native SDK/AgentSession/RPC/export/interactive direct consumers; complete streamed initial-uncompacted prepare→existing CompactionPolicy chunker (no eager messages/source arrays); prepare/reopen/commit helper current imports and lifetime guards; compiled/package integration; real local native and >256MiB/memory-envelope acceptance. No Proxy, array compatibility facade, new input allocator or replay.
+
+## Continued implementation checkpoint
+
+- PR243 now owns current native SDK/AgentSession/RPC direct consumers; Pascal's proof startup remains separate. Indexed trackedMetadata()/trackedInputMetadata(inputId) returns id/inputId/inputDigest without message body reads and validates observation revision; direct contract sent PR244.
+- Initial SDK restore no longer eagerly allocates every historical message. SessionContext Ready/Compaction subclasses own model-policy admission and native input gate; deferred history remains available for get_state count/get_messages/get_entries and owner-selected compaction. Existing CompactionPolicy supplies bytes sizing; no new resource catalog. Protocol history arrays now stream through existing output-guard record queue (no interleaved JSON).
+- Existing compact() exercised24 local native stream fixture calls with model-sized inputs, initial-uncompacted lazy message ranges and on-disk intermediate reduction. Source generations reach actual chunker; no fake prepared-input bypass.
+- Actual candidate CLI startup/get_state now succeeds on an uncompacted source too large for its model-policy admission; correct messageCount60, no provider call, no source-body preload. First source receipt incorrectly reported0 (caught/fixed by routing count through the context owner); both logs retained.
+- Native prepare/reopen/commit validators now consume DiskEntryStore; no separate eager strict parser, no lifetime256MiB file guard there. Commit/reconcile reuses the index observed by its own freshly-opened SessionManager and validates revision while holding original writer lock.
+- Remaining: full helper/manual saved-prefix streaming, HTML and branch-summary iterator consumers, final patch/package assembly against Pascal's current startup source, old/current contract fixtures and Lovelace's larger-than256MiB memory/initial compaction acceptance. This is not a finished deployable candidate yet.
