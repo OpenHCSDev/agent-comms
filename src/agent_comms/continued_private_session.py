@@ -1,8 +1,8 @@
 """Derive continued-session coverage from existing native and input authorities.
 
 This creates no enrollment or recovery record. A visible session alone cannot
-cover history: each user entry needs an independently recorded native start or
-live-recorded coordinator proof. All UNKNOWN rows remain unchanged.
+cover history: each user entry needs a recorded native start or verified native
+context evidence. All UNKNOWN rows remain unchanged.
 """
 
 from __future__ import annotations
@@ -60,6 +60,11 @@ def verify_continued_private_session(
         if raw_ids or (root / "coordination.sqlite3").exists()
         else {}
     )
+    retained = (
+        NativeContextProof.read_history_evidence(session, header, entries)
+        if tracked.keys() - (started.keys() | recorded.keys())
+        else {}
+    )
     observed = set()
     for entry in entries:
         if not entry.is_message or not entry.message.user:
@@ -82,8 +87,8 @@ def verify_continued_private_session(
                 session, native_id, request_generation=proof.request_generation
             ):
                 raise ValueError("Continued private user differs from live-recorded context")
-        else:
-            raise ValueError("Continued private user has no independent start evidence")
+        elif native_id not in retained:
+            raise ValueError("Continued private user has no verified retained context")
     if not observed or not raw_ids.issubset(observed & recorded.keys()):
         raise ValueError("Continued private raw input remains UNKNOWN")
     if _session_revision(str(session)) != before:

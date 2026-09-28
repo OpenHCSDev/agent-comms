@@ -13,7 +13,7 @@ import re
 import shutil
 import stat
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -25,7 +25,7 @@ from . import pi_events as pi
 from .child_process import BoundedRun
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
-from .native_entries import NativeEntry
+from .native_entries import NativeEntry, SessionEntry
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
@@ -152,10 +152,38 @@ class NativeContextProof:
         tracked = NativeEntry.tracked_users(entries)
         if input_id not in tracked:
             raise NativePiUnavailable("The specified input was never durably committed")
+        chosen = None
+        for proof in cls._verified_history_rows(session_file, header, tracked):
+            if proof.input_id == input_id and (
+                request_generation is None or proof.request_generation == request_generation
+            ):
+                chosen = proof
+        if chosen is None:
+            raise NativePiUnavailable("The input has no assembled-context proof")
+        return chosen
+
+    @classmethod
+    def read_history_evidence(
+        cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...]
+    ) -> dict[str, NativeContextProof]:
+        """Verify retained context in one pass using already-decoded native history.
+
+        This proves historical context inclusion. It never creates an input
+        disposition, an owner enrollment, or permission to replay an input.
+        """
+        tracked = NativeEntry.tracked_users(entries)
+        return {
+            proof.input_id: proof
+            for proof in cls._verified_history_rows(session_file, header, tracked)
+        }
+
+    @classmethod
+    def _verified_history_rows(
+        cls, session_file: Path, header: SessionEntry, tracked: dict[str, NativeEntry]
+    ) -> Iterator[NativeContextProof]:
         previous_generation = 0
         generation_digest = None
         seen = set()
-        chosen = None
         for row in _read_private_file(Path(str(session_file) + ".input-proof")):
             try:
                 proof = cls.from_journal(row, session_file)
@@ -181,13 +209,7 @@ class NativeContextProof:
             previous_generation = proof.request_generation
             generation_digest = proof.llm_context_digest
             seen.add((proof.request_generation, proof.input_id))
-            if proof.input_id == input_id and (
-                request_generation is None or proof.request_generation == request_generation
-            ):
-                chosen = proof
-        if chosen is None:
-            raise NativePiUnavailable("The input has no assembled-context proof")
-        return chosen
+            yield proof
 
 
 class NativePiTerminalFailure(NativePiUnavailable):
