@@ -58,7 +58,8 @@ Isolated installed core wheel + paired Toad107 f902042 + existing parent Textual
 render the full retained archive: #comms8, agent-comms-ux2,
 pr95-selected-pi-summary-owner0. No messages sent. Watcher and child join;
 asyncio executor/interpreter shutdown completes and full probe exits0 under the
-original40s external/35s diagnostic limits. See archived-ui.txt.
+unchanged35s diagnostic limit (external safety cap40s). The log creation
+to final-write interval is6s; this is filesystem timing, not a stopwatch probe. See archived-ui.txt.
 
 Source was parent's staged current root:
 /home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/d22-current-root-latest.
@@ -90,7 +91,8 @@ Ruff and diff-check pass. No unrelated native/provider/CI checks were repeated.
 
 ## Integration receipt
 
-Ready for core integration after required local ratchet.237 remains unchanged.
+Ready for core integration: required local ratchet passes with zero increases
+in all three measures against13547ee.237 remains unchanged.
 Native unread work uses bounded record checkpoints by default on viewer_snapshot;
 no timeout expansion, background indexing service, parallel store or old scan.
 Cancellation is cooperative between complete native records, not a hard bound
@@ -108,3 +110,5 @@ Copernicus; no reply or adoption is verified. It remains a Toad presentation
 followthrough, not an unread scan/exit failure. All owned copied roots, wheel
 build caches and test artifacts are removed after the processes exit; published
 evidence and reproduction scripts remain in this persistent worktree/PR.
+
+Change counts against13547ee: production +132/-43; tests +115/-6.
