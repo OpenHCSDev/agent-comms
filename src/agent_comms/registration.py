@@ -275,7 +275,6 @@ class Registration:
         *,
         expected_goal_id: str | None,
         expected_goal_revision: int | None,
-        correction_revision: int,
         session_file: str,
         session_leaf: str,
         session_revision: str,
@@ -287,7 +286,6 @@ class Registration:
             turn_id,
             expected_goal_id=expected_goal_id,
             expected_goal_revision=expected_goal_revision,
-            correction_revision=correction_revision,
             session_file=session_file,
             session_leaf=session_leaf,
             session_revision=session_revision,
@@ -303,7 +301,6 @@ class Registration:
         *,
         expected_goal_id: str | None,
         expected_goal_revision: int | None,
-        correction_revision: int,
         session_file: str,
         session_leaf: str,
         session_revision: str,
@@ -339,8 +336,6 @@ class Registration:
                     or expected_goal_revision < 0
                 )
             )
-            or type(correction_revision) is not int
-            or correction_revision < 0
             or type(session_file) is not str
             or not session_file
             or type(session_leaf) is not str
@@ -384,7 +379,6 @@ class Registration:
                     turn_id=turn_id,
                     goal_id=goal.id if goal is not None else None,
                     goal_revision=goal.revision if goal is not None else None,
-                    correction_revision=correction_revision,
                     session_file=session_file,
                     session_leaf=session_leaf,
                     session_revision=session_revision,

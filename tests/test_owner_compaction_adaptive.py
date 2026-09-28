@@ -14,8 +14,10 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
@@ -23,6 +25,7 @@ from agent_comms.owner_compaction_provider import (
     NativeSummary,
 )
 from agent_comms.owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
+from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.threads import Thread
@@ -65,7 +68,7 @@ console.log(manager.getSessionFile());
             "owner",
             frozenset(),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("work", "goal"),
             model="openrouter/fixture",
@@ -90,7 +93,7 @@ console.log(manager.getSessionFile());
     )
     monkeypatch.setattr(
         "agent_comms.owner_compaction_adaptive.read_compaction_decision",
-        lambda *_args, **_kwargs: PiCompactionDecision(True, 100, 100, True),
+        lambda *_args, **_kwargs: PiCompactionDecision(100, 100, enabled=True, trigger=True),
     )
     info = AgentRuntimeInfo(
         thread="owner",
@@ -293,21 +296,27 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             )
         return NativeSummary(
             "Provider-free ACP-owner summary",
-            {"readFiles": ["src/retained.py"], "modifiedFiles": ["src/changed.py"]},
-            {
-                "input": 7,
-                "output": 4,
-                "cacheRead": 0,
-                "cacheWrite": 0,
-                "totalTokens": 11,
-                "cost": {
-                    "input": 0.0,
-                    "output": 0.0,
-                    "cacheRead": 0.0,
-                    "cacheWrite": 0.0,
-                    "total": 0.0,
+            FieldCodec.decode(
+                SummaryFiles,
+                {"readFiles": ["src/retained.py"], "modifiedFiles": ["src/changed.py"]},
+            ),
+            FieldCodec.decode(
+                SummaryUsage,
+                {
+                    "input": 7,
+                    "output": 4,
+                    "cacheRead": 0,
+                    "cacheWrite": 0,
+                    "totalTokens": 11,
+                    "cost": {
+                        "input": 0.0,
+                        "output": 0.0,
+                        "cacheRead": 0.0,
+                        "cacheWrite": 0.0,
+                        "total": 0.0,
+                    },
                 },
-            },
+            ),
         )
 
     agent = CommsAgent(
@@ -330,7 +339,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             goal=Goal("retain history", "goal-acp"),
             session_file=str(session),
             model=info.model,
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
     comms.agents.set_agent_info(

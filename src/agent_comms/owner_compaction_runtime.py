@@ -130,7 +130,7 @@ async def _commit_native_summary(
     source: CompactionSource,
     result: NativeSummary,
 ) -> CompactionOperation:
-    if type(result.text) is not str or not result.text:
+    if not result.text:
         raise ValueError("Bounded owner summary required")
     # No native write can begin until this returns; closing under the borrow
     # lock makes an old RPC manager unusable even if commit is later refused.

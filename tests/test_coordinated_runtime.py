@@ -95,7 +95,9 @@ def _root(
     comms = Comms(root, private_initial_writes=True)
     people = [
         Thread(
-            "sender", frozenset(), str(tmp_path),
+            "sender",
+            frozenset(),
+            str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ),
         Thread(
@@ -1419,13 +1421,20 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     comms.threads.register(
         Thread(
             "beta",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             model="openai-codex/gpt-6-sol",
         )
     )
@@ -1534,7 +1543,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
         return append(self, intent, registry_snapshot=registry_snapshot)
 
-    monkeypatch.setattr(Publisher, '_publish_keyed_response_unlocked', blocking_append)
+    monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
     try:
         result = await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True

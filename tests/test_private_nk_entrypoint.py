@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -17,11 +16,11 @@ from agent_comms import (
     active_route,
     cli,
     cohort_foreground,
-    owner_lifecycle,
     private_nk_entrypoint,
     worker,
 )
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import (
@@ -171,36 +170,31 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
     comms.threads.register(
-        Thread("resumable", frozenset(), str(tmp_path), pid=0, session_file=str(saved))
+        Thread(
+            "resumable", frozenset(), str(tmp_path), process_identity=None, session_file=str(saved)
+        )
     )
-    launched: list[subprocess.Popen] = []
+    launched: list[DetachedProcess] = []
     captured: list[dict[str, str]] = []
-    original_popen = subprocess.Popen
+    launch = DetachedProcess.launch
 
     def provider_free_child(_argv, **kwargs):
         captured.append(kwargs["env"])
-        process = original_popen(
-            [
-                sys.executable, "-c",
-                "import os,time; os.read(int(os.environ['AGENT_COMMS_RESERVATION_FD']),32); "
-                "time.sleep(10)",
-            ],
-            **kwargs,
-        )
-        launched.append(process)
-        return process
+        child = launch((sys.executable, "-c", "import time; time.sleep(10)"), **kwargs)
+        launched.append(child)
+        return child
 
-    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", provider_free_child)
+    monkeypatch.setattr(DetachedProcess, "launch", provider_free_child)
     try:
         result = comms.owners.start("resumable")
         assert result.pid == launched[0].pid
+        assert comms.registry.require("resumable").process_identity == launched[0].identity
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
         assert captured[0][ROOT_ID_ENV] == root_id
         assert captured[0][PACKAGE_ENV] == str(tmp_path)
     finally:
-        for process in launched:
-            process.terminate()
-            process.wait(timeout=5)
+        for child in launched:
+            child.stop_sync()
 
 
 def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, monkeypatch):
@@ -225,8 +219,6 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     with pytest.raises(ValueError, match="already installed"):
         active_route.publish_active_route(route)
     assert route_file.read_bytes() == original
-
-
 
 
 def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monkeypatch):
@@ -295,7 +287,14 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     root, root_id, _, _, _ = _root(tmp_path)
     legacy = Comms(tmp_path / ".agent-comms")
     for name in ("sender", "receiver"):
-        legacy.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        legacy.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
     route_file = tmp_path / "route-state" / "active-route.json"
     route = active_route.ActiveRoute(root, root_id, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -320,7 +319,7 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
             exclusive_requested.set()
         return original_flock(fd, operation)
 
-    monkeypatch.setattr(legacy.messaging, 'send', delayed_send)
+    monkeypatch.setattr(legacy.messaging, "send", delayed_send)
     monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
     with ThreadPoolExecutor(max_workers=2) as executor:
         sending = executor.submit(
@@ -337,10 +336,6 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     assert [message.body for message in legacy.bus.inbox("receiver")] == ["old"]
     assert cli.main(["send", "--from", "sender", "--to", "receiver", "--body", "late"]) == 1
     assert [message.body for message in legacy.bus.inbox("receiver")] == ["old"]
-
-
-
-
 
 
 def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
@@ -468,7 +463,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
         assert wire(env["AGENT_COMMS_ROOT"]).root == physical
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", intercept)
+    monkeypatch.setattr(DetachedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [str(physical)]
@@ -493,7 +488,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
         seen.append((env["AGENT_COMMS_ROOT"], env[ROOT_ID_ENV], env[PACKAGE_ENV]))
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", intercept)
+    monkeypatch.setattr(DetachedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [(str(root), root_id, str(tmp_path))]
@@ -526,7 +521,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
             assert participant.committed and participant.owner_thread == "late-owner"
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", intercept)
+    monkeypatch.setattr(DetachedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners.start("late-owner", agent_bin="pi")
     with MutationStore(str(root / "coordination.sqlite3")) as store:

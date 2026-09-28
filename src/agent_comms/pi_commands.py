@@ -11,6 +11,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .owner_compaction_prepare import NativeWitness
+from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -25,7 +26,6 @@ from .pi_summary_payloads import (
     CompactionSettingsData,
     SelectedModel,
     SelectedProbeData,
-    SelectedSettings,
     SelectedSummaryData,
 )
 
@@ -324,7 +324,7 @@ class AgentCommsSummarizeCompaction(PiCommand):
     operation_id: str = field(metadata={"wire_name": "operationId"})
     witness: NativeWitness
     selected: SelectedModel
-    settings: SelectedSettings
+    settings: PiCompactionSettings
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -335,7 +335,7 @@ class AgentCommsPrepareCompaction(PiCommand):
     dry_run: bool = field(default=True, metadata={"wire_name": "dryRun"})
     witness: NativeWitness
     selected: SelectedModel
-    settings: SelectedSettings
+    settings: PiCompactionSettings
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -25,7 +25,6 @@ from .coordination_store import (
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
-from .messages import Message
 from .passive_channel_awareness import PassiveChannelAwareness
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
@@ -164,9 +163,7 @@ class InputDrain(FutureInputQueue):
             "restored": restored,
         }
 
-    async def emit_queue_state(
-        self, session_id: str, *, restored: list[str] | None = None, client: Any = None
-    ) -> None:
+    async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
         binding, state = self.queue_state(session_id)
         await (client or self.runtime).session_update(
             session_id=session_id,
@@ -177,14 +174,6 @@ class InputDrain(FutureInputQueue):
                     "agentComms": {
                         "queueBinding": binding,
                         "queueState": state,
-                        # Legacy text-only projection is informational, never
-                        # authoritative for exact-ID queue matching.
-                        "queue": [row["text"] for row in state["items"]] if state else [],
-                        "restored": (
-                            [row["text"] for row in state["restored"]]
-                            if state is not None and restored is not None
-                            else []
-                        ),
                     }
                 },
             ),
@@ -646,9 +635,7 @@ class InputDrain(FutureInputQueue):
             self.restored_inputs.setdefault(session_id, {}).update(
                 {key: replace(item, receipt=None) for key, item in remaining.items() if item.echo}
             )
-            await self.emit_queue_state(
-                session_id, restored=[item.text for item in remaining.values() if item.echo]
-            )
+            await self.emit_queue_state(session_id)
 
     async def run_owned_input(
         self,
