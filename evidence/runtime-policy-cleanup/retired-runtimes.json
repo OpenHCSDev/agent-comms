@@ -1,0 +1,17 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-identity-20260928",
+      "file_bytes": 70914358
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-input-drain-20260928",
+      "file_bytes": 68757370
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-session-state-20260928",
+      "file_bytes": 70809052
+    }
+  ],
+  "checks": "No live process cmdline/environ/maps references; no remaining runtime bin/pth/pyvenv or local launcher references. Current policy-cleanup runtime and previous s7 runtime retained; only owned unused runtime copies and finished NRA cache removed."
+}
