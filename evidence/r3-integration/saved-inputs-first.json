@@ -1,0 +1,34 @@
+{
+  "equal": true,
+  "roots": [
+    {
+      "source": "/home/ts/.agent-comms",
+      "equal": true,
+      "input_rows": 7766,
+      "delivery_cursors": 96,
+      "unknown_rows": 2577,
+      "old_error": null,
+      "new_error": null
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "equal": true,
+      "input_rows": 14,
+      "delivery_cursors": 0,
+      "unknown_rows": 3,
+      "old_error": null,
+      "new_error": null
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+      "equal": true,
+      "input_rows": 0,
+      "delivery_cursors": 0,
+      "unknown_rows": 0,
+      "old_error": null,
+      "new_error": null
+    }
+  ],
+  "live_input_sends": 0,
+  "writes_only_to_owned_copies": true
+}
