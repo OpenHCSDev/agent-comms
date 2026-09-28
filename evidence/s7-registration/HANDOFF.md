@@ -11,8 +11,8 @@ Owner: Pascal. No live activation, provider calls, helpers, model changes or new
 ## Publication
 
 Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/159
-Implementation commit: `733bba42d55ef1e58a02afedaad060d483814763`.
-Current main checked: `e751d10` (PR158). Git merge-tree reports exactly one conflicting path, `src/agent_comms/exporting.py`, in the import section: preserve parent's PR158 imports and import Registration from `.registration`. Parent owns serial integration/seam resolution; all other paths merge automatically.
+Rebased on current main `e751d10` (PR158), preserving its export declaration deletion. The one import conflict is resolved: export uses DeclaredFamily and Registration directly, without _FamilyMeta or ThreadRegistry.
+Post-rebase focused export/component/identity tests: **41 passed**; export-family deletion checks listed in rebase-export-families.txt. Parent owns integration/activation. Earlier implementation733bba4 is superseded by the rebased branch.
 
 ## Implemented owners
 
