@@ -37,7 +37,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", agent_args=["--model", "test/model"])
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
     class Client:
         async def session_update(self, **kwargs):
@@ -48,7 +48,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
     comms.update_tags("worker", add=frozenset({"team"}))
     comms.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
     initial = comms.send_message("peer", "worker", "Initial request")
-    await agent._drain_inbox("worker")
+    await agent.inputs.drain_inbox("worker")
     session = tmp_path / "session.jsonl"
     session.touch()
     comms.attach_session("worker", str(session))
@@ -62,7 +62,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
         yield ae.InputStarted(id=None)
         incoming = comms.send_message("peer", target, "@worker Follow-up request")
         received.append(incoming)
-        assert await agent._drain_inbox("worker") == 1
+        assert await agent.inputs.drain_inbox("worker") == 1
         command = kwargs["steering_queue"].get_nowait()
         public_id = command["_input_id"] if isinstance(command, dict) else "legacy-steer"
         text = command["message"] if isinstance(command, dict) else command
@@ -76,7 +76,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn(
+        await agent.turns.run_agent_turn(
             "worker", "worker", ScheduledTurn.incoming(initial).prompt, origins=(initial,)
         )
         reopened = wire(comms.root)
@@ -94,7 +94,9 @@ async def test_original_and_busy_input_keep_distinct_routes(
                 )
                 for event in inputs
             ] == [message.message_id for message in received]
-        assert not agent._pending_turns.get("worker"), "Attributed inputs must not be replayed"
+        assert not agent.inputs.pending_turns.get("worker"), (
+            "Attributed inputs must not be replayed"
+        )
     finally:
         await agent.shutdown()
 

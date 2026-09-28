@@ -28,7 +28,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
         resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"})
     assert reopened.registry.require("worker").goal == paused
-    active = reopened.update_goal("worker", "active", goal_id=goal.id, owner_action=True)
+    active = reopened.turns.update_goal("worker", "active", goal_id=goal.id, owner_action=True)
     assert active.active and reopened.goal_pause("worker") is None
 
 

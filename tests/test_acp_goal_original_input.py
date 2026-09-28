@@ -19,7 +19,7 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     updates = []
 
@@ -36,13 +36,13 @@ async def owner(tmp_path, monkeypatch):
 
 
 def disposition_rows(agent):
-    return list(agent._dispositions._read().values())
+    return list(agent.inputs.dispositions._read().values())
 
 
 @pytest.mark.asyncio
 async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeypatch):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
-    store = agent._open_goal_store()
+    store = agent.turns.open_goal_store()
     goal = comms.update_goal("project", "set", text="Keep reading", owner_store=store)
 
     async def events(*args, **kwargs):
@@ -71,7 +71,7 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
-        await agent._run_owned_input("project", "project", "testing steering")
+        await agent.inputs.run_owned_input("project", "project", "testing steering")
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0]["status"] == "started"
         current = comms.registry.require("project").goal
@@ -88,7 +88,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     tmp_path, monkeypatch, existing_goal
 ):
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
-    store = agent._open_goal_store()
+    store = agent.turns.open_goal_store()
     if existing_goal:
         comms.update_goal("project", "set", text="Original goal", owner_store=store)
     original_emit = agent.inputs.emit_input_disposition
@@ -112,7 +112,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
         with pytest.raises(RequestError) as refused:
-            await agent._run_owned_input("project", "project", "admitted before goal change")
+            await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
         assert refused.value.data == {"reason": "input_authority_changed"}
         assert backend_calls == 0
         rows = disposition_rows(agent)
@@ -131,7 +131,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
 @pytest.mark.asyncio
 async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
-    store = agent._open_goal_store()
+    store = agent.turns.open_goal_store()
     goal = comms.update_goal("project", "set", text="Keep reading", owner_store=store)
     boundaries = []
 
@@ -143,7 +143,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
-        await agent._run_owned_input("project", "project", "do not send after stop")
+        await agent.inputs.run_owned_input("project", "project", "do not send after stop")
         assert boundaries == [False]
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0]["status"] == "unknown"

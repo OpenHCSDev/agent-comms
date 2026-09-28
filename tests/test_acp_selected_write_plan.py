@@ -90,18 +90,18 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             private_nk_wire_root_id=root_id,
             private_nk_native_package=package,
         )
-        agent._sessions["beta"] = "beta"
-        agent._session_titles["beta"] = "beta"
-        agent._session_worktrees["beta"] = str(work)
-        agent._sessions["alpha"] = "alpha"
-        agent._session_titles["alpha"] = "alpha"
-        agent._session_worktrees["alpha"] = str(work)
+        agent.sessions.bindings["beta"] = "beta"
+        agent.sessions.titles["beta"] = "beta"
+        agent.sessions.worktrees["beta"] = str(work)
+        agent.sessions.bindings["alpha"] = "alpha"
+        agent.sessions.titles["alpha"] = "alpha"
+        agent.sessions.worktrees["alpha"] = str(work)
 
         class AttachedClient:
             async def session_update(self, **_kwargs):
                 return None
 
-        agent._client = AttachedClient()  # explicit attached direct ACP test controller
+        agent.sessions.client = AttachedClient()  # explicit attached direct ACP test controller
         prior_seq = 0
         if scenario == "older_claims":
             for index in range(100):
@@ -207,7 +207,9 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             return
         if scenario in {"reconnect", "lost_process_state"}:
             if scenario == "reconnect":
-                agent._client = AttachedClient()  # different ACP controller, same owner process
+                agent.sessions.client = (
+                    AttachedClient()
+                )  # different ACP controller, same owner process
             else:
                 agent._selected_write_controllers.clear()  # owner-process crash loses binding
             with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):

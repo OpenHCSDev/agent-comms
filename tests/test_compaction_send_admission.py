@@ -46,8 +46,8 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
     comms.attach_session("project", str(session), pid=os.getpid())
@@ -62,13 +62,13 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
-        await agent._run_owned_input("project", "project", "new correction")
+        await agent.inputs.run_owned_input("project", "project", "new correction")
         assert observed == [False]
         rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
         assert len(rows) == 1 and rows[0]["native_id"] is None
         assert journal.get(commit_id).status == "intent"
         journal.resolve(commit_id, "unknown", {"status": "unknown", "reason": "uncertain"})
-        await agent._run_owned_input("project", "project", "distinct later input")
+        await agent.inputs.run_owned_input("project", "project", "distinct later input")
         assert observed == [False, False]
         assert journal.get(commit_id).status == "unknown"
     finally:

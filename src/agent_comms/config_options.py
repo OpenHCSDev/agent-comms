@@ -264,7 +264,7 @@ class ConfigOptions:
             return SetSessionConfigOptionResponse.model_validate(result)
         name = await self.sessions.sync_identity(session_id)
         await member.change(self, session_id, self.comms.registry.require(name), value)
-        await self.effects._close_idle_backend(session_id)
+        await self.effects.turns.close_idle_backend(session_id)
         options = await self.options(name)
         await self.publish(session_id, options)
         return SetSessionConfigOptionResponse(config_options=options)
@@ -276,7 +276,7 @@ class ConfigOptions:
         result_type: type[events.SettingChangeResult],
         timeout_message: str,
     ) -> None:
-        inbox = self.effects._active_backend_inbox(session_id)
+        inbox = self.effects.turns.active_backend_inbox(session_id)
         if inbox is None:
             return
         request_id = uuid4().hex
@@ -291,7 +291,7 @@ class ConfigOptions:
 
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)
-        await self.effects._sync_goal_execution(session_id, name)
+        await self.effects.turns.sync_goal_execution(session_id, name)
         thread = self.comms.registry.require(name)
         signature = self.signature(thread)
         if self.session_config_signature.get(session_id) == signature:

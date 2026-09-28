@@ -294,15 +294,15 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     from test_acp import TestAgentTurn as GoalFixture
 
     agent = CommsAgent(wired, agent_bin="pi")
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
     goal = wired.update_goal("project", "set", text="private goal")
     GoalFixture()._authorize_test_goal(agent, wired, goal)
-    store = agent._goal_store
+    store = agent.turns.goal_store
     admission = wired.registry.snapshot().admission_generations["project"]
     for state in ("unknown", "started"):
         key = f"acp:earlier-{state}"
-        agent._dispositions.record(
+        agent.inputs.dispositions.record(
             key,
             seq=None,
             owner="project",
@@ -312,9 +312,9 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         )
         if state == "started":
             binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
-            assert agent._dispositions.bind(key, admission=admission, **binding)
-            assert agent._dispositions.started(key, **binding)
-    ledger_before = agent._dispositions.path.read_bytes()
+            assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+            assert agent.inputs.dispositions.started(key, **binding)
+    ledger_before = agent.inputs.dispositions.path.read_bytes()
     cursors = wired.root / "acp_delivery_cursors.json"
     cursor_before = cursors.read_bytes() if cursors.exists() else None
     if outcome in {"observation_error", "observation_rollback"}:
@@ -344,9 +344,11 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     try:
         if outcome == "observation_rollback":
             with pytest.raises(StorageUncertain):
-                await agent._run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+                await agent.turns.run_agent_turn(
+                    "project", "project", "Continue", autonomous_goal=True
+                )
         else:
-            await agent._run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+            await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
         assert store.snapshot(goal.id).state == "blocked"
         with pytest.raises(UnresolvedAttempt):
             store.resume(goal.id, 1)
@@ -364,15 +366,15 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         )
         assert projection.state == expected
         assert store.path.read_bytes() == before
-        assert agent._dispositions.path.read_bytes() == ledger_before
+        assert agent.inputs.dispositions.path.read_bytes() == ledger_before
         assert (cursors.read_bytes() if cursors.exists() else None) == cursor_before
         if owner_pauses:
             assert owner.goal.status == "paused"
             assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
         else:
             assert owner.goal.status == "blocked"
-        agent._schedule_goal("project")
-        assert not agent._pending_turns.get("project")
+        agent.turns.schedule_goal("project")
+        assert not agent.inputs.pending_turns.get("project")
         observations = rows(store, "failed_turn_observations")
         assert len(observations) == (
             0 if outcome in {"observation_error", "observation_rollback"} else 1

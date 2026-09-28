@@ -57,11 +57,11 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
         return None
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
-    monkeypatch.setattr(agent, "_sync_thread_config", noop)
-    monkeypatch.setattr(agent, "_schedule_goal", lambda _session_id: None)
-    monkeypatch.setattr(agent, "_refresh_auth_models", noop)
-    agent._ensure_live_drain("owner")
-    task = agent._drain_tasks["owner"]
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.turns, "schedule_goal", lambda _session_id: None)
+    monkeypatch.setattr(agent.sessions.config, "refresh_auth_models", noop)
+    agent.inputs.ensure_live_drain("owner")
+    task = agent.inputs.drain_tasks["owner"]
     try:
         await asyncio.sleep(0.2)
         assert calls == 1
@@ -96,10 +96,10 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
         return None
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
-    monkeypatch.setattr(agent, "_sync_thread_config", noop)
-    monkeypatch.setattr(agent, "_schedule_goal", lambda _session_id: None)
-    monkeypatch.setattr(agent, "_refresh_auth_models", noop)
-    agent._ensure_live_drain("owner")
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.turns, "schedule_goal", lambda _session_id: None)
+    monkeypatch.setattr(agent.sessions.config, "refresh_auth_models", noop)
+    agent.inputs.ensure_live_drain("owner")
     await asyncio.wait_for(entered.wait(), timeout=1)
     await asyncio.sleep(0)
     await asyncio.wait_for(agent.shutdown(), timeout=1)

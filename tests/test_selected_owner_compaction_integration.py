@@ -234,8 +234,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         )
         agent.on_connect(Client())
         await agent.new_session(cwd=str(project), mcp_servers=[])
-        agent._drain_tasks["proj"].cancel()
-        await asyncio.gather(agent._drain_tasks["proj"], return_exceptions=True)
+        agent.inputs.drain_tasks["proj"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
         comms.registry.register(
             replace(
                 comms.registry.require("proj"),
@@ -255,8 +255,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         private.mkdir(mode=0o700)
         store = GoalAttemptStore.initialize(private)
         store.create_goal("goal-acp")
-        agent._goal_store = store
-        agent._persistent_backends["proj"] = persistent
+        agent.turns.goal_store = store
+        agent.turns.persistent_backends["proj"] = persistent
         dispositions = InputDispositions(root)
         if private_session:
             record_fixture_history(
@@ -333,7 +333,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         else:
             monkeypatch.setattr(backend, "stream_agent_events", native_stream)
         try:
-            turn = agent._run_agent_turn(
+            turn = agent.turns.run_agent_turn(
                 "proj",
                 "proj",
                 "Continue",
@@ -360,7 +360,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             assert sum(row["type"] == "compaction" for row in entries) == (
                 0 if correction or clean_decline else 1
             )
-            assert "proj" not in agent._selected_summary_admissions
+            assert "proj" not in agent.inputs.selected_summary_admissions
             if real_host and not correction:
                 assert persistent.reopen_required is None
                 assert persistent.proc is not None
@@ -396,7 +396,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     context_used=info.context_used,
                     context_size=info.context_size,
                 )
-                await agent._run_agent_turn(
+                await agent.turns.run_agent_turn(
                     "proj",
                     "proj",
                     "Continue again",

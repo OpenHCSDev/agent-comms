@@ -18,11 +18,11 @@ async def goal_owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     scheduled = []
-    monkeypatch.setattr(owner, "_schedule_goal", scheduled.append)
+    monkeypatch.setattr(owner.turns, "schedule_goal", scheduled.append)
     try:
         yield comms, owner, proxy, session, scheduled
     finally:
@@ -51,13 +51,13 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
     paused = await proxy.request("goal_snapshot")
     assert paused["goal"]["revision"] > result["goal"]["revision"]
     assert paused["goalExecution"]["state"] == "paused"
-    assert scheduled == [] and not owner._pending_turns and not owner._wake_tasks
+    assert scheduled == [] and not owner.inputs.pending_turns and not owner.inputs.wake_tasks
 
 
 async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
     comms, owner, proxy, session, scheduled = goal_owner
     goal = comms.update_goal(
-        session, "set", text="Review child output", owner_store=owner._open_goal_store()
+        session, "set", text="Review child output", owner_store=owner.turns.open_goal_store()
     )
     paused = await proxy.request(
         "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision
@@ -86,7 +86,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         expected_revision=resumed["goal"]["revision"],
     ) == {"goal": None, "goalExecution": None}
     assert scheduled == [session]
-    assert owner._goal_store.snapshot(goal.id).state == "cancelled"
+    assert owner.turns.goal_store.snapshot(goal.id).state == "cancelled"
 
 
 async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_owner, monkeypatch):

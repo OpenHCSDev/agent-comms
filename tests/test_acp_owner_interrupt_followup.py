@@ -34,13 +34,13 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
     before_goal = comms.registry.require(session).goal
     before_wait = comms.goal_wait(session)
     message = comms.send_message("outsider", session, "Question while goal is parked")
-    assert await agent._drain_owned_inbox(session) == 1
-    queued = agent._pending_turns.pop(session)[0]
+    assert await agent.inputs.drain_owned_inbox(session) == 1
+    queued = agent.inputs.pending_turns.pop(session)[0]
     gate_facts = []
     expected_state = {"goal": before_goal, "wait": before_wait}
     admission = comms.registry.snapshot().admission_generations[session]
     old_key = "acp:historical-uncertain"
-    agent._dispositions.record(
+    agent.inputs.dispositions.record(
         old_key,
         seq=None,
         owner=session,
@@ -48,7 +48,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         target=session,
         text="Never replay historical uncertainty",
     )
-    old_row = agent._dispositions.get(old_key)
+    old_row = agent.inputs.dispositions.get(old_key)
 
     async def events(*args, **kwargs):
         native_id = "a" * 32
@@ -85,9 +85,9 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         elif change == "owner_stopped":
             comms.registry.unregister(session)
         elif change == "missing_input_key":
-            agent._steering_input_keys[session].pop(public_id)
+            agent.inputs.steering_input_keys[session].pop(public_id)
         elif change == "foreign_input_key":
-            agent._steering_input_keys[session][public_id] = old_key
+            agent.inputs.steering_input_keys[session][public_id] = old_key
         expected_state.update(
             goal=comms.registry.require(session).goal, wait=comms.goal_wait(session)
         )
@@ -105,10 +105,10 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
             assert kwargs["native_start"](public_id, "b" * 32, command["message"])
             yield ae.InputStarted(id=public_id)
             # STARTED is not a reusable send right, even with unchanged owner.
-            before_duplicate = agent._dispositions.path.read_bytes()
+            before_duplicate = agent.inputs.dispositions.path.read_bytes()
             with kwargs["send_boundary"](public_id, "c" * 32, command["message"]) as allowed:
                 assert allowed is False
-            assert agent._dispositions.path.read_bytes() == before_duplicate
+            assert agent.inputs.dispositions.path.read_bytes() == before_duplicate
         else:
             yield ae.InputRefused(id=public_id)
         yield ae.StreamSettled()
@@ -116,7 +116,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn(
+        await agent.turns.run_agent_turn(
             session,
             session,
             queued.prompt,
@@ -127,21 +127,21 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
             direct_interrupt_input_key=queued.direct_interrupt_input_key,
             direct_interrupt_ticket=queued.direct_interrupt_ticket,
         )
-        assert agent._dispositions.status(f"bus:{message.seq}") == "started"
+        assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
         owner_rows = [
             r
-            for k, r in agent._dispositions._read().items()
+            for k, r in agent.inputs.dispositions._read().items()
             if k.startswith("acp:") and k != old_key
         ]
         assert len(owner_rows) == 1
         assert owner_rows[0]["status"] == ("started" if change is None else "unknown")
         if change is not None:
             assert owner_rows[0]["native_id"] is None
-        assert agent._dispositions.get(old_key) == old_row
+        assert agent.inputs.dispositions.get(old_key) == old_row
         assert comms.registry.require(session).goal == expected_state["goal"]
         assert comms.goal_wait(session) == expected_state["wait"]
         assert not (comms.root / "goal-private").exists()
-        assert not agent._pending_turns.get(session)
+        assert not agent.inputs.pending_turns.get(session)
     finally:
         await agent.shutdown()
 
@@ -183,8 +183,8 @@ for line in sys.stdin:
 """
     )
     stub.chmod(0o755)
-    agent._agent_bin = str(stub)
-    agent._agent_args = []
+    agent.turns.agent_bin = str(stub)
+    agent.turns.agent_args = []
     started = asyncio.Event()
     emit = agent._emit_event
 
@@ -197,10 +197,10 @@ for line in sys.stdin:
     goal_before = comms.registry.require(session).goal
     wait_before = comms.goal_wait(session)
     comms.send_message("outsider", session, "Separate DM")
-    await agent._drain_owned_inbox(session)
-    queued = agent._pending_turns.pop(session)[0]
+    await agent.inputs.drain_owned_inbox(session)
+    queued = agent.inputs.pending_turns.pop(session)[0]
     turn = asyncio.create_task(
-        agent._run_agent_turn(
+        agent.turns.run_agent_turn(
             session,
             session,
             queued.prompt,
@@ -219,7 +219,7 @@ for line in sys.stdin:
         )
         public_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
         await asyncio.wait_for(turn, 5)
-        assert agent._dispositions.status("acp:" + public_id) == "started"
+        assert agent.inputs.dispositions.status("acp:" + public_id) == "started"
         commands = [json.loads(line) for line in received.read_text().splitlines()]
         assert len(commands) == 2
         assert commands[1]["message"] == "User follow-up:\nFresh owner request"

@@ -369,8 +369,8 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     )
     agent.on_connect(Client())
     await agent.new_session(cwd=str(project), mcp_servers=[])
-    agent._drain_tasks["proj"].cancel()
-    await asyncio.gather(agent._drain_tasks["proj"], return_exceptions=True)
+    agent.inputs.drain_tasks["proj"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
     current = comms.registry.require("proj")
     comms.registry.register(
         replace(
@@ -393,7 +393,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     private.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(private)
     store.create_goal("goal-acp")
-    agent._goal_store = store
+    agent.turns.goal_store = store
     admission = comms.registry.snapshot().admission_generations["proj"]
     InputDispositions(root).record(
         "acp:original",
@@ -408,7 +408,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     async def fake_native_stream(*args, **kwargs):
         task = args[2]
         native_id = "a" * 32
-        assert agent._persistent_backends["proj"].reopen_required == str(session)
+        assert agent.turns.persistent_backends["proj"].reopen_required == str(session)
         with kwargs["send_boundary"](None, native_id, task) as allowed:
             assert allowed is True
             dispatched.append(native_id)
@@ -420,7 +420,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     monkeypatch.setattr(backend, "stream_agent_events", fake_native_stream)
     assert comms.registry.require("proj").role.executable
     try:
-        turn = agent._run_agent_turn(
+        turn = agent.turns.run_agent_turn(
             "proj",
             "proj",
             "Original new task",

@@ -26,7 +26,7 @@ LOCAL_HANDOFF_TIMEOUT_SECONDS = 3.0
 async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -> int:
     """Project up to 32 metadata rows; return only the number locally observed."""
     runtime = agent._runtime
-    if agent._client is None and not runtime.clients.get(session_id):
+    if agent.sessions.client is None and not runtime.clients.get(session_id):
         return 0  # No consumer: leave every row durably pending.
     path = agent._comms.root / "compaction-commits.sqlite3"
     if not path.exists() and not path.is_symlink():
@@ -44,7 +44,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
         if (
             owner.pid != os.getpid()
             or not owner.session_file
-            or agent._require_session(session_id) != owner.name
+            or agent.sessions.require(session_id) != owner.name
         ):
             return 0
         identity = (
@@ -56,7 +56,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
             owner.worktree,
         )
         journal = CompactionJournal(path)
-        client = agent._client
+        client = agent.sessions.client
         sockets = frozenset(runtime.clients.get(session_id, ()))
         for item in journal.pending_publications(owner.session_file):
             # Recheck under the handoff fence; an owner epoch may change even
@@ -75,8 +75,8 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                     current.worktree,
                 )
                 != identity
-                or agent._require_session(session_id) != owner.name
-                or agent._client is not client
+                or agent.sessions.require(session_id) != owner.name
+                or agent.sessions.client is not client
                 or not runtime.clients.get(session_id, set()).issubset(sockets)
             ):
                 break
@@ -119,8 +119,8 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
                     current.worktree,
                 )
                 != identity
-                or agent._require_session(session_id) != owner.name
-                or agent._client is not client
+                or agent.sessions.require(session_id) != owner.name
+                or agent.sessions.client is not client
                 or not runtime.clients.get(session_id, set()).issubset(sockets)
                 or (client is None and not runtime.clients.get(session_id))
             ):

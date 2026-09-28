@@ -44,7 +44,7 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
             field_meta={"agentComms": {"deferDisplay": True, "userText": "later"}},
         )
         assert not turn.done()
-        assert len(agent._queued_inputs["project"]) == 1
+        assert len(agent.inputs.queued_inputs["project"]) == 1
         await agent.prompt(
             "project",
             [{"type": "text", "text": "now"}],
@@ -59,7 +59,7 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
             if "inputStarted" in u.get("_meta", {}).get("agentComms", {})
         ]
         assert starts == [None, "later"]
-        assert not agent._queued_inputs.get("project")
+        assert not agent.inputs.queued_inputs.get("project")
     finally:
         await agent.shutdown()
 

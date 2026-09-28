@@ -155,7 +155,9 @@ class SessionLifecycle:
         self, thread: Thread, session_id: str, *, fresh: bool, private: bool
     ) -> None:
         self.bindings[session_id] = thread.name
-        self.effects._initialize_session_delivery(session_id, thread, fresh=fresh, private=private)
+        self.effects.inputs.initialize_session_delivery(
+            session_id, thread, fresh=fresh, private=private
+        )
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree
         if self.runtime_enabled:
@@ -168,7 +170,7 @@ class SessionLifecycle:
         private = self.effects._private_session_mode()
         thread = self.declare_thread(cwd, os.getpid())
         await self.bind_owned(thread, thread.name, fresh=True, private=private)
-        self.effects._ensure_live_drain(thread.name)
+        self.effects.inputs.ensure_live_drain(thread.name)
         options = await self.config.session_options(thread.name, thread.name)
         return NewSessionResponse(
             session_id=thread.name,
@@ -193,9 +195,9 @@ class SessionLifecycle:
         self.comms.heartbeat(thread.name)
         await self.bind_owned(thread, session_id, fresh=False, private=private)
         await self.transcript.replay(session_id, thread.name)
-        await self.effects.replay_unknown_inputs(session_id)
+        await self.effects.inputs.replay_unknown_inputs(session_id)
         options = await self.config.session_options(session_id, thread.name)
-        self.effects._ensure_live_drain(session_id)
+        self.effects.inputs.ensure_live_drain(session_id)
         return LoadSessionResponse(
             config_options=options,
             field_meta=self.metadata(thread.name, session_id=session_id),
@@ -227,7 +229,7 @@ class SessionLifecycle:
             or thread.pid != os.getpid()
             or not self.comms.registry.status(name).running
         ):
-            await self.effects._close_idle_backend(session_id)
+            await self.effects.turns.close_idle_backend(session_id)
         self.bindings[session_id] = name
         if (
             self.titles.get(session_id) != name
