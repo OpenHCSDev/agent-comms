@@ -1,0 +1,16 @@
+src/agent_comms/claim_admission.py:47:101: E501 Line too long (101 > 100)
+src/agent_comms/coordination_store.py:1191:37: F841 Local variable `db` is assigned to but never used
+src/agent_comms/coordination_store.py:1252:37: F841 Local variable `db` is assigned to but never used
+src/agent_comms/coordination_store.py:1290:101: E501 Line too long (113 > 100)
+src/agent_comms/coordination_store.py:1322:101: E501 Line too long (103 > 100)
+src/agent_comms/selected_tool_broker.py:355:101: E501 Line too long (125 > 100)
+tests/test_claim_admission_verifier.py:120:101: E501 Line too long (123 > 100)
+tests/test_claim_admission_verifier.py:132:101: E501 Line too long (123 > 100)
+tests/test_claim_admission_verifier.py:137:101: E501 Line too long (119 > 100)
+tests/test_claim_admission_verifier.py:151:101: E501 Line too long (116 > 100)
+tests/test_claim_admission_verifier.py:265:101: E501 Line too long (116 > 100)
+tests/test_cohort_foreground.py:304:101: E501 Line too long (118 > 100)
+tests/test_cohort_foreground.py:717:101: E501 Line too long (101 > 100)
+tests/test_selected_tool_runner_hook.py:114:101: E501 Line too long (108 > 100)
+Found 14 errors.
+No fixes available (2 hidden fixes can be enabled with the `--unsafe-fixes` option).
