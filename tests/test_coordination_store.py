@@ -11,19 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
-
 import agent_comms.coordination_store as store_module
-from agent_comms.attempt_states import (
-    AbortingAttempt,
-    ModelRunningAttempt,
-    ModelStalledAttempt,
-    PromptAcceptedAttempt,
-    PromptStartingAttempt,
-    RetryingAttempt,
-    SettlingAttempt,
-    SucceededAttempt,
-)
 from agent_comms.assignment_states import (
     AssignmentState,
     CompletedAssignment,
@@ -35,12 +23,22 @@ from agent_comms.assignment_states import (
     PassiveAssignment,
     TriagePendingAssignment,
 )
+from agent_comms.attempt_states import (
+    AbortingAttempt,
+    ModelRunningAttempt,
+    ModelStalledAttempt,
+    PromptAcceptedAttempt,
+    PromptStartingAttempt,
+    RetryingAttempt,
+    SettlingAttempt,
+    SucceededAttempt,
+)
 from agent_comms.coordination import (
     ACPClientConnectivity,
     ExecutionOrigin,
     MessageAudience,
     OwnerConnectivity,
-    PublicationIntent,
+    PublicationIntents,
     ReplayFact,
     WakeAssignment,
     canonical_publication_key,
@@ -69,6 +67,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
@@ -1249,7 +1248,7 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
             timestamp=1.0,
             notice=False,
         )
-        intent = PublicationIntent(
+        intent = PublicationIntents(
             "exec",
             "thread",
             "owner",
@@ -1399,19 +1398,31 @@ def _read_while_other_store_commits(
     errors: list[BaseException] = []
 
     class PausedReader(MutationStore):
-        paused = False
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            paused = False
+            selected = False
 
-        def _row(self, table: str, column: str, key: object) -> sqlite3.Row | None:
-            result = super()._row(table, column, key)
-            if table == first_table and not self.paused:
-                self.paused = True
-                first_read.set()
-                assert commit_started.wait(timeout=5), "writer never reached COMMIT"
-                # Without one read transaction the writer commits before the
-                # remaining SELECTs, producing an impossible mixed aggregate.
-                # With rollback-journal read locking it waits until we return.
-                writer_done.wait(timeout=0.3)
-            return result
+            def trace(statement):
+                nonlocal selected
+                selected = f"FROM {first_table} " in statement or (
+                    f'FROM "{first_table}" ' in statement
+                )
+
+            def read_row(cursor, values):
+                nonlocal paused
+                result = sqlite3.Row(cursor, values)
+                if selected and not paused:
+                    paused = True
+                    first_read.set()
+                    assert commit_started.wait(timeout=5), "writer never reached COMMIT"
+                    # A real SQLite row was read under the aggregate snapshot.
+                    # The second connection must remain blocked until its reader exits.
+                    writer_done.wait(timeout=0.3)
+                return result
+
+            self._connection.set_trace_callback(trace)
+            self._connection.row_factory = read_row
 
     def writer() -> None:
         try:

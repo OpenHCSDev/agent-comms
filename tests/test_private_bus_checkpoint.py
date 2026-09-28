@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
-from agent_comms.coordination import PublicationIntent, canonical_publication_key
+from agent_comms.coordination import PublicationIntents, canonical_publication_key
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_bus import MessageBus
@@ -128,7 +128,7 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
     expected = Message("Alice", "sender", "done", MessageType.INFO)
     key = canonical_publication_key("execution-1", expected.target)
     response = response_bus.publisher.publish_keyed_response(
-        PublicationIntent(
+        PublicationIntents(
             execution_id="execution-1",
             sender=expected.sender,
             exact_target=expected.target,

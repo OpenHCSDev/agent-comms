@@ -1,9 +1,10 @@
-# S10 V1/V3 working draft; complete surface still open
+# S10 V1/V3 + A12 adoption; V2 and shared cancellation closure open
 
 Draft PR234: https://github.com/OpenHCSDev/agent-comms/pull/234.
 
 Owner Pascal. Tree `/home/ts/wt/comms-s10-pi-boundary-20260928`, branch
-`refactor/s10-pi-boundary-20260928`, source `c4b8dad`, based on merged226 + R0/228.
+`refactor/s10-pi-boundary-20260928`, source `6f25dc8`, integrated with current main `bf68bbb` at `a5d99ea`;
+includes PR232 through `175d188`, merged226, R0/228, channel231 and A13/230.
 Parent owns whole-step quiet install. No live root mutation/restart/provider call.
 
 ## Implemented / deleted
@@ -58,20 +59,65 @@ NRA full context scan:79 detectors/0 omitted, exact_compact_global complete,
 proof of new V1/V3 defects or a globally-clean result. No automatic codemod proof
 is claimed. Manual ownership/caller closure and concrete boundary tests above.
 
+## A12 adoption checkpoint (6f25dc8)
+
+- Integrated PR232 into this branch. All three Pi-event `_terminate_process`
+  imports/calls are deleted; failures use the actual AttachedChild.stop owner.
+- Native tracked turns use BoundedRun.session for spawn/deadline/group retirement.
+  Removed native_pi's terminate/killpg/wait/grace/cancellation-join mechanism.
+  Raw prompt admission, proof checks and UNKNOWN handling stay in their owners.
+- Full caller trace found selected_pi_child_deadline reachable only from
+  SelectedSummarySlot.exchange_fake_rpc, itself used only by obsolete tests.
+  Production run_selected_summary uses the persistent AttachedChild from backend.
+  Deleted the whole 451-line guardian module, exchange_fake_rpc/_run_fake/_attempt,
+  and three fake-only test modules. Namespaced supervision remains solely on
+  A12's NamespacedChild, already covered by its real namespace/deadline tests.
+  SelectedChildUnknown moves directly to selected_pi_summary_rpc; callers migrated,
+  no alias/re-export. Production summary exchange behavior stays intact.
+- Current native fixtures launch real AttachedChild processes. Removed old local
+  group-signal variants; A12 owns those process semantics. Real Pi preflight
+  fixtures replace fabricated process bags; actual current authority assertions
+  remain. Summary fixtures now use the real persistent child owner too.
+
+Additional focused receipts:
+- child-adoption-first.log:70 passed/6 opt-in skips (native proofs, fake RPC,
+  cancellation and actual failed-child reap before UNKNOWN slot release).
+- event-summary-first.log:83 passed/2 opt-in skips;2 SDK failures were missing
+  dependencies only. child-ui-sdk.log:both SDK cases pass after linking the
+  existing dependency directory. Failed receipt kept.
+- child-actual-cli-guards.log:7 passed, including actual prepared Pi CLI with
+  loopback-only deterministic provider plus S10/A12 guards. No paid provider.
+- child-main-native-seam.log:7 passed on current main, including the actual Pi
+  read/edit/write/bash loopback fixture and six S10/PF guards.
+- child-debt-ratchet.json:passes after current-main sync, including coupled A12
+  changes: type checks -12, long boolean chains -1, literal subscripts -15.
+  The pre-sync receipt failed +39 subscripts because origin/main advanced to
+  include channel/A13 deletions; that receipt is retained as before-sync.json.
+  The earlier handoff's pass label was premature and is corrected here.
+- Ruff on changed source/current seam tests and git diff --check pass.
+
+This adoption alone deletes804/adds252 production lines, deletes674/adds128 test
+lines (not counting imported PR232's foundation). It replaces no live data.
+
 ## Remaining assigned scope / exact dependencies
 
 **S10 is incomplete.** V2 remains the ten-column raw native_runtime_inputs read
-in selected_tool_broker.verify_sent_full_input. Cicero PR230 owns A13 and the canonical
-NativeRuntimeInput declaration; adopt that API here when landed, not a local row
-or adapter. Lovelace PR232 owns A12; S10 then migrates native_pi.py and
-selected_pi_child_deadline.py native spawn/stop/guardian users and deletes local
-supervision. No edits to those files in this draft. Parent integrates narrow
-backend callback annotations with Lovelace's backend migration. No other agent
-must change the V1/V3 owners concurrently.
+in selected_tool_broker.verify_sent_full_input. Cicero PR230 owns A13 and the
+canonical NativeRuntimeInput declaration; adopt that landed API here, not a copy.
 
-Full surface guards/full merged suite/quiet step activation remain pending these
-assigned dependencies. Current guards cover completed V1/V3, with no exceptions;
-they do not assert V2 or child adoption complete.
+**Concrete A12 cancellation gap for Lovelace PR232:** two cancellations of a
+BoundedRun.session containing a TERM-resistant child allow the caller to finish
+before the retained stop task reaps the child. Reproduced locally; see
+`a12-repeated-cancel.log` and `repeated-cancel.py`. Child was then fully reaped by
+its owner. Native's replaced cleanup previously guaranteed join before returning,
+so coupled integration needs A12.stop/session to preserve that invariant under
+repeated cancellation. No private workaround/second cleanup algorithm added here.
+Parent was notified once; no live reproduction or installed change.
+
+PR232 alone removes backend helpers required by old pi_events; integrate this
+branch's migrated callers with it. Parent handles serial coupled merge/full
+merged suite/quiet step activation. Guards cover current V1/V3 and retired local
+supervision; they do not claim V2 or the shared cancellation issue complete.
 
 ## Stores and install boundary
 
@@ -83,7 +129,7 @@ Parent must rebuild/seal the prepared Pi package using the new shipped extension
 before quiet step activation; an older selected extension is intentionally
 rejected by current source validation. Do not patch the live package in place.
 
-## Change accounting against R0/228 main
+## Initial V1/V3 change accounting against R0/228 main
 
 Production:127 added /113 deleted. Tests:252 added /56 deleted, including the
 71-line PF guard carried after226. Source net growth expresses three distinct UI

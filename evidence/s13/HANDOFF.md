@@ -117,6 +117,9 @@ First guard collection found an import of deleted reservation proof in obsolete
 tests; those tests/import were removed. Owner fixture API mistakes were fixed
 and their receipt preserved; two leftover owned fixture replacements were
 identified by their test-root saved identities and retired before rerunning.
+Final artifact cleanup found a third from the failed receipt fixture after pytest
+rotated its directory; exact process birth plus its own AGENT_COMMS_ROOT proved
+ownership before retirement. No live fixture workers or test artifacts remain.
 
 `reattach-first-failure.log` is an actual new-session path failure at
 ThreadManagement.claim_thread's obsolete pid= constructor. This is the explicit

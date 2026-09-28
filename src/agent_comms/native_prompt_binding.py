@@ -17,11 +17,11 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import WakeAssignment
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
-from .native_runtime_input import NativeRuntimeInput
-from .typed_table import Column, TypedRow, TypedTable
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
+from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .threads import Thread
+from .typed_table import Column, TypedRow, TypedTable
 
 _BINDING_PATH = "native_prompt_bindings.sqlite3"
 
@@ -67,7 +67,8 @@ class PromptBinding(TypedTable):
     @classmethod
     def triggers(cls) -> dict[str, str]:
         return {
-            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_{operation.lower()}_guard "
+            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
+            f"{operation.lower()}_guard "
             f"BEFORE {operation} ON {cls.declared_name} "
             "BEGIN SELECT RAISE(ABORT,'prelaunch binding is immutable'); END"
             for operation in ("UPDATE", "DELETE")

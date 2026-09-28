@@ -18,6 +18,8 @@ from .native_runtime_input import NativeRuntimeInput
 from .typed_table import TypedRow
 from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
+from .native_runtime_input import NativeRuntimeInput
+from .typed_table import TypedRow
 
 
 @dataclass(frozen=True, slots=True)
