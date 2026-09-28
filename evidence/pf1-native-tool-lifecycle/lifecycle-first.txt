@@ -1,0 +1,46 @@
+......................................FF.....                            [100%]
+=================================== FAILURES ===================================
+____ test_socket_close_cancels_pending_admission_and_closes_client[coding] _____
+
+policy = namespace(socket=<agent_comms.channel_coding_tools.CodingToolSocket object at 0x7f9454642670>, selected=False, effects...test_socket_close_cancels_pend0'), input_id='ed3391c456b2795a0119041e1d60e4bc', args={'path': 'x', 'content': 'value'})
+
+    async def test_socket_close_cancels_pending_admission_and_closes_client(policy):
+        p = policy
+        await p.socket.start()
+        p.socket.expected_pid = os.getpid()
+        reader, writer = await asyncio.open_unix_connection(str(p.socket.path))
+        writer.write(p.raw())
+        await writer.drain()
+        async with asyncio.timeout(2):
+            while not p.socket.calls: await asyncio.sleep(0)
+        await p.socket.close()
+>       assert await reader.read() == b''
+E       assert b'{"ok": fals...error": ""}\n' == b''
+E         
+E         Use -v to get more diff
+
+tests/test_native_tool_lifecycle.py:208: AssertionError
+___ test_socket_close_cancels_pending_admission_and_closes_client[selected] ____
+
+policy = namespace(socket=<agent_comms.selected_tool_broker.SelectedToolSocket object at 0x7f94546780f0>, selected=True, effect...socket_close_cancels_pend1'), input_id='10bcbab040ec0ecd3a485355c1e228fa', args={'resource': 'x', 'contents': 'value'})
+
+    async def test_socket_close_cancels_pending_admission_and_closes_client(policy):
+        p = policy
+        await p.socket.start()
+        p.socket.expected_pid = os.getpid()
+        reader, writer = await asyncio.open_unix_connection(str(p.socket.path))
+        writer.write(p.raw())
+        await writer.drain()
+        async with asyncio.timeout(2):
+            while not p.socket.calls: await asyncio.sleep(0)
+        await p.socket.close()
+>       assert await reader.read() == b''
+E       assert b'{"ok": fals... no retry"}\n' == b''
+E         
+E         Use -v to get more diff
+
+tests/test_native_tool_lifecycle.py:208: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_tool_lifecycle.py::test_socket_close_cancels_pending_admission_and_closes_client[coding]
+FAILED tests/test_native_tool_lifecycle.py::test_socket_close_cancels_pending_admission_and_closes_client[selected]
+2 failed, 43 passed in 20.22s
