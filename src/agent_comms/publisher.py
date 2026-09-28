@@ -156,6 +156,7 @@ class Publisher:
         if _human_origin is not None and type(_human_origin) is not HumanOrigin:
             raise RelationViolationError("Human origin must be a typed local USER identity.")
         with guard_legacy_root_write(self.log.path.parent), self.log.locked():
+            self._validate_publish_request(message)
             if not self.log.read_metadata_unlocked().private:
                 self._initialize_private_protocol_unlocked()
                 if self._private_claim_writes:

@@ -106,7 +106,7 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
         SavedView("team-view", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"team"})))
     )
     before = comms.bus.log.latest_sequence()
-    with pytest.raises(ValueError, match="not routable"):
+    with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send_user_message("#team-view", "blocked", worktree=str(comms.root))
     assert comms.bus.log.latest_sequence() == before
     comms.messaging.send_user_message("#team", "exact", worktree=str(comms.root))

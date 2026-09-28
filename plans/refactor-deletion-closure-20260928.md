@@ -61,7 +61,7 @@ with its real number as soon as working source is committed and published.
 | Batch | Owner / worktree | PR and state | Required closure |
 | --- | --- | --- | --- |
 | B1 canonical bus execution / S2,S4,S7,R3,R7 | Parent; persistent integration tree | Draft PR229; follows B2 writer caller; D22 approved | Delete public Publisher.publish, old append/sequence and InputDrain ACK/steer execution fallback; remove mark_view_read forwarding. Stage canonical roots through existing cutover owners, preserve original source/history and unresolved input provenance; no UNKNOWN replay. |
-| B2 channel/catalog compatibility / S4,R2 | Darwin; ~/wt/comms-channel-deletion-closure-20260928 | Pending; implementation assigned | Migrate saved union audiences/preferences/history into current owners, retire their active creation/routing, delete Channel.aggregate_target/members_for. Migrate update_tags to canonical publisher. Paired Toad callers belong to this batch. |
+| B2 channel/catalog compatibility / S4,R2 | Darwin; ~/wt/comms-channel-deletion-closure-20260928 | Comms231 and Toad106 merged; quiet installation and tool deletion pending | Migrate saved union audiences/preferences/history into current owners, retire their active creation/routing, delete Channel.aggregate_target/members_for. Migrate update_tags to canonical publisher. Paired Toad callers belong to this batch. |
 | B3 native evidence and response authority / PF3,S3,R7 | Pascal; ~/wt/comms-pf3-deletion-closure-20260928 | PR226 merged; installation pending quiet step | Delete _read_native_context_evidence after moving validation to NativeContextProof and migrating five current callers. Delete response-owner fixture bypass and optional authority forms; fixtures provide real witnesses. |
 | B4 typed file-claim callers / S5 | Pascal; same authority PR as B3 | PR226 merged; installation pending quiet step | Move internal callers to ExistingFileClaim/WritableFileClaim; delete normalize_existing_file and raw internal coercion adapters; parse external paths once. |
 | B5 disconnected bridges / S7,R6 | Parent; ~/wt/comms-acp-saved-session-startup-20260928 | PR225 merged and installed; local checks and installed read-only DM acceptance passed | Delete ordinary_delivery_bridge.py, transcript_route_legacy.py and their exclusive tests; preserve existing saved files and current native route/delivery owners. Fix remaining test caller of removed package export. |
@@ -97,3 +97,14 @@ Close each row only after its concrete obsolete names/implementations are absent
 all current callers use the actual owner, saved data is preserved when affected,
 local and installed-path evidence passes, and its PR is merged and installed.
 Line deletion counts are evidence of removal, not proof of correct ownership.
+
+## Current integration receipt
+
+PR229 rebased onto main including231. Public writer/drain and duplicate scalar
+read stores are removed. Current channel/read-ledger/idle suite: 35 passed,
+6.63s (evidence/round2-l0/channel-current-contracts.log). Retained channel race
+tests use the canonical writer and actual human provenance. Deleted only old
+public-tail and missing-marker repair assertions. No live installation yet.
+D22 history rewrite, old reader removal, admission floor across runtime reset,
+and remaining current callers still belong to229/235. Round-two detailed
+assignments are in docs/refactor/round2/04-DISPATCH.md.
