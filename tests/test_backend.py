@@ -2438,6 +2438,41 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
         assert events[-1].reason_code == "pi_input_id_unavailable"
         assert not received.exists()
 
+    async def test_preflight_exit_reports_startup_cause_without_sending_prompt(self, tmp_path):
+        received = tmp_path / "received-prompt"
+        cause = (
+            "Failed to load extension: Native import boundary refused: "
+            "outside committed deployment root"
+        )
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + f"""
+import json, select, sys
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+print({cause!r}, file=sys.stderr, flush=True)
+if select.select([sys.stdin], [], [], 0.1)[0]:
+    line = sys.stdin.readline()
+    if line: open({str(received)!r}, "w").write(line)
+sys.exit(1)
+""",
+        )
+        events = [
+            event
+            async for event in backend.stream_agent_events(
+                stub, [], "private unsent prompt", str(tmp_path)
+            )
+        ]
+        done = events[-1]
+        assert not done.ok
+        assert done.reason_code == "pi_input_id_unavailable"
+        assert done.diagnostic["reason"] == "native_preflight_exit"
+        assert cause in done.text
+        assert "prompt was not sent" in done.text
+        assert "private unsent prompt" not in done.text
+        assert cause not in str(done.diagnostic)
+        assert not received.exists()
+
     async def test_preflight_timeout_reports_phase_duration_and_session_size(
         self, tmp_path, monkeypatch
     ):

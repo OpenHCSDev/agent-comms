@@ -1,0 +1,4 @@
+Verified entire native package after canonical source reconciliation
+package: /home/ts/wt/comms-native-global-extensions-20260928/.artifacts/package
+commitment: ae844ae9c0fdb5efbf8782818e781b0d81f5911d5488e308f3911abc77ff932e
+exit: 0

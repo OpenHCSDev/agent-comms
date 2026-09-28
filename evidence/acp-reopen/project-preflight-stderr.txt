@@ -1,0 +1,5 @@
+Error: Failed to load extension "/home/ts/.pi/agent/extensions/agent-comms/index.ts": Failed to load extension: Native import boundary refused: outside committed deployment root
+Error: Failed to load extension "/home/ts/.pi/agent/extensions/project-sync/index.ts": Failed to load extension: Native import boundary refused: outside committed deployment root
+Error: Failed to load extension "/home/ts/.pi/agent/extensions/subagent/index.ts": Failed to load extension: Native import boundary refused: outside committed deployment root
+Error: Failed to load extension "/home/ts/.pi/agent/extensions/web-search/index.ts": Failed to load extension: Native import boundary refused: outside committed deployment root
+Hint: Start without extensions using "pi -ne".
