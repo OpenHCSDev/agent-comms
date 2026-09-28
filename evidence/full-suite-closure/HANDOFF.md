@@ -59,3 +59,27 @@ fresh owner authority from autonomous goal grants. Assertions now require False
 refusal and unchanged autonomous generation while retaining native STARTED/UNKNOWN,
 owner-stop revocation, goal replacement and no-replay behavior. Next full run
 includes those corrections; no production authority change.
+
+## Parent ownership integration and persistence fixtures
+
+Merged parent8aa4419 cleanly, retaining archival-read and real saved-collision
+coverage. Parent alone owns publication collision boundary source and live stage.
+Cicero owns checkpoint/source-cursor cleanup; no changes to those modules here.
+
+Third full attempt reached cohort tests before its165-second command bound;
+11 failures observed, no complete result claimed. Isolated failure batch plus
+parent-reported fixtures:67 passed/1failed in14.37s after fixes. The final failure
+called deleted MessageBus.remove_thread; that old-path assertion is now deleted,
+as is deleted Publisher.publish acceptance. Canonical claim conflict, retained
+history and marker behavior remain covered by the existing real publication tests.
+
+- Registry family fixture gives BlockedGoal an explicit fixture-only reason.
+- Visible-after-fsync fixture rewrites an actual canonical published row with0600
+  permissions; it no longer inserts an unattested row outside the history boundary.
+- Backend settlement exercises actual native RPC pipes via explicit fixture trust.
+- Owner-pause tests use the canonical configured owner; assertions unchanged.
+- Channel membership/pin fixtures use ProcessIdentity. Deleted unmarked legacy
+  #any runtime-reader assertion; retained agent and human non-routability checks.
+
+Next full serial run uses explicit -n0, cleared addopts, maxfail12, verbose log,
+JUnit output, owned .t basetemp and1800-second overall bound with SIGINT cleanup.

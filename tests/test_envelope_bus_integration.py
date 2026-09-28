@@ -208,10 +208,6 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert comms.bus.inbox("bob")[0].claim_transition == sent.claim_transition
     fresh = Comms(comms.root)
     assert fresh.views.full_history() == [sent]
-    marker_before = (comms.root / "bus_meta.json").read_bytes()
-    with pytest.raises(RelationViolationError, match="Private bus protocol blocks legacy deletion"):
-        fresh.bus.remove_thread("alice")
-    assert (comms.root / "bus_meta.json").read_bytes() == marker_before
 
 
 def test_whole_set_rejects_conflict_without_partial_ownership(tmp_path: Path) -> None:
