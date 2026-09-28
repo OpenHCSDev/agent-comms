@@ -57,6 +57,7 @@ from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
 from agent_comms.wake_policy import PassiveWake
+from selected_summary_cases import manual_source
 
 
 @pytest.fixture
@@ -493,12 +494,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
         journal.reserve_selected_summary(
             str(fresh.path),
             {
-                "source": {
-                    "ownerName": "beta",
-                    "ownerCreatedAt": float(people[2].created_at).hex(),
-                    "ownerPid": os.getpid(),
-                    "admissionGeneration": coverage[3],
-                },
+                "source": manual_source(fresh.path, "beta", incarnation=people[2].incarnation),
                 "selected": {"provider": "openrouter", "modelId": "test", "contextWindow": 200000},
                 "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
@@ -636,7 +632,7 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
         journal.reserve_selected_summary(
             str(visible[0]),
             {
-                "source": {"ownerName": "beta"},
+                "source": manual_source(visible[0], "beta"),
                 "selected": {"provider": "openrouter", "modelId": "test", "contextWindow": 200000},
                 "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
@@ -899,7 +895,7 @@ def _reserved_private_selected_row(journal: CompactionJournal, session_file: Pat
     operation_id = "a" * 32
     source = json.dumps(
         {
-            "source": {"witness": "fake"},
+            "source": manual_source(session_file, "beta"),
             "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
             "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
         },
@@ -1015,7 +1011,7 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
         journal.reserve_selected_summary(
             str(saved),
             {
-                "source": {"witness": "fake"},
+                "source": manual_source(saved, "beta"),
                 "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
                 "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
