@@ -38,3 +38,10 @@ This branch is not independently installable before stored data cutover and thes
 - Additional registration shard: 32 passed (including the two shared new tests); the guard initially identified the purge call and now passes after full entrypoint deletion.
 - Wider goal/relationship/DM shard: 66 passed, 3 failed. The retained DM rebind tests still encounter the existing old bus reader's pending-history counts after removing physical purge from their setup. Keep their assertions; rerun with parent's actual ReadLedger change, not an assertion relaxation.
 - No live restart, install or live state mutation. Full suite/integration and parent cutover remain pending. Slow CI deferred.
+
+## Typed protocol and packaged acceptance
+
+- Core Goal payloads now carry the same typed state used in persistence. `GoalHistoryEntry.to_wire` also emits typed nested goals. External ACP framing is unchanged; the agent-comms-owned metadata changes in the paired Toad release.
+- 69 focused goal/runtime tests pass, including current runtime snapshots and retry notifications.
+- All marked guards: 5 passed; ratchet delta: type identity -2, long booleans 0, string subscripts -2. Required GitHub run 36440516230 passed at source 70fb790.
+- Built wheel installed only in this worktree's disposable target. Fresh real CLI processes registered an isolated owner, set a goal, reread it and its history, stopped and archived it, then proved identical retained history. Package import was from that candidate wheel, not the live runtime. Receipt: installed-cli.json. No mock/provider/live-owner action involved.
