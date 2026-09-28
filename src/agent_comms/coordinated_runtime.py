@@ -36,6 +36,7 @@ from .coordination_cohort import _assert_schema, accept_initial_cohort, sealed_c
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
+    _require_live_registry_owner,
     _response_boundary,
     prepare_fenced_response,
     publish_fenced_response,
@@ -1012,6 +1013,22 @@ class SelectedExecution:
         )
 
     def _uncertain_failure(self, error: NativePiUnavailable):
+        try:
+            if self.progress is not None:
+                # run_native_pi_turn returns/raises only after its child, raw
+                # writer and tool socket have closed. Preserve UNKNOWN effects,
+                # but do not strand unrelated work behind this dead local turn.
+                with _response_boundary(self.bus) as registry:
+                    _require_live_registry_owner(
+                        registry, self.progress.fence, os.getpid(), self.owner_witness
+                    )
+                    self.progress.fail_unknown()
+            else:
+                _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        except StaleFence:
+            # Recovery monitor owns a revoked owner's still-uncertain attempt.
+            # Preserve the original backend error and never act for a successor.
+            return
         if self.input_id is not None:
             try:
                 _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
