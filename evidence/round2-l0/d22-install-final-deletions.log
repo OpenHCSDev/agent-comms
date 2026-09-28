@@ -1,0 +1,16 @@
+PASS live installation refused while clients remain: Registered owner is still alive: agent-comms-ux
+{
+  "messages": 145,
+  "archived_messages": 8420,
+  "threads": 104,
+  "unknown_inputs": 13,
+  "retained_documents": [
+    "relationships.json",
+    "compaction-commits.sqlite3"
+  ],
+  "all_original_backup_files": 301,
+  "atomic_exchange": true,
+  "human_read_memberships_preserved": true,
+  "native_sessions_and_diagnostics_preserved": true
+}
+PASS: actual retained-root staging, installation and reopening; owned copies removed

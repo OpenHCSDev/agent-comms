@@ -1,9 +1,10 @@
 {
   "readonly": true,
+  "field_checked": "to",
   "sources": [
     {
       "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/bus.jsonl",
-      "messages": 145,
+      "messages": 146,
       "broadcast_targets": []
     },
     {
@@ -17,5 +18,6 @@
       "broadcast_targets": []
     }
   ],
-  "migration_required": false
+  "migration_required": false,
+  "correction": "Prior receipt checked target rather than serialized to; this replaces that invalid audit."
 }
