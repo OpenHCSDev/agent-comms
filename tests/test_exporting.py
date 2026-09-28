@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import SavedView, Thread, ViewKind, ViewMatch, ViewPredicate, wire
+from agent_comms import AnyOfMatch, SavedView, Thread, ViewKind, ViewPredicate, wire
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.cli import main
 from agent_comms.declarations import Message, MessageType, RelationViolationError
@@ -338,7 +338,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
         SavedView(
             "projection",
             ViewKind.PARTICIPANTS,
-            ViewPredicate(ViewMatch.ANY_OF, frozenset({"team"})),
+            ViewPredicate(AnyOfMatch, frozenset({"team"})),
         )
     )
     with pytest.raises(RelationViolationError, match="no authoritative wire history"):

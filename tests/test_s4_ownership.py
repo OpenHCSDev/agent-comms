@@ -7,16 +7,17 @@ from pathlib import Path
 import pytest
 
 from agent_comms import (
+    AnyOfMatch,
     Message,
     MessageType,
     SavedView,
     Thread,
     ViewKind,
-    ViewMatch,
     ViewPredicate,
     wire,
 )
 from agent_comms.declarations import BuiltinChannel, ThreadRole
+from agent_comms.field_codec import FieldCodec
 
 
 def test_alias_declaration_drives_lookup_delivery_history_and_audience(monkeypatch, tmp_path):
@@ -52,7 +53,7 @@ def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
     view = SavedView(
         "work",
         ViewKind.ACTIVITY,
-        ViewPredicate(ViewMatch.ANY_OF, frozenset({"z", "a"})),
+        ViewPredicate(AnyOfMatch, frozenset({"z", "a"})),
         created_at=7.0,
     )
     expected = {
@@ -61,8 +62,8 @@ def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
         "predicate": {"match": "any_of", "tags": ["a", "z"]},
         "created_at": 7.0,
     }
-    assert view.to_wire() == expected
-    assert SavedView.from_wire("work", {k: v for k, v in expected.items() if k != "name"}) == view
+    assert FieldCodec.encode(view) == expected
+    assert FieldCodec.decode(SavedView, expected) == view
     message = Message("sender", "peer", "body", MessageType.INFO, timestamp=7.0, seq=1)
     assert message.to_wire() == {
         "from": "sender",
