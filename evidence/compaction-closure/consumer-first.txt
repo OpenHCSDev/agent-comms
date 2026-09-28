@@ -1,0 +1,858 @@
+......................................ss.................EEEEEEEEEEEEEE  [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_live_future_queue_and_foreign_ingress_do_not_change_summary_source _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_live_future_queue_and_for0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e853a820>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_live_future_queue_and_for0/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[steer] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75ea5a1cc0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu0/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[clear] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75ea55a6d0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu1/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[promote] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75ea559a20>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu2/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[shutdown] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75ea55b7e0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu3/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[lost_owner] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75ea558050>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu4/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[changed_queue] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e85274d0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu5/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[deleted_queue] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e8526820>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu6/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[bound_queue] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e85278c0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu7/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_ ERROR at setup of test_uncertain_or_changed_input_never_borrows_future_queue_exception[old_unknown] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_uncertain_or_changed_inpu8')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e84fb8c0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_uncertain_or_changed_inpu8/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+___ ERROR at setup of test_relevant_source_and_owner_fences_remain[original] ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_relevant_source_and_owner0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e84faeb0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_relevant_source_and_owner0/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_____ ERROR at setup of test_relevant_source_and_owner_fences_remain[bus] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_relevant_source_and_owner1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e833f230>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_relevant_source_and_owner1/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+____ ERROR at setup of test_relevant_source_and_owner_fences_remain[owner] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_relevant_source_and_owner2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e833d6a0>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_relevant_source_and_owner2/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+_____ ERROR at setup of test_relevant_source_and_owner_fences_remain[turn] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/consumer/test_relevant_source_and_owner3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f75e838f230>
+
+    @pytest.fixture
+    async def owner(tmp_path, monkeypatch):
+        comms = Comms(tmp_path)
+        comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+        session = tmp_path / "saved.jsonl"
+        session.write_text("saved history\n")
+        comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
+        current, epoch = comms.registry.live_owner_with_generation("owner")
+        current, epoch = comms.registry.claim_live_turn_with_generation(
+            current, "turn", expected_owner_generation=epoch
+        )
+        agent = CommsAgent(comms, auto_wake=False)
+        agent.sessions.bindings["owner"] = "owner"
+        agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
+        agent.turns.active_turns["owner"] = "turn"
+        agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+        agent.inputs.dispositions.record(
+            "acp:original",
+            seq=None,
+            owner="owner",
+            admission=current.active_turn.admission_generation,
+            target="owner",
+            text="original",
+        )
+        # Only native package verification is outside this source-boundary fixture.
+        # The actual registry, wire, disposition, session locks and source CAS run.
+        monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
+>       witness = NativeWitness(
+            session_id="saved",
+            session_file=str(session),
+            leaf_id="leaf",
+            first_kept_entry_id="leaf",
+            revision="native-revision",
+        )
+
+tests/test_input_drain.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:8: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='saved', session_file='/home/ts/wt/comms-compaction-lifecycle-closure-20260928/.closure-work/...r/test_relevant_source_and_owner3/saved.jsonl', leaf_id='leaf', first_kept_entry_id='leaf', revision='native-revision')
+
+    def __post_init__(self):
+        if any(type(value := getattr(self, item.name)) is not str or not value
+               for item in fields(self)):
+            raise NativePreparationError("Exact native witness required")
+        if not self.session_file.startswith("/") or re.fullmatch(
+            r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision
+        ) is None:
+>           raise NativePreparationError("Canonical native path and revision required")
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Canonical native path and revision required
+
+src/agent_comms/owner_compaction_prepare.py:86: NativePreparationError
+=========================== short test summary info ============================
+ERROR tests/test_input_drain.py::test_live_future_queue_and_foreign_ingress_do_not_change_summary_source
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[steer]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[clear]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[promote]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[shutdown]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[lost_owner]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[changed_queue]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[deleted_queue]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[bound_queue]
+ERROR tests/test_input_drain.py::test_uncertain_or_changed_input_never_borrows_future_queue_exception[old_unknown]
+ERROR tests/test_input_drain.py::test_relevant_source_and_owner_fences_remain[original]
+ERROR tests/test_input_drain.py::test_relevant_source_and_owner_fences_remain[bus]
+ERROR tests/test_input_drain.py::test_relevant_source_and_owner_fences_remain[owner]
+ERROR tests/test_input_drain.py::test_relevant_source_and_owner_fences_remain[turn]
+55 passed, 2 skipped, 14 errors in 19.83s

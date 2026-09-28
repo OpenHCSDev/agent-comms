@@ -1,0 +1,51 @@
+........................F............................................... [ 90%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+___________ test_link_requires_exact_committed_native_intent_binding ___________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f5a3e34bd90>, '/home/ts/wt/comms-compaction-lifecycle-...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_link_requires_exact_committed_native_intent_binding(reserved):
+        journal, session, source = reserved
+        wrong = journal.begin(session, {"selectedSummaryOperationId": "0" * 32})
+        journal.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
+        operation_id = journal.reserve_selected_summary(session, source)
+        with pytest.raises(CompactionJournalError, match="Exact committed"):
+            journal.link_selected_summary_commit(operation_id, wrong)
+        commit_id = journal.begin(session, {"selectedSummaryOperationId": operation_id})
+        with pytest.raises(CompactionJournalError, match="Exact committed"):
+            journal.link_selected_summary_commit(operation_id, commit_id)
+        journal.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
+        journal.link_selected_summary_commit(operation_id, commit_id)
+        assert journal.selected_summary(operation_id).state.commit_id == commit_id
+        assert journal.unresolved_selected_summary(session) == ()
+        assert journal.blocking_selected_summary(session) == (journal.selected_summary(operation_id),)
+        assert not native_input_admitted(journal.path.parent, session)
+        with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+            journal.begin(session, {})
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            journal.reserve_selected_summary(session, source, operation_id=operation_id)
+        with pytest.raises(CompactionJournalError, match="transition|Exact committed"):
+>           journal.mark_selected_summary_unknown(operation_id)
+
+tests/test_selected_summary_journal.py:252: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.compaction_journal.CompactionJournal object at 0x7f5a3e34bd90>
+operation_id = '62533389dc8a4aa5a00c320885c15431'
+
+    def mark_selected_summary_unknown(self, operation_id: str) -> None:
+        """Record transport uncertainty; never erase or retry the reservation."""
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT status FROM selected_summary_attempts WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+>           if row is None or not SummaryState.decode(row[0])().may_become(UnknownSummary()):
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: LinkedSummary.__init__() missing 1 required positional argument: 'commit_id'
+
+src/agent_comms/compaction_journal.py:703: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_journal.py::test_link_requires_exact_committed_native_intent_binding
+1 failed, 79 passed in 7.21s
