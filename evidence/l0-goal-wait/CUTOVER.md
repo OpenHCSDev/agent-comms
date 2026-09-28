@@ -1,7 +1,7 @@
 # L0 goal/wait/input cutover contract
 
 Owner implementation branch: refactor/l0-goal-wait-closure-20260928, based on
-parent PR229 at 14df8d6, with parent bb1892e integrated. Parent owns the one-shot tools and quiet activation.
+parent PR229 at 14df8d6, with parent 121f526 integrated (current S12 GoalHistoryEntry table). Parent owns the one-shot tools and quiet activation.
 No live or parent source/data is modified by this branch.
 
 ## Durable goal records

@@ -13,7 +13,6 @@ import pytest
 
 from agent_comms import locked_store
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_pauses import GoalPauseEvent, GoalPauseEvents
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_states import OwnerPause, PausedGoal, RuntimePause
@@ -276,12 +275,3 @@ def test_pause_store_golden_and_shared_algorithm(tmp_path):
         GoalPauseEvents.for_goal(Goal("Work", "goal", revision=5, state=PausedGoal())).source
         == OwnerPause()
     )
-
-
-def test_history_codec_roundtrips_current_goal_and_rejects_invalid_revision():
-    goal = Goal("Work", "goal")
-    assert GoalHistoryStore._decode(GoalHistoryStore._encode(goal)) == goal
-    assert GoalHistoryStore._encode(None) is None
-    assert GoalHistoryStore._decode(None) is None
-    with pytest.raises(GoalHistoryError, match="invalid goal snapshot"):
-        GoalHistoryStore._decode('{"text": "Work", "id": "goal", "revision": true}')

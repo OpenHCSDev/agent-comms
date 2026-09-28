@@ -55,12 +55,19 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
         == "Blocked · reason unavailable"
     )
     with sqlite3.connect(tmp_path / "goal_history.sqlite3") as database:
-        before = database.execute(f"SELECT * FROM {GoalHistoryEntry.declared_name} ORDER BY sequence").fetchall()
+        before = database.execute(
+            f"SELECT * FROM {GoalHistoryEntry.declared_name} ORDER BY sequence"
+        ).fetchall()
     reopened = wire(tmp_path)
     assert reopened.goals.goal_history("owner") == history
     assert not reopened.relationships._goal_contacts(reopened.registry.snapshot())[0]
     with sqlite3.connect(tmp_path / "goal_history.sqlite3") as database:
-        assert database.execute(f"SELECT * FROM {GoalHistoryEntry.declared_name} ORDER BY sequence").fetchall() == before
+        assert (
+            database.execute(
+                f"SELECT * FROM {GoalHistoryEntry.declared_name} ORDER BY sequence"
+            ).fetchall()
+            == before
+        )
     for data in ({"kind": "blocked"}, {"kind": "blocked", "block_reason": None}):
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(GoalState, data)

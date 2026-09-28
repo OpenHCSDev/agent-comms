@@ -180,15 +180,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 or wait.revision > goal.revision
             ):
                 wait = None
-            dependencies = (
-                targets
-                if name == owner
-                else (
-                    wait.targets
-                    if wait is not None
-                    else ()
-                )
-            )
+            dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
                 canonical = snapshot.aliases.get(target.name, target.name)
                 peer = snapshot.threads.get(canonical)

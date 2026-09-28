@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .field_codec import FieldCodec
-from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, GoalState, PausedGoal, UnrecordedBlockGoal
+from .goal_states import (
+    ActiveGoal,
+    BlockedGoal,
+    CompletedGoal,
+    GoalState,
+    PausedGoal,
+    UnrecordedBlockGoal,
+)
 from .thread_presentation import ThreadPresentation
 
 
@@ -53,7 +60,10 @@ class GoalExecutionState(StrEnum):
     STANDBY = ("standby", StandbyExecutionPresentation())
     PAUSED = (PausedGoal.declared_name, StateExecutionPresentation(PausedGoal))
     BLOCKED = (BlockedGoal.declared_name, StateExecutionPresentation(BlockedGoal))
-    UNRECORDED_BLOCK = (UnrecordedBlockGoal.declared_name, StateExecutionPresentation(UnrecordedBlockGoal))
+    UNRECORDED_BLOCK = (
+        UnrecordedBlockGoal.declared_name,
+        StateExecutionPresentation(UnrecordedBlockGoal),
+    )
     COMPLETED = (CompletedGoal.declared_name, StateExecutionPresentation(CompletedGoal))
 
 
