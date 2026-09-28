@@ -37,6 +37,7 @@ class BusRouteCounts:
             "CREATE INDEX IF NOT EXISTS route_pair_seq "
             "ON route_prefixes(target, sender, seq DESC, id DESC)"
         )
+        self.connection.execute("CREATE INDEX IF NOT EXISTS route_seq ON route_prefixes(seq)")
         self.connection.execute(
             "CREATE TABLE IF NOT EXISTS route_totals ("
             "target TEXT PRIMARY KEY, total INTEGER NOT NULL)"
@@ -184,6 +185,27 @@ class BusRouteCounts:
 
     def routes(self) -> tuple[tuple[str, str], ...]:
         return tuple(self.connection.execute("SELECT target, sender FROM pair_totals"))
+
+    def unseen_counts(self, seen: frozenset[int]) -> tuple[tuple[str, str, int], ...]:
+        """Subtract exact painted membership from existing route totals.
+
+        The ledger supplies only currently valid display evidence. Probe the
+        sequence index once per seen sequence, not once per historical message
+        or once per route. No read watermark can represent holes in that set.
+        """
+        return tuple(
+            self.connection.execute(
+                "WITH painted AS ("
+                "SELECT route.target, route.sender, count(*) AS count "
+                "FROM json_each(?) AS seen CROSS JOIN route_prefixes AS route "
+                "ON route.seq = seen.value GROUP BY route.target, route.sender) "
+                "SELECT totals.target, totals.sender, totals.total - coalesce(painted.count, 0) "
+                "FROM pair_totals AS totals LEFT JOIN painted "
+                "ON totals.target = painted.target AND totals.sender = painted.sender "
+                "WHERE totals.total > coalesce(painted.count, 0)",
+                (json.dumps(sorted(seen)),),
+            )
+        )
 
     def target_after(self, target: str, through: int) -> int:
         key = target, through
