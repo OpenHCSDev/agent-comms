@@ -31,7 +31,7 @@ from .coordination import (
     ConnectivityFacet,
     CoordinationError,
     CoordinationStore,
-    CurrentExecutionPointer,
+    CurrentExecutions,
     ExecutionAssignmentLink,
     ExecutionOrigin,
     ExecutionRecord,
@@ -39,11 +39,15 @@ from .coordination import (
     MessageAudience,
     OwnerConnectivity,
     OwnerFence,
-    PublicationIntent,
+    OwnerGenerations,
+    ParticipantAliases,
+    Participants,
+    PublicationIntents,
     PublicationReceipt,
+    PublicationReceipts,
     RecoveryAudit,
     RecoverySnapshot,
-    ReplayAssessment,
+    ReplayAssessments,
     ReplayFact,
     ResponseObligation,
     WakeAssignment,
@@ -51,7 +55,7 @@ from .coordination import (
 )
 from .coordination_errors import IdentityConflict
 from .execution_states import ExecutionState, QueuedExecution
-from .messages import MessageType
+from .native_runtime_input import NativeRuntimeInput
 from .obligation_states import ResponseState
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
 from .wake_policy import WakePolicy
@@ -107,7 +111,7 @@ class ParticipantSnapshot:
     aliases: tuple[str, ...]
     owner_thread: str
     participant_generation: int = field(metadata={"wire_name": "generation"})
-    pointer: CurrentExecutionPointer
+    pointer: CurrentExecutions
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,18 +166,22 @@ class VerifiedOwnerLoss:
             attempt = snapshot.attempt
             if attempt is None or not snapshot.is_current:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
-            source = store._connection.execute(
-                "SELECT owner_lookup,owner_thread,owner_generation,sent_owner_admission_epoch "
-                "FROM native_runtime_inputs WHERE execution_id=? AND attempt_ordinal=?",
-                (execution_id, attempt.attempt_ordinal),
-            ).fetchone()
-            if source is None or tuple(source[:3]) != (
+            source = NativeRuntimeInput.one(
+                store._connection,
+                execution_id=execution_id,
+                attempt_ordinal=attempt.attempt_ordinal,
+            )
+            if source is None or (
+                source.owner_lookup,
+                source.owner_thread,
+                source.owner_generation,
+            ) != (
                 attempt.owner_lookup,
                 attempt.owner_thread,
                 attempt.owner_generation,
             ):
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
-            admission_generation = source["sent_owner_admission_epoch"]
+            admission_generation = source.sent_owner_admission_generation
             release = comms.owners._read_owner_release_receipts().get(attempt.owner_thread)
             current = registry.threads.get(attempt.owner_thread)
             if release is None or current is None:
@@ -418,32 +426,29 @@ class MutationStore(CoordinationStore):
 
     def _participant(self, lookup: str) -> ParticipantSnapshot:
         db = self._connection
-        person = self._row("participants", "participant_lookup", lookup)
-        generation = self._row("owner_generations", "owner_lookup", lookup)
-        pointer = self._row("current_executions", "owner_lookup", lookup)
+        person = Participants.one(self._connection, participant_lookup=lookup)
+        generation = OwnerGenerations.one(self._connection, owner_lookup=lookup)
+        pointer = CurrentExecutions.one(self._connection, owner_lookup=lookup)
         if person is None or generation is None or pointer is None:
             raise IdentityConflict("participant aggregate is not registered")
         aliases = tuple(
-            row[0]
-            for row in db.execute(
-                "SELECT alias FROM participant_aliases WHERE participant_lookup=? "
-                "ORDER BY renamed_at_ms, rowid",
-                (lookup,),
+            row.alias
+            for row in ParticipantAliases.read(
+                db.execute(
+                    f"SELECT * FROM {ParticipantAliases.declared_name} WHERE participant_lookup=? "
+                    "ORDER BY renamed_at_ms, rowid",
+                    (lookup,),
+                )
             )
         )
         return ParticipantSnapshot(
             lookup,
-            person["display_name"],
-            bool(person["committed"]),
+            person.display_name,
+            person.committed,
             aliases,
-            generation["owner_thread"],
-            generation["generation"],
-            CurrentExecutionPointer(
-                lookup,
-                pointer["execution_id"],
-                pointer["attempt_ordinal"],
-                pointer["pointer_revision"],
-            ),
+            generation.owner_thread,
+            generation.generation,
+            pointer,
         )
 
     def participant(self, lookup: str) -> ParticipantSnapshot:
@@ -466,7 +471,7 @@ class MutationStore(CoordinationStore):
                 raise ValueError("participant identity must be bounded and nonempty")
         primary = alias or lookup
         with self._transaction() as db:
-            existing = self._row("participants", "participant_lookup", lookup)
+            existing = Participants.one(self._connection, participant_lookup=lookup)
             if existing is not None:
                 snapshot = self._participant(lookup)
                 # Commitment, display name and generation owner may advance.
@@ -475,21 +480,20 @@ class MutationStore(CoordinationStore):
                 if not snapshot.aliases or snapshot.aliases[0] != primary:
                     raise IdentityConflict("participant registration alias conflicts")
                 return AlreadyApplied(snapshot)
-            if self._row("participant_aliases", "alias", primary) is not None:
+            if ParticipantAliases.one(self._connection, alias=primary) is not None:
                 raise IdentityConflict("alias already belongs to another participant")
-            db.execute(
-                "INSERT INTO participants VALUES (?,?,?)", (lookup, display_name, int(committed))
+            Participants(
+                participant_lookup=lookup, display_name=display_name, committed=committed
+            ).insert(db)
+            ParticipantAliases(
+                alias=primary, participant_lookup=lookup, renamed_at_ms=self._now()
+            ).insert(db)
+            OwnerGenerations(owner_lookup=lookup, owner_thread=owner_thread, generation=1).insert(
+                db
             )
-            db.execute(
-                "INSERT INTO participant_aliases VALUES (?,?,?)", (primary, lookup, self._now())
-            )
-            db.execute("INSERT INTO owner_generations VALUES (?,?,1)", (lookup, owner_thread))
-            db.execute(
-                "INSERT INTO current_executions"
-                "(owner_lookup,execution_id,attempt_ordinal,pointer_revision) "
-                "VALUES (?,NULL,NULL,0)",
-                (lookup,),
-            )
+            CurrentExecutions(
+                owner_lookup=lookup, execution_id=None, attempt_ordinal=None, pointer_revision=0
+            ).insert(db)
             return Applied(self._participant(lookup))
 
     def commit_participant(
@@ -499,9 +503,11 @@ class MutationStore(CoordinationStore):
             person = self._participant(lookup)
             if person.committed:
                 return AlreadyApplied(person)
-            db.execute(
-                "UPDATE participants SET committed=1 WHERE participant_lookup=? AND committed=0",
-                (lookup,),
+            Participants.update(
+                db,
+                where="participant_lookup=? AND committed=0",
+                parameters=(lookup,),
+                committed=True,
             )
             return Applied(self._participant(lookup))
 
@@ -520,22 +526,22 @@ class MutationStore(CoordinationStore):
             person = self._participant(lookup)
             if person.participant_generation != expected_generation:
                 raise StaleRevision("owner generation changed")
-            existing = self._row("participant_aliases", "alias", alias)
+            existing = ParticipantAliases.one(self._connection, alias=alias)
             if existing is not None:
-                if existing["participant_lookup"] != lookup:
+                if existing.participant_lookup != lookup:
                     raise IdentityConflict("alias is already assigned")
                 return AlreadyApplied(person)
-            last_alias_ms = db.execute(
-                "SELECT max(renamed_at_ms) FROM participant_aliases WHERE participant_lookup=?",
-                (lookup,),
-            ).fetchone()[0]
-            db.execute(
-                "INSERT INTO participant_aliases VALUES (?,?,?)",
-                (alias, lookup, self._now(last_alias_ms)),
+            last_alias_ms = max(
+                row.renamed_at_ms
+                for row in ParticipantAliases.select(
+                    db, where="participant_lookup=?", parameters=(lookup,)
+                )
             )
-            db.execute(
-                "UPDATE participants SET display_name=? WHERE participant_lookup=?",
-                (display_name, lookup),
+            ParticipantAliases(
+                alias=alias, participant_lookup=lookup, renamed_at_ms=self._now(last_alias_ms)
+            ).insert(db)
+            Participants.update(
+                db, where="participant_lookup=?", parameters=(lookup,), display_name=display_name
             )
             return Applied(self._participant(lookup))
 
@@ -554,10 +560,12 @@ class MutationStore(CoordinationStore):
                 raise IdentityConflict("uncommitted participant cannot own a generation")
             if person.participant_generation != expected_generation:
                 raise StaleRevision("owner generation changed")
-            db.execute(
-                "UPDATE owner_generations SET owner_thread=?,generation=generation+1 "
-                "WHERE owner_lookup=? AND generation=?",
-                (owner_thread, lookup, expected_generation),
+            OwnerGenerations.update(
+                db,
+                where="owner_lookup=? AND generation=?",
+                parameters=(lookup, expected_generation),
+                owner_thread=owner_thread,
+                generation=expected_generation + 1,
             )
             return Applied(self._participant(lookup))
 
@@ -696,18 +704,7 @@ class MutationStore(CoordinationStore):
             )
         )
         assignments = tuple(self.assignment(link.assignment_id) for link in links)
-        replay_row = self._row("replay_assessments", "execution_id", execution_id)
-        replay = (
-            ReplayAssessment(
-                execution_id,
-                ReplayFact(replay_row["facts"]),
-                bool(replay_row["replay_safe"]),
-                bool(replay_row["side_effects_possible"]),
-                replay_row["revision"],
-            )
-            if replay_row
-            else None
-        )
+        replay = ReplayAssessments.one(db, execution_id=execution_id)
         obligation_row = self._row("obligations", "execution_id", execution_id)
         obligation = (
             ResponseObligation(
@@ -725,42 +722,24 @@ class MutationStore(CoordinationStore):
             else None
         )
         # Read-only projections do not grant Tx1, append, Tx2 or resolution.
-        intent_row = self._row("publication_intents", "execution_id", execution_id)
-        intent = (
-            PublicationIntent(
-                execution_id,
-                intent_row["sender"],
-                intent_row["exact_target"],
-                MessageType(intent_row["message_type"]),
-                bool(intent_row["notice"]),
-                intent_row["timestamp"],
-                intent_row["payload"],
-                intent_row["payload_digest"],
-                intent_row["publication_key"],
-                intent_row["expected_message_id"],
-            )
-            if intent_row
-            else None
-        )
-        receipt_row = self._row("publication_receipts", "execution_id", execution_id)
-        receipt = (
-            PublicationReceipt(
-                execution_id,
-                intent.publication_key,
-                receipt_row["seq"],
-                receipt_row["message_id"],
-                intent.sender,
-                intent.exact_target,
-                intent.message_type,
-                intent.notice,
-                intent.timestamp,
-                intent.payload_digest,
-            )
-            if receipt_row and intent is not None
-            else None
-        )
+        intent = PublicationIntents.one(db, execution_id=execution_id)
+        receipt_row = PublicationReceipts.one(db, execution_id=execution_id)
         if receipt_row is not None and intent is None:
             raise IntegrityViolationError("publication receipt has no frozen intent")
+        receipt = None
+        if receipt_row is not None:
+            projection = ", ".join(
+                f"{'r' if name in PublicationReceipts.columns() else 'i'}.{name}"
+                for name in PublicationReceipt.columns()
+            )
+            (receipt,) = PublicationReceipt.read(
+                db.execute(
+                    f"SELECT {projection} FROM {PublicationReceipts.declared_name} r "
+                    f"JOIN {PublicationIntents.declared_name} i ON r.execution_id=i.execution_id "
+                    "WHERE r.execution_id=?",
+                    (execution_id,),
+                )
+            )
         connectivity_row = self._row("connectivity", "execution_id", execution_id)
         connectivity = (
             ConnectivityFacet(
@@ -773,22 +752,17 @@ class MutationStore(CoordinationStore):
             if connectivity_row
             else None
         )
-        audit_row = db.execute(
-            "SELECT * FROM recovery_audit WHERE execution_id=? ORDER BY audit_id DESC LIMIT 1",
-            (execution_id,),
-        ).fetchone()
-        audit = (
-            RecoveryAudit(
-                execution_id,
-                RecoveryCondition.decode(audit_row["kind"]),
-                audit_row["reason_code"],
-                audit_row["sanitized_detail"],
-                audit_row["attempt"],
-                audit_row["elapsed_ms"],
-                audit_row["observed_at_ms"],
-            )
-            if audit_row
-            else None
+        audit = next(
+            iter(
+                RecoveryAudit.read(
+                    db.execute(
+                        f"SELECT * FROM {RecoveryAudit.declared_name} WHERE execution_id=? "
+                        "ORDER BY audit_id DESC LIMIT 1",
+                        (execution_id,),
+                    )
+                )
+            ),
+            None,
         )
         pointer = self._participant(execution.owner_lookup).pointer
         return RecoverySnapshot(
@@ -1098,19 +1072,24 @@ class MutationStore(CoordinationStore):
                 "revision=revision+1,reason_code=NULL,updated_at_ms=? WHERE execution_id=?",
                 (ordinal, created, execution_id),
             )
-            db.execute(
-                "UPDATE current_executions SET execution_id=?,attempt_ordinal=?,"
-                "pointer_revision=pointer_revision+1 WHERE owner_lookup=?",
-                (execution_id, ordinal, execution.owner_lookup),
+            CurrentExecutions.update(
+                db,
+                where="owner_lookup=?",
+                parameters=(execution.owner_lookup,),
+                execution_id=execution_id,
+                attempt_ordinal=ordinal,
+                pointer_revision=snapshot.pointer_revision + 1,
             )
             if attempt_ordinal > 1 and snapshot.replay is not None and snapshot.replay.replay_safe:
                 # Replay safety is execution-scoped in v2, not bound to the new
                 # attempt.  Monotonically revoke the previous attempt's proof;
                 # a further automatic retry needs a separately versioned schema.
-                updated = db.execute(
-                    "UPDATE replay_assessments SET replay_safe=0,revision=revision+1 "
-                    "WHERE execution_id=?",
-                    (execution_id,),
+                updated = ReplayAssessments.update(
+                    db,
+                    where="execution_id=?",
+                    parameters=(execution_id,),
+                    replay_safe=False,
+                    revision=snapshot.replay.revision + 1,
                 )
                 if updated.rowcount != 1:
                     raise IntegrityViolationError("retry safety revocation lost its assessment")
@@ -1188,18 +1167,32 @@ class MutationStore(CoordinationStore):
             raise ValueError("attempt finality and progress must be booleans")
         if phase.terminal:
             raise IdentityConflict("terminal phases require atomic settlement")
-        with self._transaction() as db:
+        with self._transaction():
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            return Applied(self._advance_attempt(
-                fence, attempt, phase, backend_done=backend_done, process_dead=process_dead,
-                progress=progress, reason_code=reason_code,
-            ))
+            return Applied(
+                self._advance_attempt(
+                    fence,
+                    attempt,
+                    phase,
+                    backend_done=backend_done,
+                    process_dead=process_dead,
+                    progress=progress,
+                    reason_code=reason_code,
+                )
+            )
 
     def _advance_attempt(
-        self, fence: OwnerFence, attempt: AttemptRecord, phase: type[AttemptState], *,
-        backend_done: bool, process_dead: bool, progress: bool, reason_code: str | None,
+        self,
+        fence: OwnerFence,
+        attempt: AttemptRecord,
+        phase: type[AttemptState],
+        *,
+        backend_done: bool,
+        process_dead: bool,
+        progress: bool,
+        reason_code: str | None,
     ) -> StartResult:
         """Record a checked phase inside the caller's fenced transaction."""
         db = self._connection
@@ -1213,9 +1206,7 @@ class MutationStore(CoordinationStore):
                 process_dead and not attempt.lifecycle.process_dead
             )
             if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
-                raise RecoveryBlocked(
-                    "final backend evidence forbids further phase or progress"
-                )
+                raise RecoveryBlocked("final backend evidence forbids further phase or progress")
         now = self._now(attempt.updated_at_ms)
         db.execute(
             "UPDATE attempts SET phase=?,revision=revision+1,updated_at_ms=?,"
@@ -1249,14 +1240,14 @@ class MutationStore(CoordinationStore):
         if type(replay_safe) is not bool or type(side_effects_possible) is not bool:
             raise ValueError("replay assessment flags must be booleans")
         facts = ReplayFact(facts)
-        with self._transaction() as db:
+        with self._transaction():
             snapshot, _ = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
             before = snapshot.replay
             if (before.revision if before else None) != expected_replay_revision:
                 raise StaleRevision("replay assessment revision changed")
-            after = ReplayAssessment(
+            after = ReplayAssessments(
                 fence.execution_id,
                 facts,
                 replay_safe,
@@ -1266,7 +1257,9 @@ class MutationStore(CoordinationStore):
             return self._record_replay(snapshot, after)
 
     def _record_replay(
-        self, snapshot: RecoverySnapshot, after: ReplayAssessment,
+        self,
+        snapshot: RecoverySnapshot,
+        after: ReplayAssessments,
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         """Persist monotonic replay evidence inside the checked transaction."""
         db = self._connection
@@ -1284,26 +1277,24 @@ class MutationStore(CoordinationStore):
                 or (before.side_effects_possible and not after.side_effects_possible)
             ):
                 raise IdentityConflict("replay facts cannot be erased")
-            db.execute(
-                "UPDATE replay_assessments SET facts=?,replay_safe=?,"
-                "side_effects_possible=?,revision=revision+1 WHERE execution_id=?",
-                (int(after.facts), int(after.replay_safe), int(after.side_effects_possible), after.execution_id),
+            ReplayAssessments.update(
+                db,
+                where="execution_id=?",
+                parameters=(after.execution_id,),
+                facts=after.facts,
+                replay_safe=after.replay_safe,
+                side_effects_possible=after.side_effects_possible,
+                revision=before.revision + 1,
             )
         else:
-            db.execute(
-                "INSERT INTO replay_assessments VALUES (?,?,?,?,?)",
-                (
-                    after.execution_id,
-                    int(after.facts),
-                    int(after.replay_safe),
-                    int(after.side_effects_possible),
-                    1,
-                ),
-            )
+            after.insert(db)
         return Applied(self.snapshot(after.execution_id))
 
     def fail_unknown_attempt(
-        self, fence: OwnerFence, *, expected_pointer_revision: int,
+        self,
+        fence: OwnerFence,
+        *,
+        expected_pointer_revision: int,
     ) -> Applied[RecoverySnapshot]:
         """Atomically fail a fenced, reaped backend; UNKNOWN is never replayable.
 
@@ -1317,21 +1308,34 @@ class MutationStore(CoordinationStore):
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
             before = snapshot.replay
-            self._record_replay(snapshot, ReplayAssessment(
-                fence.execution_id,
-                (before.facts if before is not None else ReplayFact.NONE) | ReplayFact.UNKNOWN_EFFECTS,
-                False,
-                True,
-                1 if before is None else before.revision + 1,
-            ))
+            self._record_replay(
+                snapshot,
+                ReplayAssessments(
+                    fence.execution_id,
+                    (before.facts if before is not None else ReplayFact.NONE)
+                    | ReplayFact.UNKNOWN_EFFECTS,
+                    False,
+                    True,
+                    1 if before is None else before.revision + 1,
+                ),
+            )
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 self._advance_attempt(
-                    fence, attempt, type(attempt.lifecycle), backend_done=True, process_dead=True,
-                    progress=False, reason_code="native_unknown",
+                    fence,
+                    attempt,
+                    type(attempt.lifecycle),
+                    backend_done=True,
+                    process_dead=True,
+                    progress=False,
+                    reason_code="native_unknown",
                 )
-            return Applied(self._settle(
-                self.snapshot(fence.execution_id), success=False, reason_code="native_unknown",
-            ))
+            return Applied(
+                self._settle(
+                    self.snapshot(fence.execution_id),
+                    success=False,
+                    reason_code="native_unknown",
+                )
+            )
 
     def observe_connectivity(
         self,
@@ -1387,19 +1391,15 @@ class MutationStore(CoordinationStore):
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
             kind.validate_audit(snapshot, attempt)
-            db.execute(
-                "INSERT INTO recovery_audit(execution_id,kind,reason_code,"
-                "sanitized_detail,attempt,elapsed_ms,observed_at_ms) VALUES (?,?,?,?,?,?,?)",
-                (
-                    fence.execution_id,
-                    kind.declared_name,
-                    reason_code,
-                    sanitized_detail,
-                    attempt.attempt_ordinal,
-                    elapsed_ms,
-                    self._now(attempt.updated_at_ms),
-                ),
-            )
+            RecoveryAudit(
+                execution_id=fence.execution_id,
+                kind=kind,
+                reason_code=reason_code,
+                sanitized_detail=sanitized_detail,
+                attempt=attempt.attempt_ordinal,
+                elapsed_ms=elapsed_ms,
+                observed_at_ms=self._now(attempt.updated_at_ms),
+            ).insert(db)
             return Applied(self.snapshot(fence.execution_id))
 
     def _settle(
@@ -1458,10 +1458,13 @@ class MutationStore(CoordinationStore):
                 "updated_at_ms=? WHERE claim_id=?",
                 (disposition, self._now(assignment.updated_at_ms), assignment.assignment_id),
             )
-        db.execute(
-            "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
-            "pointer_revision=pointer_revision+1 WHERE owner_lookup=?",
-            (execution.owner_lookup,),
+        CurrentExecutions.update(
+            db,
+            where="owner_lookup=?",
+            parameters=(execution.owner_lookup,),
+            execution_id=None,
+            attempt_ordinal=None,
+            pointer_revision=snapshot.pointer_revision + 1,
         )
         return self.snapshot(execution.execution_id)
 
@@ -1566,16 +1569,17 @@ class RecoveryMonitorCapability:
             assert attempt is not None  # The release observer requires an attempt.
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
-            reserved = store._connection.execute(
-                "SELECT * FROM native_runtime_inputs WHERE execution_id=? AND attempt_ordinal=?",
-                (execution_id, attempt.attempt_ordinal),
-            ).fetchone()
+            reserved = NativeRuntimeInput.one(
+                store._connection,
+                execution_id=execution_id,
+                attempt_ordinal=attempt.attempt_ordinal,
+            )
             assert reserved is not None  # Already joined by the release observer.
             session_dir = store.path.parent / "native-sessions" / loss.owner_lookup
             session_file = Path(session_file).absolute()
             if session_file.parent != session_dir:
                 raise RecoveryBlocked("native failure session belongs to another owner")
-            binding = read_expected_prompt_binding(store, reserved["input_id"])
+            binding = read_expected_prompt_binding(store, reserved.input_id)
             if (
                 binding is None
                 or (
@@ -1593,13 +1597,13 @@ class RecoveryMonitorCapability:
                     loss.owner_lookup,
                     attempt.owner_thread,
                     attempt.owner_generation,
-                    reserved["claim_id"],
+                    reserved.assignment_id,
                     "full",
                 )
                 or not expected_prompt_matches_journal(session_file, binding)
             ):
                 raise RecoveryBlocked("native failure lacks its bound original input")
-            proof = NativeContextProof.read_evidence(session_file, reserved["input_id"])
+            proof = NativeContextProof.read_evidence(session_file, reserved.input_id)
             _header, entries = NativeEntry.read_evidence(session_file)
             user_index = next(
                 index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
@@ -1710,16 +1714,17 @@ class RecoveryMonitorCapability:
                     not unsafe,
                     possible,
                 ):
-                    db.execute(
-                        "UPDATE replay_assessments SET facts=?,replay_safe=?,"
-                        "side_effects_possible=?,revision=revision+1 WHERE execution_id=?",
-                        (int(new_facts), int(not unsafe), int(possible), execution_id),
+                    ReplayAssessments.update(
+                        db,
+                        where="execution_id=?",
+                        parameters=(execution_id,),
+                        facts=new_facts,
+                        replay_safe=not unsafe,
+                        side_effects_possible=possible,
+                        revision=before.revision + 1,
                     )
             elif new_facts:
-                db.execute(
-                    "INSERT INTO replay_assessments VALUES (?,?,0,1,1)",
-                    (execution_id, int(new_facts)),
-                )
+                ReplayAssessments(execution_id, new_facts, False, True, 1).insert(db)
             db.execute(
                 "UPDATE attempts SET process_dead=1,backend_done=?,revision=revision+1,"
                 "updated_at_ms=?,reason_code=? WHERE execution_id=? AND attempt_ordinal=?",
@@ -1739,12 +1744,15 @@ class RecoveryMonitorCapability:
                     reason_code=evidence.reason_code,
                 )
                 kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
-                db.execute(
-                    "INSERT INTO recovery_audit(execution_id,kind,reason_code,"
-                    "sanitized_detail,attempt,elapsed_ms,observed_at_ms) "
-                    "VALUES (?,?,?,NULL,?,0,?)",
-                    (execution_id, kind.declared_name, evidence.reason_code, ordinal, now),
-                )
+                RecoveryAudit(
+                    execution_id=execution_id,
+                    kind=kind,
+                    reason_code=evidence.reason_code,
+                    sanitized_detail=None,
+                    attempt=ordinal,
+                    elapsed_ms=0,
+                    observed_at_ms=now,
+                ).insert(db)
                 return Applied(store.snapshot(execution_id))
             # Death and genuinely observed backend completion commit even when
             # publication remains unresolved.  Neither state clears the pointer.

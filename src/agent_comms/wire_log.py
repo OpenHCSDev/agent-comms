@@ -38,7 +38,7 @@ from .store_files import (
 from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
-    from .coordination import PublicationIntent
+    from .coordination import PublicationIntents
 
 
 class WireLog:
@@ -328,16 +328,16 @@ class WireLog:
             return matched
 
     def _keyed_receipt_unlocked(
-        self, intent: PublicationIntent
+        self, intent: PublicationIntents
     ) -> tuple[Message | None, int, WireMetadata]:
         """Read the whole owner-only bus before trusting an exact keyed receipt.
 
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
-        from .coordination import PublicationIntent
+        from .coordination import PublicationIntents
 
-        if type(intent) is not PublicationIntent:
-            raise TypeError("Keyed response requires a validated PublicationIntent.")
+        if type(intent) is not PublicationIntents:
+            raise TypeError("Keyed response requires a validated PublicationIntents.")
         metadata = self._private_marker_unlocked()
         matched: Message | None = None
         previous_sequence = 0
@@ -362,7 +362,7 @@ class WireLog:
                 raise RelationViolationError("Response publication intent conflicts.")
         return matched, previous_sequence, metadata
 
-    def read_keyed_response(self, intent: PublicationIntent) -> Message | None:
+    def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact receipt resolution; never append or repair an absent row."""
         with _store_lock(self.path):
             matched, _, _ = self._keyed_receipt_unlocked(intent)

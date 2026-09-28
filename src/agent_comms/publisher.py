@@ -45,7 +45,7 @@ from .store_files import (
 )
 
 if TYPE_CHECKING:
-    from .coordination import PublicationIntent
+    from .coordination import PublicationIntents
     from .registration import Registration
 
 from .catalog_store import ChannelCatalog
@@ -498,7 +498,7 @@ class Publisher:
                     ) from error
             return stored
 
-    def publish_keyed_response(self, intent: PublicationIntent) -> Message:
+    def publish_keyed_response(self, intent: PublicationIntents) -> Message:
         """Default-OFF fsynced append; runtime owner fencing needs a coordinator."""
         if self._private_response_writes is not True:
             raise RelationViolationError("Private response publication is disabled.")
@@ -506,7 +506,7 @@ class Publisher:
             return self._publish_keyed_response_unlocked(intent)
 
     def _publish_keyed_response_unlocked(
-        self, intent: PublicationIntent, *, registry_snapshot: RegistrySnapshot | None = None
+        self, intent: PublicationIntents, *, registry_snapshot: RegistrySnapshot | None = None
     ) -> Message:
         """Internal append with bus lock; a supplied registry snapshot stays locked."""
         from .audience_manifest import MAX_WIRE_SEQ
