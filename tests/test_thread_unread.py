@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from dataclasses import replace
 from unittest.mock import patch
 
@@ -74,6 +75,24 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
         append(source)
         assert fresh.counts(str(tmp_path), sources).counts["worker"] == 101
         assert parse.call_count == 1
+
+
+def test_current_index_does_not_contend_with_an_open_previous_ui(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    previous_path = comms.root / "transcript_reply_index.sqlite3"
+    previous = sqlite3.connect(previous_path)
+    try:
+        previous.execute("CREATE TABLE still_open (value INTEGER)")
+        previous.execute("INSERT INTO still_open VALUES (17)")
+        # An existing UI may retain a transaction while a fresh UI starts.
+        assert previous.in_transaction
+        assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 1
+        assert comms.views.transcript_reads._index_path != previous_path
+        assert previous.execute("SELECT value FROM still_open").fetchone() == (17,)
+        assert source.exists()
+    finally:
+        previous.close()
 
 
 def test_many_threads_do_not_reparse_saved_histories_on_attach(tmp_path):
