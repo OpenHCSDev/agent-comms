@@ -256,7 +256,11 @@ def native_memory_budget(root: Path, monkeypatch, *, rss_mib=240, heap_mib=128):
     observer = root / "observe-native.mjs"
     observer.write_text(
         "import {appendFileSync,readFileSync} from 'node:fs';"
-        "globalThis.fetch=()=>{throw Error('NETWORK_PROHIBITED_IN_CAPACITY_ACCEPTANCE')};"
+        "import http from 'node:http';import https from 'node:https';import net from 'node:net';"
+        "import {syncBuiltinESMExports} from 'node:module';"
+        "const deny=()=>{throw Error('NETWORK_PROHIBITED_IN_CAPACITY_ACCEPTANCE')};"
+        "http.request=http.get=https.request=https.get=net.connect=net.createConnection=deny;"
+        "globalThis.fetch=deny;syncBuiltinESMExports();"
         "const stat=readFileSync('/proc/self/stat','utf8');"
         "const start_time=Number(stat.slice(stat.lastIndexOf(')')+2).split(' ')[19]);"
         f"appendFileSync({json.dumps(str(starts))},JSON.stringify({{pid:process.pid,"
@@ -370,7 +374,9 @@ def native_memory_budget(root: Path, monkeypatch, *, rss_mib=240, heap_mib=128):
         assert all(not identity.alive() for identity in identities.values()), receipt
 
 
-async def capacity_native_cli(package: Path, session: Path, root: Path):
+async def capacity_native_cli(
+    package: Path, session: Path, root: Path, *, expected_session_id: str
+):
     """Actual CLI startup/reopen and correlated state; never send a prompt."""
     child = await AttachedChild.start(
         (
@@ -399,9 +405,17 @@ async def capacity_native_cli(package: Path, session: Path, root: Path):
                     raw = await child.stdout.readline()
                     assert raw, (await stderr).decode(errors="replace")
                     event = json.loads(raw)
+                    assert event.get("type") not in {"input_committed", "context_committed"}, event
                     if event.get("type") == "response" and event.get("id") == command:
                         assert event["success"], event
-                        if command == "get_messages":
+                        if command == "get_state":
+                            assert event["data"]["sessionId"] == expected_session_id, event
+                            assert Path(event["data"]["sessionFile"]) == session, event
+                            assert (
+                                event["data"]["nativeInputProofCapability"]
+                                == "pi-native-input-v1-live-only"
+                            ), event
+                        else:
                             assert b"MAIN_RETAINED_SUMMARY" in raw or b"Capacity accepted" in raw
                             assert b"OBSOLETE_LARGE_PAYLOAD" not in raw
                             assert b"SIDE_BRANCH_ONLY" not in raw
@@ -448,7 +462,11 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
         with native_memory_budget(root, monkeypatch) as memory:
             receipt["memory"] = memory
             monkeypatch.setenv("AC_CAPACITY_PHASE", "cli-open")
-            asyncio.run(capacity_native_cli(package, session, root))
+            asyncio.run(
+                capacity_native_cli(
+                    package, session, root, expected_session_id=fixture["session_id"]
+                )
+            )
             receipt["phases"].append("cli-open")
             monkeypatch.setenv("AC_CAPACITY_PHASE", "branch-replay-malformed")
             monkeypatch.setenv("AC_CAPACITY_SESSION", str(session))
@@ -515,7 +533,11 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             )
             receipt["phases"].append("strict-reopen")
             monkeypatch.setenv("AC_CAPACITY_PHASE", "cli-reopen")
-            asyncio.run(capacity_native_cli(package, session, root))
+            asyncio.run(
+                capacity_native_cli(
+                    package, session, root, expected_session_id=fixture["session_id"]
+                )
+            )
             receipt["phases"].append("cli-reopen")
             receipt["memory"] = memory
         # Read only the original prefix: commit must append, never prune history.

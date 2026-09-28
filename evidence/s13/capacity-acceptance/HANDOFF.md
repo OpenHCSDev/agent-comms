@@ -2,6 +2,14 @@
 
 Source: existing tests/test_owner_compaction_prepare.py and stack/test-native-writer-coverage.mjs. Parent assigned production changes to Darwin/S9 and Pascal/S10; no production mechanism added here.
 
+## Current dispatch and package dependency
+
+Full combined243/244 actual CLI -> prepare -> journal/inherited-FD commit -> strict reopen -> fresh CLI remains first. Darwin24363415f8 has helper/caller/package and empty-file initialization closure outstanding; Pascal244f878403 (production22b71b1) has proof startup acceptance. Both received the package/manifest/Python checkpoint request. Parent's round2 ProcessIdentity/typed-registration Python source must be composed with these native changes; no legacy Thread(pid) adapter will be added to make an unmatched checkpoint pass.
+
+The combined test now also requires exact selected session ID/path and native input-proof capability on both CLI launches, refusing startup proof emissions. Its observer blocks HTTP/HTTPS/net/fetch provider routes. `cli-identity-contract.log` passes this changed contract against the existing small real native fixture (VmHWM161748KiB, Python73016KiB), all generated data removed. This is a narrow test-helper validation, **not** a combined capacity result; unchanged302/604MB manager checks were not repeated.
+
+Queued only after this acceptance: independent T7 terminal refactor from `~/wt/toad-refactor-dispatch-20260928/docs/refactor`. At dispatch read complete surface/rules and NRA skill; own persistent worktree, prompt code-bearing draft, full command/read/mode-switch deletion, escaped-byte contract and large-stream performance. No T7 implementation started.
+
 ## What is implemented
 
 - Opt-in 288MiB/576MiB real v3 history, generated incrementally on owned disk. No retained user history or provider request.
