@@ -1,0 +1,19 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: synthesizing mapped summaries must not count source bytes twice
+
+500008 !== 468784
+
+    at summarize (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/test-native-compaction.mjs:44:12)
+    at async file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/test-native-compaction.mjs:79:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 500008,
+  expected: 468784,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.5.0

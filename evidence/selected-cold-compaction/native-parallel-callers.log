@@ -1,0 +1,5 @@
+parallel compaction PASS maps=9 requests=10 concurrency=4
+policy/hierarchy PASS serialPeak=1 synthesisRequests=7 total=16
+three-round source/summary plumbing PASS
+saved repeated split-turn prior-summary/custom-instruction PASS
+configured output-reserve PASS requests=8

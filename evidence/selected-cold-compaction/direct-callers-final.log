@@ -1,0 +1,45 @@
+.......F                                                                 [100%]
+=================================== FAILURES ===================================
+_____________ test_unapproved_session_alias_and_bounds_are_refused _____________
+
+session = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/pytest-direct-callers/test_unapproved_session_alias_0/sessions/2026-09-28T20-57-24-937Z_01a0e9ce-e2c8-75db-a1d9-3b10bb227d96.jsonl')
+
+    def test_unapproved_session_alias_and_bounds_are_refused(session):
+        alias = session.with_name("alias.jsonl")
+        alias.symlink_to(session)
+        with pytest.raises(NativePreparationError, match="canonical"):
+            prepare_native_source(
+                Path(PACKAGE),
+                str(alias),
+                settings=PiCompactionSettings(16384, 1),
+                context_window=128000,
+            )
+        with pytest.raises(NativePreparationError, match="Native source cannot be prepared"):
+            prepare_native_source(
+                Path(PACKAGE),
+                str(session),
+>               settings=PiCompactionSettings(16384, 0),
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                context_window=128000,
+            )
+
+tests/test_owner_compaction_prepare.py:1071: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:5: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PiCompactionSettings(reserve_tokens=16384, keep_recent_tokens=0)
+
+    def __post_init__(self):
+        if (
+            not 0 <= self.reserve_tokens <= 10_000_000
+            or not 0 < self.keep_recent_tokens <= 10_000_000
+        ):
+>           raise PiSettingsEvidenceError("Invalid effective Pi compaction settings")
+E           agent_comms.owner_compaction_settings.PiSettingsEvidenceError: Invalid effective Pi compaction settings
+
+src/agent_comms/owner_compaction_settings.py:34: PiSettingsEvidenceError
+=========================== short test summary info ============================
+FAILED tests/test_owner_compaction_prepare.py::test_unapproved_session_alias_and_bounds_are_refused
+1 failed, 7 passed, 6 deselected in 30.97s
