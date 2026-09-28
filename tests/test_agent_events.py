@@ -81,17 +81,17 @@ class ContextWarning(events.ActivityEvent):
 
 
 async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_path, monkeypatch):
-    comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     participant = ParticipantEventConsumer(comms, "bot", "task")
     await participant.dispatch(ContextWarning("context warning"))
-    assert comms.activity_of("bot").detail == "context warning"
+    assert comms.agents.activity_of("bot").detail == "context warning"
     owner = CommsAgent(comms, agent_bin="unused")
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     observed = []
 
     async def stream(*args, **kwargs):
         yield ContextWarning("context warning")
-        observed.append(comms.activity_of(owner.sessions.bindings[session.session_id]).detail)
+        observed.append(comms.agents.activity_of(owner.sessions.bindings[session.session_id]).detail)
         yield events.Done("done", True)
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", stream)
@@ -128,9 +128,9 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
 async def test_settle_turn_releases_fence_after_publication_even_on_error(
     comms, tmp_path, monkeypatch, publication_fails
 ):
-    comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     owner = CommsAgent(comms, agent_bin="unused")
-    claim = comms.begin_turn("bot", "turn")
+    claim = comms.agents.begin_turn("bot", "turn")
     owner.turns.active_turns["session"] = "turn"
     effects = []
 
@@ -147,7 +147,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
         effects.append("release")
 
     monkeypatch.setattr(owner, "_emit_event", emit)
-    monkeypatch.setattr(comms, "release_waits_after_terminal_turn", release)
+    monkeypatch.setattr(comms.goals, 'release_waits_after_terminal_turn', release)
     if publication_fails:
         with pytest.raises(RuntimeError, match="client closed"):
             await owner.turns.settle_turn("session", "bot", "turn", claim)
@@ -159,12 +159,12 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
 async def test_stream_settlement_defers_waiters_and_preserves_replacement_turn(
     comms, tmp_path, monkeypatch
 ):
-    comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     owner = CommsAgent(comms, agent_bin="unused")
-    claim = comms.begin_turn("bot", "turn")
+    claim = comms.agents.begin_turn("bot", "turn")
     owner.turns.active_turns["session"] = "turn"
     released = []
-    monkeypatch.setattr(comms, "release_waits_after_terminal_turn", released.append)
+    monkeypatch.setattr(comms.goals, 'release_waits_after_terminal_turn', released.append)
     fence = owner.turns.finish_turn_stream("session", "bot", "turn", claim)
     assert released == []
     owner.turns.active_turns["session"] = "replacement"

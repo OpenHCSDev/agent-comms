@@ -18,7 +18,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .cli_commands import CliCommand
-from .operations import wire
+from .comms import wire
 
 
 def _emit(payload: object) -> None:

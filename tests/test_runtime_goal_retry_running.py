@@ -44,13 +44,13 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     owner.on_connect(Client())
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner.turns.open_goal_store()
-    goal = comms.update_goal(
+    goal = comms.goals.update_goal(
         session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
     )
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
     store.record_failed(reservation, "Previous goal attempt failed")
-    blocked = comms.update_goal(
+    blocked = comms.goals.update_goal(
         session,
         BlockedGoalAction(
             expect=GoalPrecondition(goal_id=goal.id), block_reason="Previous goal attempt failed"
@@ -93,7 +93,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
                 current = comms.registry.require(session).goal
                 assert current.state.active and current.id == goal.id
                 assert store.snapshot(goal.id).number == 2
-                comms.update_goal(
+                comms.goals.update_goal(
                     session,
                     CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                     actor=ModelInvocable,
@@ -186,7 +186,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner.turns.open_goal_store()
-    goal = comms.update_goal(
+    goal = comms.goals.update_goal(
         session, SetGoalAction(text="Keep attempt authority"), owner_store=store
     )
     reservation = store.reserve(goal.id, 1)
@@ -194,7 +194,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
         store.claim_launch(reservation)
     if fence in {"owner", "origin"}:
         store.record_failed(reservation, "Known failed attempt")
-    blocked = comms.update_goal(
+    blocked = comms.goals.update_goal(
         session,
         BlockedGoalAction(
             expect=GoalPrecondition(goal_id=goal.id),

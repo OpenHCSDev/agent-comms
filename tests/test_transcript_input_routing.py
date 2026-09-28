@@ -45,13 +45,13 @@ async def test_original_and_busy_input_keep_distinct_routes(
 
     agent.on_connect(Client())
     await agent.new_session(str(tmp_path / "worker"))
-    comms.update_tags("worker", add=frozenset({"team"}))
-    comms.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
-    initial = comms.send_message("peer", "worker", "Initial request")
+    comms.channels.update_tags("worker", add=frozenset({"team"}))
+    comms.threads.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
+    initial = comms.messaging.send_message("peer", "worker", "Initial request")
     await agent.inputs.drain_inbox("worker")
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.attach_session("worker", str(session))
+    comms.threads.attach_session("worker", str(session))
     received = [initial]
 
     async def events(*args, **kwargs):
@@ -60,7 +60,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
             append_input(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
         yield ae.InputStarted(id=None)
-        incoming = comms.send_message("peer", target, "@worker Follow-up request")
+        incoming = comms.messaging.send_message("peer", target, "@worker Follow-up request")
         received.append(incoming)
         assert await agent.inputs.drain_inbox("worker") == 1
         command = kwargs["steering_queue"].get_nowait()
@@ -81,8 +81,8 @@ async def test_original_and_busy_input_keep_distinct_routes(
         )
         reopened = wire(comms.root)
         for events in (
-            reopened.thread_transcript("worker"),
-            reopened.thread_transcript_page("worker").events,
+            reopened.transcripts.thread_transcript("worker"),
+            reopened.transcripts.thread_transcript_page("worker").events,
         ):
             inputs = [event for event in events if event.kind == "user"]
             assert [event.text for event in inputs] == [message.body for message in received]
@@ -104,28 +104,28 @@ async def test_original_and_busy_input_keep_distinct_routes(
 @pytest.mark.parametrize("paged", [False, True])
 def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(tmp_path, paged):
     comms = wire(tmp_path / "wire")
-    comms.register(Thread("worker", frozenset(), str(tmp_path)))
-    comms.register(Thread("peer", frozenset(), str(tmp_path)))
-    first = comms.send_message("peer", "worker", "Original input")
-    second = comms.send_message("peer", "worker", "Distinct follow-up")
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("peer", frozenset(), str(tmp_path)))
+    first = comms.messaging.send_message("peer", "worker", "Original input")
+    second = comms.messaging.send_message("peer", "worker", "Distinct follow-up")
     raw_second = ScheduledTurn.incoming(second).prompt
     quote = "[agent-comms from peer to worker]\nA genuine user's quoted example"
     # Bind before the session file exists, as on first-turn/fork startup.
-    comms.record_input_display(
+    comms.transcripts.record_input_display(
         "b" * 32, raw_second, sent_text=raw_second, routing=TurnRouting((second,), None)
     )
-    comms.record_input_display("c" * 32, quote, sent_text=quote)
+    comms.transcripts.record_input_display("c" * 32, quote, sent_text=quote)
     path = tmp_path / "new-session.jsonl"
     append_input(path, "b" * 32, raw_second)
     append_input(path, "c" * 32, quote)
-    comms.attach_session("worker", str(path))
+    comms.threads.attach_session("worker", str(path))
     # Older settlement code labels all records with the initial origin.
-    comms.transcript_routes.record(str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None))
+    comms.transcripts.routes.record(str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None))
     reopened = wire(comms.root)
     events = (
-        reopened.thread_transcript_page("worker").events
+        reopened.transcripts.thread_transcript_page("worker").events
         if paged
-        else reopened.thread_transcript("worker")
+        else reopened.transcripts.thread_transcript("worker")
     )
     inputs = [event for event in events if event.kind == "user"]
     assert inputs[0].text == second.body and inputs[0].routing.requests == (second,)
@@ -134,18 +134,18 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
 
 def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.register(Thread("worker", frozenset(), str(tmp_path)))
-    comms.register(Thread("peer", frozenset(), str(tmp_path)))
-    incoming = comms.send_message("peer", "worker", "Verified input")
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("peer", frozenset(), str(tmp_path)))
+    incoming = comms.messaging.send_message("peer", "worker", "Verified input")
     route = TurnRouting((incoming,), None)
     text = ScheduledTurn.incoming(incoming).prompt
-    comms.record_input_display("a" * 32, text, sent_text=text, routing=route)
-    comms.record_input_display("a" * 32, text, sent_text=text, routing=route)
+    comms.transcripts.record_input_display("a" * 32, text, sent_text=text, routing=route)
+    comms.transcripts.record_input_display("a" * 32, text, sent_text=text, routing=route)
     with pytest.raises(ValueError):
-        comms.record_input_display("a" * 32, text, sent_text="different", routing=route)
+        comms.transcripts.record_input_display("a" * 32, text, sent_text="different", routing=route)
     path = tmp_path / "changed.jsonl"
     append_input(path, "a" * 32, "unrelated input")
-    comms.attach_session("worker", str(path))
-    comms.transcript_routes.record(str(path), ("aaaaaaaa",), route)
-    event = comms.thread_transcript_page("worker").events[0]
+    comms.threads.attach_session("worker", str(path))
+    comms.transcripts.routes.record(str(path), ("aaaaaaaa",), route)
+    event = comms.transcripts.thread_transcript_page("worker").events[0]
     assert event.text == "unrelated input" and event.routing is None

@@ -18,6 +18,7 @@ from acp.schema import (
 )
 
 from . import backend
+from .comms import Comms
 from .coordination_store import (
     PublicationActivationBlocked,
 )
@@ -29,7 +30,7 @@ from .declarations import (
 )
 from .input_disposition import AcpDeliveryCursors, FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
-from .operations import OBSERVATION_INTERVAL, Comms
+from .owner_lifecycle import OBSERVATION_INTERVAL
 from .passive_channel_awareness import PassiveChannelAwareness
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -104,7 +105,7 @@ class InputDrain(FutureInputQueue):
         cursor, legacy = self.delivery_cursors.initialize(
             self.comms.registry.aliases_for(thread.name),
             thread.name,
-            high_water=self.comms.message_high_water(),
+            high_water=self.comms.bus.latest_sequence(),
             fresh=fresh,
         )
         with _store_lock(self.comms._wire_lock_path):
@@ -115,8 +116,8 @@ class InputDrain(FutureInputQueue):
                 self.passive_awareness.initialize(
                     owner,
                     admission=admission,
-                    high_water=self.comms.message_high_water(),
-                    channels=self.comms.channel_catalog.targets_for(owner.tags),
+                    high_water=self.comms.bus.latest_sequence(),
+                    channels=self.comms.channels.catalog.targets_for(owner.tags),
                     fresh=fresh,
                 )
         self.inbox_cursors[session_id] = cursor
@@ -287,7 +288,7 @@ class InputDrain(FutureInputQueue):
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
         owner = self.sessions.require(session_id)
-        overview = self.comms.input_delivery(
+        overview = self.comms.goals.input_delivery(
             owner, awaiting_keys=self.awaiting_input_keys(session_id)
         )
         for disposition in overview["inputs"]:
@@ -326,7 +327,7 @@ class InputDrain(FutureInputQueue):
                         await self.drain_inbox(session_id)
                         await self.sessions.config.sync_thread(session_id)
                         if time.monotonic() >= next_goal_wait_check:
-                            self.comms.recover_closed_goal_wait(session_id)
+                            self.comms.goals.recover_closed_goal_wait(session_id)
                             next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                         self.effects.turns.schedule_goal(session_id)
                         await self.sessions.config.refresh_auth_models()
@@ -379,8 +380,8 @@ class InputDrain(FutureInputQueue):
             return 0
         pushed = 0
         after = self.inbox_cursors.get(session_id, 0)
-        high_water = self.comms.message_high_water()
-        page = self.comms.incoming_page(thread_name, after=after) if after < high_water else None
+        high_water = self.comms.bus.latest_sequence()
+        page = self.comms.bus.incoming_page(thread_name, after=after) if after < high_water else None
         # A private cutover on a previously empty bus may have occurred after
         # the first classification but before this page was read. Reclassify
         # before touching delivery cursors, input dispositions or legacy ACK.
@@ -410,7 +411,7 @@ class InputDrain(FutureInputQueue):
                 starts_turn = message.starts_turn_for(current_name, aliases=snapshot.aliases)
                 direct = starts_turn and message.target in aliases
                 if starts_turn:
-                    wait = self.comms.goal_wait(current_name) if direct else None
+                    wait = self.comms.goals.goal_wait(current_name) if direct else None
                     if wait is not None and wait.matches(message, snapshot):
                         dependency_wait = wait
                         incoming = replace(
@@ -515,7 +516,7 @@ class InputDrain(FutureInputQueue):
             self.delivery_cursors.advance(aliases, high_water)
             self.inbox_cursors[session_id] = max(self.inbox_cursors.get(session_id, 0), high_water)
         if pushed:
-            self.comms.acknowledge_through(thread_name, self.inbox_cursors[session_id])
+            self.comms.messaging.acknowledge_through(thread_name, self.inbox_cursors[session_id])
             await self.emit_input_delivery_changed(session_id)
         self.schedule_wake(session_id)
         return pushed
@@ -600,7 +601,7 @@ class InputDrain(FutureInputQueue):
                         # must then pin the CURRENT goal revision and wait ID
                         # and hold them exactly through the native send lock.
                         # Any change after dispatch denies without retry.
-                        current_wait = self.comms.goal_wait(owner.name)
+                        current_wait = self.comms.goals.goal_wait(owner.name)
                         assert goal is not None  # filtered above: goal active
                         pending[0] = replace(
                             pending[0],
@@ -640,7 +641,7 @@ class InputDrain(FutureInputQueue):
                     except RequestError:
                         if pending[0].goal_wait_id is None or goal is None:
                             raise
-                        self.comms.block_goal_after_failed_turn(
+                        self.comms.goals.block_goal_after_failed_turn(
                             owner.name,
                             started_goal=goal,
                             expected_worktree=owner.worktree,

@@ -61,7 +61,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, l
     if legacy_directory:
         directory.mkdir(parents=True)
         directory.chmod(0o755)
-    receipt = comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
+    receipt = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
     assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
     assert receipt.source_id == "ses_test" and receipt.imported_messages == 4
@@ -75,11 +75,11 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, l
     for record in records[1:]:
         assert record["parentId"] == parent
         parent = record["id"]
-    context = "\n".join(event.text for event in comms.thread_transcript(thread.name))
+    context = "\n".join(event.text for event in comms.transcripts.thread_transcript(thread.name))
     assert "Keep model authority" in context and "42 passed" in context
     assert "remaining work" in context
     with pytest.raises(ValueError, match="reserved"):
-        comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
+        comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
@@ -92,7 +92,7 @@ def test_import_refuses_redirected_legacy_session_directory(tmp_path):
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ValueError, match="owner-controlled"):
-        comms.import_thread(source, ImportFormat.OPENCODE, name="imported")
+        comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
     assert not comms.registry.name_reserved("imported")

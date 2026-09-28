@@ -18,9 +18,9 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from .comms import Comms
 from .declarations import Thread
 from .declared_family import DeclaredFamily
-from .operations import Comms
 from .pending_requests import PendingRequests
 from .pi_commands import PiCommand, SetModel, SetThinkingLevel
 from .runtime import RuntimeServer
@@ -97,7 +97,7 @@ class ModelConfigOption(ConfigOption):
             events.ModelChanged,
             "Model change timed out",
         )
-        owner.comms.set_thread_model(thread.name, value)
+        owner.comms.threads.set_thread_model(thread.name, value)
         await ThinkingLevelConfigOption.selection(owner, replace(thread, model=value))
 
 
@@ -116,7 +116,7 @@ class ThinkingLevelConfigOption(ConfigOption):
         selected = cls.current_value(thread)
         if selected not in levels:
             selected = "medium" if "medium" in levels else levels[0]
-            owner.comms.set_thread_thinking_level(thread.name, selected)
+            owner.comms.threads.set_thread_thinking_level(thread.name, selected)
         return selected, levels
 
     @classmethod
@@ -142,7 +142,7 @@ class ThinkingLevelConfigOption(ConfigOption):
             events.ThinkingChanged,
             "Thinking level change timed out",
         )
-        owner.comms.set_thread_thinking_level(thread.name, value)
+        owner.comms.threads.set_thread_thinking_level(thread.name, value)
 
 
 class ConfigOptions:
@@ -171,11 +171,11 @@ class ConfigOptions:
         thread = self.comms.registry.require(thread_name)
         selected = thread.model
         if selected is None:
-            selected = self.comms.resolve_thread_model(
+            selected = self.comms.threads.resolve_thread_model(
                 thread.name, backend.configured_model(self.agent_args)
             )
         if selected is not None and selected != thread.model:
-            self.comms.set_thread_model(thread.name, selected)
+            self.comms.threads.set_thread_model(thread.name, selected)
         return selected
 
     async def models_for(self, thread_name: str) -> list[backend.Model]:
@@ -306,7 +306,7 @@ class ConfigOptions:
     ) -> None:
         """Apply first-observed settings from S1/S2's typed backend observation."""
         if event.model and self.comms.registry.require(thread_name).model is None:
-            self.comms.set_thread_model(thread_name, event.model)
+            self.comms.threads.set_thread_model(thread_name, event.model)
             await self.publish(session_id, await self.options(thread_name))
         if event.thinking_level and self.comms.registry.require(thread_name).thinking_level is None:
-            self.comms.set_thread_thinking_level(thread_name, event.thinking_level)
+            self.comms.threads.set_thread_thinking_level(thread_name, event.thinking_level)

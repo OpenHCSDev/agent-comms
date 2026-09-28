@@ -17,8 +17,8 @@ import shlex
 import sys
 from pathlib import Path
 
+from agent_comms.comms import wire
 from agent_comms.declarations import RelationViolationError
-from agent_comms.operations import wire
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -53,7 +53,7 @@ def plan(root: Path, queue: Path, prompt: Path) -> dict:
         status = snapshot.statuses[thread.name]
         if not (thread.role.executable and status.active):
             continue
-        if thread.pid <= 0 or not comms._process_alive(thread.pid):
+        if thread.pid <= 0 or not comms.owners._process_alive(thread.pid):
             excluded.append({"name": thread.name, "reason": "no local live owner pid"})
             continue
         epoch = snapshot.admission_generations.get(thread.name)
@@ -94,12 +94,12 @@ def _owner_environment(pid: int) -> tuple[dict[str, str], str]:
 def _restart_exact_owner(comms, thread, expected):
     # Reprove before/after reading /proc: a reused pid cannot supply launch
     # environment without also passing the later locked incarnation/socket CAS.
-    if not comms._is_local_participant(thread, wait=False):
+    if not comms.owners._is_local_participant(thread, wait=False):
         raise ValueError("Original owner lacks live socket proof")
     original, _argv0 = _owner_environment(thread.pid)
     if original["AGENT_COMMS_THREAD"] != thread.name:
         raise ValueError("Original owner environment names a different thread")
-    if not comms._is_local_participant(thread, wait=False):
+    if not comms.owners._is_local_participant(thread, wait=False):
         raise ValueError("Original owner changed during environment read")
     saved = os.environ.copy()
     try:
@@ -108,7 +108,7 @@ def _restart_exact_owner(comms, thread, expected):
         # never the isolated scheduler's PYTHONPATH/model/provider settings.
         os.environ.clear()
         os.environ.update(original)
-        return comms.restart_owners(
+        return comms.owners.restart_owners(
             [thread.name],
             agent_bin=original["AGENT_COMMS_AGENT_BIN"],
             agent_args=(

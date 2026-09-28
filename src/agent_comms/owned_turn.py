@@ -98,7 +98,7 @@ class OwnedTurn:
             # must not run for a bus input whose UNKNOWN row needs that proof.
             return
         self.goal = self.thread.goal
-        self.wait = self.runner.comms.goal_wait(self.thread_name)
+        self.wait = self.runner.comms.goals.goal_wait(self.thread_name)
         self.direct_interrupt = self.direct_interrupt_goal_id is not None
         if self.direct_interrupt:
             self.tickets = self.runner.inputs.direct_interrupt_tickets.get(self.session_id, {})
@@ -206,8 +206,8 @@ class OwnedTurn:
             self.origins,
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
-        self.checkpoint = self.runner.comms.transcript_checkpoint(self.thread_name)
-        self.turn_claim = self.runner.comms.begin_turn(
+        self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
+        self.turn_claim = self.runner.comms.agents.begin_turn(
             self.thread_name, self.turn_id, self.task[:80], self.routing
         )
         self.turn_admission = self.runner.comms.registry.snapshot().admission_generations[
@@ -279,12 +279,12 @@ class OwnedTurn:
         # This lock spans the final authority read and stdin.write only.
         # Pi's turn, ACK, and provider response happen after it is released.
         with _store_lock(self.runner.comms._wire_lock_path):
-            self.runner.comms.maintenance.assert_open_unlocked()
+            self.runner.comms.owners.maintenance.assert_open_unlocked()
             snapshot = self.runner.comms.registry.snapshot()
             canonical = snapshot.aliases.get(self.thread_name, self.thread_name)
             current = snapshot.threads.get(canonical)
             current_goal = current.goal if current is not None else None
-            current_wait = self.runner.comms.goal_wait(canonical) if current is not None else None
+            current_wait = self.runner.comms.goals.goal_wait(canonical) if current is not None else None
             if self.goal is not None and self.goal.state.active:
                 goal_ok = (
                     current_goal is not None
@@ -371,7 +371,7 @@ class OwnedTurn:
                     owner_ok = self.runner.inputs.passive_awareness.still_current(
                         current,
                         snapshot,
-                        self.runner.comms.channel_catalog.targets_for(current.tags),
+                        self.runner.comms.channels.catalog.targets_for(current.tags),
                         self.passive_sources,
                     )
                 except (OSError, TypeError, ValueError):
@@ -530,7 +530,7 @@ class OwnedTurn:
                 and not interrupt_ok
                 and not owner_interrupt_followup
             ):
-                allowed = self.runner.comms.consume_goal_wait(canonical, current_wait.wait_id)
+                allowed = self.runner.comms.goals.consume_goal_wait(canonical, current_wait.wait_id)
             if allowed:
                 if public_id is None:
                     display = self.original_display
@@ -542,7 +542,7 @@ class OwnedTurn:
                         public_id
                     )
                     input_origins = (origin,) if origin is not None else ()
-                self.runner.comms.record_input_display(
+                self.runner.comms.transcripts.record_input_display(
                     native_id,
                     display,
                     sent_text=sent_text,
@@ -585,7 +585,7 @@ class OwnedTurn:
         }
         self.peers = [
             {key: person[key] for key in ("name", "status", "activity", "activity_detail")}
-            for person in self.runner.comms.presence()
+            for person in self.runner.comms.views.presence()
             if person["name"] != self.thread_name
         ][:50]
         self.task = (
@@ -692,7 +692,7 @@ class OwnedTurn:
                         self.passive_frame = self.runner.inputs.passive_awareness.frame(
                             self.current_thread,
                             self.snapshot,
-                            self.runner.comms.channel_catalog.targets_for(self.current_thread.tags),
+                            self.runner.comms.channels.catalog.targets_for(self.current_thread.tags),
                         )
                         if self.passive_frame:
                             self.passive_sources = self.runner.inputs.passive_awareness.sources(
@@ -725,7 +725,7 @@ class OwnedTurn:
                     self.runner.agent_bin,
                     self.thread_name,
                     self.turn_id,
-                    self.runner.comms.agent_info_of(self.thread_name),
+                    self.runner.comms.agents.agent_info_of(self.thread_name),
                     self.original_keys[0],
                     self.runner.persistent_backends.setdefault(
                         self.session_id, backend.PersistentPiSession()
@@ -739,7 +739,7 @@ class OwnedTurn:
                 # A selected adaptive operation may already have paid or
                 # written. Do not turn a fault into ordinary input fallback.
                 if self.goal is not None and self.goal.state.active:
-                    self.runner.comms.block_goal_after_failed_turn(
+                    self.runner.comms.goals.block_goal_after_failed_turn(
                         self.thread_name,
                         started_goal=self.goal,
                         expected_worktree=self.thread.worktree,

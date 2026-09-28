@@ -41,7 +41,7 @@ def seed_unknown(comms, count, text):
 @pytest.fixture
 def inbox_comms(comms):
     for name in ("a", "b"):
-        comms.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
     return comms
 
 
@@ -49,12 +49,12 @@ def inbox_comms(comms):
 def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)
-    comms.send("a", "b", "An unread new message")
+    comms.messaging.send("a", "b", "An unread new message")
     authority_before = ledger.path.read_bytes()
     expected = {
-        "messages": [message.to_wire() for message in comms.inbox("b")],
+        "messages": [message.to_wire() for message in comms.bus.inbox("b")],
         "acknowledged": 0,
-        "unresolved_inputs": comms.unresolved_inputs("b"),
+        "unresolved_inputs": comms.goals.unresolved_inputs("b"),
     }
 
     result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
@@ -67,7 +67,7 @@ def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, c
     assert result["messages"] == result["unresolved_inputs"] == []
     assert "omitted" in result["instruction"]
     assert "selectively" in result["instruction"]
-    assert comms.pending_count("b") == 1
+    assert comms.bus.pending_count("b") == 1
     assert ledger.path.read_bytes() == authority_before
     artifact = Path(result["result_file"])
     assert artifact.parent == comms.root / "tool-output"
@@ -88,15 +88,15 @@ def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, c
 def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "Earlier unresolved message")
-    comms.send("a", "b", "hello")
+    comms.messaging.send("a", "b", "hello")
     expected = {
-        "messages": [message.to_wire() for message in comms.inbox("b")],
+        "messages": [message.to_wire() for message in comms.bus.inbox("b")],
         "acknowledged": int(ack),
-        "unresolved_inputs": comms.unresolved_inputs("b"),
+        "unresolved_inputs": comms.goals.unresolved_inputs("b"),
     }
     authority_before = ledger.path.read_bytes()
     assert invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": ack}) == expected
-    assert comms.pending_count("b") == int(not ack)
+    assert comms.bus.pending_count("b") == int(not ack)
     assert ledger.path.read_bytes() == authority_before
     assert not (comms.root / "tool-output").exists()
 
@@ -104,7 +104,7 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
 def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "body" * 20_000)
-    comms.send("a", "b", "Still unread after failure")
+    comms.messaging.send("a", "b", "Still unread after failure")
     authority_before = ledger.path.read_bytes()
 
     def fail(*args, **kwargs):
@@ -113,7 +113,7 @@ def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
     monkeypatch.setattr("agent_comms.tool_output._atomic_write_text", fail)
     with pytest.raises(OSError, match="artifact publication failed"):
         invoke_tool(comms, "comms_inbox", {"thread": "b"})
-    assert comms.pending_count("b") == 1
+    assert comms.bus.pending_count("b") == 1
     assert ledger.path.read_bytes() == authority_before
 
 
@@ -123,9 +123,9 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
 ):
     comms = inbox_comms
     monkeypatch.setenv("PI_AGENT_ID", "b")
-    goal = comms.update_goal("b", SetGoalAction(text="Wait for a after reviewing its replies"))
+    goal = comms.goals.update_goal("b", SetGoalAction(text="Wait for a after reviewing its replies"))
     messages = [
-        comms.send_message("a", "b", body) for body in (large_body, "Previously reviewed reply")
+        comms.messaging.send_message("a", "b", body) for body in (large_body, "Previously reviewed reply")
     ]
     dispositions = InputDispositions(comms.root)
     for message in messages:
@@ -152,7 +152,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         goal_revision=goal.revision,
         turn_id="earlier-review",
     )
-    review = comms.goal_input_review("b", goal.id, ["a"])
+    review = comms.goals.goal_input_review("b", goal.id, ["a"])
     before = dispositions.path.read_bytes()
     result = invoke_tool(
         comms,
@@ -178,9 +178,9 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     assert full_review == review
     assert full_review["messages"][0]["text"] == messages[0].body
     comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
-    comms.begin_turn("a", "next-a-result-in-flight")
+    comms.agents.begin_turn("a", "next-a-result-in-flight")
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
-    assert comms.goal_wait("b") is not None
+    assert comms.goals.goal_wait("b") is not None
     assert all(dispositions.status(f"bus:{message.seq}") == "unknown" for message in messages)
     assert dispositions.status("acp:owner-input") == "unknown"
     assert not dispositions.get("acp:owner-input").get("goal_reviews")
@@ -216,9 +216,9 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     monkeypatch.setenv("PI_AGENT_ID", "b")
     # The reviewed standby liveness gate refuses a declared dependency with
     # no active turn. Give "a" a live in-process turn for this fixture only.
-    comms.register(replace(comms.registry.require("a"), pid=os.getpid()))
-    comms.begin_turn("a", "a-review-in-flight")
-    goal = comms.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
+    comms.threads.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.agents.begin_turn("a", "a-review-in-flight")
+    goal = comms.goals.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
     dispositions = InputDispositions(comms.root)
     for index in range(930):
         dispositions.record(
@@ -230,7 +230,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
             text="Uncertain owner input " * 45,
         )
     messages = [
-        comms.send_message("a", "b", body)
+        comms.messaging.send_message("a", "b", body)
         for body in ("Already reviewed", "Complete new reply: " + "x" * 548)
     ]
     for message in messages:
@@ -266,10 +266,10 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     assert "excluded_inputs" not in review and "already_reviewed_inputs" not in review
     assert len(json.dumps(result, indent=2).encode()) <= MAX_INLINE_OUTPUT_BYTES
     assert result["complete"] is False and result["ackDeferred"] is True
-    assert result["acknowledged"] == 0 and comms.pending_count("b") == 2
+    assert result["acknowledged"] == 0 and comms.bus.pending_count("b") == 2
     assert dispositions.path.read_bytes() == before
     full = json.loads(Path(result["result_file"]).read_text())
-    assert full["standby_review"] == comms.goal_input_review("b", goal.id, ["a"])
+    assert full["standby_review"] == comms.goals.goal_input_review("b", goal.id, ["a"])
     assert len(full["standby_review"]["excluded_inputs"]) == 930
     report = {
         "goal_id": goal.id,
@@ -282,7 +282,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
         invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]})
     assert dispositions.path.read_bytes() == before
     # A reply arriving after this snapshot still blocks standby atomically.
-    late = comms.send_message("a", "b", "New evidence after inbox inspection")
+    late = comms.messaging.send_message("a", "b", "New evidence after inbox inspection")
     dispositions.record(
         f"bus:{late.seq}", seq=late.seq, owner="b", admission=1, target="b", text=late.body
     )
@@ -295,7 +295,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     )["standby_review"]
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]})
-    assert comms.goal_wait("b") is not None
+    assert comms.goals.goal_wait("b") is not None
     assert dispositions.status(f"bus:{messages[1].seq}") == "unknown"
     assert not dispositions.get("acp:owner-0").get("goal_reviews")
 
@@ -309,9 +309,9 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     await owner.new_session(str(tmp_path / "b"))
-    comms.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
-    comms.begin_turn("a", "a-admission-in-flight")
-    goal = comms.update_goal(
+    comms.threads.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.agents.begin_turn("a", "a-admission-in-flight")
+    goal = comms.goals.update_goal(
         "b",
         SetGoalAction(text="Review dependency and wait"),
         owner_store=owner.turns.open_goal_store(),
@@ -319,7 +319,7 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
     args = {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]}
     report = {"goal_id": goal.id, "status": "standby", "progress": "Wait", "wait_for": ["a"]}
     try:
-        message = comms.send_message("a", "b", "Reply before the owner has admitted it")
+        message = comms.messaging.send_message("a", "b", "Reply before the owner has admitted it")
         before = invoke_tool(comms, "comms_inbox", args)
         assert before["messages"] == [message.to_wire()]
         assert before["standby_review"]["reviewed_inputs"] == []
@@ -334,7 +334,7 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
             "comms_goal",
             {**report, "reviewed_inputs": after["standby_review"]["reviewed_inputs"]},
         )
-        assert comms.goal_wait("b") is not None
+        assert comms.goals.goal_wait("b") is not None
         assert owner.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
         # The pre-standby drain legitimately queued one ordinary direct-DM
         # interrupt (no goal permit, wait/witness captured then). It must be

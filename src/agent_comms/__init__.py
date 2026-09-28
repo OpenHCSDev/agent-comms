@@ -2,6 +2,7 @@
 
 __version__ = "0.1.0"
 
+from .comms import Comms, wire
 from .declarations import (
     GLOBAL_CHANNEL,
     Activity,
@@ -60,20 +61,7 @@ from .historical_views import (
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt, ImportSnapshot
 from .mentions import MentionCandidate, MentionQuery, ThreadMention
-from .operations import (
-    OBSERVATION_INTERVAL,
-    Comms,
-    DeleteThreadResult,
-    ForkSpec,
-    OwnerRestartResult,
-    OwnerStartResult,
-    ProjectChangeResult,
-    RenameThreadResult,
-    TranscriptCursor,
-    TranscriptEvent,
-    TranscriptPage,
-    wire,
-)
+from .owner_lifecycle import OBSERVATION_INTERVAL, OwnerRestartResult, OwnerStartResult
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .read_ledger import ReadLedger
 from .registration import Registration
@@ -83,8 +71,10 @@ from .response_policy import (
     InformationalPolicy,
     MentionedOnlyPolicy,
 )
+from .thread_management import DeleteThreadResult, ForkSpec, ProjectChangeResult, RenameThreadResult
 from .thread_status import ThreadStatus
 from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
+from .transcripts import TranscriptCursor, TranscriptEvent, TranscriptPage
 
 __all__ = [
     "ReadLedger",

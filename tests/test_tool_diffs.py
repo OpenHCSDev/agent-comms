@@ -107,8 +107,8 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
         + "\n"
     )
     comms = wire(tmp_path / "wire")
-    comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
-    page = comms.thread_transcript_page("worker", max_messages=1)
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
     saved = TranscriptEvent.from_wire(page.events[0].to_wire())
     assert saved.diff == live.diff

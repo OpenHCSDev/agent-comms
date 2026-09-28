@@ -310,7 +310,7 @@ async def test_legacy_owner_and_relay_fail_explicitly(tmp_path, monkeypatch):
     try:
         with pytest.raises(RequestError):
             await agent.prompt("project", [{"type": "text", "text": "#all look"}, IMAGE])
-        assert not agent._comms.full_history()
+        assert not agent._comms.views.full_history()
         agent.sessions.proxies["project"] = object()
         with pytest.raises(RequestError):
             await agent.prompt("project", [IMAGE])

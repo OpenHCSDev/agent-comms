@@ -22,9 +22,9 @@ from acp.schema import (
 )
 
 from . import backend
+from .comms import Comms
 from .config_options import ConfigOptions
 from .declarations import Thread
-from .operations import Comms
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .transcript_updates import TranscriptReplay
@@ -128,7 +128,7 @@ class SessionLifecycle:
             )
 
     def declare_thread(self, cwd: str, owner_pid: int) -> Thread:
-        return self.comms.claim_thread(
+        return self.comms.threads.claim_thread(
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
@@ -189,10 +189,10 @@ class SessionLifecycle:
             and thread.pid == os.getpid()
             and self.comms.registry.status(thread.name).active
         ):
-            thread = self.comms.acquire_thread(thread.name, owner_pid=os.getpid())
+            thread = self.comms.owners.acquire_thread(thread.name, owner_pid=os.getpid())
         if thread.pid != os.getpid():
             return await self.attach_owner(thread, session_id)
-        self.comms.heartbeat(thread.name)
+        self.comms.threads.heartbeat(thread.name)
         await self.bind_owned(thread, session_id, fresh=False, private=private)
         await self.transcript.replay(session_id, thread.name)
         await self.effects.inputs.replay_unknown_inputs(session_id)
@@ -257,8 +257,8 @@ class SessionLifecycle:
 
     def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         thread = self.comms.registry.require(thread_name)
-        goal, execution = self.comms.goal_snapshot(thread_name)
-        info = self.comms.agent_info_of(thread_name)
+        goal, execution = self.comms.goals.goal_snapshot(thread_name)
+        info = self.comms.agents.agent_info_of(thread_name)
         usage = (
             {"used": info.context_used, "size": info.context_size, "source": "last_response"}
             if info is not None and info.context_used is not None and info.context_size
@@ -301,7 +301,7 @@ class SessionLifecycle:
                     self.comms.registry.require(canonical).pid == os.getpid()
                     and self.comms.registry.status(canonical).running
                 ):
-                    self.comms.stop(canonical)
+                    self.comms.owners.stop(canonical)
             except Exception as error:
                 self.effects._debug_log(f"shutdown error: {error!r}")
         await self.runtime.close()
@@ -328,7 +328,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         self.reject_foreign_mcp(mcp_servers)
         thread = self.validated_thread(cwd, session_id)
         owner = await asyncio.to_thread(
-            self.comms.ensure_owner,
+            self.comms.owners.ensure_owner,
             thread.name,
             agent_bin=self.agent_bin,
             agent_args=self.agent_args,

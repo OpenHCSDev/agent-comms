@@ -13,6 +13,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
@@ -20,7 +21,6 @@ from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import RelationViolationError, Thread
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.operations import Comms
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from test_native_prompt_binding import _fake_model
 
@@ -37,12 +37,12 @@ def _fresh(tmp_path: Path, count: int = 2):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid()))
-    root_id = comms.initialize_private_initial_protocol()
-    comms.initialize_private_claim_protocol()
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid()))
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_claim_protocol()
     install_private_bus_checkpoint(comms.bus)  # Strictly fresh-root opt-in.
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -59,7 +59,7 @@ def _fresh(tmp_path: Path, count: int = 2):
 
 
 def _seal(comms: Comms, root: Path, root_id: str, target: str, body: str):
-    message = comms.send_initial_cohort("sender", target, body)
+    message = comms.messaging.send_initial_cohort("sender", target, body)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count
     return message
@@ -78,7 +78,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     # The certificate filters 1,001 committed initials for another owner.
     # Do not accept, inject, acknowledge, or replay those unrelated sources.
     for n in range(1001):
-        comms.send_initial_cohort("sender", "other001", f"unrelated-{n}:" + "x" * 8400)
+        comms.messaging.send_initial_cohort("sender", "other001", f"unrelated-{n}:" + "x" * 8400)
     assert comms.bus._path.stat().st_size > 8 * 1024 * 1024
     selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
     second = await runtime.run_one_sealed_claim(

@@ -56,13 +56,13 @@ async def compact_context(
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
         assert task is not None
-        turn_claim = runner.comms.begin_turn(thread_name, turn_id, "Compacting context")
+        turn_claim = runner.comms.agents.begin_turn(thread_name, turn_id, "Compacting context")
         runner.active_turns[session_id] = turn_id
         runner.turn_tasks[session_id] = task
         started = False
         terminal_attempted = False
         try:
-            runner.comms.set_activity(thread_name, ActivityState.WORKING, "Compacting context")
+            runner.comms.agents.set_activity(thread_name, ActivityState.WORKING, "Compacting context")
             active = runner.comms.registry.require(thread_name).active_turn
             assert active is not None and active.id == turn_id
             await runner.effects._emit_event(
@@ -74,10 +74,10 @@ async def compact_context(
                     activity_detail="Compacting context",
                 ),
             )
-            info = runner.comms.agent_info_of(thread_name)
+            info = runner.comms.agents.agent_info_of(thread_name)
             # An old usage sample cannot describe the context after a manual
             # compaction attempt, including one with an uncertain outcome.
-            runner.comms.set_agent_info(
+            runner.comms.agents.set_agent_info(
                 thread_name,
                 model=info.model if info else thread.model,
                 session_name=info.session_name if info else None,

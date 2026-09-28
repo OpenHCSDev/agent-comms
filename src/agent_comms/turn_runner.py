@@ -20,6 +20,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from .comms import Comms
 from .declarations import (
     FinishedTurnFence,
     Goal,
@@ -48,7 +49,6 @@ from .goal_attempts import (
     UnresolvedAttempt,
 )
 from .input_drain import InputDrain
-from .operations import Comms
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
@@ -169,7 +169,7 @@ class TurnRunner:
             sent_seq = 0
             if relay_text:
                 target, body = parse_target(relay_text)
-                self.comms.send(thread_name, target, body)
+                self.comms.messaging.send(thread_name, target, body)
                 sent_seq = self.comms.bus.total_messages()
             self.effects._debug_log(
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
@@ -189,7 +189,7 @@ class TurnRunner:
                 )
             else:
                 turn_id = uuid4().hex
-                turn_claim = self.comms.begin_turn(thread_name, turn_id, "Waiting for replies")
+                turn_claim = self.comms.agents.begin_turn(thread_name, turn_id, "Waiting for replies")
                 self.active_turns[session_id] = turn_id
                 try:
                     await self.effects._emit_event(
@@ -245,7 +245,7 @@ class TurnRunner:
 
     def peer_progress(self, thread_name: str, sent_seq: int) -> bool:
         """True when a peer is active on, or has read, our message."""
-        for name, activity in self.comms.all_activity().items():
+        for name, activity in self.comms.agents.all_activity().items():
             if name != thread_name and activity.state.busy:
                 return True
         if sent_seq:
@@ -261,7 +261,7 @@ class TurnRunner:
             return
         name = self.sessions.bindings.get(session_id)
         if name and (goal := self.comms.registry.require(name).goal) and goal.state.active:
-            self.comms.update_goal(
+            self.comms.goals.update_goal(
                 name,
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,
@@ -273,7 +273,7 @@ class TurnRunner:
             await backend.terminate_task_process(task)
         thread_name = self.sessions.bindings.get(session_id)
         if thread_name:
-            self.comms.acknowledge(thread_name)
+            self.comms.messaging.acknowledge(thread_name)
 
     async def extension_ui_permission(
         self,
@@ -383,7 +383,7 @@ class TurnRunner:
         claim: TurnLeaseFence,
     ) -> FinishedTurnFence | None:
         """Clear only this turn; waiter release follows committed terminal output."""
-        fence = self.comms.finish_turn(claim)
+        fence = self.comms.agents.finish_turn(claim)
         if self.active_turns.get(session_id) == turn_id:
             self.active_turns.pop(session_id, None)
         return fence
@@ -413,13 +413,13 @@ class TurnRunner:
             if not stream_settled:
                 await self.effects._emit_event(session_id, events.TurnSettled(turn_id))
         finally:
-            self.comms.release_waits_after_terminal_turn(terminal_fence)
+            self.comms.goals.release_waits_after_terminal_turn(terminal_fence)
 
     def started_event(self, thread_name: str, turn_id: str) -> StartedTranscriptUpdate:
         """Project one owner-authored turn without inventing presentation timestamps."""
         thread = self.comms.registry.require(thread_name)
         active = thread.active_turn
-        activity = self.comms.activity_of(thread.name)
+        activity = self.comms.agents.activity_of(thread.name)
         return StartedTranscriptUpdate(
             turn_id=turn_id,
             started_at=active.started_at if active is not None and active.id == turn_id else None,
@@ -486,7 +486,7 @@ class TurnRunner:
             return
         goal = thread.goal
         if goal is not None and goal.state.active:
-            if self.comms.goal_wait(thread.name) is not None:
+            if self.comms.goals.goal_wait(thread.name) is not None:
                 return
             if self.pending_goal_origins.get(thread.name) == goal.id:
                 return
@@ -497,7 +497,7 @@ class TurnRunner:
             ):
                 store = self.open_goal_store()
             if store is None:
-                self.comms.block_goal_after_failed_turn(
+                self.comms.goals.block_goal_after_failed_turn(
                     thread.name,
                     started_goal=goal,
                     expected_worktree=thread.worktree,
@@ -507,7 +507,7 @@ class TurnRunner:
             try:
                 generation = store.snapshot(goal.id)
                 if generation is None or not generation.lifecycle.ready:
-                    self.comms.block_goal_after_failed_turn(
+                    self.comms.goals.block_goal_after_failed_turn(
                         thread.name,
                         started_goal=goal,
                         expected_worktree=thread.worktree,
@@ -520,7 +520,7 @@ class TurnRunner:
             except StaleAttempt:
                 return
             except GoalAttemptError:
-                self.comms.block_goal_after_failed_turn(
+                self.comms.goals.block_goal_after_failed_turn(
                     thread.name,
                     started_goal=goal,
                     expected_worktree=thread.worktree,
@@ -572,7 +572,7 @@ class TurnRunner:
         if backend.rpc_args_for(self.agent_bin, self.agent_args) is None:
             raise ValueError("Persistent goals require a native Pi backend.")
         name = self.sessions.require(session_id)
-        goal = self.comms.update_goal(
+        goal = self.comms.goals.update_goal(
             name,
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner_pid=os.getpid())),
             actor=OwnerInvocable,
@@ -592,7 +592,7 @@ class TurnRunner:
             raise ValueError("The goal changed; refresh its state before editing.")
         # update_goal owns the wire lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
-        edited = self.comms.update_goal(
+        edited = self.comms.goals.update_goal(
             name,
             EditGoalAction(
                 text=text,
@@ -620,7 +620,7 @@ class TurnRunner:
         if goal is None or goal.id != goal_id or goal.revision != expected_revision:
             raise ValueError("The goal changed; refresh its state before updating.")
         try:
-            updated = self.comms.update_goal(
+            updated = self.comms.goals.update_goal(
                 name,
                 action(
                     expect=GoalPrecondition(
@@ -649,7 +649,7 @@ class TurnRunner:
             raise ValueError("The blocked goal changed; refresh its state.")
         if self.pending_goal_origins.get(name) == goal_id:
             raise ValueError("Wait for the goal origin turn to finish.")
-        resumed = self.comms.update_goal(
+        resumed = self.comms.goals.update_goal(
             name,
             RetryGoalAction(
                 expect=GoalPrecondition(
@@ -670,7 +670,7 @@ class TurnRunner:
         return resumed
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = self.comms.goal_changed(thread_name, self.goal_execution_signatures.get(session_id))
+        event = self.comms.goals.goal_changed(thread_name, self.goal_execution_signatures.get(session_id))
         if event is None:
             return
         await self.effects._emit_event(session_id, event)

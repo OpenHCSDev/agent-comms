@@ -36,7 +36,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
                     if index == 2:
                         observed.extend(
                             (message.body, message.notice)
-                            for message in comms.channel_history("#team")
+                            for message in comms.views.channel_history("#team")
                         )
                     assert index <= 2
                     if index == 1:
@@ -133,8 +133,8 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             project = root / "worker"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.register(Thread("member", frozenset({"team"}), str(project)))
-            human = comms.user_identity(str(project))
+            comms.threads.register(Thread("member", frozenset({"team"}), str(project)))
+            human = comms.messaging.user_identity(str(project))
             origin = Message(human.name, "#team", "Please help", MessageType.INFO)
             await asyncio.wait_for(
                 agent.turns.run_agent_turn(
@@ -150,7 +150,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             assert len(requests) == 2
             assert observed == [("Working", True)]
             assert [
-                (message.body, message.notice) for message in comms.channel_history("#team")
+                (message.body, message.notice) for message in comms.views.channel_history("#team")
             ] == [("Working", True), ("Done", False)]
         finally:
             await agent.shutdown()

@@ -314,7 +314,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             owner.inputs.drain_tasks["project"].cancel()
             await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
             if surface in {"acp_goal_original", "acp_terminal_goal"}:
-                owner._comms.update_goal(
+                owner._comms.goals.update_goal(
                     "project",
                     SetGoalAction(text="Continue useful work"),
                     owner_store=owner.turns.open_goal_store(),

@@ -21,9 +21,9 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.backend import NATIVE_INPUT_CAPABILITY
+from agent_comms.comms import wire
 from agent_comms.declarations import ActivityState, UnregisteredThreadError
 from agent_comms.manual_compaction_bridge import compact_context
-from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -72,7 +72,7 @@ class TestHandlers:
         def no_owner(*args, **kwargs):
             raise AssertionError("foreign ACP declaration reached owner acquisition")
 
-        monkeypatch.setattr(agent._comms, "ensure_owner", no_owner)
+        monkeypatch.setattr(agent._comms.owners, 'ensure_owner', no_owner)
         for supplied in [[{"name": "untrusted", "command": "bad"}], {"bad": "shape"}]:
             with pytest.raises(RequestError) as new_error:
                 await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=supplied)
@@ -125,7 +125,7 @@ class TestHandlers:
     ):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.set_agent_info(
+        agent._comms.agents.set_agent_info(
             "proj", model="test/model", context_used=38723, context_size=272000
         )
         reopened = CommsAgent(wire(agent._comms.root))
@@ -134,7 +134,7 @@ class TestHandlers:
             "size": 272000,
             "source": "last_response",
         }
-        agent._comms.set_agent_info(
+        agent._comms.agents.set_agent_info(
             "proj", model="test/model", context_used=None, context_size=272000
         )
         assert reopened.sessions.metadata("proj")["agentComms"]["contextUsage"] is None
@@ -166,7 +166,7 @@ class TestHandlers:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.touch()
-        agent._comms.attach_session("proj", str(session_file))
+        agent._comms.threads.attach_session("proj", str(session_file))
         received: dict[str, object] = {}
 
         async def compact_session(*args, **kwargs):
@@ -196,7 +196,7 @@ class TestHandlers:
         assert received["args"][-1] == "keep test findings"
         # The bridge does not promote estimated post-compaction usage to a
         # measured context receipt; it remains unknown until a fresh sample.
-        assert agent._comms.agent_info_of("proj").context_used is None
+        assert agent._comms.agents.agent_info_of("proj").context_used is None
         assert agent._comms.registry.require("proj").active_turn is None
 
     async def test_compaction_has_owner_lifecycle_and_rejects_concurrent_work(
@@ -206,7 +206,7 @@ class TestHandlers:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.touch()
-        agent._comms.attach_session("proj", str(session_file))
+        agent._comms.threads.attach_session("proj", str(session_file))
         entered = asyncio.Event()
         release = asyncio.Event()
 
@@ -234,7 +234,7 @@ class TestHandlers:
         assert active.started_at > 0
         assert agent.turns.active_turns["proj"] == active.id
         assert agent.turns.turn_tasks["proj"] is compaction
-        activity = agent._comms.activity_of("proj")
+        activity = agent._comms.agents.activity_of("proj")
         assert activity.state.value == "working"
         assert activity.detail == "Compacting context"
         started = next(
@@ -257,14 +257,14 @@ class TestHandlers:
         assert agent._comms.registry.require("proj").active_turn is None
         assert "proj" not in agent.turns.active_turns
         assert "proj" not in agent.turns.turn_tasks
-        assert agent._comms.activity_of("proj").state.value == "idle"
+        assert agent._comms.agents.activity_of("proj").state.value == "idle"
 
     async def test_replay_uses_owner_turn_timestamp_and_activity(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         turn_id = "compaction-existing"
-        agent._comms.begin_turn("proj", turn_id, "Compacting context")
-        agent._comms.set_activity("proj", ActivityState.WORKING, "Compacting context")
+        agent._comms.agents.begin_turn("proj", turn_id, "Compacting context")
+        agent._comms.agents.set_activity("proj", ActivityState.WORKING, "Compacting context")
         active = agent._comms.registry.require("proj").active_turn
         updates: list = []
 
@@ -284,14 +284,14 @@ class TestHandlers:
                 "activityDetail": "Compacting context",
             }
         }
-        agent._comms.finish_turn(agent._comms.registry.require("proj").turn_lease)
+        agent._comms.agents.finish_turn(agent._comms.registry.require("proj").turn_lease)
 
     async def test_cancel_cleans_up_compaction_lifecycle(self, tmp_path, monkeypatch):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.touch()
-        agent._comms.attach_session("proj", str(session_file))
+        agent._comms.threads.attach_session("proj", str(session_file))
         entered = asyncio.Event()
 
         async def compact_session(*args, **kwargs):
@@ -312,7 +312,7 @@ class TestHandlers:
         assert agent._comms.registry.require("proj").active_turn is None
         assert "proj" not in agent.turns.active_turns
         assert "proj" not in agent.turns.turn_tasks
-        assert agent._comms.activity_of("proj").state.value == "idle"
+        assert agent._comms.agents.activity_of("proj").state.value == "idle"
 
     async def test_compaction_refuses_to_interrupt_an_active_turn(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -370,7 +370,7 @@ class TestHandlers:
                 for index in range(100)
             )
         )
-        agent._comms.attach_session("proj", str(path))
+        agent._comms.threads.attach_session("proj", str(path))
         sent = []
 
         class Client:
@@ -391,21 +391,21 @@ class TestHandlers:
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
         agent = self._agent(tmp_path)
-        agent._comms.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
-        agent._comms.send("peer", "#all", "old message")
+        agent._comms.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        agent._comms.messaging.send("peer", "#all", "old message")
 
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        assert agent._comms.inbox(response.session_id) == []
+        assert agent._comms.bus.inbox(response.session_id) == []
 
-        agent._comms.send("peer", "#all", "new message")
-        assert [message.body for message in agent._comms.inbox(response.session_id)] == [
+        agent._comms.messaging.send("peer", "#all", "new message")
+        assert [message.body for message in agent._comms.bus.inbox(response.session_id)] == [
             "new message"
         ]
 
     async def test_same_cwd_allocates_distinct_threads(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.stop("proj")
+        agent._comms.owners.stop("proj")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         names = list(agent._comms.registry.all_threads())
         assert names == ["proj", "proj-2"]
@@ -457,7 +457,7 @@ class TestHandlers:
                 ]
             )
         )
-        first._comms.attach_session("proj", str(session_file), pid=os.getpid())
+        first._comms.threads.attach_session("proj", str(session_file), pid=os.getpid())
         await first.shutdown()
         assert first._comms.registry.status("proj").declared_name == "stopped"
 
@@ -490,7 +490,7 @@ class TestHandlers:
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
-        history = agent._comms.channel_history("#all")
+        history = agent._comms.views.channel_history("#all")
         assert [m.body for m in history] == ["hello all"]
 
     async def test_unknown_session_fails_closed(self, tmp_path):
@@ -508,10 +508,10 @@ class TestHandlers:
     async def test_cancel_drains_inbox(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
-        agent._comms.send("peer", "proj", "hello")
+        agent._comms.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        agent._comms.messaging.send("peer", "proj", "hello")
         await agent.cancel(session_id="proj")
-        assert agent._comms.pending_count("proj") == 0
+        assert agent._comms.bus.pending_count("proj") == 0
 
     async def test_cancel_ends_active_relay_turn(self, tmp_path):
         agent = CommsAgent(
@@ -582,7 +582,7 @@ class TestAgentTurn:
 
     async def test_agent_turn_streams_reply_without_broadcasting(self, wired, tmp_path):
         agent = self._agent_with_stub(tmp_path, wired)
-        wired.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
 
         sent: list = []
 
@@ -599,7 +599,7 @@ class TestAgentTurn:
         response = "".join(getattr(getattr(update, "content", None), "text", "") for update in sent)
         assert response.endswith("fix the flake")
         assert "you are thread 'proj'" in response
-        assert agent._comms.full_history() == []
+        assert agent._comms.views.full_history() == []
 
     async def test_agent_turn_runs_in_thread_worktree(self, wired, tmp_path):
         worktree = tmp_path / "somewhere"
@@ -659,7 +659,7 @@ class TestAgentTurn:
             session_id="proj", prompt=[{"type": "text", "text": "just chat"}]
         )
         assert response.stop_reason == "end_turn"
-        assert wired.channel_history("#all") == []
+        assert wired.views.channel_history("#all") == []
 
     async def test_cancel_terminates_active_backend_process(self, wired, tmp_path):
         pid_path = tmp_path / "backend.pid"
@@ -712,7 +712,7 @@ class TestAgentTurn:
             if isinstance(update, SessionInfoUpdate) and "title" in update.model_fields_set
         ]
         assert title_updates == []
-        assert wired.agent_info_of("proj").session_name == "Agent-chosen title"
+        assert wired.agents.agent_info_of("proj").session_name == "Agent-chosen title"
 
     async def test_backend_session_is_persisted_and_live_inbox_is_steered(
         self, wired, tmp_path, monkeypatch
@@ -738,8 +738,8 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
-        wired.send("peer", "proj", "ping parent")
+        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
+        wired.messaging.send("peer", "proj", "ping parent")
 
         await agent.turns.run_agent_turn("proj", "proj", "coordinate with the child")
         await agent.turns.run_agent_turn("proj", "proj", "continue")
@@ -762,7 +762,7 @@ class TestAgentTurn:
 
         async def events(*args, **kwargs):
             monkeypatch.setenv("PI_AGENT_ID", "proj")
-            wired.rename_self("renamed-proj")
+            wired.threads.rename_self("renamed-proj")
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
@@ -799,7 +799,7 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, goal)
         await agent.turns.run_agent_turn("proj", "proj", "work")
 
@@ -870,14 +870,14 @@ class TestAgentTurn:
     ):
         agent = self._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, goal)
         secret = "provider stderr SECRET_PRIVATE_937"
 
         async def events(*args, **kwargs):
             yield ae.Error(text=secret)
             if completed_in_turn:
-                wired.update_goal(
+                wired.goals.update_goal(
                     "proj",
                     CompletedGoalAction(
                         expect=GoalPrecondition(goal_id=goal.id), progress="Verified complete"
@@ -1006,7 +1006,7 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        original = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        original = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, original)
         await agent.turns.run_agent_turn("proj", "proj", "Continue working toward the active goal.")
 
@@ -1030,7 +1030,7 @@ class TestAgentTurn:
 
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        initial = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        initial = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
@@ -1039,8 +1039,8 @@ class TestAgentTurn:
                 yield ae.Done(ok=outcome == "success", text="work")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        original_update = wired.update_goal
-        original_block = wired.block_goal_after_failed_turn
+        original_update = wired.goals.update_goal
+        original_block = wired.goals.block_goal_after_failed_turn
         raced = False
 
         def independently_advance(name):
@@ -1048,7 +1048,7 @@ class TestAgentTurn:
             raced = True
             # A separate tool process advances progress after ACP's precheck,
             # before the automated transition acquires the shared wire lock.
-            wire(wired.root).update_goal(
+            wire(wired.root).goals.update_goal(
                 name,
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
@@ -1066,8 +1066,8 @@ class TestAgentTurn:
                 independently_advance(name)
             return original_block(name, **kwargs)
 
-        monkeypatch.setattr(wired, "update_goal", interpose_pause)
-        monkeypatch.setattr(wired, "block_goal_after_failed_turn", interpose_block)
+        monkeypatch.setattr(wired.goals, 'update_goal', interpose_pause)
+        monkeypatch.setattr(wired.goals, 'block_goal_after_failed_turn', interpose_block)
         await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
         assert raced
@@ -1093,7 +1093,7 @@ class TestAgentTurn:
 
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        original = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        original = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, original)
         assert original is not None
 
@@ -1102,13 +1102,13 @@ class TestAgentTurn:
             yield ae.Done(ok=False, text="backend unavailable")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        original_block = wired.block_goal_after_failed_turn
+        original_block = wired.goals.block_goal_after_failed_turn
         superseding = None
 
         def interpose(name, **kwargs):
             nonlocal superseding
             if superseding is None:
-                superseding = wire(wired.root).update_goal(
+                superseding = wire(wired.root).goals.update_goal(
                     name,
                     (
                         SetGoalAction(text="New objective")
@@ -1121,7 +1121,7 @@ class TestAgentTurn:
                 )
             return original_block(name, **kwargs)
 
-        monkeypatch.setattr(wired, "block_goal_after_failed_turn", interpose)
+        monkeypatch.setattr(wired.goals, 'block_goal_after_failed_turn', interpose)
         await agent.turns.run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
         assert superseding is not None and current is not None
@@ -1151,11 +1151,11 @@ class TestAgentTurn:
 
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        initial = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        initial = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
-            wire(wired.root).update_goal(
+            wire(wired.root).goals.update_goal(
                 "proj",
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
@@ -1187,12 +1187,12 @@ class TestAgentTurn:
 
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        initial = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        initial = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
             yield ae.ToolStart(id="goal-progress", name="comms_goal", title="Report progress")
-            wired.update_goal(
+            wired.goals.update_goal(
                 "proj",
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
@@ -1224,7 +1224,7 @@ class TestAgentTurn:
 
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Ship the release"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         private = wired.root / "goal-private"
         private.mkdir(mode=0o700)
         store = GoalAttemptStore.initialize(private)
@@ -1232,7 +1232,7 @@ class TestAgentTurn:
         agent.turns.goal_store = store
 
         async def events(*args, **kwargs):
-            wired.update_goal(
+            wired.goals.update_goal(
                 "proj",
                 CompletedGoalAction(
                     expect=GoalPrecondition(goal_id=goal.id), progress="Verified done"
@@ -1278,14 +1278,14 @@ class TestAgentTurn:
                 response_id="1",
                 usage={"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}},
             )
-            wired.update_goal("proj", SetGoalAction(text="Finish the release"))
+            wired.goals.update_goal("proj", SetGoalAction(text="Finish the release"))
             yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
             yield ae.ProviderUsage(
                 response_id="2",
                 usage={"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
             )
             if owner_paused:
-                wired.update_goal("proj", PausedGoalAction(), actor=OwnerInvocable)
+                wired.goals.update_goal("proj", PausedGoalAction(), actor=OwnerInvocable)
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="Goal set")
 
@@ -1295,7 +1295,7 @@ class TestAgentTurn:
         goal = wired.registry.require("proj").goal
         if owner_paused:
             assert goal.state.declared_name == "paused"
-            assert wired.goal_pause("proj").source.declared_name == "owner"
+            assert wired.goals.goal_pause("proj").source.declared_name == "owner"
             agent.turns.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")
@@ -1322,7 +1322,7 @@ class TestAgentTurn:
 
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Finish safely"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Finish safely"))
         private = wired.root / "goal-private"
         private.mkdir(mode=0o700)
         store = GoalAttemptStore.initialize(private)
@@ -1330,7 +1330,7 @@ class TestAgentTurn:
         agent.turns.goal_store = store
 
         async def events(*args, **kwargs):
-            wired.update_goal(
+            wired.goals.update_goal(
                 "proj",
                 CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Premature"),
                 actor=ModelInvocable,
@@ -1365,7 +1365,7 @@ class TestAgentTurn:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
         async def events(*args, **kwargs):
-            wired.update_goal("proj", SetGoalAction(text="Do not replay"))
+            wired.goals.update_goal("proj", SetGoalAction(text="Do not replay"))
             yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="provider failed")
@@ -1398,13 +1398,13 @@ class TestAgentTurn:
 
         agent.on_connect(FakeClient())
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Keep working"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Keep working"))
         store = agent.turns.open_goal_store()
         store.create_goal(goal.id)
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         store.record_failed(reservation, "The previous turn failed")
-        blocked = wired.update_goal(
+        blocked = wired.goals.update_goal(
             "proj",
             BlockedGoalAction(
                 expect=GoalPrecondition(goal_id=goal.id), block_reason="The previous turn failed"
@@ -1413,7 +1413,7 @@ class TestAgentTurn:
 
         try:
             with pytest.raises(ValueError, match="explicit retry"):
-                wired.update_goal(
+                wired.goals.update_goal(
                     "proj", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id))
                 )
             proxy = RuntimeProxy(agent, "proj", socket_path(wired.root, os.getpid()))
@@ -1443,13 +1443,13 @@ class TestAgentTurn:
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Recover a retry"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Recover a retry"))
         store = agent.turns.open_goal_store()
         store.create_goal(goal.id)
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         store.record_failed(reservation, "Previous turn failed")
-        blocked = wired.update_goal(
+        blocked = wired.goals.update_goal(
             "proj",
             BlockedGoalAction(
                 expect=GoalPrecondition(goal_id=goal.id), block_reason="Previous turn failed"
@@ -1532,7 +1532,7 @@ class TestAgentTurn:
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="No silent stalled goal"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="No silent stalled goal"))
         store = agent.turns.open_goal_store()
         store.create_goal(goal.id)
         agent.turns.goal_store = GoalAttemptStore(wired.root / "goal-private")
@@ -1563,7 +1563,7 @@ class TestAgentTurn:
             agent.sessions.client = FakeClient()
             await agent.new_session(cwd=base, mcp_servers=[])
             name = next(iter(agent.sessions.bindings))
-            goal = wired.update_goal(name, SetGoalAction(text="No replay after crash"))
+            goal = wired.goals.update_goal(name, SetGoalAction(text="No replay after crash"))
             private = root / "goal-private"
             private.mkdir(mode=0o700)
             store = GoalAttemptStore.initialize(private)
@@ -1591,7 +1591,7 @@ class TestAgentTurn:
         agent = CommsAgent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.update_goal("proj", SetGoalAction(text="No orphan spend"))
+        wired.goals.update_goal("proj", SetGoalAction(text="No orphan spend"))
 
         async def forbidden_backend(*args, **kwargs):
             raise AssertionError("An ungranted goal must not start Pi")
@@ -1608,7 +1608,7 @@ class TestAgentTurn:
         agent = CommsAgent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="One attempt"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="One attempt"))
         self._authorize_test_goal(agent, wired, goal)
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -1640,7 +1640,7 @@ class TestAgentTurn:
         agent = CommsAgent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.update_goal("proj", SetGoalAction(text="Count responses"))
+        goal = wired.goals.update_goal("proj", SetGoalAction(text="Count responses"))
         self._authorize_test_goal(agent, wired, goal)
         terminated = []
 
@@ -1754,8 +1754,8 @@ class TestWireProtocol:
             if "proj" in comms.registry:
                 owner = comms.registry.require("proj").pid
                 assert owner != proc.pid
-                assert comms._process_alive(owner)
-                comms.stop("proj")
+                assert comms.owners._process_alive(owner)
+                comms.owners.stop("proj")
         responses = {
             m.get("id"): m for m in (json.loads(line) for line in out_lines if line.strip())
         }
@@ -1764,13 +1764,13 @@ class TestWireProtocol:
         assert responses[3]["result"]["stopReason"] == "end_turn"
         # The wire got the thread and the prompt.
         assert "proj" in comms.registry
-        assert [m.body for m in comms.channel_history("#all")] == ["anyone alive?"]
+        assert [m.body for m in comms.views.channel_history("#all")] == ["anyone alive?"]
 
 
 class TestCrossClient:
     def test_acp_and_cli_share_one_wire(self, tmp_path):
         """CLI agents and ACP sessions see the same threads and messages."""
-        from agent_comms.operations import wire as wire_fn
+        from agent_comms.comms import wire as wire_fn
 
         root = tmp_path / "wire"
         comms = wire_fn(root)
@@ -1782,8 +1782,8 @@ class TestCrossClient:
 
         async def flow() -> None:
             await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-            comms.register(Thread(name="cli-agent", tags=frozenset(), worktree=str(tmp_path)))
-            comms.send("cli-agent", "proj", "from the cli side")
+            comms.threads.register(Thread(name="cli-agent", tags=frozenset(), worktree=str(tmp_path)))
+            comms.messaging.send("cli-agent", "proj", "from the cli side")
 
             class FakeClient:
                 async def session_update(self, session_id=None, update=None, **kw):
@@ -1803,7 +1803,7 @@ class TestCrossClient:
         assert len(incoming) == 1
         assert "from the cli side" in incoming[0].content.text
         # The ACP prompt itself is visible on the CLI side.
-        assert [m.body for m in comms.inbox("cli-agent")] == ["checking inbox"]
+        assert [m.body for m in comms.bus.inbox("cli-agent")] == ["checking inbox"]
 
 
 class TestLiveDrain:
@@ -1833,8 +1833,8 @@ class TestLiveDrain:
         )
 
         # A peer DMs the session thread AFTER the prompt finished.
-        agent._comms.register(Thread(name="cli", tags=frozenset(), worktree="/wt"))
-        agent._comms.send("cli", "proj", "live push")
+        agent._comms.threads.register(Thread(name="cli", tags=frozenset(), worktree="/wt"))
+        agent._comms.messaging.send("cli", "proj", "live push")
 
         # Wait for the background drain loop to fire.
         for _ in range(30):
@@ -1872,15 +1872,15 @@ class TestLiveDrain:
 
 class TestFullHistory:
     def test_full_history_is_everything_in_order(self, tmp_path):
-        from agent_comms.operations import wire
+        from agent_comms.comms import wire
 
         comms = wire(tmp_path / "wire")
-        comms.register(Thread(name="a", tags=frozenset({"x"}), worktree="/wt"))
-        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
-        comms.send("a", "#all", "one")
-        comms.send("a", "b", "dm")
-        comms.send("b", "#x", "tagged")
-        bodies = [(m.sender, m.target, m.body) for m in comms.full_history()]
+        comms.threads.register(Thread(name="a", tags=frozenset({"x"}), worktree="/wt"))
+        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.messaging.send("a", "#all", "one")
+        comms.messaging.send("a", "b", "dm")
+        comms.messaging.send("b", "#x", "tagged")
+        bodies = [(m.sender, m.target, m.body) for m in comms.views.full_history()]
         assert bodies == [
             ("a", "#all", "one"),
             ("a", "b", "dm"),
@@ -2045,9 +2045,9 @@ class TestAgentTurnForwarding:
             session_id="proj", prompt=[{"type": "text", "text": "!agent do a thing"}]
         )
         # Turn finished -> idle again.
-        assert wired.activity_of("proj").state.value == "idle"
+        assert wired.agents.activity_of("proj").state.value == "idle"
         # The full trail was recorded: thinking -> working -> thinking -> idle.
-        states = [e.state.value for e in wired.activity._load() if e.thread == "proj"]
+        states = [e.state.value for e in wired.agents.activity._load() if e.thread == "proj"]
         assert states == ["thinking", "working", "thinking", "idle"]
 
 
@@ -2056,8 +2056,8 @@ class TestActivityLayer:
         from agent_comms import ActivityState
 
         wired.registry.require("PR111")
-        wired.set_activity("PR111", ActivityState.WORKING, "bash: echo hi")
-        activity = wired.activity_of("PR111")
+        wired.agents.set_activity("PR111", ActivityState.WORKING, "bash: echo hi")
+        activity = wired.agents.activity_of("PR111")
         assert activity.state is ActivityState.WORKING
         assert activity.detail == "bash: echo hi"
 
@@ -2065,28 +2065,28 @@ class TestActivityLayer:
         from agent_comms import ActivityState
 
         with pytest.raises(Exception, match="Idle"):
-            wired.set_activity("PR111", ActivityState.IDLE, "junk")
+            wired.agents.set_activity("PR111", ActivityState.IDLE, "junk")
 
     def test_unknown_thread_fail_closed(self, wired):
         from agent_comms import ActivityState
 
         with pytest.raises(UnregisteredThreadError):
-            wired.set_activity("ghost", ActivityState.THINKING)
+            wired.agents.set_activity("ghost", ActivityState.THINKING)
 
     def test_stale_activity_reads_idle(self, wired):
         import time as _time
 
         from agent_comms.declarations import Activity, ActivityState
 
-        wired.activity.emit(Activity(thread="PR111", state=ActivityState.WORKING, detail="old"))
+        wired.agents.activity.emit(Activity(thread="PR111", state=ActivityState.WORKING, detail="old"))
         # Tamper the timestamp to be stale.
         import json as _json
 
-        log = wired.activity._path
+        log = wired.agents.activity._path
         lines = [_json.loads(line) for line in log.read_text().splitlines()]
         lines[-1]["ts"] = _time.time() - 1000
         log.write_text("\n".join(_json.dumps(line) for line in lines))
-        assert wired.activity_of("PR111").state is ActivityState.IDLE
+        assert wired.agents.activity_of("PR111").state is ActivityState.IDLE
 
     def test_activity_persistence(self, tmp_path):
         from agent_comms.declarations import Activity, ActivityLog, ActivityState
@@ -2133,13 +2133,13 @@ class TestTargetPrefix:
 
     async def test_dm_prompt_reaches_only_target(self, wired):
         agent = CommsAgent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
-        wired.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         # DM delivered, not broadcast.
-        assert wired.pending_count("peer") == 1
-        assert wired.pending_count("PR111") == 0
-        assert [m.body for m in wired.dm_history("proj", "peer")] == ["hi peer"]
+        assert wired.bus.pending_count("peer") == 1
+        assert wired.bus.pending_count("PR111") == 0
+        assert [m.body for m in wired.views.dm_history("proj", "peer")] == ["hi peer"]
 
 
 class TestFailureFeedback:
@@ -2158,13 +2158,13 @@ class TestFailureFeedback:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.register(
+        wired.threads.register(
             Thread(name="peer", tags=frozenset({"team"}), worktree=str(tmp_path / "proj"))
         )
         origin = Message(sender="peer", target="#team", body="do the work", type=MessageType.INFO)
         await agent.turns.run_agent_turn("proj", "proj", "do the work", origins=(origin,))
 
-        history = wired.channel_history("#team")
+        history = wired.views.channel_history("#team")
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert notice.notice is True
@@ -2182,14 +2182,14 @@ class TestFailureFeedback:
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.user_identity(str(tmp_path / "proj"))
+        human = wired.messaging.user_identity(str(tmp_path / "proj"))
         if channel:
-            wired.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+            wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin_target = "#team" if channel else "proj"
         reply_target = "#team" if channel else human.name
         origin = Message(human.name, origin_target, "please help", MessageType.INFO)
         routed: list = []
-        monkeypatch.setattr(wired, "record_turn_routing", lambda *args: routed.append(args))
+        monkeypatch.setattr(wired.transcripts, 'record_turn_routing', lambda *args: routed.append(args))
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="unfinished secret answer")
@@ -2202,7 +2202,7 @@ class TestFailureFeedback:
         )
 
         history = (
-            wired.channel_history(reply_target) if channel else wired.dm_history("proj", human.name)
+            wired.views.channel_history(reply_target) if channel else wired.views.dm_history("proj", human.name)
         )
         assert len(history) == 1
         assert history[0].notice is True
@@ -2220,10 +2220,10 @@ class TestFailureFeedback:
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.user_identity(str(tmp_path / "proj"))
+        human = wired.messaging.user_identity(str(tmp_path / "proj"))
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
         routed: list = []
-        monkeypatch.setattr(wired, "record_turn_routing", lambda *args: routed.append(args))
+        monkeypatch.setattr(wired.transcripts, 'record_turn_routing', lambda *args: routed.append(args))
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="unfinished secret answer")
@@ -2233,7 +2233,7 @@ class TestFailureFeedback:
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
         )
-        history = wired.dm_history("proj", human.name)
+        history = wired.views.dm_history("proj", human.name)
         assert len(history) == 1
         assert history[0].notice is True
         assert history[0].body.startswith("Request failed: backend turn did not complete. ")
@@ -2247,10 +2247,10 @@ class TestFailureFeedback:
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.user_identity(str(tmp_path / "proj"))
+        human = wired.messaging.user_identity(str(tmp_path / "proj"))
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
         routed: list = []
-        monkeypatch.setattr(wired, "record_turn_routing", lambda *args: routed.append(args))
+        monkeypatch.setattr(wired.transcripts, 'record_turn_routing', lambda *args: routed.append(args))
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="complete answer")
@@ -2261,7 +2261,7 @@ class TestFailureFeedback:
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
         )
-        history = wired.dm_history("proj", human.name)
+        history = wired.views.dm_history("proj", human.name)
         assert len(history) == 1
         assert history[0].notice is False
         assert history[0].body == "complete answer"
@@ -2274,14 +2274,14 @@ class TestFailureFeedback:
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.user_identity(str(tmp_path / "proj"))
-        wired.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        human = wired.messaging.user_identity(str(tmp_path / "proj"))
+        wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="Working")
             yield ae.CommittedProgress(text="Working")
-            progress = wired.channel_history("#team")
+            progress = wired.views.channel_history("#team")
             assert [message.body for message in progress] == ["Working"]
             assert progress[0].notice and not progress[0].starts_turn
             yield ae.Chunk(text="Done")
@@ -2292,7 +2292,7 @@ class TestFailureFeedback:
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
         )
-        history = wired.channel_history("#team")
+        history = wired.views.channel_history("#team")
         assert [(message.body, message.notice) for message in history] == [
             ("Working", True),
             ("Done", False),
@@ -2326,8 +2326,8 @@ class TestFailureFeedback:
         )
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.user_identity(str(tmp_path / "proj"))
-        wired.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        human = wired.messaging.user_identity(str(tmp_path / "proj"))
+        wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
         original = backend.stream_agent_events
 
@@ -2343,7 +2343,7 @@ class TestFailureFeedback:
             timeout=9,
         )
         assert all(
-            "foreign earlier turn" not in message.body for message in wired.channel_history("#team")
+            "foreign earlier turn" not in message.body for message in wired.views.channel_history("#team")
         )
 
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
@@ -2353,8 +2353,8 @@ class TestFailureFeedback:
 
         agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.user_identity(str(tmp_path / "proj"))
-        wired.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        human = wired.messaging.user_identity(str(tmp_path / "proj"))
+        wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
 
         async def events(*args, **kwargs):
@@ -2365,7 +2365,7 @@ class TestFailureFeedback:
         await agent.turns.run_agent_turn(
             "proj", "proj", "answer", reply_targets=(human.name, "#team"), origins=(origin,)
         )
-        history = wired.full_history()
+        history = wired.views.full_history()
         assert len(history) == 2
         assert {message.target for message in history} == {human.name, "#team"}
         assert all(message.notice and not message.starts_turn for message in history)
@@ -2398,7 +2398,7 @@ class TestLiveConfigSync:
         assert "title" not in sent[0].model_fields_set
         sent.clear()
         # Another thread can change this thread's model; the view must follow.
-        wired.set_thread_model("proj", "openrouter/deepseek/deepseek-v4.1-flash")
+        wired.threads.set_thread_model("proj", "openrouter/deepseek/deepseek-v4.1-flash")
         await agent.sessions.config.sync_thread("proj")
         assert len(sent) == 1
         assert isinstance(sent[0], ConfigOptionUpdate)
@@ -2413,7 +2413,7 @@ class TestLiveConfigSync:
                 sent.append(update)
 
         async def assert_snapshot_update():
-            goal, execution = wired.goal_snapshot("proj")
+            goal, execution = wired.goals.goal_snapshot("proj")
             await agent.sessions.config.sync_thread("proj")
             assert len(sent) == 1 and isinstance(sent[0], SessionInfoUpdate)
             assert sent[0].field_meta == {
@@ -2431,27 +2431,27 @@ class TestLiveConfigSync:
         try:
             await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
             await assert_snapshot_update()
-            goal = wired.update_goal("proj", SetGoalAction(text="Handle assigned work"))
+            goal = wired.goals.update_goal("proj", SetGoalAction(text="Handle assigned work"))
             await assert_snapshot_update()
 
-            wired.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
-            wired.begin_turn("child", "child-metadata-work")
-            wired.update_goal(
+            wired.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+            wired.agents.begin_turn("child", "child-metadata-work")
+            wired.goals.update_goal(
                 "proj",
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
             )
             await assert_snapshot_update()
 
             # Renaming a dependency changes only the execution projection.
-            before_goal, before_execution = wired.goal_snapshot("proj")
+            before_goal, before_execution = wired.goals.goal_snapshot("proj")
             wired.registry.rename("child", "renamed-child")
-            after_goal, after_execution = wired.goal_snapshot("proj")
+            after_goal, after_execution = wired.goals.goal_snapshot("proj")
             assert after_goal == before_goal
             assert after_execution != before_execution
             assert after_execution.wait_for[0].name == "renamed-child"
             await assert_snapshot_update()
 
-            wired.update_goal("proj", ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+            wired.goals.update_goal("proj", ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
             await assert_snapshot_update()
         finally:
             await agent.shutdown()
@@ -2470,7 +2470,7 @@ class TestQueueControl:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
+        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj")))
         agent.inputs.backend_inboxes["proj"] = __import__("asyncio").Queue()
         agent.inputs.queued_inputs["proj"] = {}
         response = await agent.prompt(

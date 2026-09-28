@@ -193,7 +193,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        return ctx.server.agent._comms.input_delivery(
+        return ctx.server.agent._comms.goals.input_delivery(
             ctx.name,
             include_history=self.include_history,
             awaiting_keys=ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
@@ -203,7 +203,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        result = ctx.server.agent._comms.dismiss_historical_inputs(
+        result = ctx.server.agent._comms.goals.dismiss_historical_inputs(
             ctx.name, awaiting_keys=ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
         )
         await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
@@ -215,7 +215,7 @@ class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        history = ctx.server.agent._comms.goal_history(ctx.name, goal_id=self.goal_id)
+        history = ctx.server.agent._comms.goals.goal_history(ctx.name, goal_id=self.goal_id)
         return {"history": [row.to_wire() for row in history]}
 
 
@@ -225,7 +225,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         await self.change(ctx)
-        goal, execution = ctx.server.agent._comms.goal_snapshot(ctx.name)
+        goal, execution = ctx.server.agent._comms.goals.goal_snapshot(ctx.name)
         return {
             "goal": goal.to_wire() if goal is not None else None,
             "goalExecution": asdict(execution) if execution is not None else None,

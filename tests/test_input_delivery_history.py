@@ -24,24 +24,24 @@ def seed(comms, name):
 
 def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms = wire(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path)))
-    comms.register(Thread("peer", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("peer", frozenset(), str(tmp_path)))
     ledger, cursors = seed(comms, "owner")
     ledger.record("bus:3", seq=3, owner="peer", admission=1, target="peer", text="Peer")
     before = ledger.unknown(frozenset({"owner"}))
     files = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
-    overview = comms.input_delivery("owner")
+    overview = comms.goals.input_delivery("owner")
     assert [row["inputId"] for row in overview["inputs"]] == ["bus:2", "bus:8", "ui"]
     assert overview["historicalCount"] == 2
     assert overview["dismissedHistoricalCount"] == 0
     assert overview["historicalInputs"] == []
     assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == files
-    detail = comms.input_delivery("owner", include_history=True)
+    detail = comms.goals.input_delivery("owner", include_history=True)
     assert [r["inputId"] for r in detail["historicalInputs"]] == ["bus:1", "bus:7"]
     assert not any(r["noticeDismissed"] for r in detail["historicalInputs"])
     comms.registry.rename("owner", "renamed")
-    assert comms.input_delivery("renamed") == overview
-    result = comms.dismiss_historical_inputs("renamed")
+    assert comms.goals.input_delivery("renamed") == overview
+    result = comms.goals.dismiss_historical_inputs("renamed")
     assert result["historicalCount"] == 0 and result["dismissedHistoricalCount"] == 2
     assert result["inputs"] == overview["inputs"]
     assert ledger.get("bus:3").get("notice_dismissed") is None
@@ -51,25 +51,25 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     ] == before
     assert cursors.cursor(frozenset({"owner"})) == 0
     reopened = wire(tmp_path)
-    assert reopened.input_delivery("renamed") == result
-    assert reopened.unresolved_inputs("renamed") == [ledger.public(r) for r in before]
+    assert reopened.goals.input_delivery("renamed") == result
+    assert reopened.goals.unresolved_inputs("renamed") == [ledger.public(r) for r in before]
     assert all(
         r["noticeDismissed"]
-        for r in reopened.input_delivery("renamed", include_history=True)["historicalInputs"]
+        for r in reopened.goals.input_delivery("renamed", include_history=True)["historicalInputs"]
     )
-    assert reopened.dismiss_historical_inputs("renamed") == result
+    assert reopened.goals.dismiss_historical_inputs("renamed") == result
     assert ledger.bind("bus:7", admission=1, turn_id="t2", native_id="b" * 32, text="Text bus:7")
-    assert "bus:7" in [r["inputId"] for r in reopened.input_delivery("renamed")["inputs"]]
+    assert "bus:7" in [r["inputId"] for r in reopened.goals.input_delivery("renamed")["inputs"]]
 
 
 def test_no_migration_boundary_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
     ledger = InputDispositions(tmp_path)
     ledger.record("bus:1", seq=1, owner="owner", admission=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()
-    assert comms.dismiss_historical_inputs("owner")["historicalCount"] == 0
-    assert len(comms.input_delivery("owner")["inputs"]) == 1
+    assert comms.goals.dismiss_historical_inputs("owner")["historicalCount"] == 0
+    assert len(comms.goals.input_delivery("owner")["inputs"]) == 1
     assert ledger.path.read_bytes() == before
     assert not AcpDeliveryCursors(tmp_path).path.exists()
 
@@ -92,7 +92,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
 
     owner.sessions.client = Client()
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
-    before = comms.unresolved_inputs(session)
+    before = comms.goals.unresolved_inputs(session)
     try:
         await owner.inputs.replay_unknown_inputs(session, client=Client())
         assert updates == [], "An idle owner has no currently awaiting inputs to replay"
@@ -107,7 +107,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
         assert await proxy.request("input_dispositions") == cleared
         detailed = await proxy.request("input_dispositions", include_history=True)
         assert len(detailed["historicalInputs"]) == 5
-        assert comms.unresolved_inputs(session) == before
+        assert comms.goals.unresolved_inputs(session) == before
         assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
     finally:
         owner.sessions.client = None

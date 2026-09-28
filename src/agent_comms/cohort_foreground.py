@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
 from .cohort_schema import install_private_cohort_schema
+from .comms import Comms
 from .coordinated_runtime import (
     CoordinatedTurn,
     SelectedExistingFileWrite,
@@ -46,7 +47,6 @@ from .declarations import (
 from .envelope_claim_transitions import normalize_existing_file
 from .native_pi import _private_session_dir, _trusted_package
 from .native_prompt_binding import install_prompt_binding_schema
-from .operations import Comms
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +160,7 @@ async def run_foreground_once(
     with _store_lock(comms._wire_lock_path):
         if comms.registry.name_reserved(name):
             raise IdentityConflict("recipient name already reserved; no takeover")
-        comms._require_available_new_tags(tags)
+        comms.channels._require_available_new_tags(tags)
         comms.registry.register(thread)
     try:
         with MutationStore(str(root / "coordination.sqlite3")) as store:

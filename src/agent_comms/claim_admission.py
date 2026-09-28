@@ -13,6 +13,7 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
+from .comms import Comms
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .declarations import (
@@ -31,7 +32,6 @@ from .envelope_claim_transitions import (
     normalize_claim_file,
     normalize_existing_file,
 )
-from .operations import Comms
 
 
 def verify_selected_wake(

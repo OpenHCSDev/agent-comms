@@ -243,7 +243,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 paused = wire(root / "wire").registry.require("project").goal
                 assert (
                     paused.state.declared_name == "paused"
-                    and comms.goal_pause("project").source.declared_name == "owner"
+                    and comms.goals.goal_pause("project").source.declared_name == "owner"
                 )
                 from agent_comms.tools import TOOLS
 

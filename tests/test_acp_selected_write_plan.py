@@ -19,6 +19,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_foreground import _accept_visible_initials
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_claims
 from agent_comms.coordination_response import install_private_response_schema
@@ -26,7 +27,6 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.declarations import MessageBus, Thread
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
-from agent_comms.operations import Comms
 from agent_comms.selected_write_plan import SelectedWritePlans
 from test_coordinated_runtime import _fake_model
 
@@ -65,7 +65,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         package.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
-            comms.register(
+            comms.threads.register(
                 Thread(
                     name,
                     frozenset({"team"}),
@@ -75,8 +75,8 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                     model="test/fake",
                 )
             )
-        root_id = comms.initialize_private_initial_protocol()
-        comms.initialize_private_claim_protocol()
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -110,14 +110,14 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         prior_seq = 0
         if scenario == "older_claims":
             for index in range(100):
-                prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
+                prior_seq = comms.messaging.send_message("sender", "#team", f"@beta earlier {index}").seq
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
         if prior_seq:
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 _accept_visible_initials(
                     bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
                 )
-        message = comms.send_message("sender", "#team", "@beta inspect module.py")
+        message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
                 bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
@@ -207,7 +207,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             with pytest.raises(NativePiUnavailable):
                 await agent._drain_private_nk("beta", root_id)
             assert len(calls) == 1 and resource.read_bytes() == b"before\n"
-            assert not list(Comms(root).claim_projection())
+            assert not list(Comms(root).bus.claim_projection())
             await agent.shutdown()
             return
         if scenario in {"reconnect", "lost_process_state"}:
@@ -226,7 +226,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             return
         assert await agent._drain_private_nk("beta", root_id) == 1
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        claim = Comms(root).claim_projection()[str(resource)]
+        claim = Comms(root).bus.claim_projection()[str(resource)]
         assert (
             claim.admission is not None and claim.admission.operation_id == receipt["operationId"]
         )
@@ -252,8 +252,8 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         package.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
-        comms.register(Thread("sender", frozenset(), str(work), pid=sender_pid, created_at=61001.0))
-        comms.register(
+        comms.threads.register(Thread("sender", frozenset(), str(work), pid=sender_pid, created_at=61001.0))
+        comms.threads.register(
             Thread(
                 "alpha",
                 frozenset({"team"}),
@@ -263,8 +263,8 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 model="test/fake",
             )
         )
-        root_id = comms.initialize_private_initial_protocol()
-        comms.initialize_private_claim_protocol()
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -297,7 +297,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         attached = None
         try:
             assert process.pid != sender_pid
-            comms.register(
+            comms.threads.register(
                 Thread(
                     "beta",
                     frozenset({"team"}),
@@ -340,7 +340,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 comms, private_nk_wire_root_id=root_id, private_nk_native_package=package
             )
             await attached.load_session(str(work), "beta")
-            message = comms.send_message("sender", "#team", "@beta inspect module.py")
+            message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
             bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 _accept_visible_initials(
@@ -364,7 +364,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             result = event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
-            owner = Comms(root).claim_projection()[str(resource)]
+            owner = Comms(root).bus.claim_projection()[str(resource)]
             assert owner.owner == "beta" and owner.admission is not None
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (

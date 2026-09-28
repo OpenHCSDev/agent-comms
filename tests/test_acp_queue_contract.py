@@ -11,16 +11,16 @@ import pytest
 from acp import RequestError
 
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import Comms
 from agent_comms.declarations import Thread
 from agent_comms.input_drain import QueuedInput
-from agent_comms.operations import Comms
 from agent_comms.runtime import _present_cursor_session
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms = Comms(tmp_path / "wire")
     thread = Thread("beta", frozenset(), str(tmp_path), pid=os.getpid())
-    comms.register(thread)
+    comms.threads.register(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
     owner, epoch = comms.registry.live_owner_with_admission("beta")

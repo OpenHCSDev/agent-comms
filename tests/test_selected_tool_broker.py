@@ -13,10 +13,10 @@ import pytest
 
 from agent_comms import native_pi
 from agent_comms import selected_tool_broker as broker
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_store import MutationStore
 from agent_comms.envelope_claim_transitions import WakeAdmission
-from agent_comms.operations import Comms
 
 
 def _wire(token: str, **changes: object) -> bytes:

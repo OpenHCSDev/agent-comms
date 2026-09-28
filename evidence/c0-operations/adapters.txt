@@ -1,0 +1,139 @@
+........................................................................ [ 93%]
+F.F.F                                                                    [100%]
+=================================== FAILURES ===================================
+________ test_active_turn_is_deferred_then_exact_incarnation_restarted _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/adapters/test_active_turn_is_deferred_t0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f66b7f03c40>
+
+    def test_active_turn_is_deferred_then_exact_incarnation_restarted(tmp_path, monkeypatch):
+        path, _prompt, owner, calls = _fixture(tmp_path, monkeypatch)
+        assert queue.step(path)["entries"][0]["state"] == "pending"
+        assert not calls
+        owner.active_turn = None
+>       result = queue.step(path)["entries"][0]
+                 ^^^^^^^^^^^^^^^^
+
+tests/test_prompt_restart_queue.py:83: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+queue = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/adapters/test_active_turn_is_deferred_t0/queue.json')
+
+    def step(queue: Path) -> dict:
+        data = json.loads(queue.read_text())
+        if data.get("version") != 1:
+            raise ValueError("Unrecognized restart queue version")
+        comms = wire(data["root"])
+        for entry in data["entries"]:
+            if entry["state"] != "pending":
+                continue
+            snapshot = comms.registry.snapshot()
+            name = entry["name"]
+            thread = snapshot.threads.get(name)
+            expected = (entry["pid"], entry["created_at"], entry["epoch"])
+            observed = (
+                (thread.pid, thread.created_at, snapshot.admission_generations.get(name))
+                if thread
+                else None
+            )
+            if observed != expected or not snapshot.statuses[name].active:
+                entry.update(
+                    state="stale", reason="owner incarnation or status changed; no restart attempted"
+                )
+            elif thread.worktree != entry["worktree"] or not _policy_matches(
+                thread.worktree, entry["policy_sha256"]
+            ):
+                entry.update(state="blocked", reason="worktree or project prompt changed")
+            elif thread.active_turn is not None:
+                continue
+            else:
+                try:
+                    (result,) = _restart_exact_owner(comms, thread, expected)
+                except RelationViolationError as exc:
+                    # This API can fail after signaling; absent an explicit early
+                    # preflight reason, record UNKNOWN and stop rather than retry.
+                    reason = str(exc)
+                    if "became busy before restart" in reason:
+                        continue
+                    if reason == "Idle owner changed before restart fence.":
+                        fresh = comms.registry.snapshot()
+                        current = fresh.threads.get(name)
+                        if (
+                            current is not None
+                            and current.active_turn is not None
+                            and (current.pid, current.created_at, fresh.admission_generations.get(name))
+                            == expected
+                        ):
+                            continue  # A direct claim won; try only after its turn settles.
+                    early = (
+                        "Queued owner incarnation changed before restart.",
+                        "Guarded restart requires exactly one queued owner.",
+                        "Idle owner changed before restart fence.",
+                        "Owner selection changed before restart.",
+                        "Owner epochs changed before restart.",
+                    )
+                    entry.update(state="blocked" if reason in early else "uncertain", reason=reason)
+                except ValueError as exc:
+                    if "active turn" in str(exc):
+                        continue
+                    entry.update(state="uncertain", reason=str(exc))
+                except Exception as exc:
+                    entry.update(state="uncertain", reason=f"{type(exc).__name__}: {exc}")
+                else:
+                    entry.update(state="restarted", old_pid=result.previous_pid, new_pid=result.pid)
+            _atomic_json(queue, data)
+            if entry["state"] == "uncertain":
+>               raise RuntimeError(
+                    f"Owner {name!r} restart outcome UNKNOWN; review queue before rerunning"
+                )
+E               RuntimeError: Owner 'owner' restart outcome UNKNOWN; review queue before rerunning
+
+tools/prompt_restart_queue.py:190: RuntimeError
+_________ test_exact_owner_environment_does_not_leak_between_restarts __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/adapters/test_exact_owner_environment_d0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f66b92a5a90>
+
+    def test_exact_owner_environment_does_not_leak_between_restarts(tmp_path, monkeypatch):
+        path, _prompt, owner, calls = _fixture(tmp_path, monkeypatch)
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--provider wrong --model wrong")
+        monkeypatch.setenv("PYTHONPATH", "/isolated/branch/src")
+>       queue._restart_exact_owner(queue.wire(str(tmp_path)), owner, (401, 100.5, 7))
+
+tests/test_prompt_restart_queue.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+comms = namespace(registry=namespace(snapshot=<function _fixture.<locals>.snapshot at 0x7f66b7cfb270>), restart_owners=<functi...ure.<locals>.restart at 0x7f66b7cfab90>, _is_local_participant=<function _fixture.<locals>.<lambda> at 0x7f66b7cfacf0>)
+thread = namespace(name='owner', pid=401, created_at=100.5, worktree='/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/adapters/test_exact_owner_environment_d0/project', active_turn=<object object at 0x7f66bb9834b0>)
+expected = (401, 100.5, 7)
+
+    def _restart_exact_owner(comms, thread, expected):
+        # Reprove before/after reading /proc: a reused pid cannot supply launch
+        # environment without also passing the later locked incarnation/socket CAS.
+>       if not comms.owners._is_local_participant(thread, wait=False):
+               ^^^^^^^^^^^^
+E       AttributeError: 'types.SimpleNamespace' object has no attribute 'owners'
+
+tools/prompt_restart_queue.py:97: AttributeError
+_____________________ test_uncertain_restart_never_retried _____________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/adapters/test_uncertain_restart_never_r0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f66b92a6890>
+
+    def test_uncertain_restart_never_retried(tmp_path, monkeypatch):
+        path, _prompt, owner, _calls = _fixture(tmp_path, monkeypatch)
+        owner.active_turn = None
+    
+        def uncertain(names, **kwargs):
+            raise RuntimeError("owner stop outcome unknown")
+    
+>       monkeypatch.setattr(queue.wire(str(tmp_path)).owners, 'restart_owners', uncertain)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'types.SimpleNamespace' object has no attribute 'owners'
+
+tests/test_prompt_restart_queue.py:169: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_prompt_restart_queue.py::test_active_turn_is_deferred_then_exact_incarnation_restarted
+FAILED tests/test_prompt_restart_queue.py::test_exact_owner_environment_does_not_leak_between_restarts
+FAILED tests/test_prompt_restart_queue.py::test_uncertain_restart_never_retried
+3 failed, 74 passed in 6.48s

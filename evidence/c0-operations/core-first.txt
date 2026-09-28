@@ -1,0 +1,1646 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.FF [ 58%]
+FFFFFFFF.....FFFFFF.................................                     [100%]
+=================================== FAILURES ===================================
+__________________ TestMessaging.test_send_routes_through_bus __________________
+
+self = <test_operations.TestMessaging object at 0x7eff212ff610>
+wired = <agent_comms.comms.Comms object at 0x7eff20d5a510>
+
+    def test_send_routes_through_bus(self, wired):
+>       mid = wired.send("PR111", "fixer", "hello", MessageType.QUESTION)
+              ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:25: AttributeError
+______________ TestMessaging.test_send_fail_closed_unknown_sender ______________
+
+self = <test_operations.TestMessaging object at 0x7eff21201590>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6710>
+
+    def test_send_fail_closed_unknown_sender(self, wired):
+        with pytest.raises(UnregisteredThreadError, match="Sender"):
+>           wired.send("ghost", "fixer", "hello")
+            ^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:31: AttributeError
+________________ TestMessaging.test_broadcast_reaches_all_peers ________________
+
+self = <test_operations.TestMessaging object at 0x7eff21113bb0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6c910>
+
+    def test_broadcast_reaches_all_peers(self, wired):
+>       wired.broadcast("PR111", "green")
+        ^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'broadcast'
+
+tests/test_operations.py:34: AttributeError
+_____________________ TestMessaging.test_ack_clears_inbox ______________________
+
+self = <test_operations.TestMessaging object at 0x7eff21113490>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6e850>
+
+    def test_ack_clears_inbox(self, wired):
+>       wired.send("PR111", "fixer", "hello")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:38: AttributeError
+_______ TestMessaging.test_scoped_ack_only_clears_selected_conversation ________
+
+self = <test_operations.TestMessaging object at 0x7eff211fe450>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6ec10>
+
+    def test_scoped_ack_only_clears_selected_conversation(self, wired):
+>       wired.send("PR111", "fixer", "direct")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:44: AttributeError
+___________ TestMessaging.test_scoped_channel_ack_does_not_clear_dm ____________
+
+self = <test_operations.TestMessaging object at 0x7eff2112abe0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6ee90>
+
+    def test_scoped_channel_ack_does_not_clear_dm(self, wired):
+>       wired.send("PR111", "fixer", "direct")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:53: AttributeError
+__________________ TestMessaging.test_inbox_order_follows_seq __________________
+
+self = <test_operations.TestMessaging object at 0x7eff2112a690>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f110>
+
+    def test_inbox_order_follows_seq(self, wired):
+        for i in range(5):
+>           wired.send("PR111", "fixer", f"m{i}")
+            ^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:63: AttributeError
+___ TestMessaging.test_pending_counts_groups_all_conversations_in_one_result ___
+
+self = <test_operations.TestMessaging object at 0x7eff21143750>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f390>
+
+    def test_pending_counts_groups_all_conversations_in_one_result(self, wired):
+>       wired.send("PR111", "fixer", "direct one")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:68: AttributeError
+_______________ TestMessaging.test_shared_history_page_contract ________________
+
+self = <test_operations.TestMessaging object at 0x7eff206ca650>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f610>
+
+    def test_shared_history_page_contract(self, wired):
+        for index in range(5):
+>           wired.send("PR111", "#all", f"m{index}")
+            ^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:78: AttributeError
+_____ TestThreadOps.test_thread_transcript_normalizes_persisted_pi_events ______
+
+self = <test_operations.TestThreadOps object at 0x7eff21200cd0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f890>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_thread_transcript_normali0')
+
+    def test_thread_transcript_normalizes_persisted_pi_events(self, wired, tmp_path):
+        session_file = tmp_path / "session.jsonl"
+        records = [
+            {
+                "type": "message",
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "demo request"}],
+                },
+            },
+            {
+                "type": "message",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "considering"},
+                        {
+                            "type": "toolCall",
+                            "id": "call-1",
+                            "name": "comms_send",
+                            "arguments": {"to": "child"},
+                        },
+                    ],
+                },
+            },
+            {
+                "type": "message",
+                "message": {
+                    "role": "toolResult",
+                    "toolCallId": "call-1",
+                    "toolName": "comms_send",
+                    "content": [{"type": "text", "text": "sent"}],
+                    "isError": False,
+                },
+            },
+            {
+                "type": "message",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "demo complete"}],
+                },
+            },
+        ]
+        session_file.write_text("\n".join(json.dumps(record) for record in records))
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="transcript-thread",
+                tags=frozenset(),
+                worktree=str(tmp_path),
+                session_file=str(session_file),
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:131: AttributeError
+____ TestThreadOps.test_thread_transcript_includes_saved_compaction_summary ____
+
+self = <test_operations.TestThreadOps object at 0x7eff21200b90>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6fb10>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_thread_transcript_include0')
+
+    def test_thread_transcript_includes_saved_compaction_summary(self, wired, tmp_path):
+        session_file = tmp_path / "compacted.jsonl"
+        session_file.write_text(
+            json.dumps(
+                {
+                    "type": "compaction",
+                    "summary": "Important decisions and remaining work.",
+                    "tokensBefore": 12000,
+                }
+            )
+            + "\n"
+        )
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="compacted-thread",
+                tags=frozenset(),
+                worktree=str(tmp_path),
+                session_file=str(session_file),
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:166: AttributeError
+________ TestThreadOps.test_claim_thread_can_baseline_inbox_atomically _________
+
+self = <test_operations.TestThreadOps object at 0x7eff21112b10>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6fd90>
+
+    def test_claim_thread_can_baseline_inbox_atomically(self, wired):
+>       wired.send("PR111", "#all", "before claim")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:182: AttributeError
+____________ TestThreadOps.test_runtime_info_is_exposed_in_presence ____________
+
+self = <test_operations.TestThreadOps object at 0x7eff206d8e90>
+wired = <agent_comms.comms.Comms object at 0x7eff1fefc050>
+
+    def test_runtime_info_is_exposed_in_presence(self, wired):
+>       wired.set_agent_info("fixer", model="openrouter/model", context_used=25, context_size=100)
+        ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'set_agent_info'
+
+tests/test_operations.py:194: AttributeError
+______ TestThreadOps.test_presence_omits_expensive_viewer_pending_counts _______
+
+self = <test_operations.TestThreadOps object at 0x7eff211feb10>
+wired = <agent_comms.comms.Comms object at 0x7eff1fefc2d0>
+
+    def test_presence_omits_expensive_viewer_pending_counts(self, wired):
+>       rows = {row["name"]: row for row in wired.presence()}
+                                            ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'presence'
+
+tests/test_operations.py:201: AttributeError
+____________ TestThreadOps.test_runtime_info_rejects_unknown_thread ____________
+
+self = <test_operations.TestThreadOps object at 0x7eff21129e10>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6fc50>
+
+    def test_runtime_info_rejects_unknown_thread(self, wired):
+        with pytest.raises(UnregisteredThreadError):
+>           wired.set_agent_info("ghost", model="model")
+            ^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'set_agent_info'
+
+tests/test_operations.py:206: AttributeError
+____________________ TestThreadOps.test_list_threads_shape _____________________
+
+self = <test_operations.TestThreadOps object at 0x7eff21129d00>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6710>
+
+    def test_list_threads_shape(self, wired):
+>       rows = {row["name"]: row for row in wired.list_threads()}
+                                            ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'list_threads'
+
+tests/test_operations.py:209: AttributeError
+_____________________ TestThreadOps.test_list_active_only ______________________
+
+self = <test_operations.TestThreadOps object at 0x7eff206c8d50>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7890>
+
+    def test_list_active_only(self, wired):
+>       wired.stop("fixer")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'stop'
+
+tests/test_operations.py:216: AttributeError
+_______________________ TestThreadOps.test_thread_detail _______________________
+
+self = <test_operations.TestThreadOps object at 0x7eff206c8850>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6e90>
+
+    def test_thread_detail(self, wired):
+>       detail = wired.thread_detail("fixer")
+                 ^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'thread_detail'
+
+tests/test_operations.py:221: AttributeError
+_________________ TestThreadOps.test_thread_detail_fail_closed _________________
+
+self = <test_operations.TestThreadOps object at 0x7eff2113db80>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6ad0>
+
+    def test_thread_detail_fail_closed(self, wired):
+        with pytest.raises(UnregisteredThreadError):
+>           wired.thread_detail("ghost")
+            ^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'thread_detail'
+
+tests/test_operations.py:228: AttributeError
+__________________ TestThreadOps.test_heartbeat_marks_running __________________
+
+self = <test_operations.TestThreadOps object at 0x7eff2113d310>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7ed0>
+
+    def test_heartbeat_marks_running(self, wired):
+>       wired.stop("fixer")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'stop'
+
+tests/test_operations.py:231: AttributeError
+_ TestThreadOps.test_attach_session_preserves_declaration_and_updates_runtime __
+
+self = <test_operations.TestThreadOps object at 0x7eff2119f930>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7390>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_attach_session_preserves_0')
+
+    def test_attach_session_preserves_declaration_and_updates_runtime(self, wired, tmp_path):
+>       wired.stop("fixer")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'stop'
+
+tests/test_operations.py:236: AttributeError
+__________ TestThreadOps.test_release_only_allows_the_calling_thread ___________
+
+self = <test_operations.TestThreadOps object at 0x7eff2119f4d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1feab620>
+
+    def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
+        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+    
+        with pytest.raises(RelationViolationError, match="cannot release"):
+>           wired.release("PR111")
+            ^^^^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'release'
+
+tests/test_operations.py:252: AttributeError
+____ TestThreadOps.test_reserved_worker_acquire_requires_launch_reservation ____
+
+self = <test_operations.TestThreadOps object at 0x7eff20be5f30>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6fd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff21088590>
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_reserved_worker_acquire_requires_launch_reservation(self, wired, monkeypatch):
+>       wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:259: AttributeError
+________ TestThreadOps.test_reserved_worker_rejects_stale_launch_epoch _________
+
+self = <test_operations.TestThreadOps object at 0x7eff2127bb90>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fea98d0>
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_reserved_worker_rejects_stale_launch_epoch(self, wired, monkeypatch):
+>       wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:279: AttributeError
+_______ TestThreadOps.test_long_valid_name_reservation_is_not_truncated ________
+
+self = <test_operations.TestThreadOps object at 0x7eff2127b7d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7610>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe87690>
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_long_valid_name_reservation_is_not_truncated(self, wired, monkeypatch):
+        name = "n" * 257  # The old plaintext proof exceeded the 256-byte child read.
+>       wired.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:296: AttributeError
+_ TestThreadOps.test_name_exceeding_pipe_capacity_has_fixed_size_launch_proof __
+
+self = <test_operations.TestThreadOps object at 0x7eff210326d0>
+wired = <agent_comms.comms.Comms object at 0x7eff212ff9d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe57700>
+
+    @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
+    def test_name_exceeding_pipe_capacity_has_fixed_size_launch_proof(self, wired, monkeypatch):
+        name = "n" * 70000  # Larger than the usual Linux pipe capacity.
+        inherited = []
+    
+        class FakePopen:
+            def __init__(self, args, **kwargs):
+                self.pid = 987654
+                assert kwargs["env"]["AGENT_COMMS_THREAD"] == name
+                inherited.append(os.dup(kwargs["pass_fds"][0]))
+    
+        monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", FakePopen)
+        try:
+            with _store_lock(wired._wire_lock_path):
+>               owned = wired._launch_owner_unlocked(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    Thread(name=name, tags=frozenset(), worktree="/tmp"), "/bin/echo"
+                )
+E               AttributeError: 'Comms' object has no attribute '_launch_owner_unlocked'
+
+tests/test_operations.py:321: AttributeError
+____________ TestThreadOps.test_stop_terminates_registered_process _____________
+
+self = <test_operations.TestThreadOps object at 0x7eff21032a40>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6c2d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe847c0>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process-group signaling")
+    def test_stop_terminates_registered_process(self, wired, monkeypatch):
+        signals = []
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="signal-test",
+                tags=frozenset(),
+                worktree="/tmp",
+                pid=200,
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:335: AttributeError
+___ TestThreadOps.test_stop_waits_for_owner_socket_without_holding_wire_lock ___
+
+self = <test_operations.TestThreadOps object at 0x7eff211f9950>
+wired = <agent_comms.comms.Comms object at 0x7eff212ff9d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe6a3c0>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_waits_for_owner_socket_without_holding_wire_lock(self, wired, monkeypatch):
+        import threading
+    
+        from agent_comms.declarations import _store_lock
+    
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:368: AttributeError
+_______ TestThreadOps.test_stop_accepts_session_metadata_from_same_owner _______
+
+self = <test_operations.TestThreadOps object at 0x7eff211f9810>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7610>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe57000>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_stop_accepts_session_meta0')
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_session_metadata_from_same_owner(self, wired, monkeypatch, tmp_path):
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:400: AttributeError
+______ TestThreadOps.test_stop_rejects_fresh_registration_with_reused_pid ______
+
+self = <test_operations.TestThreadOps object at 0x7eff20696690>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe69860>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_fresh_registration_with_reused_pid(self, wired, monkeypatch):
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:425: AttributeError
+________ TestThreadOps.test_stop_accepts_project_change_from_same_owner ________
+
+self = <test_operations.TestThreadOps object at 0x7eff207a90d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6d50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe85780>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_stop_accepts_project_chan0')
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_project_change_from_same_owner(self, wired, monkeypatch, tmp_path):
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:450: AttributeError
+_______ TestThreadOps.test_stop_rejects_same_pid_new_epoch_before_signal _______
+
+self = <test_operations.TestThreadOps object at 0x7eff207a93d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe6ba80>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_same_pid_new_epoch_before_signal(self, wired, monkeypatch):
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:478: AttributeError
+______ TestThreadOps.test_stop_rejects_post_signal_same_pid_lifecycle_aba ______
+
+self = <test_operations.TestThreadOps object at 0x7eff2116d6a0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7390>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1feaaeb0>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
+>       wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:501: AttributeError
+_______ TestThreadOps.test_stop_rejects_post_kill_same_pid_lifecycle_aba _______
+
+self = <test_operations.TestThreadOps object at 0x7eff210beac0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6990>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe87d20>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_rejects_post_kill_same_pid_lifecycle_aba(self, wired, monkeypatch):
+>       wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:521: AttributeError
+_ TestThreadOps.test_stop_accepts_attested_release_after_unrelated_epoch_change _
+
+self = <test_operations.TestThreadOps object at 0x7eff211d5e50>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6850>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1feaaba0>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_accepts_attested_release_after_unrelated_epoch_change(self, wired, monkeypatch):
+>       wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:558: AttributeError
+____ TestThreadOps.test_stop_does_not_signal_replaced_pid_after_socket_wait ____
+
+self = <test_operations.TestThreadOps object at 0x7eff211d7e90>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd79d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff21089f60>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_stop_does_not_signal_replaced_pid_after_socket_wait(self, wired, monkeypatch):
+        from dataclasses import replace
+    
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:583: AttributeError
+____ TestThreadOps.test_start_waits_outside_wire_lock_and_revalidates_owner ____
+
+self = <test_operations.TestThreadOps object at 0x7eff210299f0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd65d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe786e0>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
+    def test_start_waits_outside_wire_lock_and_revalidates_owner(self, wired, monkeypatch):
+        import threading
+    
+        from agent_comms.declarations import _store_lock
+    
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:611: AttributeError
+_____________ TestThreadOps.test_start_rejects_same_pid_new_epoch ______________
+
+self = <test_operations.TestThreadOps object at 0x7eff21028c80>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6c190>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe78600>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
+    def test_start_rejects_same_pid_new_epoch(self, wired, monkeypatch):
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:635: AttributeError
+_______ TestThreadOps.test_start_refuses_replaced_pid_after_socket_wait ________
+
+self = <test_operations.TestThreadOps object at 0x7eff21029810>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f9d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff2108a190>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
+    def test_start_refuses_replaced_pid_after_socket_wait(self, wired, monkeypatch):
+        from dataclasses import replace
+    
+>       wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:654: AttributeError
+___ TestThreadOps.test_restart_preflights_whole_set_and_refuses_replaced_pid ___
+
+self = <test_operations.TestThreadOps object at 0x7eff2102acb0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6710>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff210bc280>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_preflights_whole_set_and_refuses_replaced_pid(self, wired, monkeypatch):
+        from dataclasses import replace
+    
+>       wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:675: AttributeError
+_ TestThreadOps.test_restart_rejects_same_pid_new_epoch_without_partial_signal _
+
+self = <test_operations.TestThreadOps object at 0x7eff2102ad00>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd65d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1ffaee40>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_rejects_same_pid_new_epoch_without_partial_signal(self, wired, monkeypatch):
+>       wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:702: AttributeError
+______ TestThreadOps.test_restart_refuses_turn_started_during_owner_proof ______
+
+self = <test_operations.TestThreadOps object at 0x7eff2102aad0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6e90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe78440>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_refuses_turn_started_during_owner_proof(self, wired, monkeypatch):
+        from dataclasses import replace
+    
+        from agent_comms.declarations import ActiveTurn
+    
+>       wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:730: AttributeError
+____ TestThreadOps.test_restart_rejects_post_signal_same_pid_lifecycle_aba _____
+
+self = <test_operations.TestThreadOps object at 0x7eff21028cd0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6ad0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff2108b850>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
+>       wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:754: AttributeError
+___________ TestThreadOps.test_restart_accepts_attested_self_release ___________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102ada0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6990>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff2108ba80>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_accepts_attested_self_release(self, wired, monkeypatch):
+>       wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:782: AttributeError
+__ TestThreadOps.test_restart_releases_wire_lock_for_socket_and_graceful_exit __
+
+self = <test_operations.TestThreadOps object at 0x7eff21029090>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7390>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff2116c980>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
+    def test_restart_releases_wire_lock_for_socket_and_graceful_exit(self, wired, monkeypatch):
+        import threading
+        from dataclasses import replace
+    
+        from agent_comms.declarations import _store_lock
+    
+>       wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:814: AttributeError
+____ TestThreadOps.test_stop_direct_child_exit_does_not_reap_popens_status _____
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a8f0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fea9f60>
+
+    @pytest.mark.skipif(
+        os.name != "posix" or not hasattr(os, "waitid") or not hasattr(os, "WNOWAIT"),
+        reason="non-reaping waitid direct-child proof",
+    )
+    def test_stop_direct_child_exit_does_not_reap_popens_status(self, wired, monkeypatch):
+        import signal
+    
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(10)"], start_new_session=True
+        )
+>       wired.register(Thread(name="child", tags=frozenset(), worktree="/tmp", pid=process.pid))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:866: AttributeError
+_____ TestThreadOps.test_stop_marks_dead_process_stopped_without_signaling _____
+
+self = <test_operations.TestThreadOps object at 0x7eff21028190>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6d50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe86350>
+
+    def test_stop_marks_dead_process_stopped_without_signaling(self, wired, monkeypatch):
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="dead-process",
+                tags=frozenset(),
+                worktree="/tmp",
+                pid=200,
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:884: AttributeError
+____________ TestThreadOps.test_process_liveness_without_linux_proc ____________
+
+name = 'agent_comms.operations', package = None
+
+    def import_module(name, package=None):
+        """Import a module.
+    
+        The 'package' argument is required when performing a relative import. It
+        specifies the package to use as the anchor point from which to resolve the
+        relative import to an absolute import.
+    
+        """
+        level = 0
+        if name.startswith('.'):
+            if not package:
+                raise TypeError("the 'package' argument is required to perform a "
+                                f"relative import for {name!r}")
+            for character in name:
+                if character != '.':
+                    break
+                level += 1
+>       return _bootstrap._gcd_import(name[level:], package, level)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'agent_comms.operations'
+
+/usr/lib/python3.14/importlib/__init__.py:88: ModuleNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a1c0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe85240>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
+    def test_process_liveness_without_linux_proc(self, wired, monkeypatch):
+        import os
+    
+        with monkeypatch.context() as patch:
+>           patch.setattr("agent_comms.operations.sys.platform", "darwin")
+
+tests/test_operations.py:910: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:107: in derive_importpath
+    target = resolve(module)
+             ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'agent_comms.operations.sys'
+
+    def resolve(name: str) -> object:
+        # Simplified from zope.dottedname.
+        parts = name.split(".")
+    
+        used = parts.pop(0)
+        found: object = importlib.import_module(used)
+        for part in parts:
+            used += "." + part
+            try:
+                found = getattr(found, part)
+            except AttributeError:
+                pass
+            else:
+                continue
+            # We use explicit un-nesting of the handling block in order
+            # to avoid nested exceptions.
+            try:
+                importlib.import_module(used)
+            except ImportError as ex:
+                expected = str(ex).split()[-1]
+                if expected == used:
+                    raise
+                else:
+>                   raise ImportError(f"import error in {used}: {ex}") from ex
+E                   ImportError: import error in agent_comms.operations: No module named 'agent_comms.operations'
+
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:88: ImportError
+_ TestThreadOps.test_process_liveness_unknown_ps_result_never_marks_live_pid_dead _
+
+name = 'agent_comms.operations', package = None
+
+    def import_module(name, package=None):
+        """Import a module.
+    
+        The 'package' argument is required when performing a relative import. It
+        specifies the package to use as the anchor point from which to resolve the
+        relative import to an absolute import.
+    
+        """
+        level = 0
+        if name.startswith('.'):
+            if not package:
+                raise TypeError("the 'package' argument is required to perform a "
+                                f"relative import for {name!r}")
+            for character in name:
+                if character != '.':
+                    break
+                level += 1
+>       return _bootstrap._gcd_import(name[level:], package, level)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'agent_comms.operations'
+
+/usr/lib/python3.14/importlib/__init__.py:88: ModuleNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_operations.TestThreadOps object at 0x7eff21028f00>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7610>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe6a350>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
+    def test_process_liveness_unknown_ps_result_never_marks_live_pid_dead(self, wired, monkeypatch):
+        import os
+        import subprocess
+    
+        with monkeypatch.context() as patch:
+>           patch.setattr("agent_comms.operations.sys.platform", "darwin")
+
+tests/test_operations.py:921: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:107: in derive_importpath
+    target = resolve(module)
+             ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'agent_comms.operations.sys'
+
+    def resolve(name: str) -> object:
+        # Simplified from zope.dottedname.
+        parts = name.split(".")
+    
+        used = parts.pop(0)
+        found: object = importlib.import_module(used)
+        for part in parts:
+            used += "." + part
+            try:
+                found = getattr(found, part)
+            except AttributeError:
+                pass
+            else:
+                continue
+            # We use explicit un-nesting of the handling block in order
+            # to avoid nested exceptions.
+            try:
+                importlib.import_module(used)
+            except ImportError as ex:
+                expected = str(ex).split()[-1]
+                if expected == used:
+                    raise
+                else:
+>                   raise ImportError(f"import error in {used}: {ex}") from ex
+E                   ImportError: import error in agent_comms.operations: No module named 'agent_comms.operations'
+
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:88: ImportError
+______ TestThreadOps.test_process_liveness_checks_pid_before_spawning_ps _______
+
+name = 'agent_comms.operations', package = None
+
+    def import_module(name, package=None):
+        """Import a module.
+    
+        The 'package' argument is required when performing a relative import. It
+        specifies the package to use as the anchor point from which to resolve the
+        relative import to an absolute import.
+    
+        """
+        level = 0
+        if name.startswith('.'):
+            if not package:
+                raise TypeError("the 'package' argument is required to perform a "
+                                f"relative import for {name!r}")
+            for character in name:
+                if character != '.':
+                    break
+                level += 1
+>       return _bootstrap._gcd_import(name[level:], package, level)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'agent_comms.operations'
+
+/usr/lib/python3.14/importlib/__init__.py:88: ModuleNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_operations.TestThreadOps object at 0x7eff210294f0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe68c90>
+
+    def test_process_liveness_checks_pid_before_spawning_ps(self, wired, monkeypatch):
+        def missing_process(pid, signal):
+            raise ProcessLookupError
+    
+        with monkeypatch.context() as patch:
+>           patch.setattr("agent_comms.operations.sys.platform", "darwin")
+
+tests/test_operations.py:943: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:107: in derive_importpath
+    target = resolve(module)
+             ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'agent_comms.operations.sys'
+
+    def resolve(name: str) -> object:
+        # Simplified from zope.dottedname.
+        parts = name.split(".")
+    
+        used = parts.pop(0)
+        found: object = importlib.import_module(used)
+        for part in parts:
+            used += "." + part
+            try:
+                found = getattr(found, part)
+            except AttributeError:
+                pass
+            else:
+                continue
+            # We use explicit un-nesting of the handling block in order
+            # to avoid nested exceptions.
+            try:
+                importlib.import_module(used)
+            except ImportError as ex:
+                expected = str(ex).split()[-1]
+                if expected == used:
+                    raise
+                else:
+>                   raise ImportError(f"import error in {used}: {ex}") from ex
+E                   ImportError: import error in agent_comms.operations: No module named 'agent_comms.operations'
+
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:88: ImportError
+______ TestThreadOps.test_windows_process_liveness_uses_handles_not_kill _______
+
+name = 'agent_comms.operations', package = None
+
+    def import_module(name, package=None):
+        """Import a module.
+    
+        The 'package' argument is required when performing a relative import. It
+        specifies the package to use as the anchor point from which to resolve the
+        relative import to an absolute import.
+    
+        """
+        level = 0
+        if name.startswith('.'):
+            if not package:
+                raise TypeError("the 'package' argument is required to perform a "
+                                f"relative import for {name!r}")
+            for character in name:
+                if character != '.':
+                    break
+                level += 1
+>       return _bootstrap._gcd_import(name[level:], package, level)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ModuleNotFoundError: No module named 'agent_comms.operations'
+
+/usr/lib/python3.14/importlib/__init__.py:88: ModuleNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a2b0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6d50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe86eb0>
+
+    def test_windows_process_liveness_uses_handles_not_kill(self, wired, monkeypatch):
+        import ctypes
+        from types import SimpleNamespace
+    
+        closed = []
+        exit_code = [259]
+    
+        def open_process(*args):
+            return 42
+    
+        def get_exit_code(handle, pointer):
+            pointer._obj.value = exit_code[0]
+            return 1
+    
+        def close_handle(handle):
+            closed.append(handle)
+    
+        kernel = SimpleNamespace(
+            OpenProcess=open_process, GetExitCodeProcess=get_exit_code, CloseHandle=close_handle
+        )
+        with monkeypatch.context() as patch:
+>           patch.setattr("agent_comms.operations.sys.platform", "win32")
+
+tests/test_operations.py:972: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:107: in derive_importpath
+    target = resolve(module)
+             ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+name = 'agent_comms.operations.sys'
+
+    def resolve(name: str) -> object:
+        # Simplified from zope.dottedname.
+        parts = name.split(".")
+    
+        used = parts.pop(0)
+        found: object = importlib.import_module(used)
+        for part in parts:
+            used += "." + part
+            try:
+                found = getattr(found, part)
+            except AttributeError:
+                pass
+            else:
+                continue
+            # We use explicit un-nesting of the handling block in order
+            # to avoid nested exceptions.
+            try:
+                importlib.import_module(used)
+            except ImportError as ex:
+                expected = str(ex).split()[-1]
+                if expected == used:
+                    raise
+                else:
+>                   raise ImportError(f"import error in {used}: {ex}") from ex
+E                   ImportError: import error in agent_comms.operations: No module named 'agent_comms.operations'
+
+../comms-refactor-integration-20260927/.venv/lib/python3.14/site-packages/_pytest/monkeypatch.py:88: ImportError
+______________ TestThreadOps.test_archive_requires_stopped_thread ______________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a300>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7390>
+
+    def test_archive_requires_stopped_thread(self, wired):
+>       wired.send("PR111", "fixer", "kept after archive")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:980: AttributeError
+______ TestThreadOps.test_rename_self_preserves_routing_history_and_state ______
+
+self = <test_operations.TestThreadOps object at 0x7eff21029860>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6990>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff2108a4a0>
+
+    def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
+>       wired.send("fixer", "PR111", "before rename")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:993: AttributeError
+____ TestThreadOps.test_rename_self_rejects_collisions_and_stopped_threads _____
+
+self = <test_operations.TestThreadOps object at 0x7eff210298b0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6ad0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1ff7cbb0>
+
+    def test_rename_self_rejects_collisions_and_stopped_threads(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+        with pytest.raises(RelationViolationError, match="already in use"):
+>           wired.rename_self("PR111")
+            ^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'rename_self'
+
+tests/test_operations.py:1030: AttributeError
+___ TestThreadOps.test_rename_self_reclaims_own_alias_but_not_another_owners ___
+
+self = <test_operations.TestThreadOps object at 0x7eff21029b80>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6c10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe78d00>
+
+    def test_rename_self_reclaims_own_alias_but_not_another_owners(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
+>       assert wired.rename_self("pr17").current == "pr17"
+               ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'rename_self'
+
+tests/test_operations.py:1037: AttributeError
+_____ TestThreadOps.test_managed_rename_normalizes_title_and_proves_owner ______
+
+self = <test_operations.TestThreadOps object at 0x7eff21029bd0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7890>
+
+    def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="generated-7",
+                tags=frozenset({"acp"}),
+                worktree="/tmp/project",
+                pid=os.getpid(),
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1047: AttributeError
+_______ TestThreadOps.test_managed_rename_disambiguates_duplicate_titles _______
+
+self = <test_operations.TestThreadOps object at 0x7eff2102aa30>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6fd0>
+
+    def test_managed_rename_disambiguates_duplicate_titles(self, wired):
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="testing-123",
+                tags=frozenset(),
+                worktree="/tmp/other",
+                pid=123,
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1065: AttributeError
+_____________ TestThreadOps.test_managed_rename_reclaims_own_alias _____________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102afd0>
+wired = <agent_comms.comms.Comms object at 0x7eff212ff890>
+
+    def test_managed_rename_reclaims_own_alias(self, wired):
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", pid=os.getpid())
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1087: AttributeError
+________________ TestThreadOps.test_old_alias_cannot_be_reused _________________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102b110>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6c190>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fefa5f0>
+
+    def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+>       wired.rename_self("reviewer")
+        ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'rename_self'
+
+tests/test_operations.py:1098: AttributeError
+_____________ TestThreadOps.test_delete_releases_renamed_identity ______________
+
+self = <test_operations.TestThreadOps object at 0x7eff21028370>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6710>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fee8440>
+
+    def test_delete_releases_renamed_identity(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+>       wired.rename_self("reviewer")
+        ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'rename_self'
+
+tests/test_operations.py:1104: AttributeError
+___ TestThreadOps.test_claim_reuses_alias_after_canonical_thread_is_deleted ____
+
+self = <test_operations.TestThreadOps object at 0x7eff21029900>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6fd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fee9d30>
+
+    def test_claim_reuses_alias_after_canonical_thread_is_deleted(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+>       wired.rename_self("reviewer")
+        ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'rename_self'
+
+tests/test_operations.py:1113: AttributeError
+________ TestThreadOps.test_legacy_deleted_aliases_do_not_reserve_names ________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a760>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd79d0>
+
+    def test_legacy_deleted_aliases_do_not_reserve_names(self, wired):
+        import json
+    
+        path = wired.root / "registry.json"
+        data = json.loads(path.read_text())
+        data["aliases"] = {"deleted-old": "deleted-name", "deleted-name": "deleted-name"}
+        path.write_text(json.dumps(data))
+>       claimed = wired.claim_thread("deleted-name", tags=frozenset(), worktree="/tmp")
+                  ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'claim_thread'
+
+tests/test_operations.py:1128: AttributeError
+______________ TestThreadOps.test_delete_requires_stopped_thread _______________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a6c0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6850>
+
+    def test_delete_requires_stopped_thread(self, wired):
+        with pytest.raises(RelationViolationError, match="Stop"):
+>           wired.delete("fixer")
+            ^^^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'delete'
+
+tests/test_operations.py:1134: AttributeError
+___ TestThreadOps.test_delete_detaches_children_without_changing_their_state ___
+
+self = <test_operations.TestThreadOps object at 0x7eff21028140>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7ed0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_delete_detaches_children_0')
+
+    def test_delete_detaches_children_without_changing_their_state(self, wired, tmp_path):
+        from dataclasses import replace
+    
+        session = tmp_path / "child.jsonl"
+        session.write_text("persisted child transcript\n")
+        child = replace(wired.registry.require("fixer"), session_file=str(session))
+>       wired.register(child)
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1142: AttributeError
+_ TestThreadOps.test_delete_rejects_private_or_uncertain_wire_before_begin_delete[unrelated_sideband] _
+
+self = <test_operations.TestThreadOps object at 0x7eff21028280>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7c50>
+authority = 'unrelated_sideband'
+
+    @pytest.mark.parametrize("authority", ["unrelated_sideband", "protocol_marker", "torn_row"])
+    def test_delete_rejects_private_or_uncertain_wire_before_begin_delete(
+        self, wired, authority: str
+    ) -> None:
+>       wired.send("PR111", "#all", "unrelated retained row")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:1163: AttributeError
+_ TestThreadOps.test_delete_rejects_private_or_uncertain_wire_before_begin_delete[protocol_marker] _
+
+self = <test_operations.TestThreadOps object at 0x7eff21029450>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7750>
+authority = 'protocol_marker'
+
+    @pytest.mark.parametrize("authority", ["unrelated_sideband", "protocol_marker", "torn_row"])
+    def test_delete_rejects_private_or_uncertain_wire_before_begin_delete(
+        self, wired, authority: str
+    ) -> None:
+>       wired.send("PR111", "#all", "unrelated retained row")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:1163: AttributeError
+_ TestThreadOps.test_delete_rejects_private_or_uncertain_wire_before_begin_delete[torn_row] _
+
+self = <test_operations.TestThreadOps object at 0x7eff210294a0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7b10>
+authority = 'torn_row'
+
+    @pytest.mark.parametrize("authority", ["unrelated_sideband", "protocol_marker", "torn_row"])
+    def test_delete_rejects_private_or_uncertain_wire_before_begin_delete(
+        self, wired, authority: str
+    ) -> None:
+>       wired.send("PR111", "#all", "unrelated retained row")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:1163: AttributeError
+_____ TestThreadOps.test_delete_purges_owned_state_and_preserves_sequence ______
+
+self = <test_operations.TestThreadOps object at 0x7eff21028aa0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6fb10>
+
+    def test_delete_purges_owned_state_and_preserves_sequence(self, wired):
+>       wired.send("PR111", "fixer", "inbound dm")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:1199: AttributeError
+_______________ TestThreadOps.test_stop_terminates_real_process ________________
+
+self = <test_operations.TestThreadOps object at 0x7eff2102a440>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f890>
+
+    @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
+    def test_stop_terminates_real_process(self, wired):
+        env = dict(
+            __import__("os").environ,
+            AGENT_COMMS_THREAD="live-process",
+            AGENT_COMMS_ROOT=str(wired.root),
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+            env=env,
+        )
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="live-process",
+                tags=frozenset(),
+                worktree="/tmp",
+                pid=process.pid,
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1246: AttributeError
+__________________ TestFork.test_fork_requires_parent_session __________________
+
+self = <test_operations.TestFork object at 0x7eff21200690>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f250>
+
+    def test_fork_requires_parent_session(self, wired):
+        with pytest.raises(RelationViolationError, match="session file"):
+>           wired.fork(ForkSpec(name="child", parent="PR111", task="t"))
+            ^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'fork'
+
+tests/test_operations.py:1270: AttributeError
+________________ TestFork.test_fork_fail_closed_unknown_parent _________________
+
+self = <test_operations.TestFork object at 0x7eff21113ce0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6efd0>
+
+    def test_fork_fail_closed_unknown_parent(self, wired):
+        with pytest.raises(UnregisteredThreadError):
+>           wired.fork(ForkSpec(name="child", parent="ghost", task="t"))
+            ^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'fork'
+
+tests/test_operations.py:1274: AttributeError
+______________ TestFork.test_fork_launches_process_and_registers _______________
+
+self = <test_operations.TestFork object at 0x7eff206d89d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1feedcc0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_fork_launches_process_and0')
+
+    def test_fork_launches_process_and_registers(self, wired, monkeypatch, tmp_path):
+        session = tmp_path / "session.json"
+        session.write_text("{}")
+    
+        parent = Thread(
+            name="PR111",
+            tags=frozenset({"base"}),
+            worktree=str(tmp_path),
+            pid=100,
+            session_file=str(session),
+        )
+>       wired.register(parent)
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1287: AttributeError
+________________ TestFork.test_fork_uses_task_as_default_prompt ________________
+
+self = <test_operations.TestFork object at 0x7eff211fe8d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7b10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe69a20>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_fork_uses_task_as_default0')
+
+    def test_fork_uses_task_as_default_prompt(self, wired, monkeypatch, tmp_path):
+        session = tmp_path / "session.json"
+        session.write_text("{}")
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1323: AttributeError
+_______________ TestFork.test_fork_rolls_back_when_launch_raises _______________
+
+self = <test_operations.TestFork object at 0x7eff21129150>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fe86120>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_fork_rolls_back_when_laun0')
+
+    def test_fork_rolls_back_when_launch_raises(self, wired, monkeypatch, tmp_path):
+        session = tmp_path / "session.json"
+        session.write_text("{}")
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1350: AttributeError
+_________ TestLedgerOps.test_recent_transcript_is_bounded_and_ordered __________
+
+self = <test_operations.TestLedgerOps object at 0x7eff212016d0>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7c50>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_recent_transcript_is_boun0')
+
+    def test_recent_transcript_is_bounded_and_ordered(self, wired, tmp_path):
+        import json
+    
+        from agent_comms.thread_management import _session_model
+    
+        path = tmp_path / "large-session.jsonl"
+        with path.open("w") as stream:
+            stream.write(
+                json.dumps({"type": "model_change", "provider": "test", "modelId": "one"}) + "\n"
+            )
+            # A giant record crossing the tail boundary must never trigger an
+            # unbounded readline or hide the newest small records.
+            stream.write(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "message": {"role": "assistant", "content": "x" * 2_000_000},
+                    }
+                )
+                + "\n"
+            )
+            for index in range(100):
+                stream.write(
+                    json.dumps(
+                        {"type": "message", "message": {"role": "assistant", "content": str(index)}}
+                    )
+                    + "\n"
+                )
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1394: AttributeError
+_____________ TestLedgerOps.test_merge_requires_registered_author ______________
+
+self = <test_operations.TestLedgerOps object at 0x7eff21201810>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd7ed0>
+
+    def test_merge_requires_registered_author(self, wired):
+        with pytest.raises(UnregisteredThreadError, match="Author"):
+>           wired.ledger_merge({"k": "v"}, author="ghost")
+            ^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Comms' object has no attribute 'ledger_merge'
+
+tests/test_operations.py:1404: AttributeError
+___________________ TestLedgerOps.test_merge_records_author ____________________
+
+self = <test_operations.TestLedgerOps object at 0x7eff206d8770>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6850>
+
+    def test_merge_records_author(self, wired):
+>       wired.ledger_merge({"k": "v"}, author="PR111")
+        ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'ledger_merge'
+
+tests/test_operations.py:1407: AttributeError
+______________________ TestPollAndWire.test_poll_snapshot ______________________
+
+self = <test_operations.TestPollAndWire object at 0x7eff21201950>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd79d0>
+
+    def test_poll_snapshot(self, wired):
+>       wired.send("PR111", "fixer", "hello")
+        ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'send'
+
+tests/test_operations.py:1413: AttributeError
+______________ TestPollAndWire.test_poll_current_thread_from_env _______________
+
+self = <test_operations.TestPollAndWire object at 0x7eff21201a90>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6fd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff210be350>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_poll_current_thread_from_0')
+
+    def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
+        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+        monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
+>       snap = wired.poll()
+               ^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'poll'
+
+tests/test_operations.py:1424: AttributeError
+____ TestReDeclarationPreservesProvenance.test_empty_tags_inherit_previous _____
+
+self = <test_operations.TestReDeclarationPreservesProvenance object at 0x7eff21201d10>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd65d0>
+
+    def test_empty_tags_inherit_previous(self, wired):
+>       wired.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1468: AttributeError
+___ TestReDeclarationPreservesProvenance.test_explicit_tags_replace_previous ___
+
+self = <test_operations.TestReDeclarationPreservesProvenance object at 0x7eff21201e50>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f250>
+
+    def test_explicit_tags_replace_previous(self, wired):
+>       wired.register(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1"))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1472: AttributeError
+_ TestReDeclarationPreservesProvenance.test_missing_session_file_inherits_previous _
+
+self = <test_operations.TestReDeclarationPreservesProvenance object at 0x7eff206d95b0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f890>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_missing_session_file_inhe0')
+
+    def test_missing_session_file_inherits_previous(self, wired, tmp_path):
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="PR111",
+                tags=frozenset({"base"}),
+                worktree="/tmp/wt1",
+                session_file=str(tmp_path / "s.json"),
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1476: AttributeError
+__ TestReDeclarationPreservesProvenance.test_fresh_declaration_is_unaffected ___
+
+self = <test_operations.TestReDeclarationPreservesProvenance object at 0x7eff206d96e0>
+wired = <agent_comms.comms.Comms object at 0x7eff1fe6f110>
+
+    def test_fresh_declaration_is_unaffected(self, wired):
+>       wired.register(Thread(name="fresh", tags=frozenset(), worktree="/wt"))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1488: AttributeError
+_ TestReDeclarationPreservesProvenance.test_tagless_child_keeps_channel_after_reregister _
+
+self = <test_operations.TestReDeclarationPreservesProvenance object at 0x7eff211fef90>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6710>
+
+    def test_tagless_child_keeps_channel_after_reregister(self, wired):
+>       wired.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        ^^^^^^^^^^^^^^
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1492: AttributeError
+_ TestReDeclarationPreservesProvenance.test_fork_env_carries_neutral_tag_names _
+
+self = <test_operations.TestReDeclarationPreservesProvenance object at 0x7eff2112b350>
+wired = <agent_comms.comms.Comms object at 0x7eff1ffd6e90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eff1fee8fa0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/core1/test_fork_env_carries_neutral_0')
+
+    def test_fork_env_carries_neutral_tag_names(self, wired, monkeypatch, tmp_path):
+        session = tmp_path / "session.json"
+        session.write_text("{}")
+>       wired.register(
+        ^^^^^^^^^^^^^^
+            Thread(
+                name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
+            )
+        )
+E       AttributeError: 'Comms' object has no attribute 'register'. Did you mean: 'registry'?
+
+tests/test_operations.py:1499: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_operations.py::TestMessaging::test_send_routes_through_bus
+FAILED tests/test_operations.py::TestMessaging::test_send_fail_closed_unknown_sender
+FAILED tests/test_operations.py::TestMessaging::test_broadcast_reaches_all_peers
+FAILED tests/test_operations.py::TestMessaging::test_ack_clears_inbox - Attri...
+FAILED tests/test_operations.py::TestMessaging::test_scoped_ack_only_clears_selected_conversation
+FAILED tests/test_operations.py::TestMessaging::test_scoped_channel_ack_does_not_clear_dm
+FAILED tests/test_operations.py::TestMessaging::test_inbox_order_follows_seq
+FAILED tests/test_operations.py::TestMessaging::test_pending_counts_groups_all_conversations_in_one_result
+FAILED tests/test_operations.py::TestMessaging::test_shared_history_page_contract
+FAILED tests/test_operations.py::TestThreadOps::test_thread_transcript_normalizes_persisted_pi_events
+FAILED tests/test_operations.py::TestThreadOps::test_thread_transcript_includes_saved_compaction_summary
+FAILED tests/test_operations.py::TestThreadOps::test_claim_thread_can_baseline_inbox_atomically
+FAILED tests/test_operations.py::TestThreadOps::test_runtime_info_is_exposed_in_presence
+FAILED tests/test_operations.py::TestThreadOps::test_presence_omits_expensive_viewer_pending_counts
+FAILED tests/test_operations.py::TestThreadOps::test_runtime_info_rejects_unknown_thread
+FAILED tests/test_operations.py::TestThreadOps::test_list_threads_shape - Att...
+FAILED tests/test_operations.py::TestThreadOps::test_list_active_only - Attri...
+FAILED tests/test_operations.py::TestThreadOps::test_thread_detail - Attribut...
+FAILED tests/test_operations.py::TestThreadOps::test_thread_detail_fail_closed
+FAILED tests/test_operations.py::TestThreadOps::test_heartbeat_marks_running
+FAILED tests/test_operations.py::TestThreadOps::test_attach_session_preserves_declaration_and_updates_runtime
+FAILED tests/test_operations.py::TestThreadOps::test_release_only_allows_the_calling_thread
+FAILED tests/test_operations.py::TestThreadOps::test_reserved_worker_acquire_requires_launch_reservation
+FAILED tests/test_operations.py::TestThreadOps::test_reserved_worker_rejects_stale_launch_epoch
+FAILED tests/test_operations.py::TestThreadOps::test_long_valid_name_reservation_is_not_truncated
+FAILED tests/test_operations.py::TestThreadOps::test_name_exceeding_pipe_capacity_has_fixed_size_launch_proof
+FAILED tests/test_operations.py::TestThreadOps::test_stop_terminates_registered_process
+FAILED tests/test_operations.py::TestThreadOps::test_stop_waits_for_owner_socket_without_holding_wire_lock
+FAILED tests/test_operations.py::TestThreadOps::test_stop_accepts_session_metadata_from_same_owner
+FAILED tests/test_operations.py::TestThreadOps::test_stop_rejects_fresh_registration_with_reused_pid
+FAILED tests/test_operations.py::TestThreadOps::test_stop_accepts_project_change_from_same_owner
+FAILED tests/test_operations.py::TestThreadOps::test_stop_rejects_same_pid_new_epoch_before_signal
+FAILED tests/test_operations.py::TestThreadOps::test_stop_rejects_post_signal_same_pid_lifecycle_aba
+FAILED tests/test_operations.py::TestThreadOps::test_stop_rejects_post_kill_same_pid_lifecycle_aba
+FAILED tests/test_operations.py::TestThreadOps::test_stop_accepts_attested_release_after_unrelated_epoch_change
+FAILED tests/test_operations.py::TestThreadOps::test_stop_does_not_signal_replaced_pid_after_socket_wait
+FAILED tests/test_operations.py::TestThreadOps::test_start_waits_outside_wire_lock_and_revalidates_owner
+FAILED tests/test_operations.py::TestThreadOps::test_start_rejects_same_pid_new_epoch
+FAILED tests/test_operations.py::TestThreadOps::test_start_refuses_replaced_pid_after_socket_wait
+FAILED tests/test_operations.py::TestThreadOps::test_restart_preflights_whole_set_and_refuses_replaced_pid
+FAILED tests/test_operations.py::TestThreadOps::test_restart_rejects_same_pid_new_epoch_without_partial_signal
+FAILED tests/test_operations.py::TestThreadOps::test_restart_refuses_turn_started_during_owner_proof
+FAILED tests/test_operations.py::TestThreadOps::test_restart_rejects_post_signal_same_pid_lifecycle_aba
+FAILED tests/test_operations.py::TestThreadOps::test_restart_accepts_attested_self_release
+FAILED tests/test_operations.py::TestThreadOps::test_restart_releases_wire_lock_for_socket_and_graceful_exit
+FAILED tests/test_operations.py::TestThreadOps::test_stop_direct_child_exit_does_not_reap_popens_status
+FAILED tests/test_operations.py::TestThreadOps::test_stop_marks_dead_process_stopped_without_signaling
+FAILED tests/test_operations.py::TestThreadOps::test_process_liveness_without_linux_proc
+FAILED tests/test_operations.py::TestThreadOps::test_process_liveness_unknown_ps_result_never_marks_live_pid_dead
+FAILED tests/test_operations.py::TestThreadOps::test_process_liveness_checks_pid_before_spawning_ps
+FAILED tests/test_operations.py::TestThreadOps::test_windows_process_liveness_uses_handles_not_kill
+FAILED tests/test_operations.py::TestThreadOps::test_archive_requires_stopped_thread
+FAILED tests/test_operations.py::TestThreadOps::test_rename_self_preserves_routing_history_and_state
+FAILED tests/test_operations.py::TestThreadOps::test_rename_self_rejects_collisions_and_stopped_threads
+FAILED tests/test_operations.py::TestThreadOps::test_rename_self_reclaims_own_alias_but_not_another_owners
+FAILED tests/test_operations.py::TestThreadOps::test_managed_rename_normalizes_title_and_proves_owner
+FAILED tests/test_operations.py::TestThreadOps::test_managed_rename_disambiguates_duplicate_titles
+FAILED tests/test_operations.py::TestThreadOps::test_managed_rename_reclaims_own_alias
+FAILED tests/test_operations.py::TestThreadOps::test_old_alias_cannot_be_reused
+FAILED tests/test_operations.py::TestThreadOps::test_delete_releases_renamed_identity
+FAILED tests/test_operations.py::TestThreadOps::test_claim_reuses_alias_after_canonical_thread_is_deleted
+FAILED tests/test_operations.py::TestThreadOps::test_legacy_deleted_aliases_do_not_reserve_names
+FAILED tests/test_operations.py::TestThreadOps::test_delete_requires_stopped_thread
+FAILED tests/test_operations.py::TestThreadOps::test_delete_detaches_children_without_changing_their_state
+FAILED tests/test_operations.py::TestThreadOps::test_delete_rejects_private_or_uncertain_wire_before_begin_delete[unrelated_sideband]
+FAILED tests/test_operations.py::TestThreadOps::test_delete_rejects_private_or_uncertain_wire_before_begin_delete[protocol_marker]
+FAILED tests/test_operations.py::TestThreadOps::test_delete_rejects_private_or_uncertain_wire_before_begin_delete[torn_row]
+FAILED tests/test_operations.py::TestThreadOps::test_delete_purges_owned_state_and_preserves_sequence
+FAILED tests/test_operations.py::TestThreadOps::test_stop_terminates_real_process
+FAILED tests/test_operations.py::TestFork::test_fork_requires_parent_session
+FAILED tests/test_operations.py::TestFork::test_fork_fail_closed_unknown_parent
+FAILED tests/test_operations.py::TestFork::test_fork_launches_process_and_registers
+FAILED tests/test_operations.py::TestFork::test_fork_uses_task_as_default_prompt
+FAILED tests/test_operations.py::TestFork::test_fork_rolls_back_when_launch_raises
+FAILED tests/test_operations.py::TestLedgerOps::test_recent_transcript_is_bounded_and_ordered
+FAILED tests/test_operations.py::TestLedgerOps::test_merge_requires_registered_author
+FAILED tests/test_operations.py::TestLedgerOps::test_merge_records_author - A...
+FAILED tests/test_operations.py::TestPollAndWire::test_poll_snapshot - Attrib...
+FAILED tests/test_operations.py::TestPollAndWire::test_poll_current_thread_from_env
+FAILED tests/test_operations.py::TestReDeclarationPreservesProvenance::test_empty_tags_inherit_previous
+FAILED tests/test_operations.py::TestReDeclarationPreservesProvenance::test_explicit_tags_replace_previous
+FAILED tests/test_operations.py::TestReDeclarationPreservesProvenance::test_missing_session_file_inherits_previous
+FAILED tests/test_operations.py::TestReDeclarationPreservesProvenance::test_fresh_declaration_is_unaffected
+FAILED tests/test_operations.py::TestReDeclarationPreservesProvenance::test_tagless_child_keeps_channel_after_reregister
+FAILED tests/test_operations.py::TestReDeclarationPreservesProvenance::test_fork_env_carries_neutral_tag_names
+85 failed, 39 passed in 6.66s

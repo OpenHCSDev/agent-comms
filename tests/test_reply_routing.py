@@ -20,10 +20,10 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.register(Thread("peer", frozenset({"test"}), str(tmp_path)))
+    comms.threads.register(Thread("peer", frozenset({"test"}), str(tmp_path)))
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.attach_session("worker", str(session))
+    comms.threads.attach_session("worker", str(session))
     updates = []
     receipts = []
 
@@ -75,14 +75,14 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
         assert len(sent) == 1 and sent[0].content.text == "Actual sent text"
         assert sent[0].field_meta["agentComms"]["route"]["targets"] == (target,)
         replay = [
-            event for event in comms.thread_transcript_page("worker").events if event.kind == "sent"
+            event for event in comms.transcripts.thread_transcript_page("worker").events if event.kind == "sent"
         ]
         assert len(replay) == 1 and replay[0].text == "Actual sent text"
         assert replay[0].routing.reply.targets == (target,)
         legacy = json.dumps({"id": receipts[0]["id"]})
-        assert comms.sent_tool_message("comms_send", legacy, True).body == "Actual sent text"
-        assert comms.sent_tool_message("comms_send", legacy, False) is None
-        assert comms.sent_tool_message("another_tool", legacy, True) is None
+        assert comms.messaging.sent_tool_message("comms_send", legacy, True).body == "Actual sent text"
+        assert comms.messaging.sent_tool_message("comms_send", legacy, False) is None
+        assert comms.messaging.sent_tool_message("another_tool", legacy, True) is None
     finally:
         await agent.shutdown()
 
@@ -92,10 +92,10 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.update_tags("worker", add=frozenset({"test"}))
+    comms.channels.update_tags("worker", add=frozenset({"test"}))
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","id":"session","version":3}\n')
-    comms.attach_session("worker", str(session))
+    comms.threads.attach_session("worker", str(session))
     updates = []
 
     class Client:
@@ -134,7 +134,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        comms.send_user_message("#test", "Question in channel", worktree=str(tmp_path))
+        comms.messaging.send_user_message("#test", "Question in channel", worktree=str(tmp_path))
         await agent.inputs.drain_inbox("worker")
         await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 2)
         routed = [
@@ -143,7 +143,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
             if (update.field_meta or {}).get("agentComms", {}).get("route")
         ]
         assert routed[0].field_meta["agentComms"]["route"]["targets"] == ("#test",)
-        page = wire(tmp_path / "wire").thread_transcript_page("worker")
+        page = wire(tmp_path / "wire").transcripts.thread_transcript_page("worker")
         assert page.events[0].text == "Question in channel"
         assert page.events[0].routing.requests[0].sender == "user"
         assert page.events[-1].routing.reply.outgoing_label == "To #test"
@@ -159,7 +159,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
                 )
                 + "\n"
             )
-        assert wire(tmp_path / "wire").thread_transcript_page("worker").events[-1].routing is None
+        assert wire(tmp_path / "wire").transcripts.thread_transcript_page("worker").events[-1].routing is None
     finally:
         await agent.shutdown()
 

@@ -186,9 +186,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             project = root / "parent"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
-            comms.begin_turn("child", "child-report-in-flight")
-            goal = comms.update_goal(
+            comms.threads.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
+            comms.agents.begin_turn("child", "child-report-in-flight")
+            goal = comms.goals.update_goal(
                 "parent",
                 SetGoalAction(text="Review @child report"),
                 owner_store=agent.turns.open_goal_store(),
@@ -199,7 +199,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 # message to start a turn before the goal wake under test.
                 agent.inputs.auto_wake = False
                 for index in range(5):
-                    early = comms.send_message("child", "parent", f"WAIT_INSTRUCTION_{index}")
+                    early = comms.messaging.send_message("child", "parent", f"WAIT_INSTRUCTION_{index}")
                     pending_keys.append(f"bus:{early.seq}")
                 await agent.inputs.drain_inbox("parent")
                 agent.inputs.auto_wake = True
@@ -217,7 +217,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
             assert comms.registry.require("parent").goal.state.active
-            assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
+            assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
             assert len(requests) == 2 + offset
             first_proc = agent.turns.persistent_backends["parent"].proc
             assert first_proc is not None and first_proc.returncode is None
@@ -233,9 +233,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "parent")
                 agent.turns.schedule_goal("parent")
-                assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
+                assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
                 assert not agent.inputs.pending_turns.get("parent") and len(requests) == 2 + offset
-            message = comms.send_message("child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT")
+            message = comms.messaging.send_message("child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT")
             await agent.inputs.drain_inbox("parent")
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures

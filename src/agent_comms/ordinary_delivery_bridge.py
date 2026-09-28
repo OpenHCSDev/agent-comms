@@ -21,7 +21,7 @@ from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
 
 if TYPE_CHECKING:
-    from .operations import Comms
+    from .comms import Comms
 
 from .private_sidecar import (
     create_sidecar_file,

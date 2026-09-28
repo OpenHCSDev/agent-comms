@@ -68,9 +68,7 @@ class TestEndToEndLifecycle:
         session = tmp_path / "session.json"
         session.write_text("{}")
         run_python(
-            "import json; from agent_comms import current_thread, wire;"
-            " c = wire(); c.register(c.adopt_current());"
-            " print(json.dumps({'name': c.registry.require('PR111').name}))",
+            "import json\nfrom agent_comms import current_thread, wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'name': c.registry.require('PR111').name}))",
             thread="PR111",
             parent="",
             root=root,
@@ -79,12 +77,12 @@ class TestEndToEndLifecycle:
         # A real pi process back-fills its session file into the registry;
         # emulate that here so the parent is forkable.
         from agent_comms import Thread
-        from agent_comms.operations import wire as wire_root
+        from agent_comms.comms import wire as wire_root
         from agent_comms.runtime import socket_path
 
         comms = wire_root(root)
         parent = comms.registry.require("PR111")
-        comms.register(
+        comms.threads.register(
             Thread(
                 name=parent.name,
                 tags=parent.tags,
@@ -122,9 +120,7 @@ class TestEndToEndLifecycle:
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
-            "import json; from agent_comms import current_thread, wire;"
-            " c = wire(); c.register(c.adopt_current());"
-            " print(json.dumps({'ok': 'kid' in str(c.registry.all_threads())}))",
+            "import json\nfrom agent_comms import current_thread, wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'ok': 'kid' in str(c.registry.all_threads())}))",
             thread="kid",
             parent="PR111",
             root=root,
@@ -146,8 +142,7 @@ class TestEndToEndLifecycle:
 
         # 5. Child polls, reads the inbox, and responds through the CLI.
         snap = run_python(
-            "import json; from agent_comms import wire;"
-            " c = wire(); print(json.dumps(c.poll('kid')))",
+            "import json\nfrom agent_comms import wire\nc = wire()\nprint(json.dumps(c.views.poll('kid')))",
             thread="kid",
             parent="PR111",
             root=root,
@@ -195,7 +190,7 @@ class TestEndToEndLifecycle:
         import asyncio
 
         from agent_comms.acp import CommsAgent
-        from agent_comms.operations import wire
+        from agent_comms.comms import wire
 
         root = tmp_path / "wire"
         comms = wire(root)
@@ -237,5 +232,5 @@ class TestEndToEndLifecycle:
         assert [m["text"] for m in inbox["messages"]] == ["checking inbox"]
         # And the CLI side can reply, visible in the thread's DM history.
         cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "roger")
-        dm = [m.body for m in wire(root).dm_history("cli-agent", "proj")]
+        dm = [m.body for m in wire(root).views.dm_history("cli-agent", "proj")]
         assert dm == ["from the cli side", "roger"]

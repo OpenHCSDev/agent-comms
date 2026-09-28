@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.comms import Comms
 from agent_comms.coordination import PublicationIntent, canonical_publication_key
 from agent_comms.declarations import (
     Message,
@@ -21,7 +22,6 @@ from agent_comms.declarations import (
     Thread,
     _store_lock,
 )
-from agent_comms.operations import Comms
 from agent_comms.private_bus_checkpoint import (
     certified_initial_page_unlocked,
     install_private_bus_checkpoint,
@@ -41,8 +41,8 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
         comms.registry.register(
             Thread(name, frozenset(tags), str(tmp_path), pid=os.getpid(), created_at=stamp)
         )
-    root_id = comms.initialize_private_initial_protocol()
-    comms.initialize_private_claim_protocol()
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_claim_protocol()
     return comms, root_id
 
 
@@ -58,9 +58,9 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     install_private_bus_checkpoint(comms.bus)
     with pytest.raises(RelationViolationError, match="already installed"):
         install_private_bus_checkpoint(comms.bus)
-    one = comms.send_initial_cohort("sender", "#team", "@Alice selected; Bob no-wake")
-    two = comms.send_initial_cohort("sender", "outsider", "not their audience")
-    three = comms.send_initial_cohort("sender", "#team", "@Bob selected; Alice no-wake")
+    one = comms.messaging.send_initial_cohort("sender", "#team", "@Alice selected; Bob no-wake")
+    two = comms.messaging.send_initial_cohort("sender", "outsider", "not their audience")
+    three = comms.messaging.send_initial_cohort("sender", "#team", "@Bob selected; Alice no-wake")
     alice = stable_thread_lookup(17002.0)
     bob = stable_thread_lookup(17003.0)
     witness, rows, more = _page(comms, alice, limit=1)
@@ -87,7 +87,7 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
 
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    first = comms.send_initial_cohort("sender", "Alice", "first")
+    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     saved = _page(comms, stable_thread_lookup(17002.0))[0]
     with monkeypatch.context() as patch:
         patch.setattr(
@@ -96,7 +96,7 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
             lambda *_: (_ for _ in ()).throw(OSError("crash after bus fsync")),
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.send_initial_cohort("sender", "Alice", "second")
+            comms.messaging.send_initial_cohort("sender", "Alice", "second")
     bus = comms.bus._path
     assert bus.stat().st_size > saved.offset
     witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
@@ -112,10 +112,10 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
     install_private_bus_checkpoint(comms.bus)
     resource = tmp_path / "owned.py"
     resource.write_text("owned\n")
-    initial = comms.send_initial_cohort("sender", "Alice", "task")
-    claim = comms.send_message("sender", "Alice", "claim", MessageType.HANDOFF, claims=["owned.py"])
+    initial = comms.messaging.send_initial_cohort("sender", "Alice", "task")
+    claim = comms.messaging.send_message("sender", "Alice", "claim", MessageType.HANDOFF, claims=["owned.py"])
     assert claim.claim_transition is not None
-    assert comms.claim_projection()[str(resource)].owner == "sender"
+    assert comms.bus.claim_projection()[str(resource)].owner == "sender"
     response_bus = MessageBus(comms.bus._path, comms.registry, private_response_writes=True)
     expected = Message("Alice", "sender", "done", MessageType.INFO)
     key = canonical_publication_key("execution-1", expected.target)
@@ -152,7 +152,7 @@ def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, mo
 
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "prefix A" + "x" * 6000)
+    comms.messaging.send_initial_cohort("sender", "Alice", "prefix A" + "x" * 6000)
     with monkeypatch.context() as patch:
         patch.setattr(
             checkpoint,
@@ -160,7 +160,7 @@ def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, mo
             lambda *_: (_ for _ in ()).throw(OSError("crash")),
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.send_initial_cohort("sender", "Bob", "complete lagged suffix")
+            comms.messaging.send_initial_cohort("sender", "Bob", "complete lagged suffix")
     bus = comms.bus._path
     raw = bus.read_bytes()
     # Semantic-canonical equal-length JSON: only early insignificant whitespace
@@ -194,7 +194,7 @@ def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, mo
 def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "durable original")
+    comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
     bus = comms.bus._path
     db_path = bus.with_name("private_bus_checkpoint.sqlite3")
     original = db_path.read_bytes()
@@ -239,7 +239,7 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
 def test_unknown_public_writer_cannot_make_initial_absent_audience(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "sealed")
+    comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
     raw = Message("sender", "Bob", "unsealed", MessageType.INFO, seq=2).to_wire()
     with comms.bus._path.open("ab") as stream:
         stream.write(json.dumps(raw).encode() + b"\n")
@@ -252,7 +252,7 @@ def test_unknown_public_writer_cannot_make_initial_absent_audience(tmp_path: Pat
 def test_deleted_sql_index_cannot_certify_absent_selected_source(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    source = comms.send_initial_cohort("sender", "Alice", "mandatory selected")
+    source = comms.messaging.send_initial_cohort("sender", "Alice", "mandatory selected")
     lookup = stable_thread_lookup(17002.0)
     assert [item.message.seq for item in _page(comms, lookup)[1]] == [source.seq]
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
@@ -268,7 +268,7 @@ def test_sql_index_change_plus_complete_bus_suffix_still_denies(
 
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "sealed")
+    comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
     with monkeypatch.context() as patch:
         patch.setattr(
             checkpoint,
@@ -276,7 +276,7 @@ def test_sql_index_change_plus_complete_bus_suffix_still_denies(
             lambda *_: (_ for _ in ()).throw(OSError("bus only")),
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.send_initial_cohort("sender", "Alice", "complete suffix")
+            comms.messaging.send_initial_cohort("sender", "Alice", "complete suffix")
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DELETE FROM addressed")
     with pytest.raises(RelationViolationError, match="index seal changed"):
@@ -288,7 +288,7 @@ def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monk
 
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "source")
+    comms.messaging.send_initial_cohort("sender", "Alice", "source")
     path = comms.root / "private_bus_checkpoint.sqlite3"
     real_connect = checkpoint._connect
 
@@ -311,7 +311,7 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
 
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "first")
+    comms.messaging.send_initial_cohort("sender", "Alice", "first")
     if phase == "before_db_commit":
         monkeypatch.setattr(
             checkpoint,
@@ -325,7 +325,7 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
             lambda *_: (_ for _ in ()).throw(OSError("after SQLite COMMIT")),
         )
     with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-        comms.send_initial_cohort("sender", "Alice", "second")
+        comms.messaging.send_initial_cohort("sender", "Alice", "second")
     monkeypatch.undo()
     witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
     assert [item.message.seq for item in rows] == [1, 2]
@@ -345,7 +345,7 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
             lambda *_: (_ for _ in ()).throw(OSError("after commit")),
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.send_initial_cohort("sender", "Alice", "pending")
+            comms.messaging.send_initial_cohort("sender", "Alice", "pending")
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DROP TABLE addressed")
     with pytest.raises(RelationViolationError, match="schema is unavailable"):
@@ -418,8 +418,8 @@ def test_existing_root_explicit_install_preserves_source_and_supports_append(
     tmp_path: Path,
 ) -> None:
     comms, root_id = _root(tmp_path)
-    one = comms.send_initial_cohort("sender", "Alice", "already committed")
-    two = comms.send_initial_cohort("sender", "outsider", "other audience")
+    one = comms.messaging.send_initial_cohort("sender", "Alice", "already committed")
+    two = comms.messaging.send_initial_cohort("sender", "outsider", "other audience")
     original = comms.bus._path.read_bytes()
     inode = comms.bus._path.stat().st_ino
     reopened = Comms(comms.root)
@@ -433,7 +433,7 @@ def test_existing_root_explicit_install_preserves_source_and_supports_append(
     assert comms.bus._path.read_bytes() == original
     assert comms.bus._path.stat().st_ino == inode
     assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [one.seq]
-    three = reopened.send_initial_cohort("sender", "Alice", "after installation")
+    three = reopened.messaging.send_initial_cohort("sender", "Alice", "after installation")
     assert three.seq == two.seq + 1
     assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [
         one.seq,
@@ -444,7 +444,7 @@ def test_existing_root_explicit_install_preserves_source_and_supports_append(
 @pytest.mark.parametrize("damage", ["partial", "reserved", "unattested"])
 def test_existing_root_invalid_prefix_does_not_install(tmp_path: Path, damage: str) -> None:
     comms, _ = _root(tmp_path)
-    comms.send_initial_cohort("sender", "Alice", "committed")
+    comms.messaging.send_initial_cohort("sender", "Alice", "committed")
     marker = comms.root / "bus_meta.json"
     if damage == "partial":
         with comms.bus._path.open("ab") as stream:
@@ -473,7 +473,7 @@ def test_existing_root_invalid_prefix_does_not_install(tmp_path: Path, damage: s
 def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     install_private_bus_checkpoint(comms.bus)
-    comms.send_initial_cohort("sender", "Alice", "first")
+    comms.messaging.send_initial_cohort("sender", "Alice", "first")
     bus = comms.bus._path
     original = bus.read_bytes()
     with bus.open("r+b") as stream:
@@ -488,7 +488,7 @@ def test_failed_existing_index_build_leaves_original_readable(tmp_path, monkeypa
     import agent_comms.private_bus_checkpoint as checkpoint
 
     comms, _ = _root(tmp_path)
-    one = comms.send_initial_cohort("sender", "Alice", "retained")
+    one = comms.messaging.send_initial_cohort("sender", "Alice", "retained")
     before = comms.bus._path.read_bytes()
     with monkeypatch.context() as patch:
         patch.setattr(

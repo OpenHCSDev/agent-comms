@@ -11,9 +11,9 @@ from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import wire
 
 
 async def owner(tmp_path, monkeypatch):
@@ -32,7 +32,7 @@ async def owner(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.attach_session("project", str(session))
+    comms.threads.attach_session("project", str(session))
     return agent, comms, session, updates
 
 
@@ -99,7 +99,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         yield ae.InputStarted(id=None)
         if queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
-        goal = comms.update_goal("project", SetGoalAction(text="Read files until stopped"))
+        goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
         assert agent.turns.goal_store.snapshot(goal.id).state == "reserved"
         if not queued_before_activation:
@@ -143,7 +143,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 ):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
-    original_goal = comms.update_goal(
+    original_goal = comms.goals.update_goal(
         "project", SetGoalAction(text="Read files until stopped"), owner_store=store
     )
     observed = {}
@@ -158,9 +158,9 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         public_id, command = await queue_followup(agent, kwargs)
         observed["public_id"] = public_id
         if change == "clear":
-            comms.update_goal("project", ClearGoalAction())
+            comms.goals.update_goal("project", ClearGoalAction())
         elif change == "replace":
-            observed["replacement"] = comms.update_goal(
+            observed["replacement"] = comms.goals.update_goal(
                 "project", SetGoalAction(text="A different goal"), owner_store=store
             )
         with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:

@@ -14,10 +14,11 @@ from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
+from .comms import Comms
 from .declarations import MessageRoute
 from .declared_family import DeclaredFamily
-from .operations import Comms, TranscriptEvent
 from .runtime import RuntimeServer
+from .transcripts import TranscriptEvent
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -146,7 +147,7 @@ class TranscriptReplay:
         )
         destination = client or self.runtime
         if use_snapshots:
-            page = await asyncio.to_thread(self.comms.thread_transcript_page, name)
+            page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
             include_diff = (
                 (self.diffs if client is None else getattr(client, "transcript_diffs", False))
                 if diffs is None
@@ -168,6 +169,6 @@ class TranscriptReplay:
                 ),
             )
             return
-        events = await asyncio.to_thread(self.comms.thread_transcript, name)
+        events = await asyncio.to_thread(self.comms.transcripts.thread_transcript, name)
         for event in events:
             await TranscriptUpdate.from_transcript(event).publish(session_id, destination)

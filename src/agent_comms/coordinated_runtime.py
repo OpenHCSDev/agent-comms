@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .claim_states import ClaimState, CompletedClaim, IgnoredClaim
+from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import ExecutionOrigin, OwnerFence, WakeClaim
@@ -76,7 +77,6 @@ from .native_prompt_binding import (
 )
 from .native_prompt_send import PromptAdmissionBusy
 from .native_source_cursor import advance_current_native_cursor
-from .operations import Comms
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_sidecar import SidecarCommitUnknown, native_request_digest
 from .selected_write_plan import PlannedWrite
@@ -1076,7 +1076,7 @@ async def run_one_sealed_claim(
             raise StaleFence(
                 "selected owner has an unresolved execution; new claims remain pending"
             )
-        model_selection = comms.resolve_thread_model(owner.name)
+        model_selection = comms.threads.resolve_thread_model(owner.name)
         if not model_selection or "/" not in model_selection:
             raise IdentityConflict("Selected owner has no configured provider/model")
         provider, model = model_selection.split("/", 1)
@@ -1606,7 +1606,7 @@ def _publish_native_failure(
     )
     target = derive_exact_reply_target(initial.message)
     assert target is not None
-    comms.send(
+    comms.messaging.send(
         owner.name,
         target,
         f"Message processing failed: {description} "

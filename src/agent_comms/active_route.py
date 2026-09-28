@@ -301,7 +301,7 @@ def rotate_active_route(
     Pending and UNKNOWN inputs stay in the archived source; none are replayed.
     """
     from .cohort_foreground import _preflight
-    from .operations import Comms
+    from .comms import Comms
     from .supervised_cutover import _require_unchanged_archive_source
 
     path = active_route_path() if path is None else path
@@ -353,7 +353,7 @@ def withdraw_active_route(
     The caller must fence explicit-root ingress and stop Toad and ACP owners.
     An unconfirmed removal is never retried automatically.
     """
-    from .operations import Comms
+    from .comms import Comms
     from .supervised_cutover import archive_stopped_root
 
     path = active_route_path() if path is None else path

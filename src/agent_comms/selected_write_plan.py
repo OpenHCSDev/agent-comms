@@ -19,12 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
+from .comms import Comms
 from .coordination import WakeClaim
 from .coordination_cohort import sealed_cohort_claims
 from .coordination_store import IdentityConflict, MutationStore
 from .declarations import Thread, _store_lock
 from .envelope_claim_transitions import normalize_existing_file
-from .operations import Comms
 
 _MAX_BYTES = 1024 * 1024
 

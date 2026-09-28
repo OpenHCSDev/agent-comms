@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.comms import Comms
 from agent_comms.declarations import Thread
-from agent_comms.operations import Comms
 from agent_comms.wake_candidate_index import (
     CandidateCatchUp,
     CandidatePage,
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires
 def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     # Isolate explicit fault/rebuild/catch-up steps from the production daemon.
     monkeypatch.setattr(
-        "agent_comms.operations.schedule_private_candidate_after_commit", lambda *_: None
+        "agent_comms.messaging.schedule_private_candidate_after_commit", lambda *_: None
     )
 
 
@@ -38,7 +38,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.register(
+    comms.threads.register(
         Thread(
             "sender",
             frozenset({"writer"}),
@@ -48,7 +48,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
         )
     )
     for number in range(recipients):
-        comms.register(
+        comms.threads.register(
             Thread(
                 f"member{number:03}",
                 frozenset({"cohort"}),
@@ -57,7 +57,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
                 created_at=1_700_010_100.0 + number,
             )
         )
-    root_id = comms.initialize_private_initial_protocol()
+    root_id = comms.messaging.initialize_private_initial_protocol()
     return comms, WakeCandidateIndex(comms.bus), root_id, stable_thread_lookup(1_700_010_100.0)
 
 
@@ -75,7 +75,7 @@ def _page(
 
 def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.send_initial_cohort("sender", "member000", "first")
+    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     before = comms.bus._path.read_bytes()
     hint = index.notify_committed_append(root_id=root_id, through_seq=first.seq)
     assert hint == CommittedAppendHint(root_id, 1)
@@ -98,7 +98,7 @@ def test_deferred_catch_up_refuses_zero_progress_budget_until_explicitly_enlarge
     tmp_path: Path,
 ) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    message = comms.send_initial_cohort("sender", "member000", "x" * 4096)
+    message = comms.messaging.send_initial_cohort("sender", "member000", "x" * 4096)
     hint = index.notify_committed_append(root_id=root_id, through_seq=message.seq)
     for _ in range(2):
         with pytest.raises(ProjectionUnavailableError, match="no checkpoint progress"):
@@ -112,7 +112,7 @@ def test_deferred_catch_up_refuses_zero_progress_budget_until_explicitly_enlarge
 
 def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.send_initial_cohort("sender", "member000", "first")
+    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     hint = index.notify_committed_append(root_id=root_id, through_seq=first.seq)
     assert index.catch_up_committed_append(hint, bootstrap_new=True).caught_up
     # A bus commit+index WAL commit may survive while the caller loses the ACK.
@@ -128,12 +128,12 @@ def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_pa
 @pytest.mark.parametrize("damage", ["truncate", "replace", "incomplete"])
 def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, damage: str) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.send_initial_cohort("sender", "member000", "first")
+    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     assert index.catch_up_committed_append(
         index.notify_committed_append(root_id=root_id, through_seq=first.seq),
         bootstrap_new=True,
     ).caught_up
-    second = comms.send_initial_cohort("sender", "member000", "second")
+    second = comms.messaging.send_initial_cohort("sender", "member000", "second")
     path = comms.bus._path
     if damage == "truncate":
         path.write_bytes(b"")
@@ -155,7 +155,7 @@ def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, da
 
 def test_v1_requires_explicit_rebuild_and_foreign_root_is_rejected(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path / "one")
-    first = comms.send_initial_cohort("sender", "member000", "first")
+    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     hint = index.notify_committed_append(root_id=root_id, through_seq=first.seq)
     assert index.catch_up_committed_append(hint, bootstrap_new=True).caught_up
     with sqlite3.connect(index.path) as db:
@@ -166,7 +166,7 @@ def test_v1_requires_explicit_rebuild_and_foreign_root_is_rejected(tmp_path: Pat
     assert index.catch_up_committed_append(hint).caught_up
     assert len(_page(index, root_id, lookup, 1).entries) == 1
     other, other_index, other_id, _ = _fresh(tmp_path / "other")
-    other.send_initial_cohort("sender", "member000", "elsewhere")
+    other.messaging.send_initial_cohort("sender", "member000", "elsewhere")
     with pytest.raises(ProjectionRebuildRequiredError, match="another root"):
         index.catch_up_committed_append(
             other_index.notify_committed_append(root_id=other_id, through_seq=1)
@@ -180,12 +180,12 @@ def test_v1_requires_explicit_rebuild_and_foreign_root_is_rejected(tmp_path: Pat
 
 def test_reader_snapshot_does_not_block_deferred_wal_catch_up(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.send_initial_cohort("sender", "member000", "first")
+    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     assert index.catch_up_committed_append(
         index.notify_committed_append(root_id=root_id, through_seq=first.seq),
         bootstrap_new=True,
     ).caught_up
-    second = comms.send_initial_cohort("sender", "member000", "second")
+    second = comms.messaging.send_initial_cohort("sender", "member000", "second")
     with sqlite3.connect(index.path, timeout=0.05) as reader:
         reader.execute("BEGIN")
         assert reader.execute("SELECT last_seq FROM checkpoint").fetchone() == (1,)
@@ -201,7 +201,7 @@ def test_bounded_101_initials_and_150_frozen_recipients(tmp_path: Path) -> None:
     send_times: list[float] = []
     for number in range(101):
         start = time.perf_counter()
-        message = comms.send_initial_cohort("sender", "#cohort", f"@member000 benchmark {number}")
+        message = comms.messaging.send_initial_cohort("sender", "#cohort", f"@member000 benchmark {number}")
         send_times.append(time.perf_counter() - start)
     hint = index.notify_committed_append(root_id=root_id, through_seq=message.seq)
     rounds = 0

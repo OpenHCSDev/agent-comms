@@ -16,10 +16,10 @@ import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import Thread
-from agent_comms.operations import Comms
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private N/K and claim durability require a real /var/tmp root"
@@ -37,7 +37,7 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
         comms = Comms(root)
         people = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
         for name, created_at in people.items():
-            comms.register(
+            comms.threads.register(
                 Thread(
                     name,
                     frozenset({"team"}),
@@ -45,16 +45,16 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
                     created_at=created_at,
                 )
             )
-        root_id = comms.initialize_private_initial_protocol()
+        root_id = comms.messaging.initialize_private_initial_protocol()
         # BOTH barriers must be installed while the private bus is empty.
-        comms.initialize_private_claim_protocol()
+        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as coordinator:
             install_private_cohort_schema(coordinator)
             for name in ("Alice", "Bob"):
                 coordinator.register_participant(
                     stable_thread_lookup(people[name]), name, name, committed=True
                 )
-            message = comms.send_initial_cohort("sender", "#team", "Please investigate @Alice")
+            message = comms.messaging.send_initial_cohort("sender", "#team", "Please investigate @Alice")
             receipt = accept_initial_cohort(comms.bus, root_id, message.seq, coordinator).value
             assert receipt.member_count == 2
             assert receipt.claim_count == 1
@@ -64,11 +64,11 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
             # Existing explicit resource claims are valid independent operations.
             # They neither consult nor reference the sealed N/K receipt. A
             # future native edit admission must join these two authorities.
-            committed = comms.send_message(
+            committed = comms.messaging.send_message(
                 "Bob", "#team", "Independent file claim", claims=["module.py"]
             )
             assert committed.claim_transition is not None
             assert not hasattr(committed.claim_transition, "wake_claim_id")
-            projection = comms.claim_projection()
+            projection = comms.bus.claim_projection()
             assert projection[str(resource)].owner == "Bob"
             assert resource.read_text() == "value = 1\n"

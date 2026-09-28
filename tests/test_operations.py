@@ -17,70 +17,70 @@ from agent_comms import (
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.declarations import _store_lock
-from agent_comms.operations import _owner_launch_proof
+from agent_comms.owner_lifecycle import _owner_launch_proof
 
 
 class TestMessaging:
     def test_send_routes_through_bus(self, wired):
-        mid = wired.send("PR111", "fixer", "hello", MessageType.QUESTION)
+        mid = wired.messaging.send("PR111", "fixer", "hello", MessageType.QUESTION)
         assert isinstance(mid, str)
-        assert wired.pending_count("fixer") == 1
+        assert wired.bus.pending_count("fixer") == 1
 
     def test_send_fail_closed_unknown_sender(self, wired):
         with pytest.raises(UnregisteredThreadError, match="Sender"):
-            wired.send("ghost", "fixer", "hello")
+            wired.messaging.send("ghost", "fixer", "hello")
 
     def test_broadcast_reaches_all_peers(self, wired):
-        wired.broadcast("PR111", "green")
-        assert wired.pending_count("fixer") == 1
+        wired.messaging.broadcast("PR111", "green")
+        assert wired.bus.pending_count("fixer") == 1
 
     def test_ack_clears_inbox(self, wired):
-        wired.send("PR111", "fixer", "hello")
-        assert wired.acknowledge("fixer") == 1
-        assert wired.pending_count("fixer") == 0
-        assert wired.acknowledge("fixer") == 0
+        wired.messaging.send("PR111", "fixer", "hello")
+        assert wired.messaging.acknowledge("fixer") == 1
+        assert wired.bus.pending_count("fixer") == 0
+        assert wired.messaging.acknowledge("fixer") == 0
 
     def test_scoped_ack_only_clears_selected_conversation(self, wired):
-        wired.send("PR111", "fixer", "direct")
-        wired.send("PR111", "#all", "global")
+        wired.messaging.send("PR111", "fixer", "direct")
+        wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.acknowledge("fixer", "PR111") == 1
-        assert wired.pending_count("fixer", "PR111") == 0
-        assert wired.pending_count("fixer", "#all") == 1
-        assert wired.pending_count("fixer") == 1
+        assert wired.messaging.acknowledge("fixer", "PR111") == 1
+        assert wired.bus.pending_count("fixer", "PR111") == 0
+        assert wired.bus.pending_count("fixer", "#all") == 1
+        assert wired.bus.pending_count("fixer") == 1
 
     def test_scoped_channel_ack_does_not_clear_dm(self, wired):
-        wired.send("PR111", "fixer", "direct")
-        wired.send("PR111", "#all", "global")
+        wired.messaging.send("PR111", "fixer", "direct")
+        wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.acknowledge("fixer", "#all") == 1
-        assert wired.pending_count("fixer", "#all") == 0
-        assert wired.pending_count("fixer", "PR111") == 1
-        assert wired.pending_count("fixer") == 1
+        assert wired.messaging.acknowledge("fixer", "#all") == 1
+        assert wired.bus.pending_count("fixer", "#all") == 0
+        assert wired.bus.pending_count("fixer", "PR111") == 1
+        assert wired.bus.pending_count("fixer") == 1
 
     def test_inbox_order_follows_seq(self, wired):
         for i in range(5):
-            wired.send("PR111", "fixer", f"m{i}")
-        bodies = [m.body for m in wired.inbox("fixer")]
+            wired.messaging.send("PR111", "fixer", f"m{i}")
+        bodies = [m.body for m in wired.bus.inbox("fixer")]
         assert bodies == [f"m{i}" for i in range(5)]
 
     def test_pending_counts_groups_all_conversations_in_one_result(self, wired):
-        wired.send("PR111", "fixer", "direct one")
-        wired.send("PR111", "fixer", "direct two")
-        wired.send("PR111", "#all", "global")
+        wired.messaging.send("PR111", "fixer", "direct one")
+        wired.messaging.send("PR111", "fixer", "direct two")
+        wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.pending_counts("fixer") == {"PR111": 2, "#all": 1}
-        wired.acknowledge("fixer", "PR111")
-        assert wired.pending_counts("fixer") == {"#all": 1}
+        assert wired.bus.pending_counts("fixer") == {"PR111": 2, "#all": 1}
+        wired.messaging.acknowledge("fixer", "PR111")
+        assert wired.bus.pending_counts("fixer") == {"#all": 1}
 
     def test_shared_history_page_contract(self, wired):
         for index in range(5):
-            wired.send("PR111", "#all", f"m{index}")
+            wired.messaging.send("PR111", "#all", f"m{index}")
 
-        page = wired.channel_history_page("#all", limit=2)
+        page = wired.views.channel_history_page("#all", limit=2)
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
-        assert wired.message_high_water() == 5
+        assert wired.bus.latest_sequence() == 5
 
 
 class TestThreadOps:
@@ -128,7 +128,7 @@ class TestThreadOps:
             },
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records))
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="transcript-thread",
                 tags=frozenset(),
@@ -137,7 +137,7 @@ class TestThreadOps:
             )
         )
 
-        events = wired.thread_transcript("transcript-thread")
+        events = wired.transcripts.thread_transcript("transcript-thread")
 
         assert [event.kind for event in events] == [
             "user",
@@ -148,7 +148,7 @@ class TestThreadOps:
         ]
         assert events[2].raw_input == {"to": "child"}
         assert events[3].text == "sent"
-        row = next(row for row in wired.presence() if row["name"] == "transcript-thread")
+        row = next(row for row in wired.views.presence() if row["name"] == "transcript-thread")
         assert row["resumable"] is True
 
     def test_thread_transcript_includes_saved_compaction_summary(self, wired, tmp_path):
@@ -163,7 +163,7 @@ class TestThreadOps:
             )
             + "\n"
         )
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="compacted-thread",
                 tags=frozenset(),
@@ -172,71 +172,71 @@ class TestThreadOps:
             )
         )
 
-        events = wired.thread_transcript_page("compacted-thread").events
+        events = wired.transcripts.thread_transcript_page("compacted-thread").events
 
         assert len(events) == 1
         assert events[0].kind == "notice"
         assert "Important decisions" in events[0].text
 
     def test_claim_thread_can_baseline_inbox_atomically(self, wired):
-        wired.send("PR111", "#all", "before claim")
-        claimed = wired.claim_thread(
+        wired.messaging.send("PR111", "#all", "before claim")
+        claimed = wired.threads.claim_thread(
             "viewer",
             tags=frozenset({"acp"}),
             worktree="/tmp/project",
             start_at_latest=True,
         )
-        assert wired.inbox(claimed.name) == []
-        wired.send("PR111", "#all", "after claim")
-        assert [message.body for message in wired.inbox(claimed.name)] == ["after claim"]
+        assert wired.bus.inbox(claimed.name) == []
+        wired.messaging.send("PR111", "#all", "after claim")
+        assert [message.body for message in wired.bus.inbox(claimed.name)] == ["after claim"]
 
     def test_runtime_info_is_exposed_in_presence(self, wired):
-        wired.set_agent_info("fixer", model="openrouter/model", context_used=25, context_size=100)
-        row = next(row for row in wired.who() if row["name"] == "fixer")
+        wired.agents.set_agent_info("fixer", model="openrouter/model", context_used=25, context_size=100)
+        row = next(row for row in wired.views.who() if row["name"] == "fixer")
         assert row["model"] == "openrouter/model"
         assert row["context_percent"] == 25
-        assert wired.agent_info_of("fixer").context_used == 25
+        assert wired.agents.agent_info_of("fixer").context_used == 25
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
-        rows = {row["name"]: row for row in wired.presence()}
+        rows = {row["name"]: row for row in wired.views.presence()}
         assert "pending" not in rows["fixer"]
 
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.set_agent_info("ghost", model="model")
+            wired.agents.set_agent_info("ghost", model="model")
 
     def test_list_threads_shape(self, wired):
-        rows = {row["name"]: row for row in wired.list_threads()}
+        rows = {row["name"]: row for row in wired.views.list_threads()}
         assert set(rows) == {"PR111", "fixer"}
         assert rows["fixer"]["status"] == "running"
         assert rows["fixer"]["parent"] == "PR111"
         assert rows["fixer"]["pending"] == 0
 
     def test_list_active_only(self, wired):
-        wired.stop("fixer")
-        names = {row["name"] for row in wired.list_threads(active_only=True)}
+        wired.owners.stop("fixer")
+        names = {row["name"] for row in wired.views.list_threads(active_only=True)}
         assert names == {"PR111"}
 
     def test_thread_detail(self, wired):
-        detail = wired.thread_detail("fixer")
+        detail = wired.views.thread_detail("fixer")
         assert detail["is_fork"] is True
         assert detail["task"] == "fix auth"
         assert detail["pid"] == 0
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.thread_detail("ghost")
+            wired.views.thread_detail("ghost")
 
     def test_heartbeat_marks_running(self, wired):
-        wired.stop("fixer")
-        wired.heartbeat("fixer")
+        wired.owners.stop("fixer")
+        wired.threads.heartbeat("fixer")
         assert wired.registry.status("fixer").declared_name == "running"
 
     def test_attach_session_preserves_declaration_and_updates_runtime(self, wired, tmp_path):
-        wired.stop("fixer")
+        wired.owners.stop("fixer")
         session_file = tmp_path / "session.jsonl"
 
-        attached = wired.attach_session("fixer", str(session_file), pid=123)
+        attached = wired.threads.attach_session("fixer", str(session_file), pid=123)
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
@@ -249,14 +249,14 @@ class TestThreadOps:
         monkeypatch.setenv("PI_AGENT_ID", "fixer")
 
         with pytest.raises(RelationViolationError, match="cannot release"):
-            wired.release("PR111")
+            wired.owners.release("PR111")
 
-        wired.release("fixer")
+        wired.owners.release("fixer")
         assert wired.registry.status("fixer").declared_name == "stopped"
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_reserved_worker_acquire_requires_launch_reservation(self, wired, monkeypatch):
-        wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_generations["reserved"]
         read_fd, write_fd = os.pipe()
         os.write(
@@ -265,18 +265,18 @@ class TestThreadOps:
         )
         os.close(write_fd)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
-        attached = wired.acquire_thread("reserved", owner_pid=987654)
+        attached = wired.owners.acquire_thread("reserved", owner_pid=987654)
         assert attached.pid == 987654
         assert wired.registry.snapshot().owner_generations["reserved"] == before
         assert "AGENT_COMMS_RESERVATION_FD" not in os.environ
         # A new process that reuses a dead PID has no inherited launch pipe;
         # it must acquire a NEW epoch, never inherit the old reservation.
-        wired.acquire_thread("reserved", owner_pid=987654)
+        wired.owners.acquire_thread("reserved", owner_pid=987654)
         assert wired.registry.snapshot().owner_generations["reserved"] > before
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_reserved_worker_rejects_stale_launch_epoch(self, wired, monkeypatch):
-        wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_generations["reserved"]
         read_fd, write_fd = os.pipe()
         os.write(
@@ -287,13 +287,13 @@ class TestThreadOps:
         wired.registry.register(wired.registry.require("reserved"), new_owner=True)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         with pytest.raises(RelationViolationError, match="reservation no longer matches"):
-            wired.acquire_thread("reserved", owner_pid=987654)
+            wired.owners.acquire_thread("reserved", owner_pid=987654)
         assert wired.registry.snapshot().owner_generations["reserved"] > before
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_long_valid_name_reservation_is_not_truncated(self, wired, monkeypatch):
         name = "n" * 257  # The old plaintext proof exceeded the 256-byte child read.
-        wired.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
         epoch = wired.registry.snapshot().owner_generations[name]
         read_fd, write_fd = os.pipe()
         proof = _owner_launch_proof(wired.registry.snapshot().owner_identity(name), 987654)
@@ -301,7 +301,7 @@ class TestThreadOps:
         os.write(write_fd, proof)
         os.close(write_fd)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
-        assert wired.acquire_thread(name, owner_pid=987654).pid == 987654
+        assert wired.owners.acquire_thread(name, owner_pid=987654).pid == 987654
         assert wired.registry.snapshot().owner_generations[name] == epoch
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
@@ -315,10 +315,10 @@ class TestThreadOps:
                 assert kwargs["env"]["AGENT_COMMS_THREAD"] == name
                 inherited.append(os.dup(kwargs["pass_fds"][0]))
 
-        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", FakePopen)
         try:
             with _store_lock(wired._wire_lock_path):
-                owned = wired._launch_owner_unlocked(
+                owned = wired.owners._launch_owner_unlocked(
                     Thread(name=name, tags=frozenset(), worktree="/tmp"), "/bin/echo"
                 )
             assert owned.pid == 987654
@@ -332,7 +332,7 @@ class TestThreadOps:
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process-group signaling")
     def test_stop_terminates_registered_process(self, wired, monkeypatch):
         signals = []
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="signal-test",
                 tags=frozenset(),
@@ -341,20 +341,20 @@ class TestThreadOps:
             )
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant",
             lambda *args, **kwargs: True,
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._process_alive",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._process_alive",
             lambda *args: not signals,
         )
-        monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.os.getpgid", lambda pid: pid)
         monkeypatch.setattr(
-            "agent_comms.operations.os.killpg",
+            "agent_comms.owner_lifecycle.os.killpg",
             lambda pid, sig: signals.append((pid, sig)),
         )
 
-        wired.stop("signal-test")
+        wired.owners.stop("signal-test")
 
         assert signals == [(200, __import__("signal").SIGTERM)]
         assert wired.registry.status("signal-test").declared_name == "stopped"
@@ -363,9 +363,9 @@ class TestThreadOps:
     def test_stop_waits_for_owner_socket_without_holding_wire_lock(self, wired, monkeypatch):
         import threading
 
-        from agent_comms.operations import _store_lock
+        from agent_comms.declarations import _store_lock
 
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
         obtained = threading.Event()
 
@@ -382,100 +382,100 @@ class TestThreadOps:
                 worker.join(1)
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", prove_owner)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+            "agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: not signals
         )
-        monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.os.getpgid", lambda pid: pid)
         monkeypatch.setattr(
-            "agent_comms.operations.os.killpg", lambda pid, sig: signals.append((pid, sig))
+            "agent_comms.owner_lifecycle.os.killpg", lambda pid, sig: signals.append((pid, sig))
         )
 
-        wired.stop("starting")
+        wired.owners.stop("starting")
         assert signals == [(987654, __import__("signal").SIGTERM)]
         assert wired.registry.status("starting").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_accepts_session_metadata_from_same_owner(self, wired, monkeypatch, tmp_path):
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
         session = tmp_path / "session.jsonl"
         session.touch()
 
         def prove_owner(self, thread, *, wait=True):
             if wait:
-                self.attach_session(thread.name, str(session))
+                wired.threads.attach_session(thread.name, str(session))
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", prove_owner)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+            "agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: not signals
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
 
-        wired.stop("starting")
+        wired.owners.stop("starting")
         assert signals == [(987654, signal.SIGTERM)]
         assert wired.registry.status("starting").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_fresh_registration_with_reused_pid(self, wired, monkeypatch):
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().admission_generations["starting"]
         signals = []
 
         def replace_owner(self, thread, *, wait=True):
             if wait:
-                self.register(
+                wired.threads.register(
                     Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654)
                 )
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", replace_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", replace_owner)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
         with pytest.raises(RelationViolationError, match="epoch changed"):
-            wired.stop("starting")
+            wired.owners.stop("starting")
         assert signals == []
         assert wired.registry.snapshot().admission_generations["starting"] > before
         assert wired.registry.status("starting").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_accepts_project_change_from_same_owner(self, wired, monkeypatch, tmp_path):
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().admission_generations["starting"]
         signals = []
         project_generations = []
 
         def prove_owner(self, thread, *, wait=True):
             if wait:
-                self.set_project(thread.name, str(tmp_path))
+                wired.threads.set_project(thread.name, str(tmp_path))
                 project_generations.append(
                     self.registry.snapshot().admission_generations["starting"]
                 )
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", prove_owner)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._process_alive", lambda *args: not signals
+            "agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: not signals
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
-        wired.stop("starting")
+        wired.owners.stop("starting")
         assert signals == [(987654, signal.SIGTERM)]
         assert project_generations == [before]
         assert wired.registry.status("starting").stopped
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_same_pid_new_epoch_before_signal(self, wired, monkeypatch):
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().admission_generations["starting"]
         signals = []
 
@@ -484,26 +484,26 @@ class TestThreadOps:
                 self.registry.register(thread, new_owner=True)  # Same PID, new process.
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", epoch_changed)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
         with pytest.raises(RelationViolationError, match="epoch changed"):
-            wired.stop("starting")
+            wired.owners.stop("starting")
         assert signals == []
         assert wired.registry.snapshot().admission_generations["starting"] > before
         assert wired.registry.status("starting").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
-        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", lambda *args, **kw: True
         )
-        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner", lambda *args: None)
 
         def later_incarnation(self, pid, seconds):
             self.registry.unregister("owner")
@@ -511,24 +511,24 @@ class TestThreadOps:
             self.registry.unregister("owner")
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", later_incarnation)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._wait_for_owner_exit", later_incarnation)
         with pytest.raises(RelationViolationError, match="Owner changed"):
-            wired.stop("owner")
+            wired.owners.stop("owner")
         assert wired.registry.status("owner") is not None
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_post_kill_same_pid_lifecycle_aba(self, wired, monkeypatch):
-        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_generations["owner"]
         original = wired.registry.require("owner")
         signals = []
         waits = []
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", lambda *args, **kw: True
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
 
@@ -538,15 +538,15 @@ class TestThreadOps:
                 return False  # A has not exited after TERM; KILL is still authorized.
             with monkeypatch.context() as owner:
                 owner.setenv("PI_AGENT_ID", "owner")
-                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                owner.setattr("agent_comms.owner_lifecycle.os.getpid", lambda: 987654)
                 self.release("owner")  # A's valid self-release after KILL.
                 self.registry.register(self.registry.require("owner"))  # B reuses the PID.
                 self.release("owner")  # B stops with identical declaration.
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", exit_wait)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._wait_for_owner_exit", exit_wait)
         with pytest.raises(RelationViolationError, match="Owner changed"):
-            wired.stop("owner")
+            wired.owners.stop("owner")
         assert signals == [(987654, signal.SIGTERM), (987654, signal.SIGKILL)]
         assert len(waits) == 2
         assert wired.registry.require("owner") == original
@@ -555,12 +555,12 @@ class TestThreadOps:
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_accepts_attested_release_after_unrelated_epoch_change(self, wired, monkeypatch):
-        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", lambda *args, **kw: True
         )
-        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner", lambda *args: None)
 
         def self_release(self, pid, seconds):
             # An unrelated owner changes the GLOBAL epoch before our worker
@@ -568,19 +568,19 @@ class TestThreadOps:
             self.registry.register(Thread(name="other", tags=frozenset(), worktree="/tmp"))
             with monkeypatch.context() as owner:
                 owner.setenv("PI_AGENT_ID", "owner")
-                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                owner.setattr("agent_comms.owner_lifecycle.os.getpid", lambda: 987654)
                 self.release("owner")
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", self_release)
-        wired.stop("owner")
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._wait_for_owner_exit", self_release)
+        wired.owners.stop("owner")
         assert wired.registry.status("owner").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_does_not_signal_replaced_pid_after_socket_wait(self, wired, monkeypatch):
         from dataclasses import replace
 
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
 
         def replaced_during_proof(self, thread, *, wait=True):
@@ -589,16 +589,16 @@ class TestThreadOps:
             return True
 
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant", replaced_during_proof
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", replaced_during_proof
         )
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.os.getpgid", lambda pid: pid)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.os.getpgid", lambda pid: pid)
         monkeypatch.setattr(
-            "agent_comms.operations.os.killpg", lambda pid, sig: signals.append((pid, sig))
+            "agent_comms.owner_lifecycle.os.killpg", lambda pid, sig: signals.append((pid, sig))
         )
 
         with pytest.raises(RelationViolationError, match="Owner changed"):
-            wired.stop("starting")
+            wired.owners.stop("starting")
         assert signals == []
         assert wired.registry.require("starting").pid == 987655
 
@@ -606,9 +606,9 @@ class TestThreadOps:
     def test_start_waits_outside_wire_lock_and_revalidates_owner(self, wired, monkeypatch):
         import threading
 
-        from agent_comms.operations import _store_lock
+        from agent_comms.declarations import _store_lock
 
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         obtained = threading.Event()
 
         def prove_owner(self, thread, *, wait=True):
@@ -624,15 +624,15 @@ class TestThreadOps:
                 worker.join(1)
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
-        result = wired.start("starting")
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", prove_owner)
+        result = wired.owners.start("starting")
         assert result.pid == 987654 and not result.launched
         assert wired.registry.status("starting").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
     def test_start_rejects_same_pid_new_epoch(self, wired, monkeypatch):
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_generations["starting"]
 
         def epoch_changed(self, thread, *, wait=True):
@@ -640,10 +640,10 @@ class TestThreadOps:
                 self.registry.register(thread, new_owner=True)  # Same PID, later owner incarnation.
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", epoch_changed)
         with pytest.raises(RelationViolationError, match="epoch changed"):
-            wired.start("starting")
+            wired.owners.start("starting")
         assert wired.registry.snapshot().owner_generations["starting"] > before
         assert wired.registry.require("starting").pid == 987654
 
@@ -651,29 +651,29 @@ class TestThreadOps:
     def test_start_refuses_replaced_pid_after_socket_wait(self, wired, monkeypatch):
         from dataclasses import replace
 
-        wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
 
         def replace_owner(self, thread, *, wait=True):
             if wait:
                 self.registry.register(replace(thread, pid=987655))
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", replace_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", replace_owner)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._launch_owner_unlocked",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._launch_owner_unlocked",
             lambda *args, **kwargs: pytest.fail("replacement must not be launched"),
         )
         with pytest.raises(RelationViolationError, match="Owner changed"):
-            wired.start("starting")
+            wired.owners.start("starting")
         assert wired.registry.require("starting").pid == 987655
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_restart_preflights_whole_set_and_refuses_replaced_pid(self, wired, monkeypatch):
         from dataclasses import replace
 
-        wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
-        wired.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
+        wired.threads.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
         signaled = []
 
         def replace_owner(self, thread, *, wait=True):
@@ -681,26 +681,26 @@ class TestThreadOps:
                 self.registry.register(replace(thread, pid=987656))
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", replace_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", replace_owner)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             lambda *args: signaled.append(args),
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._launch_owner_unlocked",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._launch_owner_unlocked",
             lambda *args, **kwargs: pytest.fail("replacement must not be launched"),
         )
         with pytest.raises(RelationViolationError, match="Owner selection changed"):
-            wired.restart_owners(["restart-a", "restart-b"])
+            wired.owners.restart_owners(["restart-a", "restart-b"])
         assert signaled == []
         assert wired.registry.require("restart-a").pid == 987656
         assert wired.registry.require("restart-b").pid == 987655
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_restart_rejects_same_pid_new_epoch_without_partial_signal(self, wired, monkeypatch):
-        wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
-        wired.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
+        wired.threads.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
         before = wired.registry.snapshot().admission_generations["restart-a"]
         signals = []
 
@@ -709,14 +709,14 @@ class TestThreadOps:
                 self.registry.register(thread, new_owner=True)
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", epoch_changed)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
         with pytest.raises(RelationViolationError, match="epochs changed"):
-            wired.restart_owners(["restart-a", "restart-b"])
+            wired.owners.restart_owners(["restart-a", "restart-b"])
         assert signals == []
         assert wired.registry.snapshot().admission_generations["restart-a"] > before
         assert wired.registry.status("restart-b").active
@@ -727,7 +727,7 @@ class TestThreadOps:
 
         from agent_comms.declarations import ActiveTurn
 
-        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
 
         def start_turn(self, thread, *, wait=True):
@@ -738,59 +738,59 @@ class TestThreadOps:
                 )
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", start_turn)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", start_turn)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             lambda *args: signals.append(args),
         )
         with pytest.raises(RelationViolationError, match="became busy"):
-            wired.restart_owners(["owner"])
+            wired.owners.restart_owners(["owner"])
         assert signals == []
         assert wired.registry.require("owner").active_turn.id == "new-turn"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_restart_rejects_post_signal_same_pid_lifecycle_aba(self, wired, monkeypatch):
-        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         launches = []
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", lambda *args, **kw: True
         )
-        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner", lambda *args: None)
 
         def later_incarnation(self, pid, seconds):
             with monkeypatch.context() as owner:
                 owner.setenv("PI_AGENT_ID", "owner")
-                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                owner.setattr("agent_comms.owner_lifecycle.os.getpid", lambda: 987654)
                 self.release("owner")  # A's valid receipt is superseded by B.
                 self.registry.register(self.registry.require("owner"))
                 self.release("owner")  # B reused PID and released normally.
             return True
 
-        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", later_incarnation)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._wait_for_owner_exit", later_incarnation)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._launch_owner_unlocked",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._launch_owner_unlocked",
             lambda *args, **kw: launches.append(args),
         )
         with pytest.raises(RelationViolationError, match="Owner changed"):
-            wired.restart_owners(["owner"])
+            wired.owners.restart_owners(["owner"])
         assert launches == []
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_restart_accepts_attested_self_release(self, wired, monkeypatch):
-        wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         launches = []
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant", lambda *args, **kw: True
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", lambda *args, **kw: True
         )
-        monkeypatch.setattr("agent_comms.operations.Comms._signal_local_owner", lambda *args: None)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner", lambda *args: None)
 
         def self_release(self, pid, seconds):
             with monkeypatch.context() as owner:
                 owner.setenv("PI_AGENT_ID", "owner")
-                owner.setattr("agent_comms.operations.os.getpid", lambda: 987654)
+                owner.setattr("agent_comms.owner_lifecycle.os.getpid", lambda: 987654)
                 self.release("owner")
             return True
 
@@ -798,9 +798,9 @@ class TestThreadOps:
             launches.append(thread.name)
             return thread
 
-        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", self_release)
-        monkeypatch.setattr("agent_comms.operations.Comms._launch_owner_unlocked", launch)
-        result = wired.restart_owners(["owner"])
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._wait_for_owner_exit", self_release)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._launch_owner_unlocked", launch)
+        result = wired.owners.restart_owners(["owner"])
         assert launches == ["owner"]
         assert result[0].thread == "owner"
 
@@ -809,9 +809,9 @@ class TestThreadOps:
         import threading
         from dataclasses import replace
 
-        from agent_comms.operations import _store_lock
+        from agent_comms.declarations import _store_lock
 
-        wired.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
+        wired.threads.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
         signals = []
 
         def acquire_lock():
@@ -841,15 +841,15 @@ class TestThreadOps:
             self.registry.register(owner)
             return owner
 
-        monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", prove_owner)
-        monkeypatch.setattr("agent_comms.operations.Comms._wait_for_owner_exit", await_exit)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", prove_owner)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._wait_for_owner_exit", await_exit)
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._signal_local_owner",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
         )
-        monkeypatch.setattr("agent_comms.operations.Comms._launch_owner_unlocked", launch)
-        results = wired.restart_owners(["restart-a"])
+        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._launch_owner_unlocked", launch)
+        results = wired.owners.restart_owners(["restart-a"])
         assert [(item.previous_pid, item.pid) for item in results] == [(987654, 987655)]
         assert wired.registry.require("restart-a").pid == 987655
 
@@ -863,16 +863,16 @@ class TestThreadOps:
         process = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(10)"], start_new_session=True
         )
-        wired.register(Thread(name="child", tags=frozenset(), worktree="/tmp", pid=process.pid))
+        wired.threads.register(Thread(name="child", tags=frozenset(), worktree="/tmp", pid=process.pid))
         try:
             monkeypatch.setattr(
-                "agent_comms.operations.Comms._is_local_participant",
+                "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant",
                 lambda *args, **kwargs: True,
             )
             # Simulate an inconclusive ps result even after the child exits;
             # waitid supplies the direct parent's authoritative exit witness.
-            monkeypatch.setattr("agent_comms.operations.Comms._process_alive", lambda *args: True)
-            wired.stop("child")
+            monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
+            wired.owners.stop("child")
             assert wired.registry.status("child").declared_name == "stopped"
             assert process.wait(timeout=5) == -signal.SIGTERM
         finally:
@@ -881,7 +881,7 @@ class TestThreadOps:
                 process.wait(timeout=5)
 
     def test_stop_marks_dead_process_stopped_without_signaling(self, wired, monkeypatch):
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="dead-process",
                 tags=frozenset(),
@@ -890,15 +890,15 @@ class TestThreadOps:
             )
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._process_alive",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._process_alive",
             lambda *args: False,
         )
         monkeypatch.setattr(
-            "agent_comms.operations.Comms._is_local_participant",
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant",
             lambda *args: pytest.fail("dead processes need no ownership check"),
         )
 
-        wired.stop("dead-process")
+        wired.owners.stop("dead-process")
 
         assert wired.registry.status("dead-process").declared_name == "stopped"
 
@@ -907,10 +907,10 @@ class TestThreadOps:
         import os
 
         with monkeypatch.context() as patch:
-            patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setattr("agent_comms.owner_lifecycle.sys.platform", "darwin")
             patch.setenv("PATH", "")  # The E2E CLI uses this exact environment.
-            assert wired._process_alive(os.getpid())
-            assert not wired._process_alive(2**30)
+            assert wired.owners._process_alive(os.getpid())
+            assert not wired.owners._process_alive(2**30)
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ps process lookup")
     def test_process_liveness_unknown_ps_result_never_marks_live_pid_dead(self, wired, monkeypatch):
@@ -918,35 +918,35 @@ class TestThreadOps:
         import subprocess
 
         with monkeypatch.context() as patch:
-            patch.setattr("agent_comms.operations.sys.platform", "darwin")
+            patch.setattr("agent_comms.owner_lifecycle.sys.platform", "darwin")
             patch.setattr(
-                "agent_comms.operations.subprocess.run",
+                "agent_comms.owner_lifecycle.subprocess.run",
                 lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("ps")),
             )
-            assert wired._process_alive(os.getpid())
+            assert wired.owners._process_alive(os.getpid())
             patch.setattr(
-                "agent_comms.operations.subprocess.run",
+                "agent_comms.owner_lifecycle.subprocess.run",
                 lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, "", ""),
             )
-            assert wired._process_alive(os.getpid())
+            assert wired.owners._process_alive(os.getpid())
             patch.setattr(
-                "agent_comms.operations.subprocess.run",
+                "agent_comms.owner_lifecycle.subprocess.run",
                 lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, "Z", ""),
             )
-            assert not wired._process_alive(os.getpid())
+            assert not wired.owners._process_alive(os.getpid())
 
     def test_process_liveness_checks_pid_before_spawning_ps(self, wired, monkeypatch):
         def missing_process(pid, signal):
             raise ProcessLookupError
 
         with monkeypatch.context() as patch:
-            patch.setattr("agent_comms.operations.sys.platform", "darwin")
-            patch.setattr("agent_comms.operations.os.kill", missing_process)
+            patch.setattr("agent_comms.owner_lifecycle.sys.platform", "darwin")
+            patch.setattr("agent_comms.owner_lifecycle.os.kill", missing_process)
             patch.setattr(
-                "agent_comms.operations.subprocess.run",
+                "agent_comms.owner_lifecycle.subprocess.run",
                 lambda *args, **kwargs: pytest.fail("ps must not run for a missing PID"),
             )
-            assert not wired._process_alive(123)
+            assert not wired.owners._process_alive(123)
 
     def test_windows_process_liveness_uses_handles_not_kill(self, wired, monkeypatch):
         import ctypes
@@ -969,35 +969,35 @@ class TestThreadOps:
             OpenProcess=open_process, GetExitCodeProcess=get_exit_code, CloseHandle=close_handle
         )
         with monkeypatch.context() as patch:
-            patch.setattr("agent_comms.operations.sys.platform", "win32")
+            patch.setattr("agent_comms.owner_lifecycle.sys.platform", "win32")
             patch.setattr(ctypes, "WinDLL", lambda *args, **kwargs: kernel, raising=False)
-            assert wired._process_alive(123)
+            assert wired.owners._process_alive(123)
             exit_code[0] = 0
-            assert not wired._process_alive(123)
+            assert not wired.owners._process_alive(123)
         assert closed == [42, 42]
 
     def test_archive_requires_stopped_thread(self, wired):
-        wired.send("PR111", "fixer", "kept after archive")
+        wired.messaging.send("PR111", "fixer", "kept after archive")
         with pytest.raises(RelationViolationError, match="Stop"):
-            wired.archive("fixer")
-        wired.stop("fixer")
-        wired.archive("fixer")
+            wired.threads.archive("fixer")
+        wired.owners.stop("fixer")
+        wired.threads.archive("fixer")
         assert wired.registry.status("fixer").declared_name == "archived"
-        assert not any(row["name"] == "fixer" for row in wired.who())
+        assert not any(row["name"] == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
-        assert [message.body for message in wired.dm_history("PR111", "fixer")] == [
+        assert [message.body for message in wired.views.dm_history("PR111", "fixer")] == [
             "kept after archive"
         ]
 
     def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
-        wired.send("fixer", "PR111", "before rename")
-        assert wired.acknowledge("PR111", "fixer") == 1
-        wired.set_activity("PR111", ActivityState.WORKING, "renaming")
-        wired.set_agent_info("PR111", model="test/model")
-        wired.ledger_merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
+        wired.messaging.send("fixer", "PR111", "before rename")
+        assert wired.messaging.acknowledge("PR111", "fixer") == 1
+        wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
+        wired.agents.set_agent_info("PR111", model="test/model")
+        wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
-        result = wired.rename_self("planner")
+        result = wired.threads.rename_self("planner")
 
         assert result.previous == "PR111"
         assert result.current == "planner"
@@ -1005,15 +1005,15 @@ class TestThreadOps:
         assert wired.registry.require("PR111").name == "planner"
         assert wired.registry.require("planner").tags == frozenset({"base"})
         assert wired.registry.require("fixer").parent == "planner"
-        assert wired.activity_of("planner").detail == "renaming"
-        assert wired.agent_info_of("planner").model == "test/model"
-        assert wired.ledger_read()["owner"] == "planner"
-        assert wired.pending_count("planner", "fixer") == 0
+        assert wired.agents.activity_of("planner").detail == "renaming"
+        assert wired.agents.agent_info_of("planner").model == "test/model"
+        assert wired.ledger.read()["owner"] == "planner"
+        assert wired.bus.pending_count("planner", "fixer") == 0
 
-        wired.send("fixer", "PR111", "old alias routes")
-        wired.send("PR111", "fixer", "old process sends canonically")
-        assert [message.body for message in wired.inbox("planner", "fixer")] == ["old alias routes"]
-        history = wired.dm_history("PR111", "fixer")
+        wired.messaging.send("fixer", "PR111", "old alias routes")
+        wired.messaging.send("PR111", "fixer", "old process sends canonically")
+        assert [message.body for message in wired.bus.inbox("planner", "fixer")] == ["old alias routes"]
+        history = wired.views.dm_history("PR111", "fixer")
         assert [message.body for message in history] == [
             "before rename",
             "old alias routes",
@@ -1022,29 +1022,29 @@ class TestThreadOps:
         assert history[-2].target == "PR111"
         assert history[-1].sender == "planner"
         with pytest.raises(RelationViolationError, match="cannot message itself"):
-            wired.send("PR111", "planner", "alias self-DM")
+            wired.messaging.send("PR111", "planner", "alias self-DM")
 
     def test_rename_self_rejects_collisions_and_stopped_threads(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError, match="already in use"):
-            wired.rename_self("PR111")
-        wired.stop("fixer")
+            wired.threads.rename_self("PR111")
+        wired.owners.stop("fixer")
         with pytest.raises(RelationViolationError, match="running"):
-            wired.rename_self("renamed")
+            wired.threads.rename_self("renamed")
 
     def test_rename_self_reclaims_own_alias_but_not_another_owners(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
-        assert wired.rename_self("pr17").current == "pr17"
-        assert wired.rename_self("PR111").current == "PR111"
+        assert wired.threads.rename_self("pr17").current == "pr17"
+        assert wired.threads.rename_self("PR111").current == "PR111"
         assert wired.registry.snapshot().aliases == {"pr17": "PR111"}
         assert wired.registry.require("fixer").parent == "PR111"
 
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError, match="already in use"):
-            wired.rename_self("pr17")
+            wired.threads.rename_self("pr17")
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="generated-7",
                 tags=frozenset({"acp"}),
@@ -1053,16 +1053,16 @@ class TestThreadOps:
             )
         )
 
-        result = wired.rename_managed_thread("generated-7", "testing 123", owner_pid=os.getpid())
+        result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner_pid=os.getpid())
 
         assert result.previous == "generated-7"
         assert result.current == "testing-123"
         assert wired.registry.require("generated-7").name == "testing-123"
         with pytest.raises(RelationViolationError, match="does not own"):
-            wired.rename_managed_thread("testing-123", "wrong", owner_pid=os.getpid() + 1)
+            wired.threads.rename_managed_thread("testing-123", "wrong", owner_pid=os.getpid() + 1)
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired):
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="testing-123",
                 tags=frozenset(),
@@ -1070,7 +1070,7 @@ class TestThreadOps:
                 pid=123,
             )
         )
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="generated-7",
                 tags=frozenset({"acp"}),
@@ -1079,42 +1079,42 @@ class TestThreadOps:
             )
         )
 
-        result = wired.rename_managed_thread("generated-7", "testing 123", owner_pid=456)
+        result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner_pid=456)
 
         assert result.current == "testing-123-2"
 
     def test_managed_rename_reclaims_own_alias(self, wired):
-        wired.register(
+        wired.threads.register(
             Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", pid=os.getpid())
         )
-        assert wired.rename_managed_thread("generated-7", "chosen", owner_pid=os.getpid()).changed
-        result = wired.rename_managed_thread("chosen", "generated-7", owner_pid=os.getpid())
+        assert wired.threads.rename_managed_thread("generated-7", "chosen", owner_pid=os.getpid()).changed
+        result = wired.threads.rename_managed_thread("chosen", "generated-7", owner_pid=os.getpid())
         assert (result.previous, result.current, result.changed) == ("chosen", "generated-7", True)
         assert wired.registry.snapshot().aliases["chosen"] == "generated-7"
         assert "generated-7" not in wired.registry.snapshot().aliases
 
     def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-        wired.rename_self("reviewer")
+        wired.threads.rename_self("reviewer")
         with pytest.raises(RelationViolationError, match="permanent alias"):
             wired.registry.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/other"))
 
     def test_delete_releases_renamed_identity(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-        wired.rename_self("reviewer")
-        wired.stop("reviewer")
-        wired.delete("reviewer")
-        wired.register(Thread(name="reviewer", tags=frozenset(), worktree="/tmp"))
+        wired.threads.rename_self("reviewer")
+        wired.owners.stop("reviewer")
+        wired.threads.delete("reviewer")
+        wired.threads.register(Thread(name="reviewer", tags=frozenset(), worktree="/tmp"))
         assert wired.registry.require("reviewer").name == "reviewer"
         assert "fixer" not in wired.registry
 
     def test_claim_reuses_alias_after_canonical_thread_is_deleted(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-        wired.rename_self("reviewer")
-        wired.stop("reviewer")
-        wired.delete("reviewer")
+        wired.threads.rename_self("reviewer")
+        wired.owners.stop("reviewer")
+        wired.threads.delete("reviewer")
 
-        claimed = wired.claim_thread("fixer", tags=frozenset({"acp"}), worktree="/tmp/project")
+        claimed = wired.threads.claim_thread("fixer", tags=frozenset({"acp"}), worktree="/tmp/project")
 
         assert claimed.name == "fixer"
 
@@ -1125,13 +1125,13 @@ class TestThreadOps:
         data = json.loads(path.read_text())
         data["aliases"] = {"deleted-old": "deleted-name", "deleted-name": "deleted-name"}
         path.write_text(json.dumps(data))
-        claimed = wired.claim_thread("deleted-name", tags=frozenset(), worktree="/tmp")
+        claimed = wired.threads.claim_thread("deleted-name", tags=frozenset(), worktree="/tmp")
         assert claimed.name == "deleted-name"
         assert "deleted-old" not in wired.registry
 
     def test_delete_requires_stopped_thread(self, wired):
         with pytest.raises(RelationViolationError, match="Stop"):
-            wired.delete("fixer")
+            wired.threads.delete("fixer")
 
     def test_delete_detaches_children_without_changing_their_state(self, wired, tmp_path):
         from dataclasses import replace
@@ -1139,30 +1139,30 @@ class TestThreadOps:
         session = tmp_path / "child.jsonl"
         session.write_text("persisted child transcript\n")
         child = replace(wired.registry.require("fixer"), session_file=str(session))
-        wired.register(child)
-        wired.register(Thread(name="grandchild", tags=frozenset(), worktree="/tmp", parent="fixer"))
-        wired.set_activity("fixer", ActivityState.THINKING, "still working")
-        wired.send("fixer", "grandchild", "keep this exchange")
+        wired.threads.register(child)
+        wired.threads.register(Thread(name="grandchild", tags=frozenset(), worktree="/tmp", parent="fixer"))
+        wired.agents.set_activity("fixer", ActivityState.THINKING, "still working")
+        wired.messaging.send("fixer", "grandchild", "keep this exchange")
         last_seen = wired.registry.last_seen("fixer")
-        wired.stop("PR111")
-        result = wired.delete("PR111")
+        wired.owners.stop("PR111")
+        result = wired.threads.delete("PR111")
         assert result.detached_children == ("fixer",)
         assert "PR111" not in wired.registry
         assert wired.registry.require("fixer") == replace(child, parent=None)
         assert wired.registry.require("grandchild").parent == "fixer"
         assert wired.registry.status("fixer").declared_name == "running"
         assert wired.registry.last_seen("fixer") == last_seen
-        assert wired.activity_of("fixer").state is ActivityState.THINKING
+        assert wired.agents.activity_of("fixer").state is ActivityState.THINKING
         assert session.read_text() == "persisted child transcript\n"
-        assert [m.body for m in wired.dm_history("fixer", "grandchild")] == ["keep this exchange"]
+        assert [m.body for m in wired.views.dm_history("fixer", "grandchild")] == ["keep this exchange"]
 
     @pytest.mark.parametrize("authority", ["unrelated_sideband", "protocol_marker", "torn_row"])
     def test_delete_rejects_private_or_uncertain_wire_before_begin_delete(
         self, wired, authority: str
     ) -> None:
-        wired.send("PR111", "#all", "unrelated retained row")
-        wired.send("fixer", "PR111", "subject to legacy purge")
-        wired.stop("fixer")
+        wired.messaging.send("PR111", "#all", "unrelated retained row")
+        wired.messaging.send("fixer", "PR111", "subject to legacy purge")
+        wired.owners.stop("fixer")
         path = wired.bus._path
         sequence_path = path.parent / "bus_meta.json"
         aliases = wired.registry.aliases_for("fixer")
@@ -1182,7 +1182,7 @@ class TestThreadOps:
         before_bus, before_meta = path.read_bytes(), sequence_path.read_bytes()
 
         with pytest.raises(RelationViolationError, match="Private|Incomplete"):
-            wired.delete("fixer")
+            wired.threads.delete("fixer")
 
         if authority == "protocol_marker":
             # A forged marker without a committed private registry guard
@@ -1196,15 +1196,15 @@ class TestThreadOps:
         assert sequence_path.read_bytes() == before_meta
 
     def test_delete_purges_owned_state_and_preserves_sequence(self, wired):
-        wired.send("PR111", "fixer", "inbound dm")
-        wired.send("fixer", "PR111", "outbound dm")
-        wired.send("fixer", "#all", "authored channel")
-        wired.send("PR111", "#all", "retained channel")
-        wired.acknowledge("fixer", "PR111")
-        wired.acknowledge("PR111", "fixer")
-        wired.set_activity("fixer", ActivityState.WORKING, "delete me")
-        wired.set_agent_info("fixer", model="test/model")
-        wired.ledger_merge(
+        wired.messaging.send("PR111", "fixer", "inbound dm")
+        wired.messaging.send("fixer", "PR111", "outbound dm")
+        wired.messaging.send("fixer", "#all", "authored channel")
+        wired.messaging.send("PR111", "#all", "retained channel")
+        wired.messaging.acknowledge("fixer", "PR111")
+        wired.messaging.acknowledge("PR111", "fixer")
+        wired.agents.set_activity("fixer", ActivityState.WORKING, "delete me")
+        wired.agents.set_agent_info("fixer", model="test/model")
+        wired.ledger.merge(
             {
                 "fixer": {"state": "owned"},
                 "owner": "fixer",
@@ -1213,8 +1213,8 @@ class TestThreadOps:
             author="fixer",
         )
 
-        wired.stop("fixer")
-        result = wired.delete("fixer")
+        wired.owners.stop("fixer")
+        result = wired.threads.delete("fixer")
 
         assert result.messages_removed == 3
         assert result.markers_removed == 2
@@ -1222,14 +1222,14 @@ class TestThreadOps:
         assert result.runtime_removed
         assert result.ledger_references_removed == 4
         assert "fixer" not in wired.registry
-        assert [message.body for message in wired.full_history()] == ["retained channel"]
-        assert "fixer" not in wired.all_activity()
-        assert "fixer" not in wired.all_agent_info()
-        assert wired.ledger_read() == {"members": ["PR111"]}
+        assert [message.body for message in wired.views.full_history()] == ["retained channel"]
+        assert "fixer" not in wired.agents.all_activity()
+        assert "fixer" not in wired.agents.runtime_info.all()
+        assert wired.ledger.read() == {"members": ["PR111"]}
         assert all("fixer" not in key for key in wired.bus._read_markers())
 
-        wired.send("PR111", "#all", "after delete")
-        assert [message.seq for message in wired.full_history()] == [4, 5]
+        wired.messaging.send("PR111", "#all", "after delete")
+        assert [message.seq for message in wired.views.full_history()] == [4, 5]
 
     @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
     def test_stop_terminates_real_process(self, wired):
@@ -1243,7 +1243,7 @@ class TestThreadOps:
             start_new_session=True,
             env=env,
         )
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="live-process",
                 tags=frozenset(),
@@ -1252,7 +1252,7 @@ class TestThreadOps:
             )
         )
         try:
-            wired.stop("live-process")
+            wired.owners.stop("live-process")
             assert process.wait(timeout=5) == -__import__("signal").SIGTERM
             assert wired.registry.status("live-process").declared_name == "stopped"
         finally:
@@ -1267,11 +1267,11 @@ class TestFork:
 
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
-            wired.fork(ForkSpec(name="child", parent="PR111", task="t"))
+            wired.threads.fork(ForkSpec(name="child", parent="PR111", task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.fork(ForkSpec(name="child", parent="ghost", task="t"))
+            wired.threads.fork(ForkSpec(name="child", parent="ghost", task="t"))
 
     def test_fork_launches_process_and_registers(self, wired, monkeypatch, tmp_path):
         session = tmp_path / "session.json"
@@ -1284,7 +1284,7 @@ class TestFork:
             pid=100,
             session_file=str(session),
         )
-        wired.register(parent)
+        wired.threads.register(parent)
 
         launched: dict = {}
 
@@ -1298,10 +1298,10 @@ class TestFork:
                 )
                 self.pid = 4242
 
-        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", FakePopen)
         monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/opt/pi-coding-agent/bin/pi")
         try:
-            child = wired.fork(ForkSpec(name="kid", parent="PR111", task="do it"))
+            child = wired.threads.fork(ForkSpec(name="kid", parent="PR111", task="do it"))
         finally:
             if launched.get("inherited_fd", -1) >= 0:
                 os.close(launched["inherited_fd"])
@@ -1314,13 +1314,13 @@ class TestFork:
         assert launched["env"]["PI_PARENT_ID"] == "PR111"
         assert launched["env"]["PI_TASK"] == "do it"
         assert launched["cwd"] == str(tmp_path)
-        detail = wired.thread_detail("kid")
+        detail = wired.views.thread_detail("kid")
         assert detail["pid"] == 4242 and detail["parent"] == "PR111"
 
     def test_fork_uses_task_as_default_prompt(self, wired, monkeypatch, tmp_path):
         session = tmp_path / "session.json"
         session.write_text("{}")
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
             )
@@ -1336,9 +1336,9 @@ class TestFork:
                 )
                 self.pid = 1
 
-        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", FakePopen)
         try:
-            wired.fork(ForkSpec(name="kid", parent="PR111", task="the task"))
+            wired.threads.fork(ForkSpec(name="kid", parent="PR111", task="the task"))
         finally:
             if captured.get("inherited_fd", -1) >= 0:
                 os.close(captured["inherited_fd"])
@@ -1347,7 +1347,7 @@ class TestFork:
     def test_fork_rolls_back_when_launch_raises(self, wired, monkeypatch, tmp_path):
         session = tmp_path / "session.json"
         session.write_text("{}")
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
             )
@@ -1356,9 +1356,9 @@ class TestFork:
         def boom(*args, **kwargs):
             raise OSError("no such binary")
 
-        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", boom)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", boom)
         with pytest.raises(OSError):
-            wired.fork(ForkSpec(name="kid", parent="PR111", task="t"))
+            wired.threads.fork(ForkSpec(name="kid", parent="PR111", task="t"))
         assert "kid" not in wired.registry
 
 
@@ -1366,7 +1366,7 @@ class TestLedgerOps:
     def test_recent_transcript_is_bounded_and_ordered(self, wired, tmp_path):
         import json
 
-        from agent_comms.operations import _session_model
+        from agent_comms.thread_management import _session_model
 
         path = tmp_path / "large-session.jsonl"
         with path.open("w") as stream:
@@ -1391,27 +1391,27 @@ class TestLedgerOps:
                     )
                     + "\n"
                 )
-        wired.register(
+        wired.threads.register(
             Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
         )
-        events = wired.thread_transcript("large")
+        events = wired.transcripts.thread_transcript("large")
         assert events[0].kind == "notice"
         assert [event.text for event in events[1:]] == [str(index) for index in range(80, 100)]
         assert _session_model(path) == ("test", "one")
 
     def test_merge_requires_registered_author(self, wired):
         with pytest.raises(UnregisteredThreadError, match="Author"):
-            wired.ledger_merge({"k": "v"}, author="ghost")
+            wired.ledger.merge({"k": "v"}, author="ghost")
 
     def test_merge_records_author(self, wired):
-        wired.ledger_merge({"k": "v"}, author="PR111")
-        assert wired.ledger_read()["last_updated_by"] == "PR111"
+        wired.ledger.merge({"k": "v"}, author="PR111")
+        assert wired.ledger.read()["last_updated_by"] == "PR111"
 
 
 class TestPollAndWire:
     def test_poll_snapshot(self, wired):
-        wired.send("PR111", "fixer", "hello")
-        snap = wired.poll("fixer")
+        wired.messaging.send("PR111", "fixer", "hello")
+        snap = wired.views.poll("fixer")
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
         assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
@@ -1421,19 +1421,19 @@ class TestPollAndWire:
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
         monkeypatch.setenv("PI_AGENT_ID", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.poll()
+        snap = wired.views.poll()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):
         monkeypatch.setenv("PI_AGENT_ID", "me")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        thread = comms.adopt_current()
+        thread = comms.threads.adopt_current()
         assert thread.name == "me"
         assert comms.registry.status("me").declared_name == "running"
 
     def test_wire_defaults_to_agent_comms_dir(self, monkeypatch, tmp_path):
         monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
-        from agent_comms.operations import wire as wire_fn
+        from agent_comms.comms import wire as wire_fn
 
         monkeypatch.setattr("os.path.expanduser", lambda p: str(tmp_path / str(p).lstrip("~")))
         comms = wire_fn(None)
@@ -1446,7 +1446,7 @@ class TestPollAndWire:
 
     def test_runtime_files_created_on_demand(self, tmp_path):
         comms = wire(tmp_path / "fresh")
-        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert (tmp_path / "fresh" / "registry.json").exists()
 
 
@@ -1454,7 +1454,7 @@ class TestCrossWireIsolation:
     def test_two_wires_do_not_leak(self, tmp_path):
         a = wire(tmp_path / "a")
         b = wire(tmp_path / "b")
-        a.register(Thread(name="only-in-a", tags=frozenset(), worktree="/wt"))
+        a.threads.register(Thread(name="only-in-a", tags=frozenset(), worktree="/wt"))
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):
             b.registry.require("only-in-a")
@@ -1465,15 +1465,15 @@ class TestReDeclarationPreservesProvenance:
     the tags its fork declared, or it silently loses channel access."""
 
     def test_empty_tags_inherit_previous(self, wired):
-        wired.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        wired.threads.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
         assert wired.registry.require("fixer").tags == frozenset({"auth"})
 
     def test_explicit_tags_replace_previous(self, wired):
-        wired.register(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1"))
+        wired.threads.register(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1"))
         assert wired.registry.require("fixer").tags == frozenset({"docs"})
 
     def test_missing_session_file_inherits_previous(self, wired, tmp_path):
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="PR111",
                 tags=frozenset({"base"}),
@@ -1481,22 +1481,22 @@ class TestReDeclarationPreservesProvenance:
                 session_file=str(tmp_path / "s.json"),
             )
         )
-        wired.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
+        wired.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
         assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")
 
     def test_fresh_declaration_is_unaffected(self, wired):
-        wired.register(Thread(name="fresh", tags=frozenset(), worktree="/wt"))
+        wired.threads.register(Thread(name="fresh", tags=frozenset(), worktree="/wt"))
         assert wired.registry.require("fresh").tags == frozenset()
 
     def test_tagless_child_keeps_channel_after_reregister(self, wired):
-        wired.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
-        wired.send("PR111", "#auth", "only tagged fixer sees this")
-        assert wired.pending_count("fixer") == 1
+        wired.threads.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
+        assert wired.bus.pending_count("fixer") == 1
 
     def test_fork_env_carries_neutral_tag_names(self, wired, monkeypatch, tmp_path):
         session = tmp_path / "session.json"
         session.write_text("{}")
-        wired.register(
+        wired.threads.register(
             Thread(
                 name="PR111", tags=frozenset(), worktree=str(tmp_path), session_file=str(session)
             )
@@ -1511,9 +1511,9 @@ class TestReDeclarationPreservesProvenance:
                 )
                 self.pid = 1
 
-        monkeypatch.setattr("agent_comms.operations.subprocess.Popen", FakePopen)
+        monkeypatch.setattr("agent_comms.owner_lifecycle.subprocess.Popen", FakePopen)
         try:
-            wired.fork(ForkSpec(name="kid", parent="PR111", task="t", tags=frozenset({"ci"})))
+            wired.threads.fork(ForkSpec(name="kid", parent="PR111", task="t", tags=frozenset({"ci"})))
         finally:
             if captured.get("inherited_fd", -1) >= 0:
                 os.close(captured["inherited_fd"])

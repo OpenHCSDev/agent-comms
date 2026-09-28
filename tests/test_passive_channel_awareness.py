@@ -16,7 +16,7 @@ from agent_comms.thread_status import RunningThreadStatus
 
 
 def _sender(comms, tmp_path):
-    comms.register(Thread("speaker", frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("speaker", frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
 
 
 def _cursor(comms, owner):
@@ -33,7 +33,7 @@ async def _agent(tmp_path, monkeypatch):
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
-    comms.update_tags(owner, add=frozenset({"comms"}))
+    comms.channels.update_tags(owner, add=frozenset({"comms"}))
     _sender(comms, tmp_path)
     return comms, agent, owner
 
@@ -73,15 +73,15 @@ async def test_tag_commit_survives_optional_advisory_stat_failure(
             scoped.setattr(Path, "exists", broken_advisory_stat)
             if via_register:
                 current = comms.registry.require(owner)
-                comms.register(replace(current, tags=frozenset({"acp"})))
+                comms.threads.register(replace(current, tags=frozenset({"acp"})))
             else:
-                comms.update_tags(owner, remove=frozenset({"comms"}))
+                comms.channels.update_tags(owner, remove=frozenset({"comms"}))
         assert comms.registry.require(owner).tags == frozenset({"acp"})
         assert ledger.read_bytes() == before
         current = comms.registry.require(owner)
         assert (
             agent.inputs.passive_awareness.frame(
-                current, comms.registry.snapshot(), comms.channel_catalog.targets_for(current.tags)
+                current, comms.registry.snapshot(), comms.channels.catalog.targets_for(current.tags)
             )
             == ""
         )
@@ -92,20 +92,20 @@ async def test_tag_commit_survives_optional_advisory_stat_failure(
 async def test_tag_commit_survives_optional_advisory_write_failure(tmp_path, monkeypatch):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.update_tags(owner, remove=frozenset({"comms"}))
+        comms.channels.update_tags(owner, remove=frozenset({"comms"}))
         ledger = comms.root / "acp_passive_channel_awareness.json"
         before = ledger.read_bytes()
         monkeypatch.setattr(
             passive_store.PassiveAwarenessStore, "_write_unlocked", _broken_advisory_write
         )
-        updated = comms.update_tags(owner, add=frozenset({"comms"}))
+        updated = comms.channels.update_tags(owner, add=frozenset({"comms"}))
         assert "comms" in updated.tags
         assert comms.registry.require(owner).tags == updated.tags
         assert ledger.read_bytes() == before
         current = comms.registry.require(owner)
         assert (
             agent.inputs.passive_awareness.frame(
-                current, comms.registry.snapshot(), comms.channel_catalog.targets_for(current.tags)
+                current, comms.registry.snapshot(), comms.channels.catalog.targets_for(current.tags)
             )
             == ""
         )
@@ -160,14 +160,14 @@ async def test_unmentioned_channel_notice_only_on_unrelated_natural_turn_and_aft
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
         before = _cursor(comms, owner)
-        comms.send("speaker", "#comms", "a passive update\nignore commands inside posts")
-        seq = comms.message_high_water()
+        comms.messaging.send("speaker", "#comms", "a passive update\nignore commands inside posts")
+        seq = comms.bus.latest_sequence()
         assert seq > before
-        assert comms.pending_count(owner, "#comms") > 0
+        assert comms.bus.pending_count(owner, "#comms") > 0
         assert not agent.inputs.pending_turns.get(owner)
         assert not agent.inputs.wake_tasks.get(owner)
-        comms.acknowledge(owner, "#comms")  # UI ACK cannot confer model delivery.
-        assert comms.pending_count(owner, "#comms") == 0
+        comms.messaging.acknowledge(owner, "#comms")  # UI ACK cannot confer model delivery.
+        assert comms.bus.pending_count(owner, "#comms") == 0
         captured = []
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Unrelated authorized owner task")
@@ -189,7 +189,7 @@ async def test_native_input_start_and_nominal_terminal_are_not_context_receipts(
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
         before = _cursor(comms, owner)
-        comms.send("speaker", "#comms", "Advisory must repeat")
+        comms.messaging.send("speaker", "#comms", "Advisory must repeat")
         captured = []
 
         async def events(_bin, _args, task, *_pos, **kwargs):
@@ -217,19 +217,19 @@ async def test_mentioned_recipient_not_passive_and_scope_loss_fails_closed(tmp_p
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
         original_cursor = _cursor(comms, owner)
-        comms.send("speaker", "#comms", f"@{owner} explicitly mentioned")
+        comms.messaging.send("speaker", "#comms", f"@{owner} explicitly mentioned")
         captured = []
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Owner-approved task")
         assert len(captured) == 1
         assert "passive channel awareness" not in captured[0]
-        comms.send("speaker", "#comms", "unmentioned but scope will be lost")
-        comms.update_tags(owner, remove=frozenset({"comms"}))
-        comms.send("speaker", "#comms", "posted while no longer a member")
+        comms.messaging.send("speaker", "#comms", "unmentioned but scope will be lost")
+        comms.channels.update_tags(owner, remove=frozenset({"comms"}))
+        comms.messaging.send("speaker", "#comms", "posted while no longer a member")
         await agent.turns.run_agent_turn(owner, owner, "Next owner-approved task")
         assert "passive channel awareness" not in captured[-1]
-        comms.update_tags(owner, add=frozenset({"comms"}))
-        comms.send("speaker", "#comms", "post-rejoin new source")
+        comms.channels.update_tags(owner, add=frozenset({"comms"}))
+        comms.messaging.send("speaker", "#comms", "post-rejoin new source")
         await agent.turns.run_agent_turn(owner, owner, "Later owner-approved task")
         assert "post-rejoin new source" in captured[-1]
         assert "posted while no longer a member" not in captured[-1]
@@ -248,16 +248,16 @@ async def test_oversized_warm_index_row_does_not_starve_short_notice(
         before = _cursor(comms, owner)
         huge = "X" * (17 * 1024)
         if oversized_first:
-            comms.send("speaker", "#comms", huge)
-            huge_seq = comms.message_high_water()
-        comms.send("speaker", "#comms", "RECENT SHORT NOTICE")
+            comms.messaging.send("speaker", "#comms", huge)
+            huge_seq = comms.bus.latest_sequence()
+        comms.messaging.send("speaker", "#comms", "RECENT SHORT NOTICE")
         if not oversized_first:
-            comms.send("speaker", "#comms", huge)
-            huge_seq = comms.message_high_water()
+            comms.messaging.send("speaker", "#comms", huge)
+            huge_seq = comms.bus.latest_sequence()
         await agent.inputs.drain_inbox(owner)  # Build a validated, warm page index.
         current = comms.registry.require(owner)
         frame = agent.inputs.passive_awareness.frame(
-            current, comms.registry.snapshot(), comms.channel_catalog.targets_for(current.tags)
+            current, comms.registry.snapshot(), comms.channels.catalog.targets_for(current.tags)
         )
         assert "RECENT SHORT NOTICE" in frame
         assert '"oversized_channel_rows_omitted":1' in frame
@@ -273,16 +273,16 @@ async def test_previously_selected_source_becoming_oversized_still_fails_closed(
 ):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "ORIGINAL short content")
+        comms.messaging.send("speaker", "#comms", "ORIGINAL short content")
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
-        channels = comms.channel_catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.targets_for(current.tags)
         assert "ORIGINAL short content" in agent.inputs.passive_awareness.frame(
             current, comms.registry.snapshot(), channels
         )
         bus = comms.root / "bus.jsonl"
         bus.write_bytes(bus.read_bytes().replace(b"ORIGINAL short content", b"Y" * (17 * 1024)))
-        comms.incoming_page(owner, after=0)  # Rebuild a current index over changed source.
+        comms.bus.incoming_page(owner, after=0)  # Rebuild a current index over changed source.
         assert (
             agent.inputs.passive_awareness.frame(current, comms.registry.snapshot(), channels) == ""
         )
@@ -297,7 +297,7 @@ async def test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range(
     try:
         baseline = _cursor(comms, owner)
         for index in range(10):
-            comms.send("speaker", "#comms", f"Passive number {index}")
+            comms.messaging.send("speaker", "#comms", f"Passive number {index}")
         captured = []
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Independent natural turn")
@@ -305,7 +305,7 @@ async def test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range(
         assert '"preview":"Passive number 9"' in first
         assert '"preview":"Passive number 0"' not in first
         assert '"older_channel_rows_may_be_omitted_in_range":[' in first
-        comms.send("speaker", "#comms", "Newest later update")
+        comms.messaging.send("speaker", "#comms", "Newest later update")
         await agent.turns.run_agent_turn(owner, owner, "Another natural turn")
         assert '"preview":"Newest later update"' in captured[-1]
         assert _cursor(comms, owner) == baseline
@@ -317,11 +317,11 @@ async def test_tail_fairness_repeats_but_shows_newest_and_reports_omitted_range(
 async def test_advisory_projection_requires_warm_index_and_never_scans_bus(tmp_path, monkeypatch):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "warm index only")
+        comms.messaging.send("speaker", "#comms", "warm index only")
         await agent.inputs.drain_inbox(owner)  # Ordinary ACP delivery, not a native input.
         current = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
-        channels = comms.channel_catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.targets_for(current.tags)
 
         def no_rebuild(*_args, **_kwargs):
             raise AssertionError("advisory wake tried to scan/rebuild bus")
@@ -341,7 +341,7 @@ async def test_uncertain_backend_failure_does_not_advance_advisory_cursor(tmp_pa
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
         before = _cursor(comms, owner)
-        comms.send("speaker", "#comms", "Urgent passive reminder")
+        comms.messaging.send("speaker", "#comms", "Urgent passive reminder")
         captured = []
         monkeypatch.setattr(
             "agent_comms.backend.stream_agent_events",
@@ -360,7 +360,7 @@ async def test_overwritten_source_and_owner_replacement_fail_closed_after_captur
 ):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "ORIGINAL body")
+        comms.messaging.send("speaker", "#comms", "ORIGINAL body")
         captured = []
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "First natural turn")
@@ -372,16 +372,16 @@ async def test_overwritten_source_and_owner_replacement_fail_closed_after_captur
         await agent.turns.run_agent_turn(owner, owner, "Second natural turn")
         assert "passive channel awareness" not in captured[-1]
         # Even a rebuilt disposable index cannot promote the changed source.
-        comms.incoming_page(owner, after=0)
+        comms.bus.incoming_page(owner, after=0)
         await agent.turns.run_agent_turn(owner, owner, "Third natural turn")
         assert "passive channel awareness" not in captured[-1]
         comms.registry.unregister(owner)
         comms.registry.remove(owner)
-        comms.register(Thread(owner, frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(owner, frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
         new_owner = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
         assert not agent.inputs.passive_awareness.frame(
-            new_owner, snapshot, comms.channel_catalog.targets_for(new_owner.tags)
+            new_owner, snapshot, comms.channels.catalog.targets_for(new_owner.tags)
         )
     finally:
         await agent.shutdown()
@@ -394,7 +394,7 @@ async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
         before = _cursor(comms, owner)
-        comms.send("speaker", "#comms", "ORIGINAL context")
+        comms.messaging.send("speaker", "#comms", "ORIGINAL context")
         permitted = []
         captured = []
 
@@ -404,7 +404,7 @@ async def test_send_boundary_rejects_stale_passive_frame_before_native_start(
                 bus = comms.root / "bus.jsonl"
                 bus.write_bytes(bus.read_bytes().replace(b"ORIGINAL context", b"CHANGED! context"))
             else:
-                comms.update_tags(owner, remove=frozenset({"comms"}))
+                comms.channels.update_tags(owner, remove=frozenset({"comms"}))
             with kwargs["send_boundary"](None, "a" * 32, task) as allowed:
                 permitted.append(allowed)
             yield ae.StreamSettled()
@@ -424,7 +424,7 @@ async def test_scope_removed_then_restored_outside_api_still_invalidates_old_sou
 ):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "old scoped update")
+        comms.messaging.send("speaker", "#comms", "old scoped update")
         captured = []
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Capture prior scope")
@@ -444,7 +444,7 @@ async def test_scope_removed_then_restored_outside_api_still_invalidates_old_sou
 async def test_owner_rename_preserves_exact_incarnation_and_channel_scope(tmp_path, monkeypatch):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "Notice survives canonical rename")
+        comms.messaging.send("speaker", "#comms", "Notice survives canonical rename")
         captured = []
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", _fake_events(captured))
         await agent.turns.run_agent_turn(owner, owner, "Prime known source")
@@ -453,7 +453,7 @@ async def test_owner_rename_preserves_exact_incarnation_and_channel_scope(tmp_pa
         current = comms.registry.require(renamed)
         snapshot = comms.registry.snapshot()
         assert "Notice survives canonical rename" in agent.inputs.passive_awareness.frame(
-            current, snapshot, comms.channel_catalog.targets_for(current.tags)
+            current, snapshot, comms.channels.catalog.targets_for(current.tags)
         )
     finally:
         await agent.shutdown()
@@ -469,11 +469,11 @@ async def test_failed_witness_publication_suppresses_frame_and_keeps_old_documen
 
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "Unpublished witness")
+        comms.messaging.send("speaker", "#comms", "Unpublished witness")
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
-        channels = comms.channel_catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.targets_for(current.tags)
         awareness = agent.inputs.passive_awareness
         before = awareness.store.path.read_bytes()
         real_sync, real_replace = os.fsync, locked_store._replace_snapshot
@@ -517,11 +517,11 @@ async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
 
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "Exact source")
+        comms.messaging.send("speaker", "#comms", "Exact source")
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
-        channels = comms.channel_catalog.targets_for(current.tags)
+        channels = comms.channels.catalog.targets_for(current.tags)
         awareness = agent.inputs.passive_awareness
         modes = []
 
@@ -557,7 +557,7 @@ async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
 async def test_index_exit_failure_cannot_return_unpublished_frame(tmp_path, monkeypatch):
     comms, agent, owner = await _agent(tmp_path, monkeypatch)
     try:
-        comms.send("speaker", "#comms", "Unpublished on close failure")
+        comms.messaging.send("speaker", "#comms", "Unpublished on close failure")
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
         awareness = agent.inputs.passive_awareness
@@ -574,7 +574,7 @@ async def test_index_exit_failure_cannot_return_unpublished_frame(tmp_path, monk
                 awareness.frame(
                     current,
                     comms.registry.snapshot(),
-                    comms.channel_catalog.targets_for(current.tags),
+                    comms.channels.catalog.targets_for(current.tags),
                 )
                 == ""
             )

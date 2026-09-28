@@ -28,12 +28,12 @@ async def _owner(tmp_path, monkeypatch, *, standby=False):
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     session = (await agent.new_session(str(tmp_path / "owner"))).session_id
     for name in ("outsider", "dependency"):
-        comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
-    goal = comms.update_goal(session, SetGoalAction(text="Wait for the dependency"))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+    goal = comms.goals.update_goal(session, SetGoalAction(text="Wait for the dependency"))
     assert goal is not None
     if standby:
-        comms.begin_turn("dependency", "dependency-turn")
-        comms.update_goal(
+        comms.agents.begin_turn("dependency", "dependency-turn")
+        comms.goals.update_goal(
             session,
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)),
         )
@@ -45,9 +45,9 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
     tmp_path, monkeypatch, standby
 ):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=standby)
-    original_wait = comms.goal_wait(session)
+    original_wait = comms.goals.goal_wait(session)
     original_goal = comms.registry.require(session).goal
-    message = comms.send_message("outsider", session, "A separate question")
+    message = comms.messaging.send_message("outsider", session, "A separate question")
     seen = []
 
     async def fake_events(*args, **kwargs):
@@ -97,13 +97,13 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
         assert len(seen) == 1
         assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
-        assert comms.goal_wait(session) == original_wait
+        assert comms.goals.goal_wait(session) == original_wait
         assert comms.registry.require(session).goal == original_goal
         assert not (comms.root / "goal-private").exists()
         assert not agent.inputs.pending_turns.get(session)  # no terminal auto-spin
         # Agent senders have no automatic reply_target; a response is an
         # explicit comms_send, not a fabricated delivery from terminal text.
-        assert comms.inbox("outsider") == []
+        assert comms.bus.inbox("outsider") == []
         # Re-seeing the same bus row cannot admit another turn or retry a
         # STARTED/UNKNOWN native attempt, regardless of a presentation cursor.
         agent.inputs.inbox_cursors[session] = message.seq - 1
@@ -116,9 +116,9 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
 
 async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_path, monkeypatch):
     comms, agent, session, _goal = await _owner(tmp_path, monkeypatch, standby=True)
-    original_wait = comms.goal_wait(session)
+    original_wait = comms.goals.goal_wait(session)
     original_goal = comms.registry.require(session).goal
-    message = comms.send_message("outsider", session, "What happened?")
+    message = comms.messaging.send_message("outsider", session, "What happened?")
 
     async def failed_events(*args, **kwargs):
         task = args[2]
@@ -138,7 +138,7 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
         await agent.inputs.drain_owned_inbox(session)
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=3)
         assert comms.registry.require(session).goal == original_goal
-        assert comms.goal_wait(session) == original_wait
+        assert comms.goals.goal_wait(session) == original_wait
         assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
         assert not (comms.root / "goal-private").exists()
         assert not agent.inputs.pending_turns.get(session)
@@ -149,17 +149,17 @@ async def test_failed_direct_turn_leaves_goal_and_standby_wait_untouched(tmp_pat
 async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path, monkeypatch):
     """A standby refresh must not strand a NEW unattempted DM (seq7248 defect)."""
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
-    old_wait = comms.goal_wait(session)
-    message = comms.send_message("outsider", session, "Fresh direct")
+    old_wait = comms.goals.goal_wait(session)
+    message = comms.messaging.send_message("outsider", session, "Fresh direct")
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent.inputs.drain_owned_inbox(session)
         assert agent.inputs.pending_turns[session][0].direct_interrupt_wait_id == old_wait.wait_id
-        comms.update_goal(
+        comms.goals.update_goal(
             session,
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)),
         )
-        new_wait = comms.goal_wait(session)
+        new_wait = comms.goals.goal_wait(session)
         assert new_wait.wait_id != old_wait.wait_id
         outcome = []
 
@@ -198,7 +198,7 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
         # wait is preserved untouched, never consumed by this turn.
         assert outcome == [True]
         assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
-        assert comms.goal_wait(session) == new_wait
+        assert comms.goals.goal_wait(session) == new_wait
         assert comms.registry.require(session).goal.id == goal.id
         assert comms.registry.require(session).goal.state.active
     finally:
@@ -211,7 +211,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
-        old = comms.send_message("outsider", session, "Already uncertain")
+        old = comms.messaging.send_message("outsider", session, "Already uncertain")
         owner = comms.registry.require(session)
         admission = comms.registry.snapshot().admission_generations[session]
         old_key = agent.inputs.dispositions.bus_key(old, owner)
@@ -245,13 +245,13 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
         )
         assert called == []
         assert agent.inputs.dispositions.status(old_key) == "unknown"
-        dependent = comms.send_message("dependency", session, "Declared answer")
+        dependent = comms.messaging.send_message("dependency", session, "Declared answer")
         assert await agent.inputs.drain_owned_inbox(session) == 1
         pending = agent.inputs.pending_turns[session]
         assert len(pending) == 1
         assert pending[0].origin.seq == dependent.seq
         assert pending[0].goal_id == goal.id
-        assert pending[0].goal_wait_id == comms.goal_wait(session).wait_id
+        assert pending[0].goal_wait_id == comms.goals.goal_wait(session).wait_id
         assert pending[0].direct_interrupt_goal_id is None
         assert agent.inputs.dispositions.status(old_key) == "unknown"
     finally:
@@ -260,7 +260,7 @@ async def test_historical_unknown_is_not_replayed_and_dependency_path_is_distinc
 
 async def test_new_owner_admission_refuses_old_direct_input_at_send_boundary(tmp_path, monkeypatch):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
-    message = comms.send_message("outsider", session, "Do not cross owner change")
+    message = comms.messaging.send_message("outsider", session, "Do not cross owner change")
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent.inputs.drain_owned_inbox(session)
@@ -299,7 +299,7 @@ async def test_active_backend_does_not_steer_nondependency_dm_into_goal_attempt(
     tmp_path, monkeypatch
 ):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
-    message = comms.send_message("outsider", session, "Wait for an ordinary turn")
+    message = comms.messaging.send_message("outsider", session, "Wait for an ordinary turn")
     agent.inputs.backend_inboxes[session] = asyncio.Queue()
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
@@ -316,14 +316,14 @@ async def test_active_backend_does_not_steer_nondependency_dm_into_goal_attempt(
 
 async def test_channel_post_does_not_gain_direct_interrupt_authority(tmp_path, monkeypatch):
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
-    comms.register(Thread("member", frozenset({"ci"}), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("member", frozenset({"ci"}), str(tmp_path), pid=os.getpid()))
     # Matching channel membership is only a passive view. A post alone does
     # not become a direct owner wake just because a goal is active.
     comms.registry.register(
         replace(comms.registry.require(session), tags=frozenset({"ci"})),
         comms.registry.status(session),
     )
-    channel = comms.send_message("member", "#ci", "Unmentioned channel update")
+    channel = comms.messaging.send_message("member", "#ci", "Unmentioned channel update")
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent.inputs.drain_owned_inbox(session)
@@ -338,7 +338,7 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
     """Queued unattempted DMs survive benign bumps; expectations rebind at dispatch."""
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
     original_goal = comms.registry.require(session).goal
-    message = comms.send_message("outsider", session, "Question during progress")
+    message = comms.messaging.send_message("outsider", session, "Question during progress")
     original_schedule = agent.inputs.schedule_wake
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
@@ -346,7 +346,7 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
         queued = agent.inputs.pending_turns[session][0]
         assert queued.direct_interrupt_goal_revision == original_goal.revision
         # Benign same-goal progress bump before dispatch must NOT strand it.
-        comms.update_goal(
+        comms.goals.update_goal(
             session,
             ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="normal progress"),
         )
@@ -383,8 +383,8 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
 async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch, mutate):
     """A revision bump or wait replacement AFTER dispatch denies at the boundary."""
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=True)
-    original_wait = comms.goal_wait(session)
-    message = comms.send_message("outsider", session, "Question during standby")
+    original_wait = comms.goals.goal_wait(session)
+    message = comms.messaging.send_message("outsider", session, "Question during standby")
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent.inputs.drain_owned_inbox(session)
@@ -396,14 +396,14 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
             task = args[2]
             # The change happens after dispatch, immediately before the send.
             if mutate == "revision":
-                comms.update_goal(
+                comms.goals.update_goal(
                     session,
                     ActiveGoalAction(
                         expect=GoalPrecondition(goal_id=goal.id), progress="post-dispatch bump"
                     ),
                 )
             else:
-                comms.update_goal(
+                comms.goals.update_goal(
                     session,
                     StandbyGoalAction(
                         expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)
@@ -440,20 +440,20 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
 ):
     """No active goal: queued ordinary interrupts are discarded, never dispatched."""
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch)
-    message = comms.send_message("outsider", session, "Question before the change")
+    message = comms.messaging.send_message("outsider", session, "Question before the change")
     original_schedule = agent.inputs.schedule_wake
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     try:
         await agent.inputs.drain_owned_inbox(session)
         assert agent.inputs.pending_turns[session][0].direct_interrupt_goal_id == goal.id
         if terminal == "clear":
-            comms.update_goal(
+            comms.goals.update_goal(
                 session,
                 ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,
             )
         else:
-            comms.update_goal(
+            comms.goals.update_goal(
                 session,
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,

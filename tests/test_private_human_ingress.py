@@ -13,6 +13,7 @@ import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import Applied, MutationStore
 from agent_comms.declarations import (
@@ -24,7 +25,6 @@ from agent_comms.declarations import (
     Thread,
     ThreadRole,
 )
-from agent_comms.operations import Comms, wire
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -43,14 +43,14 @@ def _root(tmp_path: Path) -> tuple[Comms, MutationStore, str, dict[str, str]]:
     install_private_cohort_schema(store)
     for name in lookups:
         store.register_participant(lookups[name], name, name, committed=True)
-    return comms, store, comms.initialize_private_initial_protocol(), lookups
+    return comms, store, comms.messaging.initialize_private_initial_protocol(), lookups
 
 
 def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    channel = comms.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
+    channel = comms.messaging.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
     assert channel.sender_role is ThreadRole.USER
-    assert [row.body for row in comms.channel_history("#team")] == ["hello @alice"]
+    assert [row.body for row in comms.views.channel_history("#team")] == ["hello @alice"]
     initial = comms.bus.read_initial_cohort(root_id, channel.seq)
     assert initial.message == channel
     assert {member.recipient_lookup for member in initial.audience.recipients} == set(
@@ -60,9 +60,9 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert isinstance(receipt, Applied)
     assert receipt.value.member_count == 2
     assert receipt.value.claim_count == 1  # Bob is a frozen unmentioned observer.
-    dm = comms.send_user_message("bob", "direct", worktree=str(tmp_path))
+    dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
-    assert comms.dm_history(channel.sender, "bob")[-1] == dm
+    assert comms.views.dm_history(channel.sender, "bob")[-1] == dm
     dm_initial = comms.bus.read_initial_cohort(root_id, dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)
@@ -86,7 +86,7 @@ def test_legacy_user_append_stays_public_without_private_marker(
     monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", no_private_schedule)
     comms = Comms(tmp_path / "legacy")
     comms.registry.register(Thread("alice", frozenset(), str(tmp_path)))
-    sent = comms.send_user_message("alice", "legacy", worktree=str(tmp_path))
+    sent = comms.messaging.send_user_message("alice", "legacy", worktree=str(tmp_path))
     assert sent.sender_role is ThreadRole.USER
     assert comms.bus.full_history() == [sent]
     assert "_agent_comms_private_v1" not in (comms.root / "bus.jsonl").read_text()
@@ -101,13 +101,13 @@ def test_explicit_root_override_preserves_private_user_receipt(
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     selected = wire()
     assert selected.root == comms.root
-    sent = selected.send_user_message("alice", "explicit", worktree=str(tmp_path))
+    sent = selected.messaging.send_user_message("alice", "explicit", worktree=str(tmp_path))
     assert selected.bus.read_initial_cohort(root_id, sent.seq).message == sent
 
 
 def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
-    user = comms.user_identity(str(tmp_path))
+    user = comms.messaging.user_identity(str(tmp_path))
     message = Message(user.name, "alice", "untrusted", MessageType.INFO)
     with pytest.raises(RelationViolationError, match="executable"):
         comms.bus.publish_initial_cohort(message)
@@ -119,13 +119,13 @@ def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_pa
             _human_origin=HumanOrigin(user.name, user.created_at + 1, user.worktree),
         )
     with pytest.raises(RelationViolationError, match="Human messages"):
-        comms.send_message(user.name, "alice", "agent impersonation")
+        comms.messaging.send_message(user.name, "alice", "agent impersonation")
     assert comms.bus.latest_sequence() == 0
 
 
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
-    user = comms.user_identity(str(tmp_path))
+    user = comms.messaging.user_identity(str(tmp_path))
     message = Message(user.name, "alice", "one input", MessageType.INFO, timestamp=123456.0)
     origin = HumanOrigin(user.name, user.created_at, user.worktree)
     first = comms.bus.publish_ordinary(message, _human_origin=origin)
@@ -149,7 +149,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
 
     monkeypatch.setattr(comms.bus, "_append_private_unlocked", fail_after_append)
     with pytest.raises(HumanInitialUnknownError, match="do not retry") as raised:
-        comms.send_user_message("alice", "uncertain", worktree=str(tmp_path))
+        comms.messaging.send_user_message("alice", "uncertain", worktree=str(tmp_path))
     assert calls == 1
     error = raised.value
     assert error.wire_root_id == root_id
@@ -193,7 +193,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     monkeypatch.setattr(os, "open", fail_bus_open)
     monkeypatch.setattr(comms.bus, "_append_private_unlocked", capture_then_append)
     with pytest.raises(HumanInitialUnknownError, match="UNKNOWN") as raised:
-        comms.send_user_message("alice", "first input", worktree=str(tmp_path))
+        comms.messaging.send_user_message("alice", "first input", worktree=str(tmp_path))
     assert raised.value.wire_root_id == root_id
     assert captured["id"] == raised.value.message_id
     assert comms.bus.full_history() == []
@@ -209,12 +209,12 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
         )
     assert second.bus.full_history() == []
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
-        second.send_user_message("alice", "different new human input", worktree=str(tmp_path))
+        second.messaging.send_user_message("alice", "different new human input", worktree=str(tmp_path))
     assert second.bus.full_history() == []
-    later_agent = second.send_initial_cohort("alice", "bob", "unrelated agent input")
+    later_agent = second.messaging.send_initial_cohort("alice", "bob", "unrelated agent input")
     assert later_agent.seq == 2
     with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
-        second.send_user_message("alice", "new human input", worktree=str(tmp_path))
+        second.messaging.send_user_message("alice", "new human input", worktree=str(tmp_path))
     assert len(second.bus.full_history()) == 1
 
 
@@ -230,7 +230,7 @@ def test_cancellation_after_append_entry_is_typed_unknown(
 
     monkeypatch.setattr(comms.bus, "_append_private_unlocked", cancel_after_append)
     with pytest.raises(HumanInitialUnknownError, match="outcome UNKNOWN") as raised:
-        comms.send_user_message("alice", "cancelled after append", worktree=str(tmp_path))
+        comms.messaging.send_user_message("alice", "cancelled after append", worktree=str(tmp_path))
     assert comms.bus.read_initial_cohort(root_id, raised.value.wire_seq).message.message_id == (
         raised.value.message_id
     )
@@ -240,9 +240,9 @@ def test_cancellation_after_append_entry_is_typed_unknown(
 def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
     with pytest.raises(RelationViolationError, match="not routable"):
-        comms.send_user_message("#any", "wrong route", worktree=str(tmp_path))
+        comms.messaging.send_user_message("#any", "wrong route", worktree=str(tmp_path))
     with pytest.raises(RelationViolationError, match="Initial direct target"):
-        comms.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
+        comms.messaging.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
     assert comms.bus.latest_sequence() == 0
 
 
@@ -251,7 +251,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
     roots = [Comms(comms.root), Comms(comms.root)]
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [
-            pool.submit(wire.send_user_message, "#team", f"input-{n}", worktree=str(tmp_path))
+            pool.submit(wire.messaging.send_user_message, "#team", f"input-{n}", worktree=str(tmp_path))
             for n, wire in enumerate(roots)
         ]
         messages = [future.result(timeout=5) for future in futures]
@@ -265,9 +265,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
 def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) -> None:
     comms, _, root_id, _ = _root(tmp_path)
     program = (
-        "import sys; from agent_comms.operations import Comms; "
-        "m=Comms(sys.argv[1]).send_user_message('#team',sys.argv[2],worktree=sys.argv[3]); "
-        "print(m.seq, m.message_id)"
+        "import sys\nfrom agent_comms.comms import Comms\nm = Comms(sys.argv[1]).messaging.send_user_message('#team', sys.argv[2], worktree=sys.argv[3])\nprint(m.seq, m.message_id)"
     )
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     processes = [
@@ -309,7 +307,7 @@ async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
 
     monkeypatch.setattr(comms.bus, "_append_private_unlocked", blocked_append)
     pending = asyncio.create_task(
-        asyncio.to_thread(comms.send_user_message, "alice", "cancelled", worktree=str(tmp_path))
+        asyncio.to_thread(comms.messaging.send_user_message, "alice", "cancelled", worktree=str(tmp_path))
     )
     assert await asyncio.to_thread(entered.wait, 5)
     pending.cancel()

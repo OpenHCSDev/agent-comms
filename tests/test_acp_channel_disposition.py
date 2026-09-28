@@ -22,8 +22,8 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.update_tags("worker", add=frozenset({"team"}))
-    message = comms.send_user_message("#team", "Durable request", worktree=str(tmp_path))
+    comms.channels.update_tags("worker", add=frozenset({"team"}))
+    message = comms.messaging.send_user_message("#team", "Durable request", worktree=str(tmp_path))
     observed = []
     advance = agent.inputs.delivery_cursors.advance
 
@@ -46,9 +46,9 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         assert observed
         assert len(agent.inputs.pending_turns["worker"]) == 1
         if revocation == "goal":
-            comms.update_goal("worker", SetGoalAction(text="New goal"))
+            comms.goals.update_goal("worker", SetGoalAction(text="New goal"))
         elif revocation == "stop":
-            comms.stop("worker")
+            comms.owners.stop("worker")
         else:
             await agent.shutdown()
             agent = CommsAgent(wire(comms.root), agent_bin="pi", runtime_enabled=True)
@@ -70,7 +70,7 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         cursor_before = agent.inputs.delivery_cursors.path.read_bytes()
         await agent.inputs.replay_unknown_inputs("worker", Client())
         unknown = [row["_meta"]["agentComms"]["inputDisposition"] for row in updates]
-        overview = agent._comms.input_delivery(
+        overview = agent._comms.goals.input_delivery(
             "worker", include_history=True, awaiting_keys=agent.inputs.awaiting_input_keys("worker")
         )
         assert overview["inputs"] == unknown
@@ -107,7 +107,7 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     for name in ("alpha", "beta"):
         await agent.new_session(str(tmp_path / name))
-        comms.update_tags(name, add=frozenset({"team"}))
+        comms.channels.update_tags(name, add=frozenset({"team"}))
     calls = []
 
     async def events(*args, **kwargs):
@@ -124,7 +124,7 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         messages = [
-            comms.send_user_message("#team", text, worktree=str(tmp_path))
+            comms.messaging.send_user_message("#team", text, worktree=str(tmp_path))
             for text in ("Request one", "Request two")
         ]
         for name in ("alpha", "beta"):
@@ -158,23 +158,24 @@ from agent_comms.acp import CommsAgent
 
 async def run():
     comms = wire(Path(sys.argv[1]))
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    agent = CommsAgent(comms, agent_bin='pi', runtime_enabled=True)
     agent.inputs.ensure_live_drain = lambda session: None
     agent.inputs.schedule_wake = lambda session: None
     await agent.new_session(sys.argv[2])
-    comms.update_tags("worker", add=frozenset({"team"}))
-    message = comms.send_user_message("#team", "CRASH_REQUEST", worktree=sys.argv[2])
+    comms.channels.update_tags('worker', add=frozenset({'team'}))
+    message = comms.messaging.send_user_message('#team', 'CRASH_REQUEST', worktree=sys.argv[2])
     advance = agent.inputs.delivery_cursors.advance
+
     def before_cursor(aliases, through):
-        if through == message.seq and sys.argv[3] == "before_cursor":
-            pending = agent.inputs.dispositions.unknown(frozenset({"worker"}))[0]
-            assert pending["sequence"] == message.seq
+        if through == message.seq and sys.argv[3] == 'before_cursor':
+            pending = agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]
+            assert pending['sequence'] == message.seq
             os._exit(0)
         advance(aliases, through)
     agent.inputs.delivery_cursors.advance = before_cursor
-    await agent.inputs.drain_inbox("worker")
-    assert agent.inputs.pending_turns["worker"]
-    assert agent.inputs.dispositions.unknown(frozenset({"worker"}))[0]["sequence"] == message.seq
+    await agent.inputs.drain_inbox('worker')
+    assert agent.inputs.pending_turns['worker']
+    assert agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]['sequence'] == message.seq
     os._exit(0)
 asyncio.run(run())
 """
@@ -226,9 +227,9 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.update_tags("worker", add=frozenset({"team"}))
+    comms.channels.update_tags("worker", add=frozenset({"team"}))
     messages = tuple(
-        comms.send_user_message("#team", body, worktree=str(tmp_path))
+        comms.messaging.send_user_message("#team", body, worktree=str(tmp_path))
         for body in ("FIRST", "SECOND")
     )
     await agent.inputs.drain_inbox("worker")
