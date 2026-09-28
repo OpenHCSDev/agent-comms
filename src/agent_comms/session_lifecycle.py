@@ -74,9 +74,7 @@ class SessionLifecycle:
             )
         )
         methods: list[Any] = []
-        if (capabilities.get("auth") or {}).get("terminal") and backend.rpc_args_for(
-            self.agent_bin, []
-        ) is not None:
+        if (capabilities.get("auth") or {}).get("terminal"):
             methods = [
                 TerminalAuthMethod(
                     type="terminal",
@@ -96,9 +94,7 @@ class SessionLifecycle:
             protocol_version=protocol_version,
             agent_capabilities=AgentCapabilities(
                 load_session=True,
-                prompt_capabilities=PromptCapabilities(
-                    image=backend.rpc_args_for(self.agent_bin, self.agent_args) is not None
-                ),
+                prompt_capabilities=PromptCapabilities(image=True),
             ),
             agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
             auth_methods=methods,
@@ -135,7 +131,7 @@ class SessionLifecycle:
             start_at_latest=True,
             model=backend.configured_model(self.agent_args),
             thinking_level=backend.configured_thinking_level(self.agent_args),
-            auto_title_pending=backend.rpc_args_for(self.agent_bin, self.agent_args) is not None,
+            auto_title_pending=True,
         )
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
@@ -260,7 +256,6 @@ class SessionLifecycle:
             if info is not None and info.context_used is not None and info.context_size
             else None
         )
-        native = backend.rpc_args_for(self.agent_bin, self.agent_args) is not None
         return {
             "agentComms": {
                 "thread": thread_name,
@@ -276,10 +271,10 @@ class SessionLifecycle:
                 "model": thread.model,
                 "thinkingLevel": thread.thinking_level,
                 "worktree": thread.worktree,
-                "autoTitle": native,
+                "autoTitle": True,
                 "title": thread.title or thread.name,
-                "promptQueue": native,
-                "imagePrompts": native,
+                "promptQueue": True,
+                "imagePrompts": True,
             }
         }
 

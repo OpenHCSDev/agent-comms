@@ -110,7 +110,7 @@ class InputForwarding:
         self.pending.append((public_id, text, forwarded.original, native_id))
         boundary = _maintenance_send_boundary(
             Path(
-                (session.env_extra or {}).get("AGENT_COMMS_ROOT")
+                session.launch.env.get("AGENT_COMMS_ROOT")
                 or os.environ.get("AGENT_COMMS_ROOT")
                 or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
             ),

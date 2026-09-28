@@ -7,14 +7,12 @@ The pinned manager's loadEntriesFromFile enforces its actual strict v3 parse.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
-import shutil
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .native_package import MANIFEST, verify_native_package
+from .native_package import verify_native_package
 from .pi_helper import PiHelper, SessionHelperRequest
 
 
@@ -40,43 +38,12 @@ class ReopenSessionHelper(PiHelper):
     result = NativeSessionIdentity
 
 
-def package_for_launcher(launcher: str) -> Path:
-    """Bind a canonical launcher to the wheel/source-owned complete-tree pin."""
-    executable = Path(shutil.which(launcher) or launcher).resolve(strict=True)
-    if executable.name == "pi-comms-native":
-        from .coordination_store import PublicationActivationBlocked
-        from .native_pi import NativePiUnavailable
-        from .private_nk_entrypoint import private_nk_from_environment
-
-        try:
-            launch = private_nk_from_environment()
-        except (NativePiUnavailable, PublicationActivationBlocked) as error:
-            raise NativeReopenError("Native owner route is unavailable") from error
-        if launch is None:
-            raise NativeReopenError("Native owner backend requires a configured private route")
-        # Use the launcher's route owner, then apply the same complete-tree
-        # commitment as the stack launcher. A path or seven-file probe alone
-        # cannot select different preparation/commit helpers after compaction.
-        verify_native_package(launch.native_package)
-        return launch.native_package
-    if executable.name != "pi-native" or executable.parent.name != "bin":
-        raise NativeReopenError("Canonical native launcher required for saved-session reopen")
-    stack = executable.parent.parent
-    manifest = stack / "pi-native.sha256"
-    if manifest.read_bytes() != MANIFEST.read_bytes():
-        raise NativeReopenError("Launcher and Python native commitments differ")
-    build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-    package = stack / f".pi-native-{build}" / "node_modules/@earendil-works/pi-coding-agent"
-    verify_native_package(package)
-    return package
-
-
 def validate_native_reopen(
-    launcher: str, session_file: str, *, expected_session_id: str | None = None
+    package: Path, session_file: str, *, expected_session_id: str | None = None
 ) -> str:
     """Return the strict saved session ID; never mutate/recover an invalid file."""
     try:
-        package = package_for_launcher(launcher)
+        verify_native_package(package)
         file = Path(session_file).absolute()
         if file != file.resolve(strict=True):
             raise NativeReopenError("Saved native session path is not canonical")

@@ -17,7 +17,6 @@ from acp.schema import (
     TextContentBlock,
 )
 
-from . import backend
 from .comms import Comms
 from .coordination_store import (
     PublicationActivationBlocked,
@@ -646,15 +645,6 @@ class InputDrain(FutureInputQueue):
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
     ) -> None:
-        if (
-            backend.rpc_args_for(self.effects.turns.agent_bin, self.effects.turns.agent_args)
-            is None
-        ):
-            # The plain text fallback has no Pi native input-ID protocol.
-            # Preserve its existing local command behavior without attaching
-            # a false Pi start claim to it.
-            await self.effects.turns.run_agent_turn(session_id, thread_name, task, images=images)
-            return
         key = f"acp:{uuid4().hex}"
         with _store_lock(self.comms._wire_lock_path):
             snapshot = self.comms.registry.snapshot()
