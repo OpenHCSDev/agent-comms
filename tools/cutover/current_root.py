@@ -11,7 +11,9 @@ from contextlib import closing
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
+from compaction_journal import stage as stage_compaction
 from registry_history import stage as stage_registry
+from todos import stage_todos
 from transcript_annotations import stage as stage_annotations
 from wire_history import stage as stage_wire
 
@@ -22,10 +24,19 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.relationships import RelationshipStore
+from agent_comms.shared_ledger import SharedLedger
 from agent_comms.store_files import _atomic_write_text, file_revision
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wire_log import WireLog
 from agent_comms.wire_metadata import ArchivedAccess, WireAccess, WritableAccess
+
+RUNTIME_DATABASES = (
+    "coordination.sqlite3",
+    "native_prompt_bindings.sqlite3",
+    "goal_attempts.sqlite3",
+    "goal-private/goal_attempts.sqlite3",
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +65,8 @@ class RootRehearsal:
     threads: int
     unresolved_inputs: int
     archived_runtime_databases: tuple[str, ...]
+    retained_documents: tuple[str, ...]
+    source_revisions: dict[str, tuple[int, int, int, int] | None]
 
 
 def stage(source: Path, destination: Path, access: WireAccess | None = None) -> RootRehearsal:
@@ -72,12 +85,20 @@ def stage(source: Path, destination: Path, access: WireAccess | None = None) -> 
         "goal_pause_events.json",
         "bus.jsonl",
         "bus_meta.json",
+        "source_bus_meta.json",
+        "history_sources.json",
         ChannelCatalog.filename,
         InputDispositions.filename,
         ReadLedger.filename,
         "transcript_routes.sqlite3",
         "transcript_routes.json",
+        RelationshipStore.filename,
+        SharedLedger.filename,
+        "todos.sqlite3",
+        "compaction-commits.sqlite3",
+        *RUNTIME_DATABASES,
     )
+    durable += tuple(name + "-wal" for name in durable if name.endswith(".sqlite3"))
     before = tuple(file_revision(source / name) for name in durable)
     wire_receipt = stage_wire(source, destination, access)
     retained = destination / "precutover-evidence"
@@ -104,6 +125,25 @@ def stage(source: Path, destination: Path, access: WireAccess | None = None) -> 
         destination / ChannelCatalog.filename,
         json.dumps(FieldCodec.encode(ChannelCatalog(source / ChannelCatalog.filename).read())),
     )
+    retained_documents = []
+    for store_type in (RelationshipStore, SharedLedger):
+        path = source / store_type.filename
+        if path.exists():
+            original = store_type(path).read()
+            shutil.copy2(path, destination / path.name)
+            if store_type(destination / path.name).read() != original:
+                raise ValueError(f"Durable document differs after staging: {path.name}")
+            retained_documents.append(path.name)
+    todos = source / "todos.sqlite3"
+    if todos.exists():
+        stage_todos(todos, retained / "todos")
+        shutil.copy2(retained / "todos" / todos.name, destination / todos.name)
+        retained_documents.append(todos.name)
+    compaction = source / "compaction-commits.sqlite3"
+    if compaction.exists():
+        stage_compaction(compaction, retained / "compaction")
+        shutil.copy2(retained / "compaction" / compaction.name, destination / compaction.name)
+        retained_documents.append(compaction.name)
     input_path = source / InputDispositions.filename
     inputs = (
         FieldCodec.decode(InputDocument, json.loads(input_path.read_text()))
@@ -116,16 +156,12 @@ def stage(source: Path, destination: Path, access: WireAccess | None = None) -> 
     # Old coordinator and compaction authority must not be opened by new code.
     # Keep complete SQLite snapshots, including UNKNOWN/replay audit records.
     archived = []
-    for name in (
-        "coordination.sqlite3",
-        "native_prompt_bindings.sqlite3",
-        "compaction-commits.sqlite3",
-        "goal_attempts.sqlite3",
-    ):
+    for name in RUNTIME_DATABASES:
         path = source / name
         if not path.exists():
             continue
         saved = retained / name
+        saved.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with (
             closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as old,
             closing(sqlite3.connect(saved)) as copy,
@@ -161,6 +197,8 @@ def stage(source: Path, destination: Path, access: WireAccess | None = None) -> 
         len(snapshot.threads),
         sum(row.unresolved for row in observed.rows.values()),
         tuple(archived),
+        tuple(retained_documents),
+        dict(zip(durable, before, strict=True)),
     )
     _atomic_write_text(
         destination / "rehearsal.json", json.dumps(FieldCodec.encode(receipt), indent=2)
