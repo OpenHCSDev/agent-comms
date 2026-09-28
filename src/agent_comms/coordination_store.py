@@ -18,8 +18,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from .attempt_states import AttemptState
 from .assignment_states import AssignmentState, EngagedAssignment
+from .attempt_states import AttemptState
 from .coordination import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -1431,7 +1431,8 @@ class RecoveryMonitorCapability:
         reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
         to replay. An unfinished journal or unresolved publication is refused.
         """
-        from .native_pi import _read_native_context_evidence, _read_private_file
+        from .native_entries import MessageEntry, NativeEntry
+        from .native_pi import _read_native_context_evidence
         from .native_prompt_binding import (
             expected_prompt_matches_journal,
             read_expected_prompt_binding,
@@ -1477,28 +1478,20 @@ class RecoveryMonitorCapability:
             ):
                 raise RecoveryBlocked("native failure lacks its bound original input")
             proof = _read_native_context_evidence(session_file, reserved["input_id"])
-            entries = _read_private_file(session_file)
+            _header, entries = NativeEntry.read_evidence(session_file)
             user_index = next(
-                index
-                for index, entry in enumerate(entries)
-                if entry.get("id") == proof.session_entry_id
+                index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
             )
             following = entries[user_index + 1 :]
             if len(following) != 1:
                 raise RecoveryBlocked("native failure has unfinished or additional session work")
             terminal = following[0]
-            message = terminal.get("message")
-            if (
-                terminal.get("type") != "message"
-                or terminal.get("parentId") != proof.session_entry_id
-                or not isinstance(message, dict)
-                or message.get("role") != "assistant"
-                or message.get("stopReason") != "error"
-                or not isinstance(message.get("errorMessage"), str)
-                or not message["errorMessage"]
-                or message.get("content") != []
-            ):
+            if not isinstance(terminal, MessageEntry):
                 raise RecoveryBlocked("native recovery requires an unambiguous failed terminal")
+            try:
+                terminal.require_failed_terminal(proof.session_entry_id)
+            except ValueError as error:
+                raise RecoveryBlocked(str(error)) from error
             cls._require_native_session_exited(session_dir)
             monitor = cls(store, _grant=_MONITOR_GRANT)
             return monitor.terminalize_dead_attempt(

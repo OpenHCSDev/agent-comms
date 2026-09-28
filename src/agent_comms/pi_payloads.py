@@ -219,6 +219,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
+    input_digest: str | None = wire_field("inputDigest")
     stop_reason: str | None = wire_field("stopReason")
     error_message: str | None = wire_field("errorMessage")
 

@@ -17,7 +17,9 @@ from pathlib import Path
 from .backend import _session_revision
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDispositions
-from .native_pi import NativeContextProof, _read_native_context_evidence, _read_private_file
+from .native_entries import NativeEntry
+from .native_pi import NativeContextProof, _read_native_context_evidence
+from .pi_payloads import TextContent
 from .private_sidecar import native_request_digest
 
 
@@ -35,9 +37,10 @@ def verify_continued_private_session(
         or session.parent.parent != (root / "native-sessions").resolve(strict=True)
     ):
         raise ValueError("Continued private source identity changed")
-    entries = _read_private_file(session)
-    if not entries or entries[0].get("type") != "session" or entries[0].get("version") != 3:
+    header, entries = NativeEntry.read_evidence(session)
+    if header.version != 3:
         raise ValueError("Continued private session needs a strict native header")
+    tracked = NativeEntry.tracked_users(entries)
     rows = InputDispositions(root / InputDispositions.filename).read().rows
     # Any unresolved owner input except the exact new original remains a stop.
     # Do not use admission rollover to hide uncertain history.
@@ -60,16 +63,12 @@ def verify_continued_private_session(
     )
     observed = set()
     for entry in entries:
-        message = entry.get("message")
-        if (
-            entry.get("type") != "message"
-            or not isinstance(message, dict)
-            or message.get("role") != "user"
-        ):
+        if not entry.is_message or not entry.message.user:
             continue
-        native_id = message.get("inputId")
-        if type(native_id) is not str or native_id in observed:
+        native_id = entry.input_id
+        if native_id is None or native_id not in tracked:
             raise ValueError("Continued private user history lacks unique tracked input")
+        message = entry.message
         observed.add(native_id)
         started_row = started.get(native_id)
         if started_row is not None:
@@ -77,13 +76,13 @@ def verify_continued_private_session(
             if (
                 type(text) is not str
                 or not started_row.turn_id
-                or message.get("content") != [{"type": "text", "text": text}]
-                or message.get("inputDigest") != native_request_digest(text)
+                or message.content != (TextContent(text),)
+                or message.input_digest != native_request_digest(text)
             ):
                 raise ValueError("Continued private user differs from recorded native start")
         elif native_id in recorded:
             proof = recorded[native_id]
-            if proof.session_entry_id != entry.get("id") or proof != _read_native_context_evidence(
+            if proof.session_entry_id != entry.id or proof != _read_native_context_evidence(
                 session, native_id, request_generation=proof.request_generation
             ):
                 raise ValueError("Continued private user differs from live-recorded context")
