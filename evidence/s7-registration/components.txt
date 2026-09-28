@@ -1,0 +1,115 @@
+...F.F                                                                   [100%]
+=================================== FAILURES ===================================
+_________ test_new_thread_field_has_no_second_registry_decoder_roster __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/components/test_new_thread_field_has_no_s0')
+
+    def test_new_thread_field_has_no_second_registry_decoder_roster(tmp_path):
+        @dataclass(frozen=True, slots=True)
+        class ExtendedThread(Thread):
+            external_reference: str = "default"
+
+        raw = owner(tmp_path).to_wire() | {"external_reference": "declared here"}
+>       loaded = ExtendedThread.from_registry("owner", raw, tmp_path)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_registration_components.py:78:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/declarations.py:1582: in from_registry
+    else FieldCodec.decode(hints[declaration.name], data[declaration.name])
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:105: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>, target = tuple[str, ...]
+data = ()
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError):
+                    pass
+            raise ValueError(f"Value does not match {target}")
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+>               raise ValueError("Expected a JSON array.")
+E               ValueError: Expected a JSON array.
+
+src/agent_comms/field_codec.py:160: ValueError
+____________________ test_s5_lifecycle_disk_protocol_replay ____________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-registration-20260928/.artifacts/s7-registration/components/test_s5_lifecycle_disk_protoco0')
+
+    def test_s5_lifecycle_disk_protocol_replay(tmp_path):
+        baseline = os.environ.get("AGENT_COMMS_BASELINE_SOURCE")
+        if not baseline:
+            pytest.skip("Select archived S5 source for protocol replay")
+        program = """
+    import json, os, sys
+    from dataclasses import replace
+    from pathlib import Path
+    from agent_comms.declarations import ThreadRegistry, Thread, ThreadStatus
+    import time
+    time.time = lambda: 1000.0
+    os.getpid = lambda: 54321
+    root=Path(sys.argv[1]);root.mkdir()
+    r=ThreadRegistry(root/'registry.json')
+    steps=[]
+    def capture():
+        steps.append(json.loads(r._path.read_text().replace(str(root), '<root>')))
+    r.register(Thread('owner', frozenset({'team'}), str(root), pid=54321, created_at=10.0));capture()
+    r.register(Thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
+    r.register(replace(r.require('owner'), title='metadata'));capture()
+    r.claim_local_turn('owner','first');capture()
+    r.finish_claimed_turn('owner','first');capture()
+    r.rename('owner','renamed');capture()
+    r.unregister('renamed');capture()
+    r.archive('renamed');capture()
+    r.begin_delete('renamed');capture()
+    r.remove('renamed');capture()
+    print(json.dumps(steps,sort_keys=True))
+    """
+        traces = []
+        for label, source in (
+            ("baseline", str(Path(baseline).resolve())),
+            ("current", str(Path(__file__).parents[1] / "src")),
+        ):
+            result = subprocess.run(
+                [sys.executable, "-c", program, str(tmp_path / label)],
+                env=dict(os.environ, PYTHONPATH=source),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert result.returncode == 0, result.stderr
+            traces.append(json.loads(result.stdout))
+        assert len(traces[0]) == 10
+>       assert traces[0] == traces[1]
+E       AssertionError: assert [{'admission_... 2, ...}, ...] == [{'admission_... 2, ...}, ...]
+E
+E         At index 3 diff: {'admission_generation_counter': 2, 'admission_generations': {'child': 2, 'owner': 1}, 'aliases': {}, 'owner_epoch_counter': 2, 'owner_epochs': {'child': 2, 'owner': 1}, 'threads': {'child': {'active_turn': None, 'auto_title_pending': False, 'channel_scope_generation': 0, 'created_at': 20.0, 'goal': None, 'last_finished_turn_id': None, 'last_goal_report_turn': None, 'last_seen': 1000.0, 'model': None, 'name': 'child', 'parent': 'owner', 'pid': 0, 'previous_worktrees': [], 'role': 'agent', 'session_file': None, 'status': 'running', 'tags': [], 'task': No...
+E
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_registration_components.py:141: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_registration_components.py::test_new_thread_field_has_no_second_registry_decoder_roster
+FAILED tests/test_registration_components.py::test_s5_lifecycle_disk_protocol_replay
+2 failed, 4 passed in 0.93s

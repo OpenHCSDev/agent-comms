@@ -42,6 +42,7 @@ from .goal_history import GoalHistoryEntry
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
+from .registration import Registration
 from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
@@ -79,7 +80,6 @@ from .declarations import (
     SharedLedger,
     Tag,
     Thread,
-    ThreadRegistry,
     ThreadRole,
     ThreadSort,
     ThreadStatus,
@@ -347,7 +347,7 @@ class Comms:
             # Create a private fresh root before the registry lock can create it
             # using the caller's ordinary umask. Existing roots are never chmod-repaired.
             self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self.registry = ThreadRegistry(self.root / "registry.json")
+        self.registry = Registration(self.root / "registry.json")
         self.transcript_routes = TranscriptRoutes(self.root / "transcript_routes.json")
         self.channel_catalog = ChannelCatalog(self.root / "channels.json", self.registry)
         self.bus = MessageBus(
@@ -364,7 +364,7 @@ class Comms:
         self.runtime_info = RuntimeInfoStore(self.root / "runtime_info.json")
         self.transcript_reads = transcript_read_state(self.reads.path)
         self._wire_lock_path = self.root / "wire"
-        self.maintenance = MaintenanceBarrier(self.registry._path)
+        self.maintenance = MaintenanceBarrier(self.registry.store.path)
         self._private_nk_launch: tuple[Path, str, Path] | None = None
         self._sent_times_signature: tuple[int, int, int] | None = None
         self._sent_times: dict[str, float] = {}
@@ -824,7 +824,7 @@ class Comms:
         marker_path = self.reads.path
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            revision = file_revision(self.registry._path)
+            revision = file_revision(self.registry.store.path)
             viewer_name = snapshot.aliases.get(viewer, viewer)
             peer_name = snapshot.aliases.get(peer, peer)
             viewer_thread = snapshot.threads.get(viewer_name)
@@ -869,7 +869,7 @@ class Comms:
                         for message, _ in records
                     )
             if (
-                file_revision(self.registry._path) != revision
+                file_revision(self.registry.store.path) != revision
                 or file_revision(marker_path) != marker_revision
             ):
                 raise ValueError("DM display changed while paging; refresh the page.")
@@ -927,7 +927,7 @@ class Comms:
         return tuple(
             file_revision(path)
             for path in (
-                self.registry._path,
+                self.registry.store.path,
                 self.channel_catalog.path,
                 self.channel_catalog.metadata_path,
                 self.channel_catalog.pins_path,
@@ -936,7 +936,7 @@ class Comms:
             )
         )
 
-    def _capture_display_basis(self, viewer: str | None, revision: tuple) -> tuple:
+    def _capture_display_basis(self, viewer: str | None) -> tuple:
         """Capture one basis while the caller holds the short wire lock."""
         registry = self.registry.snapshot()
         channels = self.channel_catalog.views(registry.threads)
@@ -979,10 +979,7 @@ class Comms:
                     targets,
                     channel.any_mode,
                     participant_names,
-                    0,
-                    revision,
-                    0,
-                    seen,
+                    seen_sequences=seen,
                 )
             )
         notice = self.reads.read().notice
@@ -1012,7 +1009,7 @@ class Comms:
             with ExitStack() as stack:
                 with _store_lock(self._wire_lock_path):
                     revision = self._display_basis_revision()
-                    basis = self._capture_display_basis(viewer, revision)
+                    basis = self._capture_display_basis(viewer)
                     if self._display_basis_revision() != revision:
                         continue
                     bus_revision = file_revision(self.bus._path)
@@ -1354,12 +1351,8 @@ class Comms:
                 basis
             )
             assert captured_viewer is not None
-            activity_scopes = tuple(
-                replace(scope, after=0, basis_revision=scope.basis_revision[:-1])
-                for scope in scopes
-            )
             display_activity, display_unread = self.presentation.display_view_metrics(
-                records, scopes, activity_scopes, captured_viewer, viewer_names, bus_revision
+                records, scopes, scopes, captured_viewer, viewer_names, bus_revision
             )
             channels = self._channel_views_for(
                 registry,
@@ -1420,7 +1413,7 @@ class Comms:
         viewer = self.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
             revision = self._display_basis_revision()
-            basis = self._capture_display_basis(viewer, revision)
+            basis = self._capture_display_basis(viewer)
             current = next((scope for scope in basis[2] if scope.channel == target), None)
             if current is None:
                 raise ValueError(f"Unknown channel: {target!r}")
@@ -1460,8 +1453,8 @@ class Comms:
         proof = expected_display_basis
         if type(proof) is not DMDisplayBasis or type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(self._wire_lock_path), _store_lock(self.registry._path):
-            snapshot = self.registry._snapshot_unlocked()
+        with _store_lock(self._wire_lock_path), _store_lock(self.registry.store.path):
+            snapshot = self.registry.store._read_unlocked().snapshot()
             proof.validate_for(
                 self.root,
                 worktree,
@@ -1496,7 +1489,7 @@ class Comms:
             tuple(
                 file_revision(path)
                 for path in (
-                    self.registry._path,
+                    self.registry.store.path,
                     self.channel_catalog.path,
                     self.channel_catalog.pins_path,
                     self.channel_catalog.metadata_path,
@@ -2294,8 +2287,8 @@ class Comms:
         selected = tuple(dict.fromkeys(names))
         with _store_lock(self._wire_lock_path):
             restored = self.registry.restore_stopped(source, selected)
-            with _store_lock(self.registry._path):
-                private = self.registry._private_guard_unlocked() is not None
+            with _store_lock(self.registry.store.path):
+                private = self.registry.store.private_guard_unlocked() is not None
             if private:
                 with MutationStore(str(self.root / "coordination.sqlite3")) as store:
                     for name in selected:
@@ -2828,13 +2821,15 @@ class Comms:
             return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            canonical = snapshot.aliases.get(fence.name, fence.name)
+            canonical = snapshot.aliases.get(
+                fence.identity.incarnation.name, fence.identity.incarnation.name
+            )
             source = snapshot.threads.get(canonical)
             if (
                 source is None
-                or source.created_at != fence.created_at
+                or source.created_at != fence.identity.incarnation.created_at
                 or source.active_turn is not None
-                or source.turn_generation != fence.turn_generation
+                or source.turn_generation != fence.identity.generation
                 or source.last_finished_turn_id != fence.turn_id
                 or snapshot.admission_generations.get(canonical) != fence.admission_generation
                 or not snapshot.statuses[canonical].active
@@ -2854,10 +2849,10 @@ class Comms:
                     or len(wait.target_turn_generations) != len(wait.targets)
                     or not any(
                         snapshot.aliases.get(target.name, target.name) == canonical
-                        and target.created_at == fence.created_at
+                        and target.created_at == fence.identity.incarnation.created_at
                         and (generation := wait.target_turn_generations[index]) is not None
                         and type(generation) is int
-                        and 0 < generation <= fence.turn_generation
+                        and 0 < generation <= fence.identity.generation
                         for index, target in enumerate(wait.targets)
                     )
                     or any(

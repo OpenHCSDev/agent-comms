@@ -152,9 +152,9 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True) -> Iterator[Re
     with (
         _store_lock(bus._path.parent / "wire", blocking=blocking),
         _store_lock(bus._path, blocking=blocking),
-        _store_lock(bus._registry._path, blocking=blocking),
+        _store_lock(bus._registry.store.path, blocking=blocking),
     ):
-        yield bus._registry._snapshot_unlocked()
+        yield bus._registry.store._read_unlocked().snapshot()
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +226,7 @@ def _require_bound_stores(bus: MessageBus, store: MutationStore) -> None:
     if (
         store.path.name != "coordination.sqlite3"
         or Path(bus._path.parent).absolute() != Path(store.path.parent).absolute()
-        or bus._registry._path.absolute() != (bus._path.parent / "registry.json").absolute()
+        or bus._registry.store.path.absolute() != (bus._path.parent / "registry.json").absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 

@@ -30,7 +30,6 @@ from .declarations import (
     Tag,
     Thread,
     ThreadPresentation,
-    ThreadRegistry,
     ThreadRole,
     ThreadSort,
     ThreadStatus,
@@ -76,6 +75,7 @@ from .operations import (
 )
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .read_ledger import ReadLedger
+from .registration import Registration
 from .response_policy import (
     CollectivePolicy,
     DirectPolicy,
@@ -137,7 +137,7 @@ __all__ = [
     "ResponsePolicy",
     "MessageRoute",
     "TurnRouting",
-    "ThreadRegistry",
+    "Registration",
     "MessageBus",
     "MessagePage",
     "HistoryCursor",

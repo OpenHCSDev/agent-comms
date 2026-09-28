@@ -10,9 +10,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms.backend import _maintenance_send_boundary, stream_agent_events
-from agent_comms.declarations import RelationViolationError, Thread, ThreadRegistry, _store_lock
+from agent_comms.declarations import RelationViolationError, Thread, _store_lock
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.operations import Comms
+from agent_comms.registration import Registration
 from maintenance_control_fixture import FixtureMaintenanceControl
 
 
@@ -60,7 +61,7 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
         result.put(("timeout", ""))
         return
     try:
-        ThreadRegistry(Path(registry_path)).claim_local_turn("owner", "other-process")
+        Registration(Path(registry_path)).claim_local_turn("owner", "other-process")
     except RelationViolationError as error:
         result.put(("denied", str(error)))
     else:
@@ -77,7 +78,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     control = FixtureMaintenanceControl(gate)
     first = control.begin("operator-one")
     assert first.phase == "draining" and first.generation == 1
-    assert MaintenanceBarrier(comms.registry._path).read() == first
+    assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.begin_turn("owner", "after")
     with pytest.raises(RelationViolationError, match="Maintenance"):
@@ -95,7 +96,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     with pytest.raises(ValueError, match="closed expected"):
         control.advance(second, "ready")
     with pytest.raises(RelationViolationError, match="Maintenance"):
-        ThreadRegistry(comms.registry._path).claim_local_turn("owner", "cold")
+        Registration(comms.registry.store.path).claim_local_turn("owner", "cold")
     assert control.advance(second, "installing").phase == "installing"
 
 
@@ -153,7 +154,7 @@ def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path:
     comms = Comms(root)
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
-    proc = mp.Process(target=_claim_other_process, args=(str(comms.registry._path), ready, q))
+    proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
     proc.start()
     assert proc.pid is not None
     comms.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=proc.pid))
@@ -218,7 +219,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     comms = Comms(root)
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
-    child = mp.Process(target=_claim_other_process, args=(str(comms.registry._path), ready, q))
+    child = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
     child.start()
     assert child.pid is not None
     comms.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=child.pid))

@@ -423,9 +423,10 @@ async def test_stalled_local_client_releases_identity_only_after_transport_clean
 def test_cross_process_identity_rebind_is_denied_during_projection_fence(owner, tmp_path):
     _agent, comms, first, _journal, _commit_id = owner
     # Fixture owner has not registered a thread until ACP creates its session.
-    from agent_comms.declarations import Thread, ThreadRegistry
+    from agent_comms.declarations import Thread
+    from agent_comms.registration import Registration
 
-    registry = ThreadRegistry(comms.registry._path)
+    registry = Registration(comms.registry.store.path)
     registry.register(
         Thread("project", frozenset(), str(tmp_path), pid=os.getpid(), session_file=str(first))
     )
@@ -435,8 +436,9 @@ def test_cross_process_identity_rebind_is_denied_during_projection_fence(owner, 
 import sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.declarations import ThreadRegistry, RelationViolationError
-registry=ThreadRegistry(Path(sys.argv[1]))
+from agent_comms.declarations import RelationViolationError
+from agent_comms.registration import Registration
+registry=Registration(Path(sys.argv[1]))
 owner=registry.require('project')
 try:
     registry.register(replace(owner,session_file=sys.argv[2]))
@@ -448,7 +450,7 @@ else:
 """
     with publication_identity_fence(comms.root):
         result = subprocess.run(
-            [sys.executable, "-c", program, str(comms.registry._path), str(other)],
+            [sys.executable, "-c", program, str(comms.registry.store.path), str(other)],
             capture_output=True,
             text=True,
             check=True,

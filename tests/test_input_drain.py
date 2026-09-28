@@ -23,9 +23,9 @@ async def owner(tmp_path, monkeypatch):
     session = tmp_path / "saved.jsonl"
     session.write_text("saved history\n")
     comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
-    current, epoch = comms.registry.live_owner_with_epoch("owner")
-    current, epoch = comms.registry.claim_live_turn_with_epoch(
-        current, "turn", expected_epoch=epoch
+    current, epoch = comms.registry.live_owner_with_generation("owner")
+    current, epoch = comms.registry.claim_live_turn_with_generation(
+        current, "turn", expected_owner_generation=epoch
     )
     agent = CommsAgent(comms, auto_wake=False)
     agent.sessions.bindings["owner"] = "owner"
@@ -43,7 +43,7 @@ async def owner(tmp_path, monkeypatch):
     # Only native package verification is outside this source-boundary fixture.
     # The actual registry, wire, disposition, session locks and source CAS run.
     monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
-    bridge = OwnerCompactionCommit(comms.registry._path, tmp_path, future_queue=agent.inputs)
+    bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
     witness = dict(
         sessionId="saved",
         sessionFile=str(session),

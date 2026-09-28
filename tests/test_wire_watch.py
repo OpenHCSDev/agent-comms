@@ -17,7 +17,7 @@ async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     comms = Comms(tmp_path)
     comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
     root_id = comms.initialize_private_initial_protocol()
-    guard = PrivateRegistryGuard(comms.registry._path, root_id)
+    guard = PrivateRegistryGuard(comms.registry.store.path, root_id)
     watcher = open_wire_watcher(tmp_path)
     if watcher is None:
         pytest.skip("Native file notifications are unavailable")

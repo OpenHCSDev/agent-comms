@@ -15,11 +15,12 @@ from agent_comms import backend, owner_compaction_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.compaction_publication import publish_pending_local
-from agent_comms.declarations import Goal, RelationViolationError, Thread, ThreadRegistry
+from agent_comms.declarations import Goal, RelationViolationError, Thread
 from agent_comms.operations import Comms, wire
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_runtime import compact_owner_once
+from agent_comms.registration import Registration
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -72,7 +73,7 @@ def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
 
 def test_canonical_owner_prepares_source_before_summary_and_commits_once(session):
     root = session.parent.parent
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -83,8 +84,10 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     before = session.read_bytes()
     candidate = bridge.prepare_source(owner, epoch, keep_recent_tokens=1)
@@ -106,7 +109,7 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
 
 def test_prepared_owner_source_refuses_later_bus_correction(session):
     root = session.parent.parent
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -117,8 +120,10 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     candidate = bridge.prepare_source(owner, epoch, keep_recent_tokens=1)
     assert candidate is not None
@@ -145,7 +150,7 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
     session, monkeypatch
 ):
     root = session.parent.parent
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -156,8 +161,10 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
     persistent.session_file = str(session)
@@ -190,7 +197,7 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
 @pytest.mark.asyncio
 async def test_late_correction_after_summary_refuses_write_without_reusing_manager(session):
     root = session.parent.parent
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -201,8 +208,10 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
     original = session.read_bytes()
@@ -229,7 +238,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     session, monkeypatch, shutdown
 ):
     root = session.parent.parent
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -240,8 +249,10 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
     native_call = bridge._call
@@ -358,7 +369,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
 
 def test_three_sequential_native_commits_keep_exact_ids_and_prior_history(session):
     root = session.parent.parent
-    registry = ThreadRegistry(root / "registry.json")
+    registry = Registration(root / "registry.json")
     registry.register(
         Thread(
             "owner",
@@ -369,8 +380,10 @@ def test_three_sequential_native_commits_keep_exact_ids_and_prior_history(sessio
             goal=Goal("continuing task", "goal-unchanged"),
         )
     )
-    owner, epoch = registry.live_owner_with_epoch("owner")
-    owner, epoch = registry.claim_live_turn_with_epoch(owner, "turn", expected_epoch=epoch)
+    owner, epoch = registry.live_owner_with_generation("owner")
+    owner, epoch = registry.claim_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     commit_ids = []
     for round_index in range(3):
@@ -441,8 +454,10 @@ async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(sess
     comms.attach_session("project", str(session), pid=os.getpid())
     current = comms.registry.require("project")
     comms.registry.register(replace(current, goal=Goal("retain exact history", "goal-e2e")))
-    owner, epoch = comms.registry.live_owner_with_epoch("project")
-    owner, epoch = comms.registry.claim_live_turn_with_epoch(owner, "rounds", expected_epoch=epoch)
+    owner, epoch = comms.registry.live_owner_with_generation("project")
+    owner, epoch = comms.registry.claim_live_turn_with_generation(
+        owner, "rounds", expected_owner_generation=epoch
+    )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = agent._persistent_backends.setdefault("project", PersistentPiSession())
     received = []
