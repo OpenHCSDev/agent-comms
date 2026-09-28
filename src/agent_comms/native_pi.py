@@ -39,7 +39,6 @@ if TYPE_CHECKING:
 CAPABILITY = "pi-native-input-v1-live-only"
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-_MAX_LINE = 1 << 20
 # Every tracked launch must remove Pi session retry, provider transport retry,
 # and overflow compaction-retry before an input can reach any provider.
 _NATIVE_SETTINGS = (
@@ -813,13 +812,13 @@ async def run_native_pi_turn(
         launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = tool_socket.token
     try:
         async with BoundedRun.session(
-            launch.argv, timeout=timeout, cwd=launch.cwd, env=launch.env, limit=_MAX_LINE + 1
+            launch.argv, timeout=timeout, cwd=launch.cwd, env=launch.env
         ) as process:
             if tool_socket is not None:
                 tool_socket.expected_pid = process.pid
             stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
             assert stdin is not None and stdout is not None and stderr is not None
-            stderr_task = asyncio.create_task(stderr.read(_MAX_LINE))
+            stderr_task = asyncio.create_task(process.discard_stderr())
             deadline = asyncio.get_running_loop().time() + timeout
 
             channel = PiRpcChannel(stdout)
@@ -829,17 +828,13 @@ async def run_native_pi_turn(
                 if remaining <= 0:
                     raise NativePiUnavailable("Native Pi turn deadline expired")
                 try:
-                    raw = await asyncio.wait_for(
-                        channel.readline(max_bytes=_MAX_LINE), timeout=remaining
-                    )
-                except ValueError as error:
-                    raise NativePiUnavailable("Native Pi RPC record is incomplete") from error
-                if not raw or len(raw) > _MAX_LINE or not raw.endswith(b"\n"):
-                    raise NativePiUnavailable("Native Pi RPC record is incomplete")
-                try:
-                    event = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_LINE)
+                    event = await asyncio.wait_for(channel.receive(strict=True), timeout=remaining)
                 except (UnicodeError, ValueError, TypeError) as error:
-                    raise NativePiUnavailable("Native Pi RPC JSON is invalid") from error
+                    raise NativePiUnavailable(
+                        "Native Pi RPC record is invalid or incomplete"
+                    ) from error
+                if event is None:
+                    raise NativePiUnavailable("Native Pi RPC record is incomplete")
                 return event
 
             async def send(command: commands.PiCommand) -> None:
