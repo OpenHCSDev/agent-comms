@@ -6,6 +6,7 @@ from dataclasses import fields
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
@@ -16,7 +17,6 @@ from agent_comms.transcript_events import (
     ThinkingTranscript,
     ToolEndTranscript,
     ToolStartTranscript,
-    TranscriptCodec,
     TranscriptEvent,
     UserTranscript,
 )
@@ -43,7 +43,7 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
         )
     )
     assert isinstance(entry, MessageEntry) and isinstance(entry.message, UserMessage)
-    normalized = TranscriptCodec.encode(entry)
+    normalized = FieldCodec.encode(entry)
     assert normalized["kind"] == "message" and normalized["message"]["kind"] == "user"
     assert "type" not in normalized and "role" not in normalized["message"]
     assert entry.events(TranscriptProjection()) == [
@@ -125,8 +125,8 @@ def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     ],
 )
 def test_snapshot_family_roundtrip_has_only_owned_fields(event):
-    payload = TranscriptCodec.encode(event)
-    assert TranscriptCodec.decode(TranscriptEvent, payload) == event
+    payload = FieldCodec.encode(event)
+    assert FieldCodec.decode(TranscriptEvent, payload) == event
     assert set(payload) <= {"kind", *(f.name for f in fields(event))}
     if isinstance(event, ToolStartTranscript):
         assert "text" not in payload and "ok" not in payload and "diff" not in payload

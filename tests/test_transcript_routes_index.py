@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
-from agent_comms.transcript_events import TranscriptCodec
 
 
 def _session(path: Path, count: int) -> None:
@@ -35,14 +35,14 @@ def test_tail_page_decodes_only_its_routing_entries(tmp_path, monkeypatch) -> No
     )
 
     decoded = 0
-    real_decode = TranscriptCodec.decode
+    real_decode = FieldCodec.decode
 
     def counted_decode(target, payload):
         nonlocal decoded
         decoded += int(target is TurnRouting)
         return real_decode(target, payload)
 
-    monkeypatch.setattr(TranscriptCodec, "decode", staticmethod(counted_decode))
+    monkeypatch.setattr(FieldCodec, "decode", staticmethod(counted_decode))
     page = wire(tmp_path / "wire").transcripts.thread_transcript_page("worker")
     assert [event.text for event in page.events] == [
         f"answer {index}" for index in range(9980, 10_000)
