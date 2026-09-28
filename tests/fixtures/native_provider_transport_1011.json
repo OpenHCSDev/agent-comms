@@ -1,0 +1,44 @@
+{
+  "type": "message_end",
+  "message": {
+    "role": "assistant",
+    "content": [],
+    "api": "openai-codex-responses",
+    "provider": "openai-codex",
+    "model": "gpt-6-sol",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "totalTokens": 0,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      }
+    },
+    "stopReason": "error",
+    "timestamp": 1790635007232,
+    "diagnostics": [
+      {
+        "type": "provider_transport_failure",
+        "timestamp": 1790635012164,
+        "error": {
+          "name": "WebSocketCloseError",
+          "message": "WebSocket closed 1011",
+          "code": 1011
+        },
+        "details": {
+          "configuredTransport": "auto",
+          "eventsEmitted": true,
+          "phase": "after_message_stream_start",
+          "requestBytes": 159312
+        }
+      }
+    ],
+    "errorMessage": "WebSocket closed 1011"
+  }
+}

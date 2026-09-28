@@ -48,6 +48,7 @@ def test_disposition_derives_from_shared_input_owner(state):
 
 def test_public_not_sent_and_ambiguous_unknown_do_not_invent_binding():
     from agent_comms.input_attempt import NotSentInput
+
     failure = ACPFailure.from_error(-32603, "Preflight failed", {"inputStatus": "not_sent"})
     assert failure.input_state is NotSentInput
     assert failure.input_disposition == "Not sent — input not retried"
@@ -62,7 +63,7 @@ def test_new_display_case_needs_only_its_declaration():
         title = "Fixture feedback"
 
         @classmethod
-        def matches(cls, code, detail):
+        def matches(cls, code, detail, diagnostics=()):
             return detail == "T2 display extension fixture"
 
     failure = ACPFailure.from_error(-32603, "T2 display extension fixture")
