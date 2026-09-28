@@ -355,3 +355,27 @@ queue capabilities. Current canonical selected-owner followup/UNKNOWN suites alr
 pass; retained three exact-input transcript routing tests and existing durable
 standby review tests. Net125 lines removed in this batch. Final alphabetical
 remainder runs before complete combined acceptance.
+
+## Final remainder checkpoint and deployment priority
+
+Owner supersedes prior full-suite gate: old mocked-suite completion does not hold
+merge/deployment; meaningful current native/mounted paths take priority. Continue
+concrete fixture/deletion work without restoring retired surfaces.
+
+Remainder-fifteen17passed12failed8.14s. Deleted test_user_channels.py (four old
+public-drain wake_tasks/stream-backend tests); canonical per-recipient channel
+outcome/UNKNOWN and native selected-followup coverage remains. Viewer cache test
+checks that every decode is the new appended row rather than a brittle two-call
+limit. Rename keeps sparse read evidence. Damaged derived display cache rebuilds,
+while replaced authoritative bus inode is correctly refused. Append race now
+publishes canonically inside the already-held wire boundary. Candidate corruption
+tests keep their actual rejection/rollback assertions with current checkpoint
+refusal diagnostic. Focused33:32pass1failure16.19s; corrected missing MessageType
+then actual raced-append test1pass0.25s. Earlier attempt was interrupted after a
+fixture nested the wire lock; no passing result claimed for that attempt.
+
+Verified production blocker: supplied native package extension mismatch (above).
+Other failures in the current remainder were obsolete APIs/fixtures. Parent owns
+paired artifact/activation. Passive and broadcast alias removals are published and
+will be integrated here; retired alias test will be deleted. No complete full-suite
+pass claimed, and no deployment hold imposed on that result.
