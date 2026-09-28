@@ -9,3 +9,7 @@ Parent local acceptance:
 - Six current Toad pilots migrated to actual component owners. Additional stale fixture-only interfaces found by installed checks are migrated to current Agent RPC requests and typed AgentEvent values. All six passed after fixture migration: goal edit/retry/set, input delivery/failure and queue view. Final results recorded alongside earlier failed attempts.
 
 Parent owns live activation and final pins. Worker source evidence is included. CI deferred. This integrates PR161 including its required typed turn fence; no old implementation is retained.
+
+## Live activation
+
+Core159/161 integrated and merged via162. Toad82 merges current test consumers and pins current core. Runtime-s7-20260928 is live on the existing bus with both owners ready and all103identities. Fresh unmentioned channel input41 produced reply42 S7_RUNTIME_OK in18.65s; native read/bash tool success verified. Installed history UI renders original #comms/#nra and original saved transcript with111historicalchoices; sequence unchanged. Existing queued-compaction/default-enabled behavior retained. No new provider model or replay.
