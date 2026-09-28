@@ -3,24 +3,30 @@
 Linux pidfd operations are lifted from compaction_child_watchdog. Process
 identity is captured before releasing the exec gate, including for short jobs.
 """
+
 from __future__ import annotations
 
 import asyncio
 import ctypes
+import json
 import math
 import os
+import secrets
 import selectors
+import shutil
 import signal
 import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, BinaryIO
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -98,6 +104,55 @@ class PidfdHandles:
             self.signal_pidfd(pidfd, signal.SIGKILL)
 
 
+@dataclass(frozen=True)
+class NamespaceReady:
+    token: str
+    namespace: str
+    pid: int
+
+
+@dataclass(frozen=True)
+class NamespaceLaunch:
+    command: tuple[str, ...]
+    token: str
+    deadline: float
+
+
+class NamespaceContainment:
+    """Linux namespace launch and typed, gated PID-1 readiness proof."""
+
+    @staticmethod
+    def namespace_argv(launch: NamespaceLaunch, ready_fd: int, release_fd: int) -> tuple[str, ...]:
+        unshare = shutil.which("unshare")
+        if unshare is None:
+            raise NotImplementedError("PID namespace containment requires unshare")
+        return (
+            unshare,
+            "--user",
+            "--map-root-user",
+            "--pid",
+            "--fork",
+            "--kill-child=SIGKILL",
+            "--",
+            *NamespaceInitCommand(launch, ready_fd, release_fd).argv(),
+        )
+
+    @staticmethod
+    def namespace_alive(namespace: str) -> bool:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                if os.readlink(entry / "ns/pid") != namespace:
+                    continue
+                state = (entry / "stat").read_text().rsplit(") ", 1)[1].split()[0]
+                if state not in {"Z", "X"}:
+                    return True
+            except FileNotFoundError:
+                continue
+        return False
+
+
 class Platform(DeclaredFamily, affix="Platform"):
     @classmethod
     def current(cls) -> Platform:
@@ -139,7 +194,8 @@ class PosixPlatform(ProcessGroups, Platform):
         if current is not None and current != leader:
             raise IdentityMismatchError(f"Process group leader changed: {leader.pid}")
         return tuple(
-            member for member in self.members_of_group(leader.pid)
+            member
+            for member in self.members_of_group(leader.pid)
             if member.start_time >= leader.start_time
         )
 
@@ -151,7 +207,7 @@ class PosixPlatform(ProcessGroups, Platform):
         os.kill(identity.pid, signum)
 
 
-class LinuxPlatform(PidfdHandles, PosixPlatform):
+class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
     @staticmethod
     def _stat(pid: int) -> tuple[ProcessIdentity, int]:
         try:
@@ -186,6 +242,91 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
             self.signal_pidfd(descriptor, signum)
         finally:
             os.close(descriptor)
+
+
+class DarwinPlatform(PosixPlatform):
+    """libproc exposes microsecond birth times, unlike formatted ps output."""
+
+    class ProcessInfo(ctypes.Structure):
+        # External Darwin proc_bsdinfo ABI, from xnu/bsd/sys/proc_info.h.
+        _fields_ = [
+            (name, ctypes.c_uint32)
+            for name in (
+                "flags",
+                "status",
+                "xstatus",
+                "pid",
+                "ppid",
+                "uid",
+                "gid",
+                "ruid",
+                "rgid",
+                "svuid",
+                "svgid",
+                "reserved",
+            )
+        ] + [
+            ("comm", ctypes.c_char * 16),
+            ("name", ctypes.c_char * 32),
+            ("nfiles", ctypes.c_uint32),
+            ("pgid", ctypes.c_uint32),
+            ("pjobc", ctypes.c_uint32),
+            ("tdev", ctypes.c_uint32),
+            ("tpgid", ctypes.c_uint32),
+            ("nice", ctypes.c_int32),
+            ("start_seconds", ctypes.c_uint64),
+            ("start_microseconds", ctypes.c_uint64),
+        ]
+
+    def __init__(self):
+        self.libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        self.libproc.proc_pidinfo.argtypes = (
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        )
+        self.libproc.proc_pidinfo.restype = ctypes.c_int
+        self.libproc.proc_listpids.argtypes = (
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        )
+        self.libproc.proc_listpids.restype = ctypes.c_int
+
+    def identity(self, pid: int) -> ProcessIdentity:
+        info = self.ProcessInfo()
+        size = self.libproc.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+        if size != ctypes.sizeof(info):
+            code = ctypes.get_errno()
+            if code == 3:  # ESRCH, the actual OS absence result.
+                raise ProcessLookupError(pid)
+            raise OSError(code, os.strerror(code))
+        if info.status == 5:  # SZOMB: exited, awaiting reap.
+            raise ProcessLookupError(pid)
+        return ProcessIdentity(pid, info.start_seconds * 1_000_000 + info.start_microseconds)
+
+    def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
+        # proc_listpids returns bytes. Grow until one query fits; never mistake
+        # a full buffer for a complete process-group observation.
+        capacity = 16
+        while True:
+            buffer = (ctypes.c_int * capacity)()
+            size = self.libproc.proc_listpids(2, pgid, buffer, ctypes.sizeof(buffer))
+            if size < 0:
+                code = ctypes.get_errno()
+                raise OSError(code, os.strerror(code))
+            if size < ctypes.sizeof(buffer):
+                break
+            capacity *= 2
+        members = []
+        for pid in buffer[: size // ctypes.sizeof(ctypes.c_int)]:
+            if pid > 0:
+                with suppress(ProcessLookupError):
+                    members.append(self.identity(pid))
+        return tuple(members)
 
 
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
@@ -226,6 +367,20 @@ class TimedOutOutcome(ChildOutcome):
 
 
 @dataclass(frozen=True)
+class GracefulStopOutcome(ChildOutcome):
+    termination: ChildOutcome
+
+    @property
+    def successful(self) -> bool:
+        return self.termination.successful
+
+
+@dataclass(frozen=True)
+class ForcedStopOutcome(GracefulStopOutcome):
+    """At least one member required the forced stage, even if leader exited."""
+
+
+@dataclass(frozen=True)
 class FailedToStartOutcome(ChildOutcome):
     error: str
 
@@ -244,14 +399,19 @@ class ChildResult:
 # The gate establishes identity before even an instantaneous executable can
 # exit. It owns no business logic or stored state and preserves exec PID/group.
 _EXEC_GATE = """import os,sys
-fd=int(sys.argv[1]); go=os.read(fd,1); os.close(fd)
+fd=int(sys.argv[1]); error_fd=int(sys.argv[2]); go=os.read(fd,1); os.close(fd)
 if go != b'G': sys.exit(126)
-os.execvpe(sys.argv[2], sys.argv[2:], os.environ)
+os.set_inheritable(error_fd, False)
+try: os.execvpe(sys.argv[3], sys.argv[3:], os.environ)
+except OSError as error:
+    os.write(error_fd, str(error.errno).encode()); os._exit(126)
 """
 
 
 @contextmanager
-def _launch_gate(command: tuple[str, ...]) -> Iterator[tuple[tuple[str, ...], int, int]]:
+def _launch_gate(
+    command: tuple[str, ...],
+) -> Iterator[tuple[tuple[str, ...], int, int, int, BinaryIO]]:
     if not command:
         raise ValueError("A child command is required")
     # Select capability before spawn. Unsupported platforms cannot silently
@@ -260,11 +420,39 @@ def _launch_gate(command: tuple[str, ...]) -> Iterator[tuple[tuple[str, ...], in
     if not isinstance(platform, ProcessGroups):
         raise NotImplementedError("Process-group containment unavailable")
     read_fd, write_fd = os.pipe()
+    error_r, error_w = os.pipe()
+    error_writer = os.fdopen(error_w, "wb", buffering=0)
     try:
-        yield ((sys.executable, "-c", _EXEC_GATE, str(read_fd), *command), read_fd, write_fd)
+        yield (
+            (sys.executable, "-c", _EXEC_GATE, str(read_fd), str(error_w), *command),
+            read_fd,
+            write_fd,
+            error_r,
+            error_writer,
+        )
     finally:
-        os.close(read_fd)
-        os.close(write_fd)
+        error_writer.close()
+        for fd in (read_fd, write_fd, error_r):
+            os.close(fd)
+
+
+async def _exec_error(fd: int, command: str) -> None:
+    os.set_blocking(fd, False)
+    loop = asyncio.get_running_loop()
+    ready: asyncio.Future[bytes] = loop.create_future()
+
+    def receive() -> None:
+        if not ready.done():
+            ready.set_result(os.read(fd, 64))
+
+    loop.add_reader(fd, receive)
+    try:
+        data = await ready
+        if data:
+            code = int(data)
+            raise OSError(code, os.strerror(code), command)
+    finally:
+        loop.remove_reader(fd)
 
 
 class ChildProcess(ABC):
@@ -288,19 +476,22 @@ class ChildProcess(ABC):
     async def _stop(self) -> ChildOutcome:
         self.platform.signal_group(self.identity, signal.SIGTERM)
         deadline = time.monotonic() + STOP_GRACE_SECONDS
+        stage = GracefulStopOutcome
         while self.platform.group_members(self.identity):
             if time.monotonic() >= deadline:
+                stage = ForcedStopOutcome
                 self.platform.signal_group(self.identity, signal.SIGKILL)
                 break
             await asyncio.sleep(0.02)
-        outcome = await self.wait()
+        async with asyncio.timeout(STOP_GRACE_SECONDS):
+            outcome = await self.wait()
         # Leader exit alone is insufficient. A grandchild may ignore TERM.
         while self.platform.group_members(self.identity):
             self.platform.signal_group(self.identity, signal.SIGKILL)
             if time.monotonic() >= deadline + STOP_GRACE_SECONDS:
                 raise RuntimeError("Child process group did not retire")
             await asyncio.sleep(0.02)
-        return outcome
+        return stage(outcome)
 
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
@@ -318,18 +509,34 @@ class AttachedChild(ChildProcess):
 
     @classmethod
     async def start(
-        cls, command: tuple[str, ...], *, cwd: str | Path | None = None,
+        cls,
+        command: tuple[str, ...],
+        *,
+        cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
     ) -> AttachedChild:
-        with _launch_gate(command) as (argv, read_fd, write_fd):
+        with _launch_gate(command) as (argv, read_fd, write_fd, error_r, error_w):
             process = await asyncio.create_subprocess_exec(
-                *argv, cwd=cwd, env=env, stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                start_new_session=True, pass_fds=(read_fd,),
+                *argv,
+                cwd=cwd,
+                env=env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+                pass_fds=(read_fd, error_w.fileno(), *pass_fds),
             )
+            error_w.close()
             identity = ProcessIdentity.capture(process.pid)
-            os.write(write_fd, b"G")
-        return cls(process, identity)
+            child = cls(process, identity)
+            try:
+                os.write(write_fd, b"G")
+                await _exec_error(error_r, command[0])
+            except BaseException:
+                await child.stop()
+                raise
+        return child
 
     @property
     def returncode(self) -> int | None:
@@ -342,8 +549,12 @@ class AttachedChild(ChildProcess):
 class BoundedRun:
     @classmethod
     async def run(
-        cls, command: tuple[str, ...], *, timeout: float,
-        input: bytes | None = None, cwd: str | Path | None = None,
+        cls,
+        command: tuple[str, ...],
+        *,
+        timeout: float,
+        input: bytes | None = None,
+        cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
     ) -> ChildResult:
         if not math.isfinite(timeout) or timeout <= 0:
@@ -373,17 +584,32 @@ class DetachedProcess(ChildProcess):
 
     @classmethod
     def launch(
-        cls, command: tuple[str, ...], *, cwd: str | Path | None = None,
-        env: dict[str, str] | None = None, output: Any = subprocess.DEVNULL,
+        cls,
+        command: tuple[str, ...],
+        *,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+        output: Any = subprocess.DEVNULL,
     ) -> DetachedProcess:
-        with _launch_gate(command) as (argv, read_fd, write_fd):
+        with _launch_gate(command) as (argv, read_fd, write_fd, error_r, error_w):
             process = subprocess.Popen(
-                argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                stdout=output, stderr=output, start_new_session=True,
-                pass_fds=(read_fd,),
+                argv,
+                cwd=cwd,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=output,
+                start_new_session=True,
+                pass_fds=(read_fd, error_w.fileno()),
             )
+            error_w.close()
             identity = ProcessIdentity.capture(process.pid)
             os.write(write_fd, b"G")
+            error = os.read(error_r, 64)
+            if error:
+                process.wait()
+                code = int(error)
+                raise OSError(code, os.strerror(code), command[0])
         return cls(identity, process)
 
     @classmethod
@@ -395,7 +621,8 @@ class DetachedProcess(ChildProcess):
         self.platform.signal_group(self.identity, signum)
 
     async def stop(self) -> ChildOutcome:
-        self.platform.require(self.identity)
+        if self._stop_task is None:
+            self.platform.require(self.identity)
         return await super().stop()
 
     async def wait(self) -> ChildOutcome:
@@ -415,3 +642,163 @@ class DetachedExitOutcome(ChildOutcome):
     @property
     def successful(self) -> bool:
         return False
+
+
+class NamespacedChild(AttachedChild):
+    """Attached shape with kernel containment and an independent hard deadline.
+
+    Lifted from the selected-Pi guardian: namespace PID1 attests readiness before
+    exec release, a pidfd watchdog arms before launch, and killing unshare kills
+    namespace PID1 (including descendants which escaped the process group).
+    Business input/UNKNOWN journals stay with the caller.
+    """
+
+    def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: str):
+        super().__init__(child.process, child.identity)
+        self.watchdog = watchdog
+        self.namespace = namespace
+
+    @classmethod
+    async def start(
+        cls,
+        command: tuple[str, ...],
+        *,
+        deadline: float,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+    ) -> NamespacedChild:
+        platform = Platform.current()
+        if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):
+            raise NotImplementedError("Exact namespace deadline containment unavailable")
+        if not math.isfinite(deadline) or deadline <= time.monotonic():
+            raise ValueError("A future finite monotonic deadline is required")
+        launch = NamespaceLaunch(command, secrets.token_hex(16), deadline)
+        ready_r, ready_w = os.pipe()
+        release_r, release_w = os.pipe()
+        child = watchdog = None
+        descriptor = None
+        try:
+            child = await AttachedChild.start(
+                platform.namespace_argv(launch, ready_w, release_r),
+                cwd=cwd,
+                env=env,
+                pass_fds=(ready_w, release_r),
+            )
+            descriptor = platform.open_pidfd(child.pid)
+            watchdog = await AttachedChild.start(
+                WatchDeadlineCommand(descriptor, deadline).argv(),
+                pass_fds=(descriptor,),
+            )
+            assert watchdog.stdout is not None
+            async with asyncio.timeout(max(0, deadline - time.monotonic())):
+                if await watchdog.stdout.readline() != b"armed\n":
+                    raise RuntimeError("Independent child watchdog failed to arm")
+                # Reading this dedicated pipe cannot consume provider stdout.
+                os.set_blocking(ready_r, False)
+                loop = asyncio.get_running_loop()
+                ready: asyncio.Future[bytes] = loop.create_future()
+                data = bytearray()
+
+                def receive() -> None:
+                    if ready.done():
+                        return
+                    chunk = os.read(ready_r, 4096)
+                    data.extend(chunk)
+                    if len(data) > 4096 or not chunk:
+                        ready.set_exception(RuntimeError("Namespace readiness missing"))
+                    elif b"\n" in data:
+                        ready.set_result(bytes(data))
+
+                loop.add_reader(ready_r, receive)
+                try:
+                    proof = FieldCodec.decode(NamespaceReady, json.loads(await ready))
+                finally:
+                    loop.remove_reader(ready_r)
+                if (
+                    proof.token != launch.token
+                    or proof.pid != 1
+                    or proof.namespace == os.readlink("/proc/self/ns/pid")
+                    or not child.alive()
+                ):
+                    raise RuntimeError("Namespace readiness identity mismatch")
+                os.write(release_w, b"G")
+                return cls(child, watchdog, proof.namespace)
+        except BaseException:
+            if child is not None:
+                await child.stop()
+            if watchdog is not None:
+                await watchdog.stop()
+            raise
+        finally:
+            for fd in (ready_r, ready_w, release_r, release_w):
+                os.close(fd)
+            if descriptor is not None:
+                os.close(descriptor)
+
+    async def _stop(self) -> ChildOutcome:
+        result = await super()._stop()
+        await self.watchdog.stop()
+        deadline = time.monotonic() + STOP_GRACE_SECONDS
+        while NamespaceContainment.namespace_alive(self.namespace):
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Child PID namespace did not retire")
+            await asyncio.sleep(0.02)
+        return result
+
+
+class ChildCommand(DeclaredFamily, affix="Command"):
+    """Internal child entrypoints decode once through their declaration owner."""
+
+    def argv(self) -> tuple[str, ...]:
+        return (
+            sys.executable,
+            "-m",
+            "agent_comms.child_process",
+            json.dumps(FieldCodec.encode(self)),
+        )
+
+    @abstractmethod
+    def run(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class NamespaceInitCommand(ChildCommand):
+    launch: NamespaceLaunch
+    ready_fd: int
+    release_fd: int
+
+    def run(self) -> None:
+        try:
+            if os.getpid() != 1 or time.monotonic() >= self.launch.deadline:
+                raise RuntimeError("Namespace init missing or deadline elapsed")
+            proof = NamespaceReady(
+                self.launch.token,
+                os.readlink("/proc/self/ns/pid"),
+                os.getpid(),
+            )
+            os.write(self.ready_fd, (json.dumps(FieldCodec.encode(proof)) + "\n").encode())
+            os.close(self.ready_fd)
+            if os.read(self.release_fd, 1) != b"G" or time.monotonic() >= self.launch.deadline:
+                raise RuntimeError("Namespace release absent or deadline elapsed")
+            os.close(self.release_fd)
+            os.execvpe(self.launch.command[0], self.launch.command, os.environ)
+        except BaseException:
+            os._exit(127)
+
+
+@dataclass(frozen=True)
+class WatchDeadlineCommand(ChildCommand):
+    descriptor: int
+    deadline: float
+
+    def run(self) -> None:
+        platform = Platform.current()
+        if not isinstance(platform, PidfdHandles):
+            raise NotImplementedError("Exact process watchdog unavailable")
+        os.fstat(self.descriptor)
+        print("armed", flush=True)
+        platform.watch_deadline(self.descriptor, self.deadline)
+
+
+if __name__ == "__main__":
+    FieldCodec.decode(ChildCommand, json.loads(sys.argv[1])).run()
