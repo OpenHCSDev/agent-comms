@@ -29,6 +29,15 @@ class ThreadIncarnation:
 
 
 @dataclass(frozen=True, slots=True)
+class TurnId:
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.value:
+            raise ValueError("Turn ID cannot be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class OwnerIdentity:
     incarnation: ThreadIncarnation
     generation: int

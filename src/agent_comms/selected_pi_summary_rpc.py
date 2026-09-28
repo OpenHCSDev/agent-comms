@@ -7,14 +7,14 @@ starts a child, resolves credentials, commits a summary, or replays input.
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession, _session_revision
-from .compaction_journal import CompactionJournal
+from .compaction_journal import CompactionJournal, SelectedSummarySource
+from .field_codec import FieldCodec
 from .fresh_private_session import FreshPrivateSession
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_provider import NativeSummary
@@ -134,7 +134,8 @@ class SelectedSummarySlot:
         Every reservation stays blocking until the existing commit/recovery
         protocol settles it. Failure never authorizes another attempt.
         """
-        source = json.loads(json.dumps(source, allow_nan=False))
+        envelope = FieldCodec.decode(SelectedSummarySource, source)
+        source = FieldCodec.encode(envelope)
         preparation = _request(witness, source["selected"], source["settings"])
         request = AgentCommsSummarizeCompaction(
             id=preparation.id,
@@ -147,7 +148,7 @@ class SelectedSummarySlot:
         )
         if (
             witness.session_id != self.session
-            or source["source"].get("ownerName") != self.owner
+            or envelope.source.incarnation.name != self.owner
             or type(tokens_before) is not int
             or not 0 <= tokens_before <= 2**53 - 1
             or not 0 < idle_timeout_seconds < float("inf")

@@ -10,16 +10,15 @@ No model tool, Pi RPC, or producer exposes this module.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import re
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
+from .child_process import ProcessIdentity
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -28,61 +27,21 @@ from .compaction_journal import (
 )
 from .compaction_states import SummaryState
 from .field_codec import FieldCodec
+from .selected_source import SelectedAdmissionSource, SessionRevision
 
 if TYPE_CHECKING:
     from .input_disposition import InputDispositions
 
-_HEX = re.compile(r"[0-9a-f]{64}\Z")
 _MINT = object()
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedAdmissionSource:
-    owner_name: str = field(metadata={"wire_name": "ownerName"})
-    owner_pid: int = field(metadata={"wire_name": "ownerPid"})
-    owner_created_at: str = field(metadata={"wire_name": "ownerCreatedAt"})
-    turn_id: str = field(metadata={"wire_name": "turnId"})
-    ingress_key: str = field(metadata={"wire_name": "ingressKey"})
-    admission_generation: int = field(metadata={"wire_name": "admissionGeneration"})
-    correction_witness: str = field(metadata={"wire_name": "correctionWitness"})
-    input_sha256: str = field(metadata={"wire_name": "inputSha256"})
-    original_sha256: str = field(metadata={"wire_name": "originalSha256"})
-    reserved_revision: tuple[
-        tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None
-    ] = field(metadata={"wire_name": "reservedRevision"})
-
-    def __post_init__(self):
-        if (
-            not all(
-                (
-                    self.owner_name,
-                    self.owner_created_at,
-                    self.turn_id,
-                    self.ingress_key,
-                    self.correction_witness,
-                )
-            )
-            or self.owner_pid <= 0
-            or self.admission_generation <= 0
-            or _HEX.fullmatch(self.input_sha256) is None
-            or _HEX.fullmatch(self.original_sha256) is None
-        ):
-            raise ValueError("Exact selected admission identity required")
-
-
-@dataclass(frozen=True, slots=True)
-class SelectedAdmissionIdentity(SelectedAdmissionSource):
-    # Post-result revision; reserved_revision retains the pre-result witness.
-    session_revision: tuple[
-        tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None
-    ] = field(metadata={"source_exclude": True})
+class SelectedAdmissionIdentity:
+    source: SelectedAdmissionSource
+    session_revision: SessionRevision
 
     def matches_source(self, source: SelectedSummarySource) -> bool:
-        try:
-            witness = FieldCodec.decode(SelectedAdmissionSource, source.source)
-        except (TypeError, ValueError):
-            return False
-        return FieldCodec.encode(witness) == FieldCodec.project(self, "source")
+        return self.source == source.source
 
 
 class SelectedSummaryAdmission:
@@ -144,7 +103,7 @@ class SelectedSummaryAdmission:
             source = FieldCodec.decode(SelectedSummarySource, json.loads(source_json))
             valid = (
                 identity.matches_source(source)
-                and identity.owner_pid == os.getpid()
+                and identity.source.owner == ProcessIdentity.capture(os.getpid())
                 and identity.session_revision is not None
                 and _session_revision(session) == identity.session_revision
                 and state.original_eligible
@@ -182,7 +141,7 @@ class SelectedSummaryAdmission:
             if (
                 os.getpid() != self._process_pid
                 or identity != self._identity
-                or identity.owner_pid != os.getpid()
+                or identity.source.owner != ProcessIdentity.capture(os.getpid())
                 or Path(session_file).resolve(strict=True) != Path(self._session)
                 or wire_root / "compaction-commits.sqlite3" != self._path
                 or (
@@ -191,7 +150,7 @@ class SelectedSummaryAdmission:
                 )
                 != self._journal_inode
                 or _session_revision(session_file) != identity.session_revision
-                or hashlib.sha256(sent_text.encode()).hexdigest() != identity.input_sha256
+                or not identity.source.input_digest.matches(sent_text)
             ):
                 return False
             journal = CompactionJournal(self._path)
@@ -208,20 +167,13 @@ class SelectedSummaryAdmission:
                 journal, self._session, self._operation_id, self._source_json
             ):
                 return False
-            row = dispositions.read().rows.get(identity.ingress_key)
-            if (
-                row is None
-                or not row.unresolved
-                or row.owner != identity.owner_name
-                or row.admission != identity.admission_generation
-                or row.native_id is not None
-                or hashlib.sha256(row.source_text.encode()).hexdigest() != identity.original_sha256
-            ):
-                return False
+            identity.source.reservation_check(
+                identity.source.reserved_revision, dispositions.read()
+            ).require_valid()
             return dispositions.bind(
-                identity.ingress_key,
-                admission=identity.admission_generation,
-                turn_id=identity.turn_id,
+                identity.source.ingress_key,
+                admission=identity.source.admission_generation,
+                turn_id=identity.source.turn.value,
                 native_id=native_id,
                 text=sent_text,
             )

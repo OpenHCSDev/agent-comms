@@ -7,7 +7,6 @@ live-recorded coordinator proof. All UNKNOWN rows remain unchanged.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import stat
@@ -15,26 +14,25 @@ from contextlib import closing
 from pathlib import Path
 
 from .backend import _session_revision
-from .native_runtime_input import NativeRuntimeInput
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDispositions
 from .native_entries import NativeEntry
 from .native_pi import NativeContextProof
+from .native_runtime_input import NativeRuntimeInput
 from .pi_payloads import TextContent
 from .private_sidecar import native_request_digest
+from .selected_source import SelectedSource
 
 
 def verify_continued_private_session(
-    root: Path, session: Path, source: dict, raw_ids: frozenset[str]
+    root: Path, session: Path, source: SelectedSource, raw_ids: frozenset[str]
 ) -> None:
     """Reprove complete saved user history; never promote an unresolved attempt."""
     before = _session_revision(str(session))
-    owner = source.get("ownerName")
+    owner = source.incarnation.name
     if (
         before is None
-        or source.get("reservedRevision") != json.loads(json.dumps(before))
-        or type(owner) is not str
-        or not owner
+        or source.reserved_revision != before
         or session.parent.parent != (root / "native-sessions").resolve(strict=True)
     ):
         raise ValueError("Continued private source identity changed")
@@ -46,7 +44,7 @@ def verify_continued_private_session(
     # Any unresolved owner input except the exact new original remains a stop.
     # Do not use admission rollover to hide uncertain history.
     if any(
-        row.owner == owner and row.unresolved and key != source.get("ingressKey")
+        row.owner == owner and row.unresolved and key != source.pending_input_key
         for key, row in rows.items()
     ):
         raise ValueError("Continued private history contains unresolved owner input")

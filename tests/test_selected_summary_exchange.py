@@ -20,6 +20,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
+from selected_summary_cases import manual_source
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 
 CHILD = r"""
@@ -118,7 +119,7 @@ async def selected(tmp_path, mode="success"):
         revision=":".join(map(str, persistent.revision[0])),
     )
     source = dict(
-        source=dict(ownerName="owner"),
+        source=manual_source(persistent.session_file),
         selected=dict(provider="fixture", modelId="fixture", contextWindow=4096),
         settings=dict(reserveTokens=100, keepRecentTokens=100),
     )
@@ -293,7 +294,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 (0, 0),
             )
             source = dict(
-                source=dict(ownerName="owner"),
+                source=manual_source(persistent.session_file),
                 selected=fixture["selected"],
                 settings=fixture["settings"],
             )

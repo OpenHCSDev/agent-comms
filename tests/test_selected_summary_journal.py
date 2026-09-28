@@ -24,6 +24,7 @@ from agent_comms.compaction_states import (
     ReservedSummary,
 )
 from agent_comms.input_disposition import InputDispositions
+from selected_summary_cases import manual_source
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
@@ -34,7 +35,7 @@ def reserved(tmp_path):
     session.write_text('{"type":"session","version":3}\n')
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
     source = {
-        "source": {"witnessRevision": "dev:ino:size:mtime:ctime", "turnId": "turn"},
+        "source": manual_source(session),
         "selected": {"provider": "fixture", "modelId": "model", "contextWindow": 1000},
         "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
     }

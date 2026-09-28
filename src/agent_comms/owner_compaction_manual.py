@@ -15,12 +15,15 @@ from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError, SelectedSummaryAttempt
 from .compaction_states import ManualCommittedSummary
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary
 from .owner_compaction_runtime import compact_owner_once
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
+from .selected_source import ManualSource, SelectedSource
+from .thread_identity import TurnId
 
 
 @dataclass(frozen=True)
@@ -64,10 +67,10 @@ async def compact_manual_owner(
     refusals = bridge.journal.blocking_selected_summary(owner.session_file)
     for refusal in refusals:
         refusal.state.manual_recovery()
-        prior = json.loads(refusal.source_json)["source"]
-        if prior.get("ownerName") != owner.name:
+        prior = FieldCodec.decode(SelectedSource, json.loads(refusal.source_json)["source"])
+        if prior.incarnation != owner.incarnation:
             raise CompactionJournalError("Refused selected source belongs to another owner")
-        key = prior.get("ingressKey")
+        key = prior.pending_input_key
         if key is not None:
             row = bridge.inputs.read().rows.get(key)
             if row is None or not row.unattempted:
@@ -99,14 +102,14 @@ async def compact_manual_owner(
         for refusal in refusals:
             bridge.journal.retire_refused_summary(refusal)
         source = {
-            "source": {
-                "ownerName": owner.name,
-                "ownerPid": owner.pid,
-                "ownerCreatedAt": float(owner.created_at).hex(),
-                "turnId": owner.active_turn.id,
-                "ingressKey": pending_input_key,
-                "reservedRevision": _session_revision(owner.session_file),
-            },
+            "source": FieldCodec.encode(
+                ManualSource(
+                    incarnation=owner.incarnation,
+                    owner=owner.process_identity,
+                    turn=TurnId(owner.active_turn.id),
+                    reserved_revision=_session_revision(owner.session_file),
+                )
+            ),
             "selected": {
                 "provider": provider,
                 "modelId": model,

@@ -6,7 +6,6 @@ capabilities. Only the journal's returned post-fsync ACK can admit an original.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
@@ -15,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .child_process import ChildOutcome
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .text_digest import TextDigest
 
 if TYPE_CHECKING:
     from .compaction_journal import CompactionJournal
@@ -199,8 +199,7 @@ class LinkedSummary(SummaryState):
             and commit.state.committed
             and type(intent) is dict
             and intent.get("selectedSummaryOperationId") == operation_id
-            and intent.get("selectedSummarySourceDigest")
-            == hashlib.sha256(source_json.encode()).hexdigest()
+            and intent.get("selectedSummarySourceDigest") == TextDigest.of(source_json).value
         )
 
 
@@ -251,7 +250,6 @@ class RefusedSummary(SummaryState):
     @classmethod
     def successors(cls):
         return (RetiredRefusalSummary,)
-
 
 
 @dataclass(frozen=True)

@@ -28,6 +28,7 @@ from agent_comms.selected_pi_summary_rpc import (
     SelectedSummarySlot,
     _summary_response,
 )
+from selected_summary_cases import manual_source
 
 
 @asynccontextmanager
@@ -299,7 +300,7 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
                 journal,
                 preparation.witness,
                 dict(
-                    source=dict(ownerName="owner"),
+                    source=manual_source(session),
                     selected=selected.to_wire(),
                     settings=dict(reserveTokens=2048, keepRecentTokens=1024),
                 ),
