@@ -8,8 +8,8 @@ import os
 import sys
 from pathlib import Path
 
-from agent_comms import acp
-from agent_comms.input_drain import InputDrain, cohort_foreground, coordinated_runtime, worker
+from agent_comms import acp, cohort_foreground, coordinated_runtime, worker
+from agent_comms.input_drain import InputDrain
 from test_coordinated_runtime import _fake_model
 
 

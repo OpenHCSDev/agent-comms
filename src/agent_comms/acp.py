@@ -199,7 +199,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     "compact", instructions=instructions
                 )
             else:
-                result = await manual_compaction_bridge.compact_context(self.turns, session_id, instructions)
+                result = await manual_compaction_bridge.compact_context(
+                    self.turns, session_id, instructions
+                )
             if not isinstance(result, dict) or result.get("ok") is not True:
                 reason = (
                     result.get("error") if isinstance(result, dict) else None

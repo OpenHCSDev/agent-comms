@@ -67,7 +67,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.register(
                 Thread(
-                    name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    name,
+                    frozenset({"team"}),
+                    str(work),
+                    pid=os.getpid(),
+                    created_at=incarnation,
+                    model="test/fake",
                 )
             )
         root_id = comms.initialize_private_initial_protocol()
@@ -249,7 +254,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         sender_pid = os.getpid()
         comms.register(Thread("sender", frozenset(), str(work), pid=sender_pid, created_at=61001.0))
         comms.register(
-            Thread("alpha", frozenset({"team"}), str(work), pid=sender_pid, created_at=61002.0)
+            Thread(
+                "alpha",
+                frozenset({"team"}),
+                str(work),
+                pid=sender_pid,
+                created_at=61002.0,
+                model="test/fake",
+            )
         )
         root_id = comms.initialize_private_initial_protocol()
         comms.initialize_private_claim_protocol()
@@ -286,7 +298,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         try:
             assert process.pid != sender_pid
             comms.register(
-                Thread("beta", frozenset({"team"}), str(work), pid=process.pid, created_at=61003.0)
+                Thread(
+                    "beta",
+                    frozenset({"team"}),
+                    str(work),
+                    pid=process.pid,
+                    created_at=61003.0,
+                    model="test/fake",
+                )
             )
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 store.register_participant(

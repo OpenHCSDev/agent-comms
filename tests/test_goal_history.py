@@ -73,7 +73,7 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     assert baseline[0].kind == "baseline"
     assert baseline[0].before is None and baseline[0].after == current
     assert Comms(comms.root).goal_history("worker") == baseline
-    paused = reopened.turns.update_goal("worker", "paused", goal_id=current.id)
+    paused = reopened.update_goal("worker", "paused", goal_id=current.id)
     entries = Comms(comms.root).goal_history("worker")
     assert [entry.kind for entry in entries] == ["baseline", "transition"]
     assert entries[-1].before == current and entries[-1].after == paused

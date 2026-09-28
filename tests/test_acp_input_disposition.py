@@ -460,12 +460,12 @@ async def run():
     comms = wire(Path(sys.argv[1]))
     agent = CommsAgent(comms, agent_bin='/bin/echo', runtime_enabled=True)
     await agent.new_session(sys.argv[2])
-    agent._drain_tasks['project'].cancel()
-    await asyncio.gather(agent._drain_tasks['project'], return_exceptions=True)
-    agent._schedule_wake = lambda _session: None
+    agent.inputs.drain_tasks['project'].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks['project'], return_exceptions=True)
+    agent.inputs.schedule_wake = lambda _session: None
     comms.register(Thread(name='peer', tags=frozenset(), worktree=sys.argv[2]))
     comms.send('peer', 'project', 'survive hard exit')
-    await agent._drain_inbox('project')
+    await agent.inputs.drain_inbox('project')
     assert InputDispositions(comms.root).status('bus:1') == 'unknown'
     os._exit(0)
 

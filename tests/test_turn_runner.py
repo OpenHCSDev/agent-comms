@@ -214,3 +214,30 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
     assert owner.inputs.dispositions.status(attempts[0]) == "unknown"
     assert not owner.turns.turn_tasks and not owner.turns.active_turns
     assert not owner.inputs.backend_inboxes
+
+
+def test_acp_has_no_superseded_component_accessors_or_dispatch():
+    removed = {
+        "_sessions",
+        "_proxies",
+        "_client",
+        "_config_options",
+        "_setting_requests",
+        "_queued_inputs",
+        "_dispositions",
+        "_schedule_wake",
+        "_drain_inbox",
+        "_turn_tasks",
+        "_turn_locks",
+        "_active_turns",
+        "_run_agent_turn",
+        "_schedule_goal",
+        "_goal_store",
+        "_persistent_backends",
+        "set_goal",
+        "compact_context",
+        "_sanitized_compaction_summary",
+        "config",
+    }
+    assert not removed.intersection(vars(CommsAgent))
+    assert not any(isinstance(value, property) for value in vars(CommsAgent).values())

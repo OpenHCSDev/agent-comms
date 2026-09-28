@@ -6,7 +6,6 @@ The runner's separate fake-provider tests establish no-retry and session safety.
 
 from __future__ import annotations
 
-
 import pytest
 from acp import RequestError
 from acp.agent.router import build_agent_router

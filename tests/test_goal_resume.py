@@ -219,13 +219,13 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
         assert action == "active"
         # Blocked goals cannot become active through an ordinary registry
         # transition; a second blocked report still exercises the ABA CAS.
-        other.turns.update_goal(
+        other.update_goal(
             name,
             "blocked" if prior == "blocked" else "active",
             goal_id=saved.id,
             progress="newer report",
         )
-        other.turns.update_goal(name, prior, goal_id=saved.id, progress="unchanged")
+        other.update_goal(name, prior, goal_id=saved.id, progress="unchanged")
         now = Comms(comms.root).registry.require(name).goal
         assert now is not None
         assert (now.id, now.status, now.progress) == (saved.id, saved.status, saved.progress)

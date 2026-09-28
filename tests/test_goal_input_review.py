@@ -103,8 +103,8 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
         # Durable explicit handling survives reopening and a later wait declaration.
         reopened = wire(comms.root)
-        reopened.turns.update_goal("worker", "active", goal_id=goal.id)
-        reopened.turns.update_goal("worker", "standby", goal_id=goal.id, wait_for=["parent"])
+        reopened.update_goal("worker", "active", goal_id=goal.id)
+        reopened.update_goal("worker", "standby", goal_id=goal.id, wait_for=["parent"])
         fresh = comms.send_message("parent", "worker", "New result")
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _: None)
         await agent.inputs.drain_inbox("worker")

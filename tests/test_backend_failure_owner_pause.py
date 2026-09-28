@@ -100,9 +100,12 @@ def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, 
     if attribution == "stale_owner":
         wired.update_goal("project", "paused", goal_id=initial.id, owner_action=True)
         wired.update_goal("project", "active", goal_id=initial.id, owner_action=True)
-    paused = wired.update_goal(
-        "project", "paused", goal_id=initial.id, model_report=attribution == "model"
-    )
+    if attribution == "model":
+        # Current goal declarations deny a model pause before any state change.
+        with pytest.raises(ValueError, match="cannot take goal action 'paused'"):
+            wired.update_goal("project", "paused", goal_id=initial.id, model_report=True)
+        assert wired.registry.require("project").goal == initial
+    paused = wired.update_goal("project", "paused", goal_id=initial.id)
     if attribution == "missing":
         (wired.root / "goal_pause_events.json").unlink()
     elif attribution == "stale_owner":

@@ -533,7 +533,7 @@ input.on('line', async line => {{
     try:
         for _ in range(2):
             # A detached owner can have passive observers without any active
-            # controller. A bound None must not fall back to owner._client.
+            # controller. A bound None must not fall back to owner.sessions.client.
             context = owner._runtime.controller.set(None) if not has_controller else None
             try:
                 result = await asyncio.wait_for(
