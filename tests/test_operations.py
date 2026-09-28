@@ -257,7 +257,7 @@ class TestThreadOps:
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_reserved_worker_acquire_requires_launch_reservation(self, wired, monkeypatch):
         wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
-        before = wired.registry.snapshot().owner_epochs["reserved"]
+        before = wired.registry.snapshot().owner_generations["reserved"]
         read_fd, write_fd = os.pipe()
         os.write(
             write_fd,
@@ -267,17 +267,17 @@ class TestThreadOps:
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         attached = wired.acquire_thread("reserved", owner_pid=987654)
         assert attached.pid == 987654
-        assert wired.registry.snapshot().owner_epochs["reserved"] == before
+        assert wired.registry.snapshot().owner_generations["reserved"] == before
         assert "AGENT_COMMS_RESERVATION_FD" not in os.environ
         # A new process that reuses a dead PID has no inherited launch pipe;
         # it must acquire a NEW epoch, never inherit the old reservation.
         wired.acquire_thread("reserved", owner_pid=987654)
-        assert wired.registry.snapshot().owner_epochs["reserved"] > before
+        assert wired.registry.snapshot().owner_generations["reserved"] > before
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_reserved_worker_rejects_stale_launch_epoch(self, wired, monkeypatch):
         wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
-        before = wired.registry.snapshot().owner_epochs["reserved"]
+        before = wired.registry.snapshot().owner_generations["reserved"]
         read_fd, write_fd = os.pipe()
         os.write(
             write_fd,
@@ -288,13 +288,13 @@ class TestThreadOps:
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         with pytest.raises(RelationViolationError, match="reservation no longer matches"):
             wired.acquire_thread("reserved", owner_pid=987654)
-        assert wired.registry.snapshot().owner_epochs["reserved"] > before
+        assert wired.registry.snapshot().owner_generations["reserved"] > before
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_long_valid_name_reservation_is_not_truncated(self, wired, monkeypatch):
         name = "n" * 257  # The old plaintext proof exceeded the 256-byte child read.
         wired.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
-        epoch = wired.registry.snapshot().owner_epochs[name]
+        epoch = wired.registry.snapshot().owner_generations[name]
         read_fd, write_fd = os.pipe()
         proof = _owner_launch_proof(wired.registry.snapshot().owner_identity(name), 987654)
         assert len(proof) == 32
@@ -302,7 +302,7 @@ class TestThreadOps:
         os.close(write_fd)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         assert wired.acquire_thread(name, owner_pid=987654).pid == 987654
-        assert wired.registry.snapshot().owner_epochs[name] == epoch
+        assert wired.registry.snapshot().owner_generations[name] == epoch
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_name_exceeding_pipe_capacity_has_fixed_size_launch_proof(self, wired, monkeypatch):
@@ -519,7 +519,7 @@ class TestThreadOps:
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
     def test_stop_rejects_post_kill_same_pid_lifecycle_aba(self, wired, monkeypatch):
         wired.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
-        before = wired.registry.snapshot().owner_epochs["owner"]
+        before = wired.registry.snapshot().owner_generations["owner"]
         original = wired.registry.require("owner")
         signals = []
         waits = []
@@ -550,7 +550,7 @@ class TestThreadOps:
         assert signals == [(987654, signal.SIGTERM), (987654, signal.SIGKILL)]
         assert len(waits) == 2
         assert wired.registry.require("owner") == original
-        assert wired.registry.snapshot().owner_epochs["owner"] > before
+        assert wired.registry.snapshot().owner_generations["owner"] > before
         assert wired.registry.status("owner").value == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
@@ -633,7 +633,7 @@ class TestThreadOps:
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
     def test_start_rejects_same_pid_new_epoch(self, wired, monkeypatch):
         wired.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
-        before = wired.registry.snapshot().owner_epochs["starting"]
+        before = wired.registry.snapshot().owner_generations["starting"]
 
         def epoch_changed(self, thread, *, wait=True):
             if wait:
@@ -644,7 +644,7 @@ class TestThreadOps:
         monkeypatch.setattr("agent_comms.operations.Comms._is_local_participant", epoch_changed)
         with pytest.raises(RelationViolationError, match="epoch changed"):
             wired.start("starting")
-        assert wired.registry.snapshot().owner_epochs["starting"] > before
+        assert wired.registry.snapshot().owner_generations["starting"] > before
         assert wired.registry.require("starting").pid == 987654
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")

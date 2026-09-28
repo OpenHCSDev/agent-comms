@@ -1,0 +1,57 @@
+src/agent_comms/__init__.py:5:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/__init__.py:5:101: E501 Line too long (562 > 100)
+src/agent_comms/channels.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/channels.py:9:101: E501 Line too long (161 > 100)
+src/agent_comms/declarations.py:72:5: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/declarations.py:3566:101: E501 Line too long (105 > 100)
+src/agent_comms/exporting.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/historical_views.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/locked_store.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/optional_awareness_projection.py:9:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/optional_awareness_projection.py:27:101: E501 Line too long (103 > 100)
+src/agent_comms/owner_compaction_adaptive.py:8:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/owner_compaction_commit.py:8:1: I001 [*] Import block is un-sorted or un-formatted
+src/agent_comms/owner_compaction_commit.py:29:101: E501 Line too long (113 > 100)
+tests/test_bus_page_index.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_coordinated_runtime.py:7:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_coordination_response.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_declarations.py:1:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_declarations.py:282:101: E501 Line too long (107 > 100)
+tests/test_declarations.py:348:101: E501 Line too long (103 > 100)
+tests/test_declarations.py:350:101: E501 Line too long (106 > 100)
+tests/test_declarations.py:618:101: E501 Line too long (103 > 100)
+tests/test_irc.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_maintenance_barrier.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_owner_compaction_adaptive.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_owner_compaction_adaptive.py:75:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_authority.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_owner_compaction_authority.py:31:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_commit.py:7:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_owner_compaction_commit.py:69:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_commit.py:724:101: E501 Line too long (113 > 100)
+tests/test_owner_compaction_commit.py:839:101: E501 Line too long (108 > 100)
+tests/test_owner_compaction_gate.py:8:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_owner_compaction_gate.py:40:101: E501 Line too long (115 > 100)
+tests/test_owner_compaction_gate.py:119:101: E501 Line too long (104 > 100)
+tests/test_owner_compaction_prepare.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_owner_compaction_prepare.py:88:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_prepare.py:122:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_prepare.py:161:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_prepare.py:206:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_prepare.py:245:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_prepare.py:374:101: E501 Line too long (107 > 100)
+tests/test_owner_compaction_prepare.py:446:101: E501 Line too long (115 > 100)
+tests/test_private_nk_entrypoint.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_private_nk_entrypoint.py:32:101: E501 Line too long (103 > 100)
+tests/test_private_nk_entrypoint.py:711:5: SIM117 Use a single `with` statement with multiple contexts instead of nested `with` statements
+tests/test_private_nk_entrypoint.py:715:11: N818 Exception name `StopBeforeSpawn` should be named with an Error suffix
+tests/test_registration_components.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_registration_components.py:15:38: F811 [*] Redefinition of unused `Registration` from line 13: `Registration` redefined here
+tests/test_registration_components.py:77:101: E501 Line too long (101 > 100)
+tests/test_registration_components.py:130:101: E501 Line too long (197 > 100)
+tests/test_registration_components.py:137:101: E501 Line too long (112 > 100)
+tests/test_selected_owner_compaction_integration.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+tests/test_selected_owner_compaction_integration.py:94:101: E501 Line too long (111 > 100)
+tests/test_thread_identity.py:3:1: I001 [*] Import block is un-sorted or un-formatted
+Found 55 errors.
+[*] 25 fixable with the `--fix` option.

@@ -61,10 +61,20 @@ class LockedStore(ABC, Generic[T]):
         """Decode at the boundary; owners may normalize legacy document shapes."""
         return FieldCodec.decode(self.record_type, data)
 
+    def _encode(self, value: T) -> Any:
+        """Owners with an established external shape may project that encoding."""
+        return FieldCodec.encode(value)
+
+    @contextmanager
+    def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
+        """Canonical lock, including a descriptor for scoped child authority."""
+        with _store_lock(self.path, shared=shared, blocking=blocking) as descriptor:
+            yield descriptor
+
     @contextmanager
     def reading(self) -> Iterator[T]:
         """Keep a shared lock through a dependent projection or source check."""
-        with _store_lock(self.path, shared=True):
+        with self.locked(shared=True):
             yield self._read_unlocked()
 
     def read(self) -> T:
@@ -72,13 +82,13 @@ class LockedStore(ABC, Generic[T]):
             return value
 
     def update(self, change: Callable[[T], T]) -> T:
-        with _store_lock(self.path):
+        with self.locked():
             original = self._read_unlocked()
             changed = change(original)
             if changed is not original:
                 self._write_unlocked(
                     json.dumps(
-                        FieldCodec.encode(changed),
+                        self._encode(changed),
                         indent=self.json_indent,
                         sort_keys=self.json_sort_keys,
                     )

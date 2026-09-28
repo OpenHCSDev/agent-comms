@@ -53,8 +53,6 @@ class BusPresentation:
                 sorted(scope.targets) if scope.targets is not None else None,
                 scope.any_mode,
                 sorted(scope.participant_names),
-                scope.after,
-                scope.expanded_after,
                 sorted(scope.seen_sequences),
             ]
 

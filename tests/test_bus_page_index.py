@@ -8,12 +8,12 @@ import sqlite3
 
 import pytest
 
-from agent_comms import Message, MessageBus, MessageType, Thread, ThreadRegistry
+from agent_comms import Message, MessageBus, MessageType, Registration, Thread
 from agent_comms.declarations import _iter_jsonl_records
 
 
 def _bus(tmp_path) -> MessageBus:
-    registry = ThreadRegistry(tmp_path / "registry.json")
+    registry = Registration(tmp_path / "registry.json")
     for name in ("a", "b", "c"):
         registry.register(Thread(name, frozenset(), str(tmp_path)))
     return MessageBus(tmp_path / "bus.jsonl", registry)

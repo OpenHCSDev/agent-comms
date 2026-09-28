@@ -27,10 +27,10 @@ from .coordination_cohort import _assert_schema, _receipt_matches
 from .declarations import (
     RelationViolationError,
     Thread,
-    ThreadRegistry,
     _require_no_private_owner_rename,
     _store_lock,
 )
+from .registration import Registration
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 
@@ -211,16 +211,16 @@ class OptionalAwarenessProjection:
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
         _require_no_private_owner_rename(self.index.bus._path.parent)
-        registry = ThreadRegistry(self.index.bus._registry._path)
-        with _store_lock(registry._path, blocking=False):
-            registry._load_unlocked()
-            actual = registry._threads.get(owner.name)
-            status = registry._statuses.get(owner.name)
+        registry = Registration(self.index.bus._registry.store.path)
+        with _store_lock(registry.store.path, blocking=False):
+            snapshot = registry.store._read_unlocked().snapshot()
+            actual = snapshot.threads.get(owner.name)
+            status = snapshot.statuses.get(owner.name)
             if (
                 actual is None
                 or status is None
                 or not status.active
-                or registry._admission_generations.get(owner.name) != self.expected_admission_epoch
+                or snapshot.admission_generations.get(owner.name) != self.expected_admission_epoch
                 or (
                     actual.name,
                     actual.created_at,

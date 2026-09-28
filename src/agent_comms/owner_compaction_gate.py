@@ -2,7 +2,7 @@
 
 Dormant by design: nothing in the runtime calls this yet. The gate exists so a
 future Python↔Pi bridge can obtain owner evidence from the canonical
-``ThreadRegistry`` instead of trusting caller-stamped labels.
+``Registration`` instead of trusting caller-stamped labels.
 
 Design invariants (blocker 1 of the PR48 merge plan):
 
@@ -33,7 +33,7 @@ __all__ = ["OwnerCompactionAttestation"]
 class OwnerCompactionAttestation:
     """Evidence snapshot proving canonical owner authority at one instant.
 
-    Produced only by ``ThreadRegistry.attest_owner_compaction`` while holding
+    Produced only by ``Registration.attest_owner_compaction`` while holding
     the registry store lock. ``session_*`` fields are echoed caller values,
     not registry observations.
     """

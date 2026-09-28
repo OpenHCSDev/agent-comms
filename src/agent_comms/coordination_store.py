@@ -99,7 +99,7 @@ class ParticipantSnapshot:
 
     This generation begins at registration and advances on explicit coordinator
     reassignment/retry, even if the registry process has not changed. It must
-    never be substituted for a ThreadRegistry owner or admission generation.
+    never be substituted for a Registration owner or admission generation.
     """
 
     lookup: str
