@@ -1,0 +1,18 @@
+..................................F.............                         [100%]
+=================================== FAILURES ===================================
+____ test_attestation_fails_closed_after_owner_or_goal_change[goal-paused] _____
+tests/test_owner_compaction_gate.py:110: in test_attestation_fails_closed_after_owner_or_goal_change
+    mutate(registry, claimed)
+tests/test_owner_compaction_gate.py:102: in <lambda>
+    replace(own, goal=replace(own.goal, status="paused", revision=own.goal.revision + 1))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/dataclasses.py:1770: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/dataclasses.py:1804: in _replace
+    return self.__class__(**changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: Goal.__init__() got an unexpected keyword argument 'status'. Did you mean 'state'?
+=========================== short test summary info ============================
+FAILED tests/test_owner_compaction_gate.py::test_attestation_fails_closed_after_owner_or_goal_change[goal-paused]
+1 failed, 47 passed in 33.77s

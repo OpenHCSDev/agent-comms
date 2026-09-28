@@ -1,0 +1,36 @@
+{
+  "src/agent_comms/declarations.py": [
+    "Goal.__init__",
+    "Goal.active",
+    "Goal.toggle_action",
+    "Goal.toggle_label"
+  ],
+  "src/agent_comms/goal_actions.py": [
+    "GoalAction.from_legacy"
+  ],
+  "src/agent_comms/goal_states.py": [
+    "BlockedGoal.load",
+    "GoalState.from_legacy",
+    "GoalState.load",
+    "GoalStateProjection.block_reason",
+    "GoalStateProjection.pause_source",
+    "GoalStateProjection.state",
+    "GoalStateProjection.status",
+    "PausedGoal.load"
+  ],
+  "src/agent_comms/goal_pauses.py": [
+    "GoalPauseEvents.snapshot"
+  ],
+  "src/agent_comms/goal_waits.py": [
+    "GoalWaits._decode",
+    "GoalWaits.snapshot"
+  ],
+  "src/agent_comms/runtime_requests.py": [
+    "GoalHistoryRuntimeRequest.invalid_payload_message",
+    "GoalRevisionRuntimeRequest.invalid_payload_message",
+    "GoalTextRuntimeRequest.invalid_payload_message",
+    "InputDispositionsRuntimeRequest.invalid_payload_message",
+    "RuntimeRequest.accepts_declared_fields",
+    "RuntimeRequest.invalid_payload_message"
+  ]
+}

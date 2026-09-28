@@ -1,0 +1,272 @@
+{
+  "base": "33dbf564d4d81389999414839b03c2d3bdb925fb",
+  "callers": [
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1570,
+      "source": "goal = Goal(**raw_goal) if isinstance(raw_goal, dict) else None"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1855,
+      "source": "goal = Goal(**raw_goal) if raw_goal is not None else None"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1914,
+      "source": "return Goal(**result[\"goal\"])"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1974,
+      "source": "if goal.status != \"blocked\":"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1984,
+      "source": "return Goal(**result[\"goal\"]) if result[\"goal\"] is not None else None"
+    },
+    {
+      "path": "src/toad/screens/goal_details.py",
+      "line": 50,
+      "source": "revision_goal = Goal(**goal_data)"
+    },
+    {
+      "path": "src/toad/screens/goal_details.py",
+      "line": 88,
+      "source": "else f\"Goal \u00b7 {goal.status} \u00b7 rev {goal.revision}\""
+    },
+    {
+      "path": "src/toad/screens/goal_details.py",
+      "line": 95,
+      "source": "and goal.active"
+    },
+    {
+      "path": "src/toad/widgets/conversation.py",
+      "line": 2655,
+      "source": "action = self.goal.toggle_action if self.goal else \"\""
+    },
+    {
+      "path": "src/toad/widgets/goal_bar.py",
+      "line": 180,
+      "source": "toggle.update(goal.toggle_label)"
+    },
+    {
+      "path": "src/toad/widgets/goal_bar.py",
+      "line": 181,
+      "source": "toggle.display = goal.status != \"completed\""
+    },
+    {
+      "path": "src/toad/widgets/goal_bar.py",
+      "line": 202,
+      "source": "header.update(f\"Goal \u00b7 {self.goal.status} \u00b7 rev {self.goal.revision}\")"
+    },
+    {
+      "path": "src/toad/widgets/goal_bar.py",
+      "line": 214,
+      "source": "and self.goal.active"
+    },
+    {
+      "path": "tests/e2e_pty.py",
+      "line": 590,
+      "source": "assert comms.registry.require(\"toad-e2e-proj-2\").goal.status == \"paused\""
+    },
+    {
+      "path": "tests/goal_objective_edit_pilot.py",
+      "line": 143,
+      "source": "while comms.registry.require(session).goal.status != \"paused\":"
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "line": 49,
+      "source": "assert view.goal.status == \"active\""
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 86,
+      "source": "assert conversation.goal.status == \"active\""
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 183,
+      "source": "assert conversation.goal.status == \"paused\" and not pulse.active"
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 185,
+      "source": "assert conversation.goal.status == \"active\""
+    },
+    {
+      "path": "tests/goal_set_owner_pilot.py",
+      "line": 49,
+      "source": "assert goal is not None and goal.status == \"active\""
+    },
+    {
+      "path": "tests/thread_controls_pilot.py",
+      "line": 187,
+      "source": "assert comms.registry.require(\"project\").goal.status == \"paused\""
+    },
+    {
+      "path": "tests/thread_controls_pilot.py",
+      "line": 191,
+      "source": "lambda: comms.registry.require(\"project\").goal.status == \"completed\""
+    },
+    {
+      "path": "tests/thread_controls_pilot.py",
+      "line": 265,
+      "source": "assert conversation.goal.status == \"completed\""
+    }
+  ],
+  "goal_constructor_and_update_receivers_for_parent_review": [
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1914,
+      "source": "Goal(**result['goal'])"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1855,
+      "source": "Goal(**raw_goal)"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1984,
+      "source": "Goal(**result['goal'])"
+    },
+    {
+      "path": "src/toad/acp/agent.py",
+      "line": 1570,
+      "source": "Goal(**raw_goal)"
+    },
+    {
+      "path": "src/toad/screens/goal_details.py",
+      "line": 50,
+      "source": "Goal(**goal_data)"
+    },
+    {
+      "path": "src/toad/widgets/conversation.py",
+      "line": 2669,
+      "source": "self.agent.update_goal(action, text)"
+    },
+    {
+      "path": "tests/goal_collapse_pilot.py",
+      "line": 30,
+      "source": "Goal('OBJECTIVE ' * 150, 'goal', progress='PROGRESS', revision=29)"
+    },
+    {
+      "path": "tests/goal_details_pilot.py",
+      "line": 25,
+      "source": "Goal('GOAL_BEGIN\\n' + 'Long objective with important details.\\n' * 100, 'goal', progress='Progress details.\\n' * 80 + 'PROGRESS_END')"
+    },
+    {
+      "path": "tests/goal_edit_owner_pilot.py",
+      "line": 39,
+      "source": "agent.update_goal('set', 'Original objective')"
+    },
+    {
+      "path": "tests/goal_geometry_pilot.py",
+      "line": 43,
+      "source": "Goal('Visible wrapped goal text. ' * 60, 'geometry')"
+    },
+    {
+      "path": "tests/goal_objective_edit_pilot.py",
+      "line": 51,
+      "source": "comms.update_goal(session, 'active', goal_id=original.id, progress='Renamed parent thread to pr17 and forked implementation.')"
+    },
+    {
+      "path": "tests/goal_objective_edit_pilot.py",
+      "line": 46,
+      "source": "agent.update_goal('set', 'Work on draft PR #17 and report remaining gaps. ' + 'Detailed acceptance criteria. ' * 30)"
+    },
+    {
+      "path": "tests/goal_pause_owner_pilot.py",
+      "line": 28,
+      "source": "client.update_goal('set', 'Keep investigating until stopped')"
+    },
+    {
+      "path": "tests/goal_pause_owner_pilot.py",
+      "line": 29,
+      "source": "client.update_goal('paused')"
+    },
+    {
+      "path": "tests/goal_pause_owner_pilot.py",
+      "line": 34,
+      "source": "client.update_goal('active')"
+    },
+    {
+      "path": "tests/goal_resize_pilot.py",
+      "line": 28,
+      "source": "Goal('Long goal detail.\\n' * 100, 'resizing', revision=7)"
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "line": 71,
+      "source": "comms.update_goal('project', 'blocked', goal_id=goal.id, block_reason='Original turn failed')"
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "line": 23,
+      "source": "Goal(self.goal.text, self.goal.id, status='active')"
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "line": 38,
+      "source": "Goal('Learn architectural factoring', 'goal-control', status='blocked')"
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "line": 64,
+      "source": "Agent.update_goal(toad_agent, 'set', 'Learn architectural factoring')"
+    },
+    {
+      "path": "tests/goal_retry_pilot.py",
+      "line": 73,
+      "source": "Agent.update_goal(toad_agent, 'retry')"
+    },
+    {
+      "path": "tests/goal_separator_pilot.py",
+      "line": 28,
+      "source": "Goal('Verify layout', 'separator-test', status='paused', progress='Working on presentation')"
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 66,
+      "source": "comms.update_goal(session, 'standby', goal_id=goal.id, wait_for=['peer'], progress='Progress details. ' * 40 + ' PROGRESS_END')"
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 60,
+      "source": "agent.update_goal('set', 'OBJECTIVE_BEGIN ' + 'Fully wrapped acceptance criteria. ' * 40 + ' OBJECTIVE_END')"
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 149,
+      "source": "comms.update_goal(session, 'edit', text='Changed through owner backend', goal_id=current.id, expected_goal=current, owner_action=True)"
+    },
+    {
+      "path": "tests/goal_server_poll_pilot.py",
+      "line": 170,
+      "source": "comms.update_goal(session, 'edit', text='Concurrent owner edit', goal_id=current.id, expected_goal=current, owner_action=True)"
+    },
+    {
+      "path": "tests/goal_set_owner_pilot.py",
+      "line": 36,
+      "source": "comms.update_goal(session, 'set', text='legacy goal')"
+    },
+    {
+      "path": "tests/goal_set_owner_pilot.py",
+      "line": 37,
+      "source": "comms.update_goal(session, 'blocked', goal_id=old.id, progress='Goal attempt unresolved')"
+    },
+    {
+      "path": "tests/goal_set_owner_pilot.py",
+      "line": 48,
+      "source": "Agent.update_goal(toad_agent, 'set', 'Finish the task')"
+    },
+    {
+      "path": "tests/goal_standby_history_pilot.py",
+      "line": 30,
+      "source": "Goal('Coordinate with @peer', 'stable-goal', progress='Keep evidence', revision=4)"
+    }
+  ]
+}

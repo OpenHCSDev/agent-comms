@@ -1,0 +1,14 @@
+................................................F..............s........ [ 39%]
+........................................................................ [ 78%]
+.......................................                                  [100%]
+=================================== FAILURES ===================================
+_______ test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation _______
+tests/test_input_delivery_history.py:102: in test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation
+    with pytest.raises(RuntimeError, match="boolean"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'boolean'
+E     Actual message: "Expected <class 'bool'>, received str"
+=========================== short test summary info ============================
+FAILED tests/test_input_delivery_history.py::test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation
+1 failed, 181 passed, 1 skipped in 12.09s
