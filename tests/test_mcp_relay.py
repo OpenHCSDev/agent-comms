@@ -18,8 +18,10 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
+from delivery_owner_fixture import canonical_agent
 
-pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub")
+pytestmark = [pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
+              pytest.mark.usefixtures("native_rpc_fixture")]
 
 
 async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
@@ -527,8 +529,9 @@ input.on('line', async line => {{
 }});
 """)
     script.chmod(0o755)
+    isolated["PI_COMPACTION_TEST_PACKAGE"] = os.environ["PI_COMPACTION_TEST_PACKAGE"]
     monkeypatch.setattr(backend.os, "environ", isolated)
-    owner = CommsAgent(
+    owner = canonical_agent(
         wire(tmp_path / "wire"), agent_bin=str(script), agent_args=[], auto_wake=False
     )
     updates = []

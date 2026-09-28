@@ -159,3 +159,28 @@ expectations; attachment images and original reference remain asserted.
 Deleted implicit ledger manufacture on Retry expectation; actual runtime socket
 now asserts rejection, unchanged blocked goal, absent grant and no scheduled wake.
 Focused image/UI-goal batch16passed in2.10s. Continuing remainder after images.
+
+## Native queue, maintenance and MCP closure
+
+Remainder-four175pass/12failed/4skip52.59s. Corrected current GoalHumanDecision
+SQL owner in Retry test and explicit local executable trust for maintenance/MCP
+protocol fixtures. Installed lockfile MCP test deps offline in this owned tree
+(npm ci --ignore-scripts --offline;187MB, remove after final suite).
+MCP13pass8.96s including package SDK/stdio MCP/ACP permission and receipt paths.
+
+Both actual native summary->original->queued followup cases pass (16.10s combined
+with then-failing maintenance test). Their obsolete subprocess interception tested
+command=pi, but current attested launcher produces node. Interception now applies
+at current NativePiRpcLaunch.managed boundary, preserves attestation/session
+selection, and uses prepared native SDK/RPC whose model host prohibits network.
+Assertions retain exact native IDs, one start each, saved compaction order and
+foreign UNKNOWN. No production queue behavior weakened.
+
+Deleted fake PID/process/raw writer in maintenance native test. Real local child
+writes pause ACK before capability response; actual fenced prompt writer refuses,
+child is reaped and persisted runtime admission remains.1pass0.74s. This reproduced
+SelectedExecution._open's stale /var/tmp-only restriction; removed geography only,
+retaining explicit activation/private directory/package/root identity checks.
+Coordinated runtime module62pass25.48s (same run initially exposed test socket
+path length; final real maintenance fixture uses short owned session directory).
+No publisher/checkpoint/current-source changes. Full suite still not complete.
