@@ -53,7 +53,14 @@ coverage remains in that audit; no new clean-scan claim.
   fixed to current declaration names, the exact assertion passes in the later
   goal seam run. Native selected failures/races and original callbacks retained.
 - `goal-seam-current.log`: 37 pass, eight fixture failures lacking canonical
-  markers. These are already corrected in S13; integrating that source next.
+  markers. Integrated S13 e96a997, preserved Participant deletion on conflict:
+  `goal-seam-integrated.log` **53 pass**, including the corrected cursor assertion.
+- `current-guard-collection.log`: all 2,999 current tests collect, 23 guards selected;
+  `current-refactor-guards.log`: **23 pass**, no exceptions.
+- `build.log`: current wheel built. `installed-native-headless-stdio.log`: **6 pass**
+  importing the extracted wheel (including child subprocess imports), real native
+  GetState, native refusal, canonical headless socket/project and ACP stdio.
+  Artifact inspection confirms agent_loop absent and headless entrypoint worker.main.
 
 Failed receipts are retained. No repeated provider proof or full-CI gate.
 
@@ -66,5 +73,24 @@ Parent owns current queue-restored presentation deletion and paired Toad rollout
 Current cursor fixture follows already-emitted S12 `owner_admission_generation`,
 `assignment_id` and `kind=current_native_cursor`; no runtime format shim.
 
-Final package/build and combined local caller check follow dependency integration;
-this receipt does not claim installation or full branch readiness yet.
+## Source publication and remaining boundary
+
+Stable production source: `16053b4` (substantive native followup `f81ac72`).
+PR234 contains all current code and consumer/test changes; the final documentation
+commit adds no production changes. Wheel:
+`.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl` in this persistent tree.
+
+Own L0B production edits (7cd8702, e13e32e, f81ac72): **453 added / 492 deleted**.
+These counts exclude integrated parent/S12/S13/S9 edits, tests and evidence.
+The followup fix adds required behavior that was absent from selected execution;
+the replaced text/poll/classifier implementations and their consumers are deleted.
+Original broader S10 deletion receipts remain in evidence/s10-pi-boundary.
+
+No source blocker remains in the native launcher/headless/fresh-input implementation.
+The coupled S9 manual compaction bridge remains Darwin's explicit scope, not closed
+by these tests: native-only managed owners must use his journal/CAS path, not the
+remaining basename-gated alternate writer. Parent owns its integration and quiet
+whole-step install. This handoff does not claim live deployment or paid-provider proof.
+
+Owned wheel extraction was removed after all child processes exited; wheel and all
+success/failed receipts retained. No copied native bundle or extra environment.
