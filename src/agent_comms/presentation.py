@@ -27,6 +27,15 @@ if TYPE_CHECKING:
     from .messages import Message
 
 
+@dataclass(frozen=True, slots=True)
+class MessageNotification:
+    """Read-only display of one recipient's durable assignment decision."""
+
+    recipient: str
+    state: str
+    detail: str
+
+
 class BusPresentation:
     def __init__(self, path: Path):
         self._path = path
