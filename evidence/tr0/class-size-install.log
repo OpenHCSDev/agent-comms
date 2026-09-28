@@ -1,0 +1,7 @@
+Using Python 3.14.2 environment at: /home/ts/wt/toad-tr0-sol-20260928/.venv
+Resolved 1 package in 1ms
+Prepared 1 package in 10ms
+Uninstalled 1 package in 6ms
+Installed 1 package in 4ms
+ - agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@ba08f65de6d4376aa33b43f079470fcd7f909fcc)
+ + agent-comms==0.1.0 (from file:///home/ts/wt/comms-tr0-sol-20260928/.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl)
