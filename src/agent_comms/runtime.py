@@ -19,6 +19,8 @@ from typing import Any, cast
 
 from acp.schema import RequestPermissionResponse
 
+from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
+
 
 def socket_path(root: Path, pid: int) -> Path:
     path = root / "runtime" / f"{pid}.sock"
@@ -219,195 +221,10 @@ class RuntimeServer:
         client = SocketClient(writer)
         session_id = None
         try:
-            request = json.loads(await reader.readline())
-            owner = self.agent._comms.registry.require(request["thread"])
-            name = owner.name
-            if owner.pid != os.getpid() or not self.agent._comms.registry.status(name).running:
-                raise RuntimeError("This process no longer owns the thread.")
-            session_id = next(
-                key
-                for key, value in self.agent._sessions.items()
-                if self.agent._comms.registry.canonical_name(value) == name
-            )
-            action = request["action"]
-            if action == "subscribe":
-                self.clients.setdefault(session_id, set()).add(client)
-                await self.agent.emit_session_identity(session_id, name, client=client)
-                await self.agent._replay_transcript(
-                    session_id,
-                    name,
-                    client=client,
-                    snapshots=request.get("transcriptSnapshots") is True,
-                    diffs=request.get("transcriptDiffs") is True,
-                )
-                await self.agent.replay_turn_state(session_id, client=client)
-                await self.agent.replay_unknown_inputs(session_id, client=client)
-                config_options = await self.agent._config_options(name)
-                metadata = self.agent._session_metadata(name)
-                writer.write(
-                    (
-                        json.dumps(
-                            {
-                                "controllerToken": client.token,
-                                "ready": {
-                                    **metadata,
-                                    "configOptions": [
-                                        option.model_dump(by_alias=True, exclude_none=True)
-                                        for option in config_options
-                                    ],
-                                },
-                            }
-                        )
-                        + "\n"
-                    ).encode()
-                )
-                await writer.drain()
-                while line := await reader.readline():
-                    response = json.loads(line)
-                    receipt = (
-                        response.get("permissionResponse") if isinstance(response, dict) else None
-                    )
-                    if not isinstance(receipt, dict):
-                        continue
-                    reply_id = receipt.get("id")
-                    pending = client.pending.get(reply_id) if isinstance(reply_id, str) else None
-                    if pending is not None and not pending.done():
-                        pending.set_result(receipt)
-            elif action == "prompt":
-                controller = next(
-                    (
-                        subscriber
-                        for subscriber in self.clients.get(session_id, ())
-                        if subscriber.token == request.get("controllerToken")
-                        and not subscriber.writer.is_closing()
-                    ),
-                    None,
-                )
-                context = self.controller.set(controller)
-                try:
-                    result = await self.agent.prompt(
-                        session_id, request["prompt"], field_meta=request.get("meta") or {}
-                    )
-                finally:
-                    self.controller.reset(context)
-                writer.write(
-                    (
-                        json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
-                        + "\n"
-                    ).encode()
-                )
-                await writer.drain()
-            elif action == "cancel":
-                await self.agent.cancel(session_id)
-                writer.write(b'{"result": {}}\n')
-                await writer.drain()
-            elif action == "set_config_option":
-                result = await self.agent.set_config_option(
-                    request["config_id"], session_id, request["value"]
-                )
-                writer.write(
-                    (
-                        json.dumps({"result": result.model_dump(by_alias=True, exclude_none=True)})
-                        + "\n"
-                    ).encode()
-                )
-                await writer.drain()
-            elif action == "compact":
-                handler = getattr(self.agent, "compact_context", None)
-                if handler is None:
-                    from .manual_compaction_bridge import compact_context
-
-                    result = await compact_context(
-                        self.agent, session_id, request.get("instructions")
-                    )
-                else:
-                    result = await handler(session_id, request.get("instructions"))
-                writer.write((json.dumps({"result": result}) + "\n").encode())
-                await writer.drain()
-            elif action == "input_dispositions":
-                include_history = request.get("include_history", False)
-                if type(include_history) is not bool:
-                    raise ValueError("include_history must be a boolean.")
-                result = self.agent._comms.input_delivery(
-                    name,
-                    include_history=include_history,
-                    awaiting_keys=self.agent.awaiting_input_keys(session_id),
-                )
-                writer.write((json.dumps({"result": result}) + "\n").encode())
-                await writer.drain()
-            elif action == "dismiss_historical_inputs":
-                result = self.agent._comms.dismiss_historical_inputs(
-                    name, awaiting_keys=self.agent.awaiting_input_keys(session_id)
-                )
-                await self.agent.emit_input_delivery_changed(session_id)
-                writer.write((json.dumps({"result": result}) + "\n").encode())
-                await writer.drain()
-            elif action == "goal_history":
-                from dataclasses import asdict
-
-                goal_id = request.get("goal_id")
-                if goal_id is not None and not isinstance(goal_id, str):
-                    raise ValueError("Goal identity must be a string.")
-                history = self.agent._comms.goal_history(name, goal_id=goal_id)
-                writer.write(
-                    (
-                        json.dumps({"result": {"history": [asdict(row) for row in history]}}) + "\n"
-                    ).encode()
-                )
-                await writer.drain()
-            elif action in {"goal_snapshot", "edit_goal", "update_goal"}:
-                from dataclasses import asdict
-
-                if action != "goal_snapshot":
-                    goal_id = request.get("goal_id")
-                    revision = request.get("expected_revision")
-                    if type(goal_id) is not str or type(revision) is not int:
-                        raise ValueError("A goal identity and revision are required for updating.")
-                    if action == "edit_goal":
-                        text = request.get("text")
-                        if not isinstance(text, str) or not text.strip():
-                            raise ValueError("A goal requires text.")
-                        await self.agent.edit_goal(session_id, goal_id, revision, text)
-                    else:
-                        await self.agent.update_goal(
-                            session_id, request.get("status"), goal_id, revision
-                        )
-                goal, execution = self.agent._comms.goal_snapshot(name)
-                writer.write(
-                    (
-                        json.dumps(
-                            {
-                                "result": {
-                                    "goal": asdict(goal) if goal is not None else None,
-                                    "goalExecution": (
-                                        asdict(execution) if execution is not None else None
-                                    ),
-                                }
-                            }
-                        )
-                        + "\n"
-                    ).encode()
-                )
-                await writer.drain()
-            elif action == "retry_goal":
-                goal_id = request.get("goal_id")
-                revision = request.get("expected_revision")
-                if type(goal_id) is not str or type(revision) is not int:
-                    raise ValueError("A goal identity and revision are required for retry.")
-                from dataclasses import asdict
-
-                goal = await self.agent.retry_goal(session_id, goal_id, revision)
-                writer.write((json.dumps({"result": {"goal": asdict(goal)}}) + "\n").encode())
-                await writer.drain()
-            elif action == "set_goal":
-                text = request.get("text")
-                if not isinstance(text, str) or not text.strip():
-                    raise ValueError("A goal requires text.")
-                from dataclasses import asdict
-
-                goal = await self.agent.set_goal(session_id, text)
-                writer.write((json.dumps({"result": {"goal": asdict(goal)}}) + "\n").encode())
-                await writer.drain()
+            request = RuntimeRequest.from_wire(json.loads(await reader.readline()))
+            context = request.bind(self, reader, client)
+            session_id = context.session_id
+            await request.apply(context)
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
                 try:
@@ -539,12 +356,11 @@ class RuntimeProxy:
             writer.write(
                 (
                     json.dumps(
-                        {
-                            "action": "subscribe",
-                            "thread": self.session_id,
-                            "transcriptSnapshots": self.agent._transcript_snapshots,
-                            "transcriptDiffs": self.agent._transcript_diffs,
-                        }
+                        SubscribeRuntimeRequest(
+                            thread=self.session_id,
+                            transcript_snapshots=self.agent._transcript_snapshots,
+                            transcript_diffs=self.agent._transcript_diffs,
+                        ).to_wire()
                     )
                     + "\n"
                 ).encode()
@@ -673,16 +489,9 @@ class RuntimeProxy:
             writer.write(
                 (
                     json.dumps(
-                        {
-                            "action": action,
-                            "thread": self.session_id,
-                            **(
-                                {"controllerToken": self._controller_token}
-                                if action == "prompt"
-                                else {}
-                            ),
-                            **kwargs,
-                        }
+                        RuntimeRequest.decode(action).proxy_payload(
+                            self.session_id, self._controller_token, kwargs
+                        )
                     )
                     + "\n"
                 ).encode()
