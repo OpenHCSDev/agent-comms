@@ -16,6 +16,7 @@ class ThreadPresentation:
     summary: str
     busy: bool = False
     notifications: tuple[MessageNotification, ...] = ()
+    attention: bool = False
 
     @property
     def label(self) -> str:

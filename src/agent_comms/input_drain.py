@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sqlite3
 import time
 from contextlib import suppress
 from dataclasses import dataclass, replace
@@ -27,7 +28,9 @@ from .acp_extension import (
     UnavailableQueueProjection,
     encode_updates,
 )
+from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .comms import Comms
+from .coordination_errors import CoordinationError
 from .goal_waits import GoalWait
 from .goals import Goal
 from .image_inputs import ImageInput
@@ -253,6 +256,8 @@ class InputDrain(FutureInputQueue):
                         await asyncio.sleep(LIVE_DRAIN_INTERVAL)
                     else:
                         watcher.changed.clear()
+                    thread = self.sessions.require(session_id)
+                    owner = self.comms.registry.snapshot().owner_identity(thread)
                     try:
                         await self.drain_inbox(session_id)
                         await self.sessions.config.sync_thread(session_id)
@@ -263,10 +268,26 @@ class InputDrain(FutureInputQueue):
                         await self.sessions.config.refresh_auth_models()
                     except asyncio.CancelledError:
                         raise
+                    except (
+                        OSError, ValueError, sqlite3.Error, CoordinationError, RequestError
+                    ) as error:
+                        self.comms.agents.set_drain_diagnostic(
+                            thread, owner,
+                            UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
+                        )
                     except Exception as error:
-                        # Never let the drain task die silently: a dead drain
-                        # means replies stop reaching the client.
-                        self.effects._debug_log(f"live-drain error: {error!r}")
+                        self.comms.agents.set_drain_diagnostic(
+                            thread, owner,
+                            StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
+                        )
+                        raise
+                    else:
+                        if (
+                            not self.comms.registry.require(thread).executing
+                            and session_id not in self.effects.turns.turn_tasks
+                            and session_id not in self.backend_inboxes
+                        ):
+                            self.comms.agents.set_drain_diagnostic(thread, owner, None)
                     if watcher is not None:
                         if watcher.invalid:
                             watcher.close()

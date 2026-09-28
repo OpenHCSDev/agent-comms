@@ -68,7 +68,7 @@ class ActiveThreadPresence:
         return tool != "comms_start" or owner_pid <= 0
 
     def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
-        return activity.state.presentation(title, activity.detail)
+        return activity.presentation(title)
 
 
 class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
