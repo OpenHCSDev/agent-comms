@@ -149,6 +149,26 @@ class Index:
 
 
 @dataclass(frozen=True)
+class ForeignKey:
+    """Composite references declared beside their row, including cyclic owners."""
+
+    columns: tuple[str, ...]
+    target: type[TypedTable]
+    target_columns: tuple[str, ...]
+    deferred: bool = False
+
+    def sql(self, owner: type[TypedTable]) -> str:
+        if len(self.columns) != len(self.target_columns):
+            raise ValueError("Foreign key column counts differ")
+        return (
+            f"FOREIGN KEY ({owner._column_list(self.columns)}) "
+            f"REFERENCES {_identifier(self.target.declared_name)} "
+            f"({self.target._column_list(self.target_columns)})"
+            + (" DEFERRABLE INITIALLY DEFERRED" if self.deferred else "")
+        )
+
+
+@dataclass(frozen=True)
 class _Field:
     name: str
     annotation: object
@@ -222,6 +242,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
     without_rowid: ClassVar[bool] = False
 
     @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        # A method permits mutually referring row classes without string names.
+        return ()
+
+    @classmethod
     def _column_list(cls, names: tuple[str, ...]) -> str:
         if not names or not set(names) <= set(cls.columns()):
             raise ValueError(f"Unknown or empty column list for {cls.declared_name}: {names}")
@@ -253,6 +278,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
             raise TypeError("WITHOUT ROWID requires a declared primary key")
         definitions.extend(f"UNIQUE ({cls._column_list(group)})" for group in cls.unique)
         definitions.extend(f"CHECK ({check})" for check in cls.checks)
+        definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
         statements = [
             f"CREATE TABLE {table} ({', '.join(definitions)}) STRICT"
