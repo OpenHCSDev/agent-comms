@@ -4,8 +4,6 @@ import json
 
 import pytest
 
-from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.routing import ScheduledTurn, TurnRouting
 from agent_comms.threads import Thread
@@ -27,79 +25,6 @@ def append_input(path, native_id, text, *, role="user"):
             )
             + "\n"
         )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("terminal_ok", [False, True])
-@pytest.mark.parametrize("target", ["worker", "#team"])
-async def test_original_and_busy_input_keep_distinct_routes(
-    tmp_path, monkeypatch, terminal_ok, target
-):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", agent_args=["--model", "test/model"])
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-
-    class Client:
-        async def session_update(self, **kwargs):
-            pass
-
-    agent.on_connect(Client())
-    await agent.new_session(str(tmp_path / "worker"))
-    comms.channels.update_tags("worker", add=frozenset({"team"}))
-    comms.threads.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
-    initial = comms.messaging.send_message("peer", "worker", "Initial request")
-    await agent.inputs.drain_inbox("worker")
-    session = tmp_path / "session.jsonl"
-    session.touch()
-    comms.threads.attach_session("worker", str(session))
-    received = [initial]
-
-    async def events(*args, **kwargs):
-        with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed
-            append_input(session, "a" * 32, args[2])
-        assert kwargs["native_start"](None, "a" * 32, args[2])
-        yield ae.InputStarted(id=None)
-        incoming = comms.messaging.send_message("peer", target, "@worker Follow-up request")
-        received.append(incoming)
-        assert await agent.inputs.drain_inbox("worker") == 1
-        command = kwargs["steering_queue"].get_nowait()
-        public_id = command["_input_id"] if isinstance(command, dict) else "legacy-steer"
-        text = command["message"] if isinstance(command, dict) else command
-        with kwargs["send_boundary"](public_id, "b" * 32, text) as allowed:
-            assert allowed
-            append_input(session, "b" * 32, text)
-        assert kwargs["native_start"](public_id, "b" * 32, text)
-        yield ae.InputStarted(id=public_id)
-        yield ae.StreamSettled()
-        yield ae.Done(ok=terminal_ok, text="done")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        await agent.turns.run_agent_turn(
-            "worker", "worker", ScheduledTurn.incoming(initial).prompt, origins=(initial,)
-        )
-        reopened = wire(comms.root)
-        for events in (
-            reopened.transcripts.thread_transcript("worker"),
-            reopened.transcripts.thread_transcript_page("worker").events,
-        ):
-            inputs = [event for event in events if event.declared_name == "user"]
-            assert [event.text for event in inputs] == [message.body for message in received]
-            assert [
-                (
-                    event.routing.requests[0].message_id
-                    if event.routing and event.routing.requests
-                    else None
-                )
-                for event in inputs
-            ] == [message.message_id for message in received]
-        assert not agent.inputs.pending_turns.get(
-            "worker"
-        ), "Attributed inputs must not be replayed"
-    finally:
-        await agent.shutdown()
 
 
 @pytest.mark.parametrize("paged", [False, True])

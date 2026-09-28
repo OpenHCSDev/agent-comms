@@ -339,3 +339,19 @@ acquires its actual process; event times/rename preservation retained. Deleted
 obsolete automatic legacy registry/session-header migration test. Focused14:
 13passed1failed3.32s; corrected own-process acquisition then final sort case passes.
 Parent alias-owned files withheld from remainder until published checkpoint.
+
+## Current transcript and turn lifecycle closure
+
+Remainder-fourteen69passed12failed62.48s. Real recorded-RPC diff test now declares
+local executable trust, preserving actual child pipes and live-vs-replay diff
+comparison. Annotation refusal matches current migration diagnostic. Turn fixtures
+use canonical agent and captured ProcessIdentity; exception provenance, cancellation,
+shutdown, no-original-send after uncertain compaction, and exact lease fences pass.
+Focused29passed2.88s.
+
+Deleted five cases requiring retired public drain: four incoming bus-steering
+variants plus dependency admission that asserted removed direct_interrupt_goal_id
+queue capabilities. Current canonical selected-owner followup/UNKNOWN suites already
+pass; retained three exact-input transcript routing tests and existing durable
+standby review tests. Net125 lines removed in this batch. Final alphabetical
+remainder runs before complete combined acceptance.
