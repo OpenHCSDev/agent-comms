@@ -536,7 +536,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
         path = root / "coordination.sqlite3"
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         reader.execute("BEGIN")
-        reader.execute("SELECT * FROM native_runtime_inputs").fetchall()
+        reader.execute("SELECT * FROM native_runtime_input").fetchall()
 
         @contextmanager
         def checked_admission():
@@ -547,7 +547,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
                     late = sqlite3.connect(path, isolation_level=None, timeout=0)
                     try:
                         with pytest.raises(sqlite3.OperationalError) as blocked:
-                            late.execute("SELECT * FROM native_runtime_inputs").fetchall()
+                            late.execute("SELECT * FROM native_runtime_input").fetchall()
                         assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
                     finally:
                         late.close()
@@ -581,6 +581,6 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     assert len(children) == 1 and children[0].returncode is not None
     with MutationStore(root / "coordination.sqlite3") as store:
         rows = store._connection.execute(
-            "SELECT sent_owner_admission_epoch FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and rows[0][0] is not None

@@ -1,31 +1,86 @@
 """Routing annotations keyed by durable Pi entry IDs, never reply text."""
 
 import hashlib
-import json
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .errors import RelationViolationError
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .transcript_events import TranscriptCodec
+from .typed_table import Column, JsonStorage, TypedRow, TypedTable
 
 
-@dataclass(frozen=True, slots=True)
-class InputDisplay:
-    """Owner-authored presentation for one native input; None means internal."""
+class RouteAnnotationTable:
+    """Durable annotations written by an owner, not a transcript-derived cache."""
 
+
+class TranscriptRoutingStorage(JsonStorage):
+    codec = TranscriptCodec
+
+    @classmethod
+    def accepts(cls, annotation: object) -> bool:
+        return False  # The routing field explicitly declares its existing boundary codec.
+
+
+@dataclass(frozen=True)
+class TranscriptRoute(RouteAnnotationTable, TypedTable):
+    session_file: str = field(metadata={"sql": Column(primary_key=True)})
+    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
+    routing: TurnRouting = field(metadata={"sql": Column(storage=TranscriptRoutingStorage)})
+    without_rowid = True
+
+
+@dataclass(frozen=True)
+class InputDisplay(RouteAnnotationTable, TypedTable):
+    """Owner-authored presentation for one native input; None text means internal."""
+
+    native_id: str = field(metadata={"sql": Column(primary_key=True)})
     text: str | None
-    routing: TurnRouting | None = None
+    routing: TurnRouting | None = field(
+        default=None, metadata={"sql": Column(storage=TranscriptRoutingStorage)}
+    )
     sent_text_digest: str | None = None
+    without_rowid = True
+    checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
 
     def matches(self, text: str) -> bool:
         return (
             self.sent_text_digest is None
             or self.sent_text_digest == hashlib.sha256(text.encode("utf-8")).hexdigest()
         )
+
+
+@dataclass(frozen=True)
+class _AnnotationSchema(TypedRow):
+    name: str
+    sql: str
+
+
+def _schema(connection: sqlite3.Connection) -> dict[str, str]:
+    return {
+        row.name: row.sql
+        for row in _AnnotationSchema.read(
+            connection.execute(
+                "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"
+            )
+        )
+    }
+
+
+def _declared_schema() -> dict[str, str]:
+    return {
+        name: sql
+        for table in TypedTable.members_with(RouteAnnotationTable)
+        for name, sql in table.schema_objects().items()
+    }
+
+
+def _assert_schema(connection: sqlite3.Connection) -> None:
+    if _schema(connection) != _declared_schema():
+        raise ValueError("Transcript annotations require the one-shot durable cutover")
 
 
 class _SessionRoutes:
@@ -44,32 +99,18 @@ class _SessionRoutes:
         if entry_id is None or self._connection is None:
             return None
         if entry_id not in self._cache:
-            row = self._connection.execute(
-                "SELECT route FROM routes WHERE session_file = ? AND entry_id = ?",
-                (self._session_file, entry_id),
-            ).fetchone()
-            self._cache[entry_id] = (
-                TranscriptCodec.decode(TurnRouting, json.loads(row[0])) if row else None
+            row = TranscriptRoute.one(
+                self._connection, session_file=self._session_file, entry_id=entry_id
             )
+            self._cache[entry_id] = row.routing if row else None
         return self._cache[entry_id]
 
     def input_display(self, native_id: str | None) -> InputDisplay | None:
         if native_id is None or self._connection is None:
             return None
         if native_id not in self._input_cache:
-            row = self._connection.execute(
-                "SELECT display_text, routing, sent_text_digest FROM input_display "
-                "LEFT JOIN input_routing USING(native_id) WHERE native_id = ?",
-                (native_id,),
-            ).fetchone()
-            self._input_cache[native_id] = (
-                InputDisplay(
-                    row[0],
-                    TranscriptCodec.decode(TurnRouting, json.loads(row[1])) if row[1] else None,
-                    row[2],
-                )
-                if row
-                else None
+            self._input_cache[native_id] = InputDisplay.one(
+                self._connection, native_id=native_id
             )
         return self._input_cache[native_id]
 
@@ -90,13 +131,12 @@ class TranscriptRoutes:
 
     def __init__(self, root: Path):
         self.database_path = root / self.filename
-        self.migration_source = root / "transcript_routes.json"
         self._initialized = False
 
     def _ensure_database(self, *, create: bool = False) -> bool:
         if self._initialized and self.database_path.is_file():
             return True
-        if not create and not self.database_path.exists() and not self.migration_source.exists():
+        if not create and not self.database_path.exists():
             return False
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with (
@@ -106,94 +146,42 @@ class TranscriptRoutes:
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
                 connection.execute("BEGIN IMMEDIATE")
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS routes (session_file TEXT NOT NULL, entry_id TEXT NOT NULL, route TEXT NOT NULL, PRIMARY KEY (session_file, entry_id)) WITHOUT ROWID"
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS input_display (native_id TEXT PRIMARY KEY, display_text TEXT) WITHOUT ROWID"
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS input_routing (native_id TEXT PRIMARY KEY, sent_text_digest TEXT NOT NULL, routing TEXT) WITHOUT ROWID"
-                )
-                migrated = connection.execute(
-                    "SELECT value FROM metadata WHERE key='routes_imported'"
-                ).fetchone()
-                if migrated is None:
-                    self._import_saved_routes(connection)
+                if not _schema(connection):
+                    for table in TypedTable.members_with(RouteAnnotationTable):
+                        table.create(connection)
+                _assert_schema(connection)
         self._initialized = True
         return True
-
-    def _import_saved_routes(self, connection: sqlite3.Connection) -> None:
-        """One-way import of actual saved annotations, then retire writer coexistence."""
-        prior_source = any(
-            row[1] == "source" for row in connection.execute("PRAGMA table_info(routes)")
-        )
-        raw = (
-            json.loads(self.migration_source.read_text()) if self.migration_source.exists() else {}
-        )
-        routes = TranscriptCodec.decode(dict[str, dict[str, TurnRouting]], raw)
-        for session_file, entries in routes.items():
-            for entry_id, route in entries.items():
-                encoded = json.dumps(TranscriptCodec.encode(route))
-                if prior_source:
-                    # Existing indexed rows win over the last original JSON snapshot.
-                    connection.execute(
-                        "INSERT INTO routes VALUES (?, ?, ?, 'legacy') ON CONFLICT(session_file,entry_id) DO UPDATE SET route=excluded.route WHERE routes.source='legacy'",
-                        (session_file, entry_id, encoded),
-                    )
-                else:
-                    connection.execute(
-                        "INSERT OR IGNORE INTO routes VALUES (?, ?, ?)",
-                        (session_file, entry_id, encoded),
-                    )
-        if prior_source:
-            connection.execute("ALTER TABLE routes DROP COLUMN source")
-        connection.execute("DELETE FROM metadata WHERE key='legacy_revision'")
-        connection.execute("INSERT INTO metadata VALUES ('routes_imported', '1')")
 
     def for_session(self, session_file: str) -> _SessionRoutes:
         path = self.database_path if self._ensure_database() else None
         return _SessionRoutes(path, session_file)
 
-    def input_bindings(self) -> dict[str, tuple[str, str | None]]:
-        """Read existing bindings without creating a database or upgrading its schema."""
+    def input_bindings(self) -> dict[str, InputDisplay]:
+        """Read typed owner bindings without creating or upgrading a database."""
         if not self.database_path.exists():
             return {}
         with closing(
             sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
         ) as connection:
-            if (
-                connection.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'input_routing'"
-                ).fetchone()
-                is None
-            ):
-                return {}
+            _assert_schema(connection)
             return {
-                native_id: (digest, routing)
-                for native_id, digest, routing in connection.execute(
-                    "SELECT native_id, sent_text_digest, routing FROM input_routing"
-                )
+                row.native_id: row
+                for row in InputDisplay.select(connection, where="sent_text_digest IS NOT NULL")
             }
 
     def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
         self._ensure_database(create=True)
-        encoded = json.dumps(TranscriptCodec.encode(routing))
         with (
             _store_lock(self.database_path),
             closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
-                connection.executemany(
-                    "INSERT OR REPLACE INTO routes VALUES (?, ?, ?)",
-                    ((session_file, entry_id, encoded) for entry_id in entry_ids),
-                )
+                for entry_id in entry_ids:
+                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
 
     def record_input_display(
         self,
@@ -209,11 +197,6 @@ class TranscriptRoutes:
         digest = (
             hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
         )
-        encoded = (
-            json.dumps(TranscriptCodec.encode(routing), sort_keys=True)
-            if routing is not None
-            else None
-        )
         self._ensure_database(create=True)
         with (
             _store_lock(self.database_path),
@@ -221,18 +204,20 @@ class TranscriptRoutes:
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
-                if digest is not None:
-                    previous = connection.execute(
-                        "SELECT sent_text_digest, routing FROM input_routing WHERE native_id = ?",
-                        (native_id,),
-                    ).fetchone()
-                    if previous is not None and previous != (digest, encoded):
-                        raise RelationViolationError("Native input routing cannot be rebound.")
-                    connection.execute(
-                        "INSERT OR IGNORE INTO input_routing VALUES (?, ?, ?)",
-                        (native_id, digest, encoded),
-                    )
-                connection.execute(
-                    "INSERT OR IGNORE INTO input_display (native_id, display_text) VALUES (?, ?)",
-                    (native_id, display_text),
-                )
+                # Serialize the read/first-write boundary across processes and threads.
+                connection.execute("BEGIN IMMEDIATE")
+                previous = InputDisplay.one(connection, native_id=native_id)
+                if previous is None:
+                    InputDisplay(native_id, display_text, routing, digest).insert(connection)
+                elif digest is not None:
+                    if previous.sent_text_digest is not None:
+                        if (previous.sent_text_digest, previous.routing) != (digest, routing):
+                            raise RelationViolationError("Native input routing cannot be rebound.")
+                    else:
+                        InputDisplay.update(
+                            connection,
+                            where="native_id=?",
+                            parameters=(native_id,),
+                            routing=routing,
+                            sent_text_digest=digest,
+                        )

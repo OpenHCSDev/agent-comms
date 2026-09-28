@@ -156,3 +156,36 @@ This is an explicit remaining integration requirement, not completed behavior.
 
 Current source diff: -105/+503 lines. Tests: -0/+176 lines. Additions establish
 A13 and typed join shapes; existing behavior tests were not ported or weakened.
+
+
+## S12 durable transcript annotation cutover contract
+
+`transcript_routes.sqlite3` and any saved `transcript_routes.json` contain owner-authored data. NEVER reset them as transcript indexes. Parent owns the one-shot tool under tools/cutover and quiet installation; no runtime converter remains in #237.
+
+New declarations in transcript_routes.py: `TranscriptRoute(session_file, entry_id, routing: TurnRouting)`, physical `transcript_route`; existing `InputDisplay` is the sole display/binding row (`native_id`, `text`, `routing: TurnRouting|None`, `sent_text_digest: str|None`), physical `input_display`. All schemas/writes/reads derive from A13. `TranscriptRoutingStorage` uses the existing TranscriptCodec (Message boundary retained), selected by the routing field, not a second serializer. `TranscriptRoutes.input_bindings()` now returns dict[str, InputDisplay], and its sole current consumer compares typed digest/routing facts.
+
+One-shot input inventory must preserve:
+- routes rows keyed by exact session_file/entry_id, including paths for archived sessions;
+- display_text, including NULL (internal) versus missing row versus empty text;
+- all input_routing digest/routing rows; reject/report orphan input_routing without input_display instead of silently discarding it or manufacturing human display;
+- optional JSON source and source-column precedence: current indexed SQLite entries win; in the retired source-column shape, JSON replaces only source='legacy' rows and supplies absent keys; in the source-free current predecessor, SQLite wins. If metadata routes_imported exists, JSON was retired and must not overwrite current SQLite. legacy_revision/routes_imported metadata and source column do not enter the new store.
+
+Read old stores read-only under the parent's quiet lock, decode existing routing with TranscriptCodec, create a NEW exclusive stage via current TranscriptRoutes/typed rows. Preserve each native ID, digest, text and routing semantically, plus per-session entry keys; verify counts and reopened paged input/reply attribution. Reject invalid/conflicting rows with source identity; leave originals unchanged. No installation on partial success. Parent installs only after full verification, then retires the old JSON/schema and deletes the one-shot tool.
+
+Runtime/derived `transcript_reply_index.sqlite3` is separately resettable; new declared ReplyIndex/TranscriptReply tables replace the prior schema. `ReadLedger.filename` is durable human read position and MUST remain intact. No source data is deleted here.
+
+### Current local closure evidence
+
+- durable-route-closure-final.log: 38 passed, including current native transcript/page
+  attribution, bounded 10,000-entry route paging, immutable input binding, durable
+  incomplete-schema refusal without writes, reply/unread behavior and A13 guards.
+- native-consumers-bounded.log: 88 passed, 1 deselected. Large certificate fixture
+  construction (>8MiB and 1001 fsynced publications) exceeded a prior bounded run;
+  that test is not counted green. UNKNOWN tests use real subprocess/filesystem
+  boundaries; replies are test fixtures, not installed Pi/provider acceptance.
+- Removed old JSON/source-column importer, migration_source/routes_imported runtime
+  paths, split input_routing schema, and four exclusive compatibility tests.
+- Current parent b4cb42a has OwnerReleaseStore but VerifiedOwnerLoss still calls
+  removed _read_owner_release_receipts. S12 owns the typed current caller fix;
+  no old receipt fallback. Integrate parent process-identity/release declarations
+  before validating that fix.

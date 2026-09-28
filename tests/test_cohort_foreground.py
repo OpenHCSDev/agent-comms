@@ -175,7 +175,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 1
@@ -498,7 +498,7 @@ except Exception as error:
         assert child.stdout.strip() == "StaleFence"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 0
@@ -681,7 +681,7 @@ raise SystemExit(f.main(sys.argv[1:]))
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (
                     store._connection.execute(
-                        "SELECT count(*) FROM native_runtime_inputs"
+                        "SELECT count(*) FROM native_runtime_input"
                     ).fetchone()[0]
                     == 1
                 )
@@ -725,7 +725,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         assert len(calls) == 1
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 1

@@ -150,3 +150,14 @@ never a fresh attempt; genuine native coverage begins at 0. No parallel migratio
 store or old-schema reader may implement this. Parent's current #229 also permits
 canonical plain history only <= H. The full table/caller migration and installed
 UNKNOWN/reset proof remain open.
+
+- **Additional closure:** transcript_routes.py now declares TranscriptRoute and
+  the existing InputDisplay as sole table owners, deleting initializer JSON/old
+  source-column conversion and exclusive compatibility tests. This store is
+  durable owner-authored annotation data, not a disposable index. Parent owns
+  the precise one-shot contract in evidence/round2-s12/HANDOFF.md.
+- **Reply index:** view_unread.py derives ReplyIndex/TranscriptReply, removes
+  in-runtime schema conversion, and requires quiet reset of
+  transcript_reply_index.sqlite3; durable ReadLedger remains untouched.
+- **Still open:** full lifecycle/core/cohort/response table caller closure and
+  remaining unowned tables. S12 is not globally complete.

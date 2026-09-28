@@ -165,7 +165,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
                 == 1
             )
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 1
@@ -223,7 +223,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             )
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
+                store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[
                     0
                 ]
                 == 1

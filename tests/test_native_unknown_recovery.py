@@ -46,7 +46,7 @@ def unknown_owner(directory, admitted, output, exit_allowed):
     else:
         raise AssertionError("fixture must leave an unresolved native attempt")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute("SELECT * FROM native_runtime_inputs").fetchone()
+        row = store._connection.execute("SELECT * FROM native_runtime_input").fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
     os.environ["AGENT_COMMS_THREAD"] = "beta"
     comms.owners.release("beta")
@@ -85,7 +85,7 @@ def leave(process, exit_allowed):
 def input_evidence(store):
     return {
         table: [tuple(row) for row in store._connection.execute("SELECT * FROM " + table)]
-        for table in ("native_runtime_inputs", "native_runtime_source_cursors")
+        for table in ("native_runtime_input", "current_native_cursor")
     }
 
 
@@ -130,8 +130,8 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert not store.snapshot(execution_id).can_retry
         assert tuple(store._connection.execute(
-            "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
-        ).fetchone()) == before["native_runtime_inputs"][0]
+            "SELECT * FROM native_runtime_input WHERE input_id=?", (input_id,)
+        ).fetchone()) == before["native_runtime_input"][0]
 
 
 def test_abandon_refuses_released_but_live_owner(released_unknown):
@@ -187,7 +187,7 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
     leave(process, exit_allowed)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         if store._connection.execute(
-            "SELECT sent_owner_admission_epoch FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation FROM native_runtime_input"
         ).fetchone()[0] is not None:
             return  # Recorded admission already binds to the earlier attested release.
         comms = Comms(root)
@@ -234,9 +234,9 @@ print(json.dumps({"type":"response", "id":request["id"],
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        old = store._connection.execute("SELECT * FROM native_runtime_inputs").fetchone()
+        old = store._connection.execute("SELECT * FROM native_runtime_input").fetchone()
         execution_id, old_id = old["execution_id"], old["input_id"]
-        assert old["session_id"] is old["sent_owner_admission_epoch"] is None
+        assert old["session_id"] is old["sent_owner_admission_generation"] is None
         snapshot = store.snapshot(execution_id)
         assert type(snapshot.execution.lifecycle) is FailedExecution
         assert not snapshot.is_current and not snapshot.can_retry
@@ -270,7 +270,7 @@ async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatc
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute("SELECT execution_id FROM native_runtime_inputs").fetchone()
+        row = store._connection.execute("SELECT execution_id FROM native_runtime_input").fetchone()
         assert store.snapshot(row[0]).is_current
 
 

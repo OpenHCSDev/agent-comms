@@ -38,6 +38,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     """Each SQLite representation owns its conversion at the storage boundary."""
 
     sql_type: ClassVar[str]
+    codec: ClassVar[type[FieldCodec]] = FieldCodec
 
     @classmethod
     @abstractmethod
@@ -68,7 +69,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
 
     @classmethod
     def to_sql(cls, value: object) -> object:
-        return FieldCodec.encode(value)
+        return cls.codec.encode(value)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -190,7 +191,7 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def to_sql(cls, value: object) -> str:
-        return json.dumps(FieldCodec.encode(value), separators=(",", ":"), allow_nan=False)
+        return json.dumps(cls.codec.encode(value), separators=(",", ":"), allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -253,11 +254,11 @@ class _Field:
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
-        FieldCodec.decode(self.annotation, FieldCodec.encode(value))
+        self.storage.codec.decode(self.annotation, self.storage.codec.encode(value))
         return None if value is None else self.storage.to_sql(value)
 
     def decode(self, value: object) -> object:
-        return FieldCodec.decode(
+        return self.storage.codec.decode(
             self.annotation, None if value is None else self.storage.from_sql(value)
         )
 
@@ -428,14 +429,35 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
             raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
         return next(iter(rows), None)
 
-    def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+    def _insertion(self) -> tuple[str, tuple]:
         writable = tuple(item for item in self._fields() if item.column.generated is None)
-        return db.execute(
+        return (
             f"INSERT INTO {_identifier(self.declared_name)} "
             f"({self._column_list(tuple(item.name for item in writable))}) "
             f"VALUES ({', '.join('?' for _ in writable)})",
             tuple(item.encode(getattr(self, item.name)) for item in writable),
         )
+
+    def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+        return db.execute(*self._insertion())
+
+    def upsert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+        """Replace writable values on a declared primary-key conflict."""
+        statement, values = self._insertion()
+        keys = tuple(item.name for item in self._fields() if item.column.primary_key)
+        updates = tuple(
+            item.name
+            for item in self._fields()
+            if not item.column.primary_key and item.column.generated is None
+        )
+        statement += f" ON CONFLICT ({self._column_list(keys)}) DO "
+        statement += (
+            "UPDATE SET "
+            + ", ".join(f"{_identifier(name)}=excluded.{_identifier(name)}" for name in updates)
+            if updates
+            else "NOTHING"
+        )
+        return db.execute(statement, values)
 
     @classmethod
     def update(

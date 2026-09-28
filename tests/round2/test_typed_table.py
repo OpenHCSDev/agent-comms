@@ -59,6 +59,10 @@ def test_declared_table_family(tmp_path):
             replace(child, key="bad", parent="missing").insert(db)
         with pytest.raises(ValueError):
             replace(parent, key="bool", count=True).insert(db)
+        replace(child, weight=3.25).upsert(db)
+        assert TableChildRow.one(db, key="c").weight == 3.25
+        child.upsert(db)
+        assert TableChildRow.one(db, key="c") == child
         TableChildRow.update(db, where="key=?", parameters=("c",), enabled=False)
         with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",), missing=1)
