@@ -26,3 +26,7 @@ Earlier attempts retained, not counted as passes: initial interpreter lacked met
 ## Parent action
 
 Merge this branch on186/current main, build/install through the existing serial activation procedure. Use normal `owners.restart_owners` for the intended idle owners; no forced replay, registry edits or manufactured release/exit evidence. Parent's earlier explicit `owners.start` recovery remains valid and is not repeated here. No CI or additional provider acceptance gate is requested. Real-process evidence here is Linux; no new macOS execution claim. An unverifiable process that remains alive must still fail rather than receive an unsafe signal.
+
+## Installed parent result
+
+Merged188, installed runtime-owner-restart-20260928 with pairedToad92. Normal owners.restart_owners replaced both intended idle live owners without the former exception or explicit-start recovery. Both ready/local; all103 identities and58 bus rows preserved. Receipt: live-activation.json. No new provider call was needed for this lifecycle-only fix.
