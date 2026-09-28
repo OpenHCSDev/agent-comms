@@ -162,3 +162,12 @@ def test_missing_optional_document_is_not_created_by_migration(tmp_path):
     path = comms.relationships.store.path
     assert migrate_relationships(path, comms.registry.snapshot()) == RelationshipDocument()
     assert not path.exists()
+
+
+def test_unknown_peer_keeps_registry_error_and_does_not_create_document(tmp_path):
+    from agent_comms.declarations import UnregisteredThreadError
+
+    comms = setup_wire(tmp_path)
+    with pytest.raises(UnregisteredThreadError):
+        comms.relationships.edit("owner", "add", "missing", "Uncommitted note")
+    assert not comms.relationships.store.path.exists()

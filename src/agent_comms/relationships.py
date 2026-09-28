@@ -20,6 +20,7 @@ from .declarations import (
     Thread,
     ThreadSort,
     ThreadView,
+    UnregisteredThreadError,
     _store_lock,
     file_revision,
     is_channel_target,
@@ -229,7 +230,7 @@ class RelationshipDocument:
                 ),
             ), None
         if second is None:
-            raise ValueError(f"Unknown collaboration peer: {peer}")
+            raise UnregisteredThreadError(f"Thread {peer!r} is not registered.")
         if not second.role.executable:
             raise ValueError("Collaborations relate agent threads")
         if first.name == second.name:

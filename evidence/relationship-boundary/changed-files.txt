@@ -1,0 +1,9 @@
+src/agent_comms/operations.py
+src/agent_comms/passive_channel_awareness.py
+src/agent_comms/relationship_migration.py
+src/agent_comms/relationships.py
+tests/test_goal_mentions.py
+tests/test_passive_channel_awareness.py
+tests/test_relationship_awareness_store.py
+tests/test_relationship_migration.py
+tests/test_relationships.py
