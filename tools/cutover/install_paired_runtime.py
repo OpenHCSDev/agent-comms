@@ -23,13 +23,19 @@ from agent_comms.cohort_foreground import _preflight
 from agent_comms.comms import wire
 from agent_comms.store_files import _atomic_write_text, _store_lock, file_revision
 
-
 RUNTIME = Path.home() / ".local/share/agent-comms/runtime-failure-recovery-candidate-20260928"
-NATIVE = Path.home() / ".local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent"
+NATIVE = (
+    Path.home()
+    / ".local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent"
+)
 LINKS = ("toad", "agent-comms", "agent-comms-acp", "agent-comms-agent", "agent-comms-nk-foreground")
-RESET = ("compaction-commits.sqlite3", "compaction-commits.sqlite3-wal",
-         "compaction-commits.sqlite3-shm", "compaction-commits.sqlite3-journal",
-         "input_dispositions.json")
+RESET = (
+    "compaction-commits.sqlite3",
+    "compaction-commits.sqlite3-wal",
+    "compaction-commits.sqlite3-shm",
+    "compaction-commits.sqlite3-journal",
+    "input_dispositions.json",
+)
 
 
 def require_no_clients():
@@ -42,8 +48,12 @@ def require_no_clients():
             arguments = (entry / "cmdline").read_bytes().split(b"\0")
         except (FileNotFoundError, ProcessLookupError, PermissionError):
             continue
-        if any(arg == b"agent_comms.acp" or arg.endswith(b"/agent-comms-acp")
-               or arg.endswith(b"/toad") for arg in arguments):
+        if any(
+            arg in (b"agent_comms.acp", b"toad", b"agent-comms-acp")
+            or arg.endswith(b"/agent-comms-acp")
+            or arg.endswith(b"/toad")
+            for arg in arguments
+        ):
             clients.append(int(entry.name))
     if clients:
         raise RuntimeError(f"Close Toad/ACP clients before runtime reset: {clients}")
@@ -55,8 +65,9 @@ def phase(comms, target):
         receipt = barrier.current_unlocked()
         if receipt is None:
             raise RuntimeError("This operator requires the existing maintenance witness")
-        data = dict(version=1, root=str(comms.root.resolve()),
-                    **asdict(replace(receipt, phase=target)))
+        data = dict(
+            version=1, root=str(comms.root.resolve()), **asdict(replace(receipt, phase=target))
+        )
         _atomic_write_text(barrier.state_path, json.dumps(data) + "\n", fsync_parent=True)
 
 
@@ -85,10 +96,19 @@ def main():
         if not link.is_symlink() or not (RUNTIME / "bin" / name).is_file():
             raise RuntimeError(f"Missing installed entry point: {name}")
         previous_links[name] = os.readlink(link)
-    sessions = {t.session_file: file_revision(Path(t.session_file)) for t in owners if t.session_file}
-    report = dict(runtime=str(RUNTIME), native=str(NATIVE), root=str(comms.root),
-                  owners=[t.name for t in owners], previous_links=previous_links,
-                  reset=[], replayed_inputs=0, applied=False)
+    sessions = {
+        t.session_file: file_revision(Path(t.session_file)) for t in owners if t.session_file
+    }
+    report = dict(
+        runtime=str(RUNTIME),
+        native=str(NATIVE),
+        root=str(comms.root),
+        owners=[t.name for t in owners],
+        previous_links=previous_links,
+        reset=[],
+        replayed_inputs=0,
+        applied=False,
+    )
     if not args.apply:
         print(json.dumps(report, indent=2))
         return
@@ -121,7 +141,9 @@ def main():
         directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             fcntl.flock(directory, fcntl.LOCK_EX)
-            _publish_active_route_locked(replacement, active_route_path(), directory, expected=route)
+            _publish_active_route_locked(
+                replacement, active_route_path(), directory, expected=route
+            )
         finally:
             os.close(directory)
         for name in LINKS:
@@ -135,15 +157,19 @@ def main():
             comms.owners.start(owner.name)
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            if all(comms.owners._is_local_participant(comms.registry.require(t.name)) for t in owners):
+            if all(
+                comms.owners._is_local_participant(comms.registry.require(t.name)) for t in owners
+            ):
                 break
-            time.sleep(.25)
+            time.sleep(0.25)
         for owner in owners:
             current = comms.registry.require(owner.name)
             if not current.process_alive or not comms.owners._is_local_participant(current):
                 raise RuntimeError(f"Fresh owner participation missing: {owner.name}")
             if (current.model, current.thinking_level, current.session_file) != (
-                owner.model, owner.thinking_level, owner.session_file
+                owner.model,
+                owner.thinking_level,
+                owner.session_file,
             ):
                 raise RuntimeError(f"Owner configuration changed: {owner.name}")
             command = Path(f"/proc/{current.pid}/cmdline").read_bytes()
