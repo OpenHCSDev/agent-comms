@@ -6,12 +6,19 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass
+from hashlib import sha256
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .goal_presentation import GoalExecution
+from .goals import Goal
+from .native_runtime_input import CurrentNativeCursor
 from .routing import MessageRoute
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .transcripts import TranscriptCursor
 
 
@@ -88,3 +95,228 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     if not isinstance(extension, dict):
         raise ValueError("Comms metadata must be an object")
     return FieldCodec.decode(UpdateBatch, extension).updates
+
+
+@dataclass(frozen=True)
+class CursorScope:
+    session_id: str
+    wire_root_id: str
+    owner: OwnerIdentity
+    owner_pid: int
+
+    def __post_init__(self):
+        if (
+            not self.session_id
+            or len(self.wire_root_id) != 32
+            or any(c not in "0123456789abcdef" for c in self.wire_root_id)
+            or self.owner_pid <= 0
+            or self.owner.generation <= 0
+            or self.owner.incarnation.created_at <= 0
+        ):
+            raise ValueError("Invalid native cursor scope")
+
+    @property
+    def logical_key(self):
+        return self.session_id, self.wire_root_id, self.owner.incarnation.name
+
+    @property
+    def owner_created_at(self):
+        return self.owner.incarnation.created_at
+
+    @property
+    def admission_generation(self):
+        return self.owner.generation
+
+
+class CursorObservation(DeclaredFamily, affix="CursorObservation"):
+    """Read-only history evidence, never an input/send capability."""
+
+    @property
+    @abstractmethod
+    def status(self) -> str: ...
+
+    def validate_scope(self, scope: CursorScope | None) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class UnavailableCursorObservation(CursorObservation):
+    @property
+    def status(self) -> str:
+        return "unavailable"
+
+
+@dataclass(frozen=True)
+class EmptyCursorObservation(CursorObservation):
+    @property
+    def status(self) -> str:
+        return "none"
+
+
+@dataclass(frozen=True)
+class VerifiedCursorObservation(CursorObservation):
+    cursor: CurrentNativeCursor
+
+    @property
+    def status(self) -> str:
+        return "proven" if self.cursor.injected_seq else "coverage_only"
+
+    def validate_scope(self, scope: CursorScope | None) -> None:
+        cursor = self.cursor
+        if (
+            scope is None
+            or cursor.wire_root_id != scope.wire_root_id
+            or cursor.owner_thread != scope.owner.incarnation.name
+            or cursor.owner_admission_generation != scope.owner.generation
+            or not 0 <= cursor.injected_seq <= cursor.covered_seq
+        ):
+            raise ValueError("Cursor observation does not belong to its scope")
+
+
+@dataclass(frozen=True)
+class CursorEnvelope:
+    scope: CursorScope | None
+    revision: int
+    observation: CursorObservation
+
+    def __post_init__(self):
+        if self.revision <= 0:
+            raise ValueError("A cursor observation requires a positive revision")
+        self.observation.validate_scope(self.scope)
+
+    @property
+    def status(self) -> str:
+        return self.observation.status
+
+    @property
+    def digest(self) -> str:
+        return sha256(
+            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+
+@dataclass(frozen=True)
+class CursorAdvancedUpdate(AgentCommsUpdate):
+    envelope: CursorEnvelope
+    selected_status: str | None = None
+
+
+@dataclass(frozen=True)
+class QueueScope:
+    session_id: str
+    owner: OwnerIdentity
+    owner_pid: int
+
+    @property
+    def logical_key(self):
+        return self.session_id, self.owner.incarnation.name
+
+    @property
+    def owner_created_at(self):
+        return self.owner.incarnation.created_at
+
+    @property
+    def admission_generation(self):
+        return self.owner.generation
+
+
+@dataclass(frozen=True)
+class QueueItem:
+    input_id: str
+    text: str
+
+
+class QueueProjection(DeclaredFamily, affix="QueueProjection"):
+    items: ClassVar[tuple[QueueItem, ...]] = ()
+    restored: ClassVar[tuple[QueueItem, ...]] = ()
+
+    @property
+    @abstractmethod
+    def status(self) -> str | None: ...
+
+
+@dataclass(frozen=True)
+class PendingQueueProjection(QueueProjection):
+    @property
+    def status(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class UnavailableQueueProjection(QueueProjection):
+    @property
+    def status(self) -> str:
+        return "unavailable"
+
+
+@dataclass(frozen=True)
+class AvailableQueueProjection(QueueProjection):
+    items: tuple[QueueItem, ...] = ()
+    restored: tuple[QueueItem, ...] = ()
+
+    @property
+    def status(self) -> str:
+        return "available"
+
+
+@dataclass(frozen=True)
+class QueueChangedUpdate(AgentCommsUpdate):
+    scope: QueueScope | None
+    revision: int
+    projection: QueueProjection
+
+    @property
+    def status(self) -> str | None:
+        return self.projection.status
+
+    @property
+    def digest(self) -> str:
+        return sha256(
+            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+
+@dataclass(frozen=True)
+class InputStartedUpdate(AgentCommsUpdate):
+    input_id: str | None
+    text: str | None
+    scope: QueueScope | None
+    revision: int | None
+
+
+@dataclass(frozen=True)
+class ContextUsage:
+    used: int
+    size: int
+
+
+@dataclass(frozen=True)
+class CoordinationChangedUpdate(AgentCommsUpdate):
+    thread: ThreadIncarnation
+    wire_root: str
+    owner_pid: int
+    worktree: str
+    model: str | None
+    thinking_level: str | None
+    title: str
+    context_usage: ContextUsage | None
+
+    @property
+    def persistence(self) -> str:
+        return "shared on-disk wire"
+
+    @property
+    def transport(self) -> str:
+        return "per-session stdio ACP"
+
+
+@dataclass(frozen=True)
+class GoalChangedUpdate(AgentCommsUpdate):
+    goal: Goal | None
+    execution: GoalExecution | None
+
+    def __post_init__(self):
+        if self.execution is not None and (
+            self.goal is None or self.execution.goal_id != self.goal.id
+        ):
+            raise ValueError("Goal execution identity does not match its declaration")

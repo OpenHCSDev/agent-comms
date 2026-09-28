@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, cast
 
 from acp.schema import (
@@ -20,6 +19,7 @@ from . import agent_events as events
 from . import backend
 from .acp_extension import (
     BackendDeliveryFailure,
+    GoalChangedUpdate,
     InputFailedUpdate,
     TextRouteUpdate,
     TurnSettledUpdate,
@@ -54,12 +54,7 @@ class AcpEventConsumer(MroDispatch):
             session_id=self.session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",
-                field_meta={
-                    "agentComms": {
-                        "goal": event.goal.to_wire() if event.goal else None,
-                        "goalExecution": asdict(event.execution) if event.execution else None,
-                    }
-                },
+                field_meta=encode_updates(GoalChangedUpdate(event.goal, event.execution)),
             ),
         )
 
