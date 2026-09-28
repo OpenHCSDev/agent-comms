@@ -20,6 +20,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from . import pi_events as pi
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .goal_actions import (
@@ -282,35 +283,35 @@ class TurnRunner:
         session_id: str,
         turn_id: str,
         controller: Any,
-        request: dict[str, Any],
-    ) -> dict[str, Any] | None:
+        request: pi.ExtensionUiRequest,
+    ) -> pi.ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
 
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
         if self.active_turns.get(session_id) != turn_id or controller is None:
-            return None
-        title, method = request.get("title"), request.get("method")
-        if type(title) is not str or not title or len(title) > 160:
-            return None
+            return pi.CancelledUiChoice()
+        title, method = request.title, request.method
+        if title is None or not title or len(title) > 160:
+            return pi.CancelledUiChoice()
         choices: dict[str, str] = {}
         if method == "confirm":
-            body = request.get("message")
-            if type(body) is not str or len(body) > 8192:
-                return None
+            body = request.message
+            if body is None or len(body) > 8192:
+                return pi.CancelledUiChoice()
             options = [
                 PermissionOption(option_id="allow-once", name="Allow once", kind="allow_once"),
                 PermissionOption(option_id="deny", name="Deny", kind="reject_once"),
             ]
         elif method == "select":
-            values = request.get("options")
+            values = request.options
             if (
-                type(values) is not list
+                values is None
                 or not 1 <= len(values) <= 8
-                or any(type(item) is not str or not item or len(item) > 100 for item in values)
+                or any(not item or len(item) > 100 for item in values)
             ):
-                return None
+                return pi.CancelledUiChoice()
             choices = {f"choice-{index}": value for index, value in enumerate(values)}
             options = [
                 PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
@@ -319,9 +320,9 @@ class TurnRunner:
             options.append(PermissionOption(option_id="deny", name="Cancel", kind="reject_once"))
             body = "Select one Pi extension option for this turn only."
         else:
-            return None
+            return pi.CancelledUiChoice()
         tool_call = ToolCallUpdate(
-            tool_call_id=f"pi-ui-{turn_id}-{request['id']}",
+            tool_call_id=f"pi-ui-{turn_id}-{request.id}",
             kind="other",
             title=title,
             content=[
@@ -344,7 +345,7 @@ class TurnRunner:
                     },
                 )
                 if not isinstance(reply, dict):
-                    return None
+                    return pi.CancelledUiChoice()
                 outcome = reply
             elif controller is self.sessions.client:
                 response = await asyncio.wait_for(
@@ -357,25 +358,25 @@ class TurnRunner:
                     by_alias=True, exclude_none=True
                 )
             else:
-                return None
+                return pi.CancelledUiChoice()
         except Exception:
             # An ACP controller exception is denial, never a raw error in Pi
             # RPC/model output or a reason to resend an uncertain MCP call.
-            return None
+            return pi.CancelledUiChoice()
         if self.active_turns.get(session_id) != turn_id:
-            return None
+            return pi.CancelledUiChoice()
         if isinstance(controller, SocketClient) and not self.runtime.is_controller(
             session_id, controller
         ):
-            return None
+            return pi.CancelledUiChoice()
         selected = outcome.get("optionId")
         if outcome.get("outcome") != "selected" or type(selected) is not str:
-            return None
+            return pi.CancelledUiChoice()
         if method == "confirm":
-            return {"confirmed": selected == "allow-once"}
+            return pi.ConfirmedUiChoice(selected == "allow-once")
         if selected in choices:
-            return {"value": choices[selected]}
-        return None
+            return pi.ValueUiChoice(choices[selected])
+        return pi.CancelledUiChoice()
 
     def finish_turn_stream(
         self,

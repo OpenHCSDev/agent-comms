@@ -1,0 +1,1293 @@
+{
+  "findings": [
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "238f349317"
+      ],
+      "target_count": 7,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 5,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:238f349317:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:238f349317:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "_pi_mcp_live_receipt:if",
+        "DeclaredFamily",
+        "CheckpointSeal",
+        "NativeEntry",
+        "PiContent",
+        "PiDelta",
+        "PiEvent"
+      ],
+      "stable_id": "b8db3fe8b9",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    },
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "79463717d8"
+      ],
+      "target_count": 7,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 5,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:79463717d8:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:79463717d8:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "_publication_metadata:if",
+        "DeclaredFamily",
+        "InputAttempt",
+        "NativeEntry",
+        "PiContent",
+        "PiDelta",
+        "PiEvent"
+      ],
+      "stable_id": "aab94d8a89",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    },
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "64548d22aa"
+      ],
+      "target_count": 7,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 5,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:64548d22aa:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:64548d22aa:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "_read_snapshot_result:if",
+        "DeclaredFamily",
+        "InputAttempt",
+        "NativeEntry",
+        "PiContent",
+        "PiDelta",
+        "PiEvent"
+      ],
+      "stable_id": "7cca4bb3e0",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    },
+    {
+      "label": "DeclaredFamily semantic descent boundary",
+      "authority_candidates": [
+        "DeclaredFamily"
+      ],
+      "detector_ids": [
+        "semantic_mirror_without_descent"
+      ],
+      "finding_ids": [
+        "8d1867103c"
+      ],
+      "target_count": 10,
+      "covered_finding_count": 1,
+      "certificate_count": 1,
+      "matched_fact_count": 8,
+      "authority_kinds": [
+        "finding_declared_authority"
+      ],
+      "projection_kinds": [
+        "detector_finding"
+      ],
+      "authority_claims": [
+        {
+          "claim": {
+            "claimed_symbol": "DeclaredFamily",
+            "authority_kind": "finding_declared_authority",
+            "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+            "qualname": "DeclaredFamily",
+            "authority_id": "finding:8d1867103c:authority"
+          },
+          "status": "resolved",
+          "proof_edges": [
+            {
+              "edge_kind": "semantic_descent_graph",
+              "authority_id": "finding:8d1867103c:authority",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "line": 86,
+              "symbol": "DeclaredFamily",
+              "detail": "claim matched semantic-descent authority catalog"
+            }
+          ],
+          "discovery_required": null
+        }
+      ],
+      "evidence_symbols": [
+        "TOOLS",
+        "DeclaredFamily",
+        "Fork",
+        "InputAttempt",
+        "ModelConfigOption",
+        "NativeEntry",
+        "PiContent",
+        "PiDelta",
+        "PiEvent",
+        "Prompt"
+      ],
+      "stable_id": "f5e1fb0f4c",
+      "detector_id": "semantic_mirror_without_descent",
+      "title": "Semantic mirror should descend to its nominal authority",
+      "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: collection_literal has semantic overlap ('fork', 'model', 'prompt', 'status', 'type') with class_family `DeclaredFamily`; collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+      "relation_context": "collection_literal has semantic overlap ('fork', 'model', 'prompt', 'status', 'type') with class_family `DeclaredFamily`; collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "authority_candidate": "DeclaredFamily",
+      "authority_discovery_required": false
+    }
+  ],
+  "plans": [],
+  "finding_payload_mode": "semantic_boundary_evidence",
+  "finding_count": 4,
+  "finding_counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 1,
+        "count": 4,
+        "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "semantic_mirror_without_descent",
+        "count": 4
+      }
+    ]
+  },
+  "scan_status": {
+    "mode": "exact_compact_global",
+    "analyzed_detector_count": 79,
+    "omitted_detector_count": 0,
+    "complete": true,
+    "reason": "all_context_detectors_use_compact_global_projections"
+  },
+  "semantic_descent_graph": {
+    "active_graph_source": "repository",
+    "repository_graph": {
+      "authority_count": 389,
+      "fact_count": 2383,
+      "projection_count": 2529,
+      "relation_count": 13,
+      "missing_descent_count": 11,
+      "authorities_by_kind": [
+        {
+          "authority_kind": "class_family",
+          "count": 97
+        },
+        {
+          "authority_kind": "dataclass_schema",
+          "count": 277
+        },
+        {
+          "authority_kind": "enum",
+          "count": 15
+        }
+      ],
+      "projections_by_kind": [
+        {
+          "projection_kind": "branch_literal",
+          "count": 1986
+        },
+        {
+          "projection_kind": "call_literal",
+          "count": 366
+        },
+        {
+          "projection_kind": "collection_literal",
+          "count": 42
+        },
+        {
+          "projection_kind": "mapping_literal",
+          "count": 134
+        },
+        {
+          "projection_kind": "match_literal",
+          "count": 1
+        }
+      ],
+      "top_certificates": [
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TOOLS",
+          "projection_kind": "collection_literal",
+          "projection_owner_symbol": "<module>",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 8,
+          "coverage_ratio": 0.025236593059936908,
+          "matched_tokens": [
+            "fork",
+            "model",
+            "prompt",
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_pi_mcp_live_receipt:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_pi_mcp_live_receipt",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/backend.py",
+          "line": 132,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.015772870662460567,
+          "matched_tokens": [
+            "state",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_publication_metadata:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_publication_metadata",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/compaction_journal.py",
+          "line": 150,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.015772870662460567,
+          "matched_tokens": [
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "_read_snapshot_result:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "_read_snapshot_result",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/selected_source_snapshot.py",
+          "line": 227,
+          "matched_fact_count": 5,
+          "coverage_ratio": 0.015772870662460567,
+          "matched_tokens": [
+            "status",
+            "type"
+          ],
+          "missing_derivation_path": "branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "GoalHistoryStore.observe:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "GoalHistoryStore.observe",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/goal_history.py",
+          "line": 215,
+          "matched_fact_count": 4,
+          "coverage_ratio": 0.012618296529968454,
+          "matched_tokens": [
+            "pending",
+            "state"
+          ],
+          "missing_derivation_path": "branch literal `GoalHistoryStore.observe:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "Goal.from_registry:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "Goal.from_registry",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/goals.py",
+          "line": 114,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.00946372239747634,
+          "matched_tokens": [
+            "pause_source",
+            "paused_goal",
+            "status"
+          ],
+          "missing_derivation_path": "branch literal `Goal.from_registry:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TurnProgress.finish_attempts:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "TurnProgress.finish_attempts",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/turn_progress.py",
+          "line": 520,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.00946372239747634,
+          "matched_tokens": [
+            "active_goal",
+            "paused_goal",
+            "state"
+          ],
+          "missing_derivation_path": "branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "class_family",
+          "projection_label": "TurnProgress.finish_attempts:if",
+          "projection_kind": "branch_literal",
+          "projection_owner_symbol": "TurnProgress.finish_attempts",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/turn_progress.py",
+          "line": 556,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.00946372239747634,
+          "matched_tokens": [
+            "active_goal",
+            "completed_goal",
+            "state"
+          ],
+          "missing_derivation_path": "branch literal `TurnProgress.finish_attempts:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "Message",
+          "authority_kind": "dataclass_schema",
+          "projection_label": "message",
+          "projection_kind": "mapping_literal",
+          "projection_owner_symbol": "ImportRole.pi_message",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/importing.py",
+          "line": 48,
+          "matched_fact_count": 3,
+          "coverage_ratio": 0.2727272727272727,
+          "matched_tokens": [
+            "body",
+            "timestamp",
+            "type"
+          ],
+          "missing_derivation_path": "mapping literal `message` repeats fields from dataclass_schema `Message`; derive it from dataclass fields through a declaration-owned projection"
+        },
+        {
+          "authority_name": "DisplayOrder",
+          "authority_kind": "class_family",
+          "projection_label": "TOOLS",
+          "projection_kind": "collection_literal",
+          "projection_owner_symbol": "<module>",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 2,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "channel_sort",
+            "thread_sort"
+          ],
+          "missing_derivation_path": "collection literal `TOOLS` repeats members from class_family `DisplayOrder`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        }
+      ]
+    },
+    "finding_backed_graph": {
+      "authority_count": 4,
+      "fact_count": 23,
+      "projection_count": 4,
+      "relation_count": 4,
+      "missing_descent_count": 4,
+      "authorities_by_kind": [
+        {
+          "authority_kind": "finding_declared_authority",
+          "count": 4
+        }
+      ],
+      "projections_by_kind": [
+        {
+          "projection_kind": "detector_finding",
+          "count": 4
+        }
+      ],
+      "top_certificates": [
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`TOOLS` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "matched_fact_count": 8,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "fork",
+            "input_attempt",
+            "model_config_option",
+            "native_entry",
+            "pi_content",
+            "pi_delta",
+            "pi_event",
+            "prompt"
+          ],
+          "missing_derivation_path": "collection_literal has semantic overlap ('fork', 'model', 'prompt', 'status', 'type') with class_family `DeclaredFamily`; collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`_pi_mcp_live_receipt:if` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/backend.py",
+          "line": 132,
+          "matched_fact_count": 5,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "checkpoint_seal",
+            "native_entry",
+            "pi_content",
+            "pi_delta",
+            "pi_event"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`_publication_metadata:if` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/compaction_journal.py",
+          "line": 150,
+          "matched_fact_count": 5,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "input_attempt",
+            "native_entry",
+            "pi_content",
+            "pi_delta",
+            "pi_event"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        },
+        {
+          "authority_name": "DeclaredFamily",
+          "authority_kind": "finding_declared_authority",
+          "projection_label": "`_read_snapshot_result:if` mirrors `DeclaredFamily`",
+          "projection_kind": "detector_finding",
+          "projection_owner_symbol": "semantic_mirror_without_descent",
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/selected_source_snapshot.py",
+          "line": 227,
+          "matched_fact_count": 5,
+          "coverage_ratio": 1.0,
+          "matched_tokens": [
+            "input_attempt",
+            "native_entry",
+            "pi_content",
+            "pi_delta",
+            "pi_event"
+          ],
+          "missing_derivation_path": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface"
+        }
+      ]
+    }
+  },
+  "timing": {
+    "parse_seconds": 22.148,
+    "analysis_seconds": 1.364,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.0,
+    "analysis_cache_status": "disabled",
+    "total_seconds": 23.512
+  },
+  "semantic_refactor_gate": {
+    "boundary_evidence": [
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "238f349317"
+        ],
+        "target_count": 7,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 5,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:238f349317:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:238f349317:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "_pi_mcp_live_receipt:if",
+          "DeclaredFamily",
+          "CheckpointSeal",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "stable_id": "b8db3fe8b9",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      },
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "79463717d8"
+        ],
+        "target_count": 7,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 5,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:79463717d8:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:79463717d8:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "_publication_metadata:if",
+          "DeclaredFamily",
+          "InputAttempt",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "stable_id": "aab94d8a89",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      },
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "64548d22aa"
+        ],
+        "target_count": 7,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 5,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:64548d22aa:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:64548d22aa:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "_read_snapshot_result:if",
+          "DeclaredFamily",
+          "InputAttempt",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "stable_id": "7cca4bb3e0",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      },
+      {
+        "label": "DeclaredFamily semantic descent boundary",
+        "authority_candidates": [
+          "DeclaredFamily"
+        ],
+        "detector_ids": [
+          "semantic_mirror_without_descent"
+        ],
+        "finding_ids": [
+          "8d1867103c"
+        ],
+        "target_count": 10,
+        "covered_finding_count": 1,
+        "certificate_count": 1,
+        "matched_fact_count": 8,
+        "authority_kinds": [
+          "finding_declared_authority"
+        ],
+        "projection_kinds": [
+          "detector_finding"
+        ],
+        "authority_claims": [
+          {
+            "claim": {
+              "claimed_symbol": "DeclaredFamily",
+              "authority_kind": "finding_declared_authority",
+              "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+              "qualname": "DeclaredFamily",
+              "authority_id": "finding:8d1867103c:authority"
+            },
+            "status": "resolved",
+            "proof_edges": [
+              {
+                "edge_kind": "semantic_descent_graph",
+                "authority_id": "finding:8d1867103c:authority",
+                "authority_kind": "finding_declared_authority",
+                "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+                "line": 86,
+                "symbol": "DeclaredFamily",
+                "detail": "claim matched semantic-descent authority catalog"
+              }
+            ],
+            "discovery_required": null
+          }
+        ],
+        "evidence_symbols": [
+          "TOOLS",
+          "DeclaredFamily",
+          "Fork",
+          "InputAttempt",
+          "ModelConfigOption",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent",
+          "Prompt"
+        ],
+        "stable_id": "f5e1fb0f4c",
+        "detector_id": "semantic_mirror_without_descent",
+        "title": "Semantic mirror should descend to its nominal authority",
+        "summary": "`DeclaredFamily` has 1 raw mirror signal(s) from semantic_mirror_without_descent; missing derivation path: collection_literal has semantic overlap ('fork', 'model', 'prompt', 'status', 'type') with class_family `DeclaredFamily`; collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface.",
+        "relation_context": "collection_literal has semantic overlap ('fork', 'model', 'prompt', 'status', 'type') with class_family `DeclaredFamily`; collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+        "authority_candidate": "DeclaredFamily",
+        "authority_discovery_required": false
+      }
+    ],
+    "authority_discovery_findings": [],
+    "active": true,
+    "ssot_authority_finding_count": 4,
+    "policy": "authority_boundary_proof",
+    "raw_findings_default": "suppressed_when_active"
+  },
+  "active_finding_surface": "semantic_refactor_boundary_evidence",
+  "raw_findings_default": "suppressed_when_active",
+  "supporting_raw_finding_count": 4,
+  "supporting_raw_findings": [
+    {
+      "pattern_id": 1,
+      "title": "`_pi_mcp_live_receipt:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/backend.py:132 repeats CheckpointSeal, NativeEntry, PiContent, PiDelta, PiEvent from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('state', 'type') with class_family `DeclaredFamily`; branch literal `_pi_mcp_live_receipt:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`_pi_mcp_live_receipt:if` mirrors 5 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/backend.py",
+          "line": 132,
+          "symbol": "_pi_mcp_live_receipt:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/checkpoint_seals.py",
+          "line": 49,
+          "symbol": "CheckpointSeal"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/native_entries.py",
+          "line": 26,
+          "symbol": "NativeEntry"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 120,
+          "symbol": "PiContent"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 366,
+          "symbol": "PiDelta"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_events.py",
+          "line": 31,
+          "symbol": "PiEvent"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/backend.py",
+        "line": 132,
+        "symbol": "_pi_mcp_live_receipt:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 5,
+        "registry_name": "_pi_mcp_live_receipt:if",
+        "class_names": [
+          "CheckpointSeal",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "class_key_pairs": [
+          "CheckpointSeal='state'",
+          "NativeEntry='type'",
+          "PiContent='type'",
+          "PiDelta='type'",
+          "PiEvent='type'"
+        ]
+      },
+      "stable_id": "238f349317",
+      "evidence_ids": [
+        "f1ccccd02c",
+        "fb0017b7b9",
+        "77a09be1da",
+        "e3d8081129",
+        "19eaa35814",
+        "35b9a3c1b3",
+        "9a06201393"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`_publication_metadata:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/compaction_journal.py:150 repeats InputAttempt, NativeEntry, PiContent, PiDelta, PiEvent from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_publication_metadata:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`_publication_metadata:if` mirrors 5 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/compaction_journal.py",
+          "line": 150,
+          "symbol": "_publication_metadata:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/input_attempt.py",
+          "line": 24,
+          "symbol": "InputAttempt"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/native_entries.py",
+          "line": 26,
+          "symbol": "NativeEntry"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 120,
+          "symbol": "PiContent"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 366,
+          "symbol": "PiDelta"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_events.py",
+          "line": 31,
+          "symbol": "PiEvent"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/compaction_journal.py",
+        "line": 150,
+        "symbol": "_publication_metadata:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 5,
+        "registry_name": "_publication_metadata:if",
+        "class_names": [
+          "InputAttempt",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "class_key_pairs": [
+          "InputAttempt='status'",
+          "NativeEntry='type'",
+          "PiContent='type'",
+          "PiDelta='type'",
+          "PiEvent='type'"
+        ]
+      },
+      "stable_id": "79463717d8",
+      "evidence_ids": [
+        "9fa3f4e0cd",
+        "fb0017b7b9",
+        "6249089089",
+        "e3d8081129",
+        "19eaa35814",
+        "35b9a3c1b3",
+        "9a06201393"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`_read_snapshot_result:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/selected_source_snapshot.py:227 repeats InputAttempt, NativeEntry, PiContent, PiDelta, PiEvent from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('status', 'type') with class_family `DeclaredFamily`; branch literal `_read_snapshot_result:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`_read_snapshot_result:if` mirrors 5 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/selected_source_snapshot.py",
+          "line": 227,
+          "symbol": "_read_snapshot_result:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/input_attempt.py",
+          "line": 24,
+          "symbol": "InputAttempt"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/native_entries.py",
+          "line": 26,
+          "symbol": "NativeEntry"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 120,
+          "symbol": "PiContent"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 366,
+          "symbol": "PiDelta"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_events.py",
+          "line": 31,
+          "symbol": "PiEvent"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/selected_source_snapshot.py",
+        "line": 227,
+        "symbol": "_read_snapshot_result:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 5,
+        "registry_name": "_read_snapshot_result:if",
+        "class_names": [
+          "InputAttempt",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent"
+        ],
+        "class_key_pairs": [
+          "InputAttempt='status'",
+          "NativeEntry='type'",
+          "PiContent='type'",
+          "PiDelta='type'",
+          "PiEvent='type'"
+        ]
+      },
+      "stable_id": "64548d22aa",
+      "evidence_ids": [
+        "d4396026bc",
+        "fb0017b7b9",
+        "6249089089",
+        "e3d8081129",
+        "19eaa35814",
+        "35b9a3c1b3",
+        "9a06201393"
+      ]
+    },
+    {
+      "pattern_id": 1,
+      "title": "`TOOLS` mirrors `DeclaredFamily`",
+      "why": "The collection literal at /home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/tools.py:571 repeats Fork, InputAttempt, ModelConfigOption, NativeEntry, PiContent, PiDelta from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "collection_literal has semantic overlap ('fork', 'model', 'prompt', 'status', 'type') with class_family `DeclaredFamily`; collection literal `TOOLS` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`TOOLS` mirrors 8 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/tools.py",
+          "line": 571,
+          "symbol": "TOOLS"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_commands.py",
+          "line": 310,
+          "symbol": "Fork"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/input_attempt.py",
+          "line": 24,
+          "symbol": "InputAttempt"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/config_options.py",
+          "line": 67,
+          "symbol": "ModelConfigOption"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/native_entries.py",
+          "line": 26,
+          "symbol": "NativeEntry"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 120,
+          "symbol": "PiContent"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_payloads.py",
+          "line": 366,
+          "symbol": "PiDelta"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_events.py",
+          "line": 31,
+          "symbol": "PiEvent"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/pi_commands.py",
+          "line": 114,
+          "symbol": "Prompt"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/tools.py",
+        "line": 571,
+        "symbol": "TOOLS"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-s10-pi-boundary-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 8,
+        "registry_name": "TOOLS",
+        "class_names": [
+          "Fork",
+          "InputAttempt",
+          "ModelConfigOption",
+          "NativeEntry",
+          "PiContent",
+          "PiDelta",
+          "PiEvent",
+          "Prompt"
+        ],
+        "class_key_pairs": [
+          "Fork='Fork'",
+          "InputAttempt='status'",
+          "ModelConfigOption='Model'",
+          "NativeEntry='type'",
+          "PiContent='type'",
+          "PiDelta='type'",
+          "PiEvent='type'",
+          "Prompt='Prompt'"
+        ]
+      },
+      "stable_id": "8d1867103c",
+      "evidence_ids": [
+        "0d46989e13",
+        "fb0017b7b9",
+        "cfb09be077",
+        "6249089089",
+        "ceeb7d88b1",
+        "e3d8081129",
+        "19eaa35814",
+        "35b9a3c1b3",
+        "9a06201393",
+        "f79dee3090"
+      ]
+    }
+  ],
+  "payload_timing": {
+    "observation_graph_seconds": 0.0,
+    "semantic_descent_graph_seconds": 0.005,
+    "source_snapshot_seconds": 0.0,
+    "source_index_payload_seconds": 0.0,
+    "semantic_refactor_gate_seconds": 0.004,
+    "finding_recipe_plan_seconds": 0.0,
+    "total_seconds": 0.017
+  }
+}

@@ -23,9 +23,9 @@ from agent_comms.pi_payloads import ToolCallContent
 
 
 def _wire(token: str, **changes: object) -> bytes:
-    data = {"token": token, "call_id": "call_1", "resource": "notes.txt", "contents": "é"}
-    data.update(changes)
-    return (json.dumps(data, ensure_ascii=False) + "\n").encode("utf-8")
+    arguments = {"resource": "notes.txt", "contents": "é", **changes}
+    data = {"token": token, "request": {"call_id": "call_1", "arguments": arguments}}
+    return (json.dumps(data) + "\n").encode("utf-8")
 
 
 def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
@@ -35,27 +35,6 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
     assert not hasattr(intent, "action")
     with pytest.raises(TypeError):
         broker.SelectedToolMode(None)  # type: ignore[arg-type]
-
-
-def test_strict_bounded_request_and_no_model_admission() -> None:
-    token = secrets.token_hex(32)
-    assert broker.SelectedToolRequest.from_wire(_wire(token), token) == broker.SelectedToolRequest(
-        "call_1", "notes.txt", "é".encode()
-    )
-    bad = (
-        _wire(token, root="forged"),
-        _wire(token, resource="../escape"),
-        _wire(token, resource="/tmp/absolute"),
-        _wire(token, resource="@notes.txt"),
-        _wire(token, resource="./notes.txt"),
-        _wire(token, contents="x" * (128 * 1024 + 1)),
-        _wire("0" * 64),
-        _wire(token)[:-1],
-        b'{"token":"' + token.encode() + b'","token":"' + token.encode() + b'"}\n',
-    )
-    for raw in bad:
-        with pytest.raises(SelectedToolDenied):
-            broker.SelectedToolRequest.from_wire(raw, token)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
@@ -160,7 +139,11 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
             comms, store, admission, "owner", session_dir, input_id
         )
         with pytest.raises(SelectedToolDenied, match="exact sent FULL input"):
-            mode.action(broker.SelectedToolRequest("call_1", "notes.txt", b"write"))
+            mode.action(
+                broker.SelectedToolRequest(
+                    "call_1", broker.SelectedWriteArguments("notes.txt", "write")
+                )
+            )
         assert not (session_dir / "selected-tool-ledger").exists()
 
 
@@ -170,7 +153,9 @@ def test_writer_order_and_unknown_after_writer(
 ) -> None:
     tmp_path.chmod(0o700)
     input_id = secrets.token_hex(16)
-    request = broker.SelectedToolRequest("call_1", "notes.txt", b"replacement")
+    request = broker.SelectedToolRequest(
+        "call_1", broker.SelectedWriteArguments("notes.txt", "replacement")
+    )
     trace: list[str] = []
 
     def publish(*args: object) -> object:
@@ -215,7 +200,9 @@ def test_post_reservation_effect_unknown_is_never_retried(
 ) -> None:
     tmp_path.chmod(0o700)
     input_id = secrets.token_hex(16)
-    request = broker.SelectedToolRequest("call_1", "notes.txt", b"replacement")
+    request = broker.SelectedToolRequest(
+        "call_1", broker.SelectedWriteArguments("notes.txt", "replacement")
+    )
     admission = WakeAdmission(
         wire_root_id="a" * 32,
         source_seq=1,
@@ -268,6 +255,18 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
             server.expected_pid = os.getpid() + 100000
             assert not await query(server.path, _wire(token))
             server.expected_pid = os.getpid()
+            for changes in (
+                {"resource": "../escape"},
+                {"resource": "/absolute"},
+                {"resource": "@alias"},
+                {"resource": "./alias"},
+                {"contents": "x" * (128 * 1024 + 1)},
+                {"contents": 12},
+                {"contents": "\ud800"},
+                {"root": "forged"},
+            ):
+                assert not await query(server.path, _wire(token, **changes))
+            assert not observed and not server.calls
             arguments = {"resource": "notes.txt", "contents": "é"}
             pending = asyncio.create_task(query(server.path, _wire(token)))
             await asyncio.sleep(0)
@@ -291,7 +290,11 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
             assert await pending
             assert not await query(server.path, _wire("0" * 64))
             assert not await query(server.path, _wire(token))  # Consumed exactly once.
-            assert observed == [broker.SelectedToolRequest("call_1", "notes.txt", "é".encode())]
+            assert observed == [
+                broker.SelectedToolRequest(
+                    "call_1", broker.SelectedWriteArguments("notes.txt", "é")
+                )
+            ]
         finally:
             await server.close()
         assert not server.path.exists()
@@ -306,3 +309,67 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
         return json.loads(row)["ok"] is True
 
     asyncio.run(run())
+
+
+@pytest.mark.asyncio
+async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path):
+    """Execute the actual producer through Node, with no Pi/model/provider."""
+    from agent_comms.pi_events import ToolExecutionEnd
+
+    tmp_path.chmod(0o700)
+    input_id, token = secrets.token_hex(16), secrets.token_hex(32)
+    target = tmp_path / "notes.txt"
+    target.write_text("before")
+
+    def commit(request):
+        broker.consume_selected_slot(tmp_path, input_id, request.call_id)
+        target.write_text(request.arguments.contents)
+        broker.record_selected_terminal(tmp_path, input_id, request.call_id)
+
+    socket = broker.SelectedToolSocket(tmp_path, token, commit)
+    arguments = {"resource": "notes.txt", "contents": "paired producer é"}
+    socket.announce(
+        (ToolCallContent(id="paired", name="selected_claimed_write", arguments=arguments),)
+    )
+    socket.tool_started(
+        ToolExecutionStart(
+            tool_call_id="paired", tool_name="selected_claimed_write", args=arguments
+        )
+    )
+    await socket.start()
+    process = None
+    try:
+        extension = Path(broker.__file__).with_name("selected_claimed_write.mjs")
+        process = await asyncio.create_subprocess_exec(
+            "node",
+            "--input-type=module",
+            "--eval",
+            f"""import register from {json.dumps(extension.as_uri())};
+let tool;
+register({{registerTool(value) {{tool = value}}}});
+await tool.execute('paired', {json.dumps(arguments)}, new AbortController().signal);
+""",
+            env={
+                **os.environ,
+                "AGENT_COMMS_SELECTED_TOOL_SOCKET": str(socket.path),
+                "AGENT_COMMS_SELECTED_TOOL_TOKEN": token,
+            },
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        socket.expected_pid = process.pid
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
+        assert process.returncode == 0, (stdout, stderr)
+        socket.tool_finished(
+            ToolExecutionEnd(
+                tool_call_id="paired", tool_name="selected_claimed_write", is_error=False
+            ),
+            input_id,
+        )
+        socket.assert_complete()
+        assert target.read_text() == arguments["contents"]
+    finally:
+        if process is not None and process.returncode is None:
+            process.kill()
+            await process.wait()
+        await socket.close()
