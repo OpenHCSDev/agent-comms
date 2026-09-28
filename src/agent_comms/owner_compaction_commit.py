@@ -27,7 +27,7 @@ from .compaction_journal import (
     CompactionOperation,
     SelectedSummaryAttempt,
 )
-from .compaction_states import NativeOutcome
+from .compaction_states import NativeOutcome, UnknownNativeOutcome
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .input_disposition import FutureInputQueue, InputDispositions
@@ -348,7 +348,7 @@ class OwnerCompactionCommit:
                 "Unparseable native outcome; never replay"
             ) from error
         try:
-            return NativeOutcome.from_wire(evidence, result.returncode)
+            return FieldCodec.decode(NativeOutcome, evidence).checked_exit(result.returncode)
         except (ValueError, TypeError) as error:
             raise CompactionTransportUnknownError(str(error)) from error
 
@@ -479,10 +479,13 @@ class OwnerCompactionCommit:
             except Exception as error:
                 # Includes launch/protocol errors: conservative even where no
                 # write probably occurred. Cancellation leaves durable intent.
-                outcome = NativeOutcome.unknown(str(error)[:1024])
+                outcome = UnknownNativeOutcome(str(error)[:1024])
             outcome = outcome.bind_metadata(metadata_digest)
             self.journal.resolve(
-                commit_id, outcome.state, outcome.evidence, publication=outcome.state.committed
+                commit_id,
+                outcome.state,
+                FieldCodec.encode(outcome),
+                publication=outcome.state.committed,
             )
             return self.journal.get(commit_id)
 
@@ -592,9 +595,12 @@ class OwnerCompactionCommit:
             try:
                 outcome = self._call(fd, request, timeout, retained)
             except Exception as error:
-                outcome = NativeOutcome.unknown(str(error)[:1024])
+                outcome = UnknownNativeOutcome(str(error)[:1024])
             outcome = outcome.bind_metadata(intent["metadataDigest"])
             self.journal.resolve(
-                commit_id, outcome.state, outcome.evidence, publication=outcome.state.committed
+                commit_id,
+                outcome.state,
+                FieldCodec.encode(outcome),
+                publication=outcome.state.committed,
             )
             return self.journal.get(commit_id)

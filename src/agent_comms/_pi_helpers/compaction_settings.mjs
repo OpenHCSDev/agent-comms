@@ -1,16 +1,12 @@
 import {lstatSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const [root, cwd, contextTokensText, contextWindowText] = process.argv.slice(1);
+const {package:root, cwd, context_tokens:contextTokens, context_window:contextWindow} = JSON.parse(process.argv[1]);
 const {CONFIG_DIR_NAME, getAgentDir} = await import(pathToFileURL(join(root, 'dist/config.js')));
 const {SettingsManager} = await import(
   pathToFileURL(join(root, 'dist/core/settings-manager.js')));
 const {shouldCompact} = await import(
   pathToFileURL(join(root, 'dist/core/compaction/compaction.js')));
-const contextTokens = Number(contextTokensText), contextWindow = Number(contextWindowText);
-if (!Number.isSafeInteger(contextTokens) || contextTokens < 0 ||
-    !Number.isSafeInteger(contextWindow) || contextWindow <= 0)
-  throw new Error('Invalid trigger token/window evidence');
 // Pi's migration, merge and effective defaults are authoritative. Its normal
 // FileSettingsStorage takes and writes lock files even for reads; this custom
 // storage exposes *only* immutable read callbacks, and refuses write attempts.

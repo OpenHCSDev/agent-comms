@@ -1,7 +1,7 @@
 import {realpathSync, lstatSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const [root, file, recent] = process.argv.slice(1);
+const {package:root, file, settings} = JSON.parse(process.argv[1]);
 const {loadEntriesFromFile, SessionManager} = await import(
   pathToFileURL(join(root, 'dist/core/session-manager.js')));
 const {prepareCompaction, DEFAULT_COMPACTION_SETTINGS} = await import(
@@ -22,9 +22,7 @@ if (!stat.isFile() || stat.nlink !== 1n || stat.size > 256n*1024n*1024n)
 // recomputes it under the session lock; this is evidence, never authority.
 const revision = [stat.dev,stat.ino,stat.size,stat.mtimeNs,stat.ctimeNs]
   .map(String).join(':');
-const settings = recent === 'default' ? DEFAULT_COMPACTION_SETTINGS :
-  {...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: Number(recent)};
-const preparation = prepareCompaction(manager.getBranch(), settings);
+const preparation = prepareCompaction(manager.getBranch(), settings ?? DEFAULT_COMPACTION_SETTINGS);
 if (!preparation) {
   console.log(JSON.stringify({status:'skip', sessionId:rows[0].id}));
 } else {

@@ -22,7 +22,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
-from agent_comms.compaction_states import NativeOutcome
+from agent_comms.compaction_states import UnknownNativeOutcome
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
@@ -291,7 +291,7 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
     def lost_result(fd, request, timeout, retained_fds=()):
         result = original(fd, request, timeout, retained_fds)
         assert result.state.committed
-        return NativeOutcome.unknown("test-only lost receipt")
+        return UnknownNativeOutcome("test-only lost receipt")
 
     bridge._call = lost_result
     operation = OwnerCompactionCommit.commit(

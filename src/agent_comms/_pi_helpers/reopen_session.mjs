@@ -1,7 +1,7 @@
 import {realpathSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const [root, file] = process.argv.slice(1);
+const {package:root, file} = JSON.parse(process.argv[1]);
 const managerURL = pathToFileURL(join(root, 'dist/core/session-manager.js'));
 const {loadEntriesFromFile} = await import(managerURL);
 const rows = loadEntriesFromFile(file);

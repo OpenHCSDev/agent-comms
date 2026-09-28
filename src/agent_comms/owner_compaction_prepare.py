@@ -8,21 +8,18 @@ capture its canonical source BEFORE summary generation and recheck on commit.
 
 from __future__ import annotations
 
-import json
+import asyncio
 import os
 import re
-import shutil
 import stat
-import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
 from .native_package import verify_native_package
-
-_PREPARE_SCRIPT = Path(__file__).with_name("_pi_helpers") / "prepare_compaction.mjs"
+from .owner_compaction_settings import PiCompactionSettings
+from .pi_helper import PiHelper, SessionHelperRequest
 
 
 class NativePreparationError(ValueError):
@@ -83,6 +80,17 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
         return self
 
 
+@dataclass(frozen=True)
+class PreparationRequest(SessionHelperRequest):
+    settings: PiCompactionSettings | None
+
+
+class PrepareCompactionHelper(PiHelper):
+    script = Path(__file__).with_name("_pi_helpers") / "prepare_compaction.mjs"
+    request = PreparationRequest
+    result = NativePreparationResult
+
+
 def prepare_native_source(
     package: Path, session_file: str, *, keep_recent_tokens: int | None = None
 ) -> NativePreparation | None:
@@ -92,10 +100,6 @@ def prepare_native_source(
     Pi's declared DEFAULT_COMPACTION_SETTINGS. The returned witness is not
     authority: the owner captures source and the writer later CASes on disk.
     """
-    if keep_recent_tokens is not None and (
-        type(keep_recent_tokens) is not int or not 0 < keep_recent_tokens <= 10_000_000
-    ):
-        raise NativePreparationError("Invalid bounded recent context window")
     try:
         package = package.resolve(strict=True)
         verify_native_package(package)
@@ -110,42 +114,27 @@ def prepare_native_source(
             or not 0 < before.st_size <= 256 * 1024 * 1024
         ):
             raise NativePreparationError("Native session is not bounded regular storage")
-        node = shutil.which("node")
-        if node is None:
-            raise NativePreparationError("Native preparer unavailable")
-        environment = dict(os.environ)
-        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            environment.pop(key, None)
-        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        environment["PI_OFFLINE"] = "1"
-        result = subprocess.run(
-            [
-                node,
-                "--no-global-search-paths",
-                "--import",
-                str(package / "dist/agent-comms-import-fence.mjs"),
-                "--input-type=module",
-                "--eval",
-                _PREPARE_SCRIPT.read_text(),
-                str(package),
-                str(file),
-                "default" if keep_recent_tokens is None else str(keep_recent_tokens),
-            ],
-            cwd=file.parent,
-            env=environment,
-            capture_output=True,
-            timeout=10,
+        result = asyncio.run(
+            PrepareCompactionHelper.run(
+                PreparationRequest(
+                    str(package),
+                    str(file),
+                    PiCompactionSettings(0, keep_recent_tokens)
+                    if keep_recent_tokens is not None
+                    else None,
+                ),
+                cwd=file.parent,
+            )
         )
         after = file.stat()
 
         def revision(info: os.stat_result) -> tuple[int, ...]:
             return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
-        if result.returncode or revision(before) != revision(after) or len(result.stdout) > 4096:
+        if revision(before) != revision(after):
             raise NativePreparationError("Native preparation failed or changed")
-        result = FieldCodec.decode(NativePreparationResult, json.loads(result.stdout))
         return result.checked(file, ":".join(map(str, revision(before))))
-    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError) as error:
+    except (OSError, ValueError, TypeError) as error:
         if isinstance(error, NativePreparationError):
             raise
         raise NativePreparationError("Native source cannot be prepared") from error

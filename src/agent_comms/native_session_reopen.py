@@ -6,19 +6,16 @@ The pinned manager's loadEntriesFromFile enforces its actual strict v3 parse.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
-import json
 import os
 import shutil
 import stat
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .field_codec import FieldCodec
 from .native_package import MANIFEST, verify_native_package
-
-_READ_ONLY_SESSION_SCRIPT = Path(__file__).with_name("_pi_helpers") / "reopen_session.mjs"
+from .pi_helper import PiHelper, SessionHelperRequest
 
 
 class NativeReopenError(ValueError):
@@ -35,6 +32,12 @@ class NativeSessionIdentity:
     def __post_init__(self):
         if not self.session_id or not Path(self.session_file).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
+
+
+class ReopenSessionHelper(PiHelper):
+    script = Path(__file__).with_name("_pi_helpers") / "reopen_session.mjs"
+    request = SessionHelperRequest
+    result = NativeSessionIdentity
 
 
 def package_for_launcher(launcher: str) -> Path:
@@ -85,45 +88,22 @@ def validate_native_reopen(
             or not 0 < before.st_size <= 256 * 1024 * 1024
         ):
             raise NativeReopenError("Saved native session is not a bounded regular file")
-        node = shutil.which("node")
-        if node is None:
-            raise NativeReopenError("Native session validator unavailable")
-        environment = dict(os.environ)
-        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            environment.pop(key, None)
-        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        environment["PI_OFFLINE"] = "1"
-        result = subprocess.run(
-            [
-                node,
-                "--no-global-search-paths",
-                "--import",
-                str(package / "dist/agent-comms-import-fence.mjs"),
-                "--input-type=module",
-                "--eval",
-                _READ_ONLY_SESSION_SCRIPT.read_text(),
-                str(package),
-                str(file),
-            ],
-            env=environment,
-            cwd=file.parent,
-            capture_output=True,
-            timeout=10,
+        identity = asyncio.run(
+            ReopenSessionHelper.run(SessionHelperRequest(str(package), str(file)), cwd=file.parent)
         )
         after = file.stat()
 
         def revision(info: os.stat_result) -> tuple[int, ...]:
             return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
-        if result.returncode or revision(before) != revision(after) or len(result.stdout) > 4096:
+        if revision(before) != revision(after):
             raise NativeReopenError("Saved native session validation failed or changed")
-        identity = FieldCodec.decode(NativeSessionIdentity, json.loads(result.stdout))
         if identity.session_file != str(file) or (
             expected_session_id is not None and identity.session_id != expected_session_id
         ):
             raise NativeReopenError("Saved native session identity changed")
         return identity.session_id
-    except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:
         if isinstance(error, NativeReopenError):
             raise
         raise NativeReopenError("Saved native session cannot be validated") from error

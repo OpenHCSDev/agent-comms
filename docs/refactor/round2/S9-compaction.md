@@ -3,6 +3,16 @@
 **Head audited:** `agent-comms` `main` at `a10655d`; re-verify at yours. **Rules:** [00-RULES.md](00-RULES.md). **Builds** [A14 `PiHelper`](02-SHARED-ABSTRACTIONS.md#a14-pihelper); **uses** A2, A12 (after S13), A13 (after S12).
 **Steps 2 and 3:** K1, K2, K5 and K6 start as soon as step 2 opens; K3 waits for A13, K4 for A12.
 
+## Current implementation — PR236
+
+K1/K2/K3/K6 implemented in source; K4 manual adopted A12, direct-parent authority
+child pending shared A12 seam; K5 fresh startup metadata pending S10 declaration.
+A13 uses its original owner. Full receipt and dependency/deletion map:
+[evidence/s9/HANDOFF.md](../../../../evidence/s9/HANDOFF.md).
+S9 is not complete or install-ready: its permanent guards still identify these
+remaining mechanisms. Parent owns quiet journal reset and actual activation.
+
+
 ---
 
 ## Already done; do not rebuild
