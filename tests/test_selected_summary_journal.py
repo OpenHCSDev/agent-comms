@@ -353,7 +353,7 @@ def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(re
     assert not native_input_admitted(journal.path.parent, session)
     journal.resolve(commit_id, AbortedNoWriteOperation(), {"status": "aborted-no-write"})
     journal.mark_selected_summary_unknown(operation_id)
-    with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+    with pytest.raises(CompactionJournalError, match="not a commit reservation"):
         journal.begin(
             session,
             {"selectedSummaryOperationId": operation_id},

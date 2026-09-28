@@ -309,3 +309,22 @@ send_user_message and history/audience instead of deleted Publisher.publish.
 Current SavedView codec retains original_targets. All14 remaining affected cases
 pass (13 initial focused; corrected alias plus module3pass). Net78 test lines
 removed. Remainder continues through actual selected native execution.
+
+## Selected native fixture closure and prepared-package mismatch
+
+Remainder-twelve163passed12failed4skipped139.94s. Four actual private-session
+summary/decline/correction cases lacked installed native schema; fixtures now
+install the existing schema in real coordination SQLite before coverage checks.
+Selected broker binding tests read NativeRuntimeInput directly, deleting two raw
+queries against retired native_runtime_inputs/epoch/claim columns. Retain before-
+write reservation and after-write admission assertions. Unknown summary refusal
+matches current nominal reservation state. Session config/router tests use canonical
+agent. Focused44pass43.46s includes all four real SDK private-session failures.
+
+Two actual Pi loader cases remain an artifact mismatch: supplied immutable
+.pi-native-0d7ebb4f4b5aa1ec has selected_claimed_write.mjs722dcd9f, while current
+source and selected_tool_broker require361bce47. Manifest is still0d7ebb4f; current
+builder copies source, so a rebuild needs the paired tree pin. Parent install/pin
+owner notified; guard remains enforced and prepared package untouched. PR248 merged;
+continuation is draft PR255. Parent separately deleting broadcast aliases; leave
+its assigned files untouched until checkpoint, then remove now-retired alias test.
