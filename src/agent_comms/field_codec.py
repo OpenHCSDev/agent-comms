@@ -43,7 +43,9 @@ class FieldCodec:
 
     Decoding rejects unknown fields and primitive coercions (including bool as
     int). Missing fields use declared defaults. Tuple fields round-trip as JSON
-    arrays. Only init fields participate; ClassVars and derived fields do not.
+    arrays. Init fields and explicitly projected wire properties participate;
+    projected values are derived again on decode. ClassVars are not stored.
+    ``wire_nonnull`` rejects an explicit null while allowing an omitted default.
     """
 
     @staticmethod
@@ -88,7 +90,9 @@ class FieldCodec:
     def encode(cls, value: object) -> Any:
         if is_dataclass(value) and not isinstance(value, type):
             result = (
-                {value.family_discriminator: value.declared_name} if isinstance(value, DeclaredFamily) else {}
+                {value.family_discriminator: value.declared_name}
+                if isinstance(value, DeclaredFamily)
+                else {}
             )
             result.update(
                 (key, cls.encode(getattr(value, field.name)))
@@ -106,6 +110,10 @@ class FieldCodec:
                         )
                     )
                 )
+            )
+            result.update(
+                (member.wire_name, cls.encode(getattr(value, name)))
+                for name, member in cls._projections(type(value), "wire").items()
             )
             return result
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
@@ -143,12 +151,7 @@ class FieldCodec:
                 for field, key in cls._fields(type(value))
                 if not field.metadata.get(f"{view}_exclude")
             }
-            properties = {
-                name: member
-                for base in reversed(type(value).__mro__)
-                for name, member in vars(base).items()
-                if isinstance(member, Projected) and member.view == view
-            }
+            properties = cls._projections(type(value), view)
             result.update(
                 (member.wire_name, cls.project(getattr(value, name), view))
                 for name, member in properties.items()
@@ -157,6 +160,15 @@ class FieldCodec:
         if isinstance(value, (tuple, list)):
             return [cls.project(item, view) for item in value]
         return cls.encode(value)
+
+    @staticmethod
+    def _projections(declaration: type, view: str) -> dict[str, Projected]:
+        return {
+            name: member
+            for base in reversed(declaration.__mro__)
+            for name, member in vars(base).items()
+            if isinstance(member, Projected) and member.view == view
+        }
 
     @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
@@ -217,9 +229,15 @@ class FieldCodec:
                 field.metadata.get("wire_required") and key not in data for field, key in declared
             ):
                 raise ValueError(f"Missing required fields for {target.__name__}")
-            unknown = set(data) - {key for _, key in declared}
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
             if unknown:
                 raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
             hints = cls._types(target)
             return target(
                 **{

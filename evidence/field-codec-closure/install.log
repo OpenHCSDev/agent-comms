@@ -1,0 +1,6 @@
+Resolved 1 package in 1ms
+Prepared 1 package in 10ms
+Uninstalled 1 package in 0.55ms
+Installed 1 package in 6ms
+ - agent-comms==0.1.0 (from file:///home/ts/wt/comms-field-codec-closure-20260928)
+ + agent-comms==0.1.0 (from file:///home/ts/wt/comms-field-codec-closure-20260928/.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl)

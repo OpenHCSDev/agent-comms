@@ -30,7 +30,7 @@ def seed_unknown(comms, count, text):
             "turn_id": "private-turn",
             "native_id": "f" * 32,
             "sent_text": "private-native-prompt",
-            "status": "unknown",
+            "kind": "bound_unknown",
         }
         for index in range(1, count + 1)
     }
@@ -187,10 +187,10 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
     assert all(
-        dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
+        dispositions.read().rows[f"bus:{message.seq}"].declared_name == "reserved"
         for message in messages
     )
-    assert dispositions.read().rows["acp:owner-input"].declared_name == "unknown"
+    assert dispositions.read().rows["acp:owner-input"].declared_name == "reserved"
     assert not dispositions.read().rows.get("acp:owner-input").goal_reviews
 
 
@@ -306,5 +306,5 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
-    assert dispositions.read().rows[f"bus:{messages[1].seq}"].declared_name == "unknown"
+    assert dispositions.read().rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
     assert not dispositions.read().rows.get("acp:owner-0").goal_reviews

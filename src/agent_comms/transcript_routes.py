@@ -10,27 +10,18 @@ from pathlib import Path
 from .errors import RelationViolationError
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .transcript_events import TranscriptCodec
-from .typed_table import Column, JsonStorage, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, SQLiteSchemaObject, TypedTable
 
 
 class RouteAnnotationTable:
     """Durable annotations written by an owner, not a transcript-derived cache."""
 
 
-class TranscriptRoutingStorage(JsonStorage):
-    codec = TranscriptCodec
-
-    @classmethod
-    def accepts(cls, annotation: object) -> bool:
-        return False  # The routing field explicitly declares its existing boundary codec.
-
-
 @dataclass(frozen=True)
 class TranscriptRoute(RouteAnnotationTable, TypedTable):
     session_file: str = field(metadata={"sql": Column(primary_key=True)})
     entry_id: str = field(metadata={"sql": Column(primary_key=True)})
-    routing: TurnRouting = field(metadata={"sql": Column(storage=TranscriptRoutingStorage)})
+    routing: TurnRouting
     without_rowid = True
 
 
@@ -40,9 +31,7 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
 
     native_id: str = field(metadata={"sql": Column(primary_key=True)})
     text: str | None
-    routing: TurnRouting | None = field(
-        default=None, metadata={"sql": Column(storage=TranscriptRoutingStorage)}
-    )
+    routing: TurnRouting | None = None
     sent_text_digest: str | None = None
     without_rowid = True
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)

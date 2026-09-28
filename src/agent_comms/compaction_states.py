@@ -6,7 +6,6 @@ capabilities. Only the journal's returned post-fsync ACK can admit an original.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
@@ -15,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .child_process import ChildOutcome
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .text_digest import TextDigest
 
 if TYPE_CHECKING:
     from .compaction_journal import CompactionJournal
@@ -81,6 +81,7 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
+    reconcile_unchanged_source: ClassVar[bool] = False
 
     @classmethod
     @abstractmethod
@@ -103,6 +104,16 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 
         raise CompactionJournalError("Selected summary refusal transition forbidden")
 
+    def fail(self, reason: str) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary failure transition forbidden")
+
+    def retire_unchanged_source(self) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
+
     def verifies_original(
         self, journal: CompactionJournal, session: str, operation_id: str, source_json: str
     ) -> bool:
@@ -116,6 +127,9 @@ class ReservedSummary(SummaryState):
     def refuse(self, reason: str) -> SummaryState:
         return RefusedSummary(reason)
 
+    def fail(self, reason: str) -> SummaryState:
+        return FailedSummary(reason)
+
     @classmethod
     def successors(cls):
         return (
@@ -124,13 +138,43 @@ class ReservedSummary(SummaryState):
             ManualCommittedSummary,
             DeclinedPrestartSummary,
             RefusedSummary,
+            FailedSummary,
         )
 
 
 class UnknownSummary(SummaryState):
+    reconcile_unchanged_source = True
+
+    def retire_unchanged_source(self) -> SummaryState:
+        return RetiredUnknownSummary()
+
     @classmethod
     def successors(cls):
-        return (UnknownSummary,)
+        return (UnknownSummary, RetiredUnknownSummary)
+
+
+class RetiredUnknownSummary(SummaryState):
+    """Provider outcome stays unknown; writer-fenced evidence excludes a native write."""
+
+    terminal = True
+    settled_without_original = True
+
+    @classmethod
+    def successors(cls):
+        return ()
+
+
+@dataclass(frozen=True)
+class FailedSummary(SummaryState):
+    """A correlated summary failure attested no native write or original input."""
+
+    reason: str
+    terminal = True
+    settled_without_original = True
+
+    @classmethod
+    def successors(cls):
+        return ()
 
 
 @dataclass(frozen=True)
@@ -155,8 +199,7 @@ class LinkedSummary(SummaryState):
             and commit.state.committed
             and type(intent) is dict
             and intent.get("selectedSummaryOperationId") == operation_id
-            and intent.get("selectedSummarySourceDigest")
-            == hashlib.sha256(source_json.encode()).hexdigest()
+            and intent.get("selectedSummarySourceDigest") == TextDigest.of(source_json).value
         )
 
 
@@ -207,7 +250,6 @@ class RefusedSummary(SummaryState):
     @classmethod
     def successors(cls):
         return (RetiredRefusalSummary,)
-
 
 
 @dataclass(frozen=True)

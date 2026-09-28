@@ -1,0 +1,21 @@
+{
+  "model": "openai-codex/gpt-6-sol",
+  "source_bytes": 143686055,
+  "transport": "installed ACP stdio, real selected provider",
+  "fork": "ux-nominal-compaction-fork",
+  "paid_provider_authorized": true,
+  "original_inputs_replayed": 0,
+  "response": {
+    "stopReason": "end_turn",
+    "usage": null,
+    "_meta": null
+  },
+  "reply": "LIVE_COMPACTION_OK",
+  "summary_states": [
+    "linked"
+  ],
+  "native_commit_verified": true,
+  "passed": true,
+  "elapsed_seconds": 147.27610487698985,
+  "original_source_unchanged": true
+}
