@@ -1,3 +1,20 @@
+# R3 input and delivery documents — MERGED AND LIVE
+
+Core199 (065a4dac76622a914cbc947dcca0e117ba34bb64) and paired Toad97 (884bba4980eeb2e1c5093c06b62ff0a8285b2583) are installed in runtime-r3-input-documents-20260928. Textual remains current4fa6a9c. Core evidence/r3-input-documents/HANDOFF.md gives worker source acceptance, deleted interfaces and earlier failures.
+
+## Current acceptance
+
+- Final old/new saved-document comparison preserved7780 full input rows,96 delivery cursors and2580 UNKNOWN observations across original/live roots. Typed read/publication roundtrip ran only on owned copies; original documents were not rewritten. Both33.9MB disposable captures removed after receipts. No historical inputs replayed.
+- Source and installed-wheel four Toad pilots passed: current owner queue/notice clear,932 historical notices/error/stale-update controls, ACP queue admission/restoration/alias/surrogate-null/rebase, native/saved route attribution. Current direct test callers use typed records; production ACP payloads unchanged.
+- Fresh installed actual configured-provider ACP compaction/queue passed. Selected summaries linked to committed journal operations; four facts retained; original and queued followup each started once in order after compaction; no remaining UNKNOWN/reserved summary or emitted errors. Acceptance uses the configured openai-codex/gpt-6-sol native route. Private test project persists under ~/wt. See installed-provider-queue.json.
+- Normal two-owner restart succeeded, both alive/local on configured models.103 identities and60 live bus rows preserved; checkpoint verified through60. Five normal launchers select R3; no compaction-disabled project/global override. Original native uncertainty remains preserved; source checkpoint is not a native injection acknowledgment.
+- Normal toad-comms PTY attached without import/traceback errors, inner exit0 after bounded observation (outer124 intentional). No new production channel post was needed: changed input/compaction path was exercised in the fresh installed actual-provider acceptance above; R1 live59→60 coding receipt remains dated evidence.
+- Shared paired stack pins copied with backup after unrelated configuration equality. Retired unused74MB R5 runtime after process/launcher/runtime/registry reference checks. CurrentR3 and previousR1 retained.
+
+Darwin has moved to R7 selected execution ownership in ~/wt/comms-refactor-r7-selected-execution-20260928; coordinated_runtime implementation observed. Pascal continues R6 native transcript/current Toad consumers. Neither is complete. Parent keeps integration serial, CI deferred. Existing canonical explicit manual /compact guard and native proof-journal issue107 retain their previously recorded scopes.
+
+## Historical preparation checkpoint
+
 # R3 parent integration checkpoint — source acceptance in progress
 
 Parent owns paired callers and installed activation. Core implementation is Darwin's refactor/input-disposition-documents-20260928 branch, reconciled to main197. R1 remains live and usable. R3 is not claimed merged or installed.
