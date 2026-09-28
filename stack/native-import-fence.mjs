@@ -1,6 +1,7 @@
 // Deployment-root import boundary. Copied to dist/ and preloaded BEFORE any SDK module.
 // Not a sandbox for trusted code, native addons, subprocesses, eval, or same-UID mutation.
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { isBuiltin, registerHooks } from 'node:module';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -30,17 +31,39 @@ function manifestFile(path) {
 const manifestPath = checkedFile(resolve(root, 'dist/agent-comms-imports.json'));
 if (lstatSync(manifestPath).size > 16384) throw deny('oversized import manifest');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-if (manifest?.version !== 1 || Object.keys(manifest).sort().join(',') !==
+if (manifest?.version !== 2 || Object.keys(manifest).sort().join(',') !==
     'extensionEntries,peerAliases,version' || !Array.isArray(manifest.extensionEntries) ||
     manifest.extensionEntries.length > 16 || !manifest.peerAliases ||
     typeof manifest.peerAliases !== 'object' || Array.isArray(manifest.peerAliases) ||
     Object.keys(manifest.peerAliases).length > 32)
     throw deny('invalid import manifest');
-const entries = new Set(manifest.extensionEntries.map(entry => {
-    if (typeof entry !== 'string' || !entry.endsWith('.mjs')) throw deny('native ESM extension required');
-    return manifestFile(entry);
-}));
-if (entries.size !== manifest.extensionEntries.length) throw deny('duplicate extension entry');
+// Each declaration owns its native entry and optional immutable source binding.
+// External source is NEVER imported/evaluated: only the committed ESM snapshot.
+const declarations = manifest.extensionEntries.map(declaration => {
+    if (!declaration || typeof declaration !== 'object' || Array.isArray(declaration) ||
+        !['entry', 'entry,sources'].includes(Object.keys(declaration).sort().join(',')) ||
+        typeof declaration.entry !== 'string' || !declaration.entry.endsWith('.mjs'))
+        throw deny('native ESM extension declaration required');
+    const entry = manifestFile(declaration.entry);
+    const sources = declaration.sources ?? [];
+    if (!Array.isArray(sources) || ('sources' in declaration && sources.length === 0))
+        throw deny('source binding requires its complete input inventory');
+    for (const source of sources) {
+        if (!source || Object.keys(source).sort().join(',') !== 'bytes,path,sha256,snapshot' ||
+            typeof source.path !== 'string' || !isAbsolute(source.path) ||
+            resolve(source.path) !== source.path || !/^[a-f0-9]{64}$/.test(source.sha256) ||
+            !Number.isSafeInteger(source.bytes) || source.bytes < 0 ||
+            typeof source.snapshot !== 'string') throw deny('invalid source binding');
+    }
+    if (new Set(sources.map(source => source.path)).size !== sources.length)
+        throw deny('duplicate source binding');
+    return { entry, sources };
+});
+const entries = new Set(declarations.map(declaration => declaration.entry));
+const sourceEntries = new Map(declarations.filter(item => item.sources.length)
+    .map(item => [item.sources[0].path, item]));
+if (entries.size !== declarations.length || sourceEntries.size !==
+    declarations.filter(item => item.sources.length).length) throw deny('duplicate extension entry');
 const extensionRoots = [...entries].map(dirname);
 const aliases = new Map(Object.entries(manifest.peerAliases).map(([name, target]) => {
     if (!/^@[a-z0-9-]+\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(name)) throw deny('invalid peer alias');
@@ -96,7 +119,19 @@ export function denyPackageSubprocess() {
 export async function loadApprovedExtension(path) {
     // Resource discovery can preserve an outer installation-path alias; authority
     // is the exact canonical entry in the already verified deployment tree.
-    const entry = checkedFile(realpathSync(path));
+    const actual = realpathSync(path);
+    const declaration = sourceEntries.get(actual);
+    if (declaration) {
+        for (const source of declaration.sources) {
+            const stat = lstatSync(source.path);
+            if (!stat.isFile() || stat.nlink !== 1 || stat.size !== source.bytes ||
+                realpathSync(source.path) !== source.path ||
+                createHash('sha256').update(readFileSync(source.path)).digest('hex') !== source.sha256)
+                throw deny(`extension source changed; prepare a new deployment: ${source.path}`);
+        }
+        return (await import(pathToFileURL(declaration.entry).href)).default;
+    }
+    const entry = checkedFile(actual);
     if (!entries.has(entry)) throw deny('extension entry not in deployment manifest');
     return (await import(pathToFileURL(entry).href)).default;
 }

@@ -108,7 +108,35 @@ export default function (pi: ExtensionAPI) {
 			label: declaration.label,
 			description: declaration.description,
 			parameters: Type.Unsafe(declaration.parameters),
-			async execute(_id, params) {
+			async execute(_id, params, _signal, _onUpdate, ctx) {
+				if (declaration.name === "comms_model") {
+					const selected = String(params.model ?? "").trim();
+					const separator = selected.indexOf("/");
+					if (separator <= 0 || separator === selected.length - 1) {
+						throw new Error("Model must be an exact provider/model identifier");
+					}
+					const provider = selected.slice(0, separator);
+					const modelId = selected.slice(separator + 1);
+					const model = ctx.modelRegistry.find(provider, modelId);
+					if (!model) {
+						throw new Error(`Unknown model: ${selected}`);
+					}
+					const thinkingLevel = String(params.thinking_level ?? "").trim();
+					if (thinkingLevel) {
+						const allLevels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+						const levels = model.reasoning
+							? allLevels.filter((level) => {
+								const mapped = model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap];
+								return mapped !== null && (level !== "xhigh" && level !== "max" || mapped !== undefined);
+							})
+							: ["off"];
+						if (!levels.includes(thinkingLevel)) {
+							throw new Error(
+								`Thinking level ${thinkingLevel} is unavailable for ${selected}; choose one of: ${levels.join(", ")}`,
+							);
+						}
+					}
+				}
 				const result = run([
 					"invoke",
 					"--tool",
