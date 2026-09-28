@@ -11,6 +11,7 @@ from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
 from agent_comms.threads import Thread
+from agent_comms.wire_metadata import WireMetadata
 from test_private_human_ingress import _root
 
 
@@ -50,12 +51,18 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.threads.register(Thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
+    root_id = comms.messaging.initialize_private_initial_protocol()
     rows = [
         Message("other", target, str(i), MessageType.INFO, timestamp=i, seq=i)
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)
     ]
     before = "".join(json.dumps(row.to_wire()) + "\n" for row in rows)
     comms.bus.log.path.write_text(before)
+    comms.bus.log.path.chmod(0o600)
+    comms.bus.log.write_metadata_unlocked(WireMetadata(
+        last_seq=4, admission_after_seq=4, writer_protocol_version=1,
+        wire_root_id=root_id, claim_envelopes_version=1,
+    ))
     catalog = comms.channels.catalog
     imported = catalog.read()
     assert json.loads(catalog.path.read_text()) == original  # read is not activation

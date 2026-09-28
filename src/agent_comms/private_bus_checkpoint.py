@@ -189,10 +189,6 @@ def _index_row(
     receipt: Mapping[str, object] | None,
     initial: CommittedInitial | None,
 ) -> None:
-    if receipt is None and initial is None and message.claim_transition is None:
-        raise RelationViolationError(
-            "Unattested public initial cannot enter a certified private root."
-        )
     if receipt is not None:
         db.execute("INSERT INTO response_keys(key) VALUES (?)", (receipt["publication_key"],))
     if initial is not None:
@@ -411,10 +407,6 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                 initial: CommittedInitial | None,
             ) -> None:
                 nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
-                if receipt is None and initial is None and message.claim_transition is None:
-                    raise RelationViolationError(
-                        "Unattested public initial blocks certified prefix."
-                    )
                 digest = _chain(digest, raw)
                 end = offset + len(raw)
                 if end == saved.offset:

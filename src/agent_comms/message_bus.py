@@ -41,8 +41,10 @@ if TYPE_CHECKING:
     from .historical_views import HistorySource, HistoryView
     from .registration import Registration
 
+from .private_registry_guard import PrivateRegistryGuard
 from .publisher import Publisher
 from .wire_log import WireLog
+from .wire_metadata import ArchivedAccess, WireMetadata
 
 
 class MessageBus:
@@ -99,7 +101,6 @@ class MessageBus:
         import tempfile
 
         from .catalog_store import ChannelCatalog
-
         from .historical_views import HistorySource
 
         source_root = source_root.resolve()
@@ -127,22 +128,28 @@ class MessageBus:
                 revisions = tuple(file_revision(path) for path in paths)
                 for path in paths:
                     if path.exists():
-                        shutil.copyfile(path, stage / path.name)
+                        shutil.copy2(path, stage / path.name)
                 if revisions != tuple(file_revision(path) for path in paths):
                     raise ValueError("Historical source changed during snapshot; retry")
                 bus_info = paths[0].stat() if paths[0].exists() else None
                 if bus_info is None:
                     (stage / "bus.jsonl").touch()
-                # Source metadata is provenance only. Never turn the snapshot
-                # into an active private root or copy coordinator/native state.
-                meta = stage / "bus_meta.json"
-                marker = json.loads(meta.read_text()) if meta.exists() else {}
-                if meta.exists():
-                    meta.rename(stage / "source_bus_meta.json")
+                # One current marker format; snapshots retain source identity
+                # and explicitly prohibit publication or historical admission.
+                archived = WireLog(stage / "bus.jsonl")
+                marker = archived.read_metadata_unlocked(required=True)
+                marker.admission_after_seq = marker.last_seq
+                marker.access = ArchivedAccess()
+                marker.checkpoint_version = None
+                marker.checkpoint_seal = None
+                guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
+                guard.create_pending()
+                archived.write_metadata_unlocked(marker)
+                guard.commit_initial()
                 source = HistorySource(
                     str(stage.resolve()),
                     str(source_root),
-                    marker.get("wire_root_id", ""),
+                    marker.root_id,
                     (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
                     bus_info.st_size if bus_info else 0,
                     file_revision(stage / "bus.jsonl"),
@@ -151,7 +158,7 @@ class MessageBus:
                 registry = source.registry().snapshot()
                 previous = 0
                 for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
-                    message, _ = self.log._public_page_record(record, size)
+                    message, _ = archived._public_page_record(record, size, marker)
                     if message.seq <= previous:
                         raise ValueError("Historical source has nonascending sequences")
                     previous = message.seq
@@ -579,9 +586,12 @@ class MessageBus:
                 # The JSONL bus remains authoritative if the disposable
                 # index is unavailable or its selected offsets disagree.
                 pass
+            metadata = (
+                self.log._private_marker_unlocked() if self.log.path.exists() else WireMetadata()
+            )
             return self._collect_history_page(
                 (
-                    self.log._public_page_record(record, size)
+                    self.log._public_page_record(record, size, metadata)
                     for record, size in _iter_jsonl_records(self.log.path)
                 ),
                 matches,
@@ -612,6 +622,7 @@ class MessageBus:
             raise ValueError("History page byte budget must be positive.")
         page: deque[tuple[Message, int]] = deque()
         page_bytes = 0
+        metadata = self.log._private_marker_unlocked()
         with self.log.path.open("rb") as stream:
 
             def has_match(*, lower: int | None, upper: int | None) -> bool:
@@ -619,7 +630,9 @@ class MessageBus:
                     index.offsets(lower=lower, upper=upper, descending=True, targets=targets)
                 ) as rows:
                     for row in rows:
-                        message, _ = self.log._public_page_record(*index.record(stream, row))
+                        message, _ = self.log._public_page_record(
+                            *index.record(stream, row), metadata
+                        )
                         if matches(message):
                             return True
                 return False
@@ -634,7 +647,9 @@ class MessageBus:
                 rows = index.offsets(lower=None, upper=before, descending=True, targets=targets)
             with closing(rows):
                 for row in rows:
-                    message, encoded_size = self.log._public_page_record(*index.record(stream, row))
+                    message, encoded_size = self.log._public_page_record(
+                        *index.record(stream, row), metadata
+                    )
                     if not matches(message):
                         continue
                     if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):

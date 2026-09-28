@@ -80,3 +80,18 @@ def test_persisted_marker_cannot_omit_admission_authority(tmp_path):
     path.write_text(json.dumps(data))
     with pytest.raises(RelationViolationError, match="required fields"), comms.bus.log.locked():
         comms.bus.log._private_marker_unlocked()
+
+
+def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
+    source, store, _root_id, _lookups = _root(tmp_path)
+    store.close()
+    sent = source.messaging.send("alice", "bob", "retained message")
+    reader = Comms(tmp_path / "reader")
+    attached = reader.bus.attach_history(source.root)
+    snapshot = Comms(attached.root)
+    before = snapshot.bus.log.path.read_bytes()
+    assert [message.message_id for message in snapshot.bus.log.full_history()] == [sent]
+    with pytest.raises(RelationViolationError, match="read-only"):
+        snapshot.messaging.send("alice", "bob", "must never append")
+    assert snapshot.bus.log.path.read_bytes() == before
+    attached.validate()

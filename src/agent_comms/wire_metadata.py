@@ -2,18 +2,38 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Literal
 
 from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+
+
+class WireAccess(DeclaredFamily, affix="Access"):
+    @abstractmethod
+    def require_append(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class WritableAccess(WireAccess):
+    def require_append(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class ArchivedAccess(WireAccess):
+    def require_append(self) -> None:
+        raise RelationViolationError("Archived history is read-only.")
 
 
 @dataclass
 class WireMetadata:
     last_seq: int = 0
     admission_after_seq: int = field(default=0, metadata={"wire_required": True})
+    access: WireAccess = field(default_factory=WritableAccess, metadata={"wire_required": True})
     writer_protocol_version: Literal[1] | None = field(
         default=None, metadata={"wire_omit_default": True}
     )

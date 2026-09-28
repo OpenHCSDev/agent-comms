@@ -29,11 +29,9 @@ from .errors import (
 from .field_codec import FieldCodec
 from .messages import Message
 from .store_files import (
-    _append_jsonl,
     _atomic_write_text,
     _iter_jsonl_records,
     _iter_jsonl_stream,
-    _repair_trailing_jsonl,
     _store_lock,
     file_revision,
 )
@@ -179,6 +177,13 @@ class WireLog:
                     public_envelope_digest(public)
                     previous_sequence = existing.seq
                     if not has_private_wire_fields(record):
+                        if (
+                            existing.claim_transition is None
+                            and existing.seq > metadata.admission_after_seq
+                        ):
+                            raise RelationViolationError(
+                                "Unattested public initial exceeds the retained history boundary."
+                            )
                         if on_row is not None:
                             on_row(offset, line, existing, None, None)
                         yield existing, None, None
@@ -249,6 +254,7 @@ class WireLog:
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
+        metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
             raise RelationViolationError("Private bus row exceeds the byte limit.")
@@ -363,11 +369,17 @@ class WireLog:
             return matched
 
     @staticmethod
-    def _public_page_record(record: Mapping, raw_size: int) -> tuple[Message, int]:
+    def _public_page_record(
+        record: Mapping, raw_size: int, metadata: WireMetadata
+    ) -> tuple[Message, int]:
         """Charge public page budgets for public bytes, never private sidebands."""
         message = Message.from_wire(record)
         if has_private_wire_fields(record):
             return message, len(json.dumps(message.to_wire()).encode()) + 1
+        if message.claim_transition is None and message.seq > metadata.admission_after_seq:
+            raise RelationViolationError(
+                "Unattested public initial exceeds the retained history boundary."
+            )
         return message, raw_size
 
     @contextmanager
@@ -376,20 +388,21 @@ class WireLog:
     ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
         """Fixed opened-inode/byte boundary with public page-size accounting.
 
-        Display-only callers do not use the sequence watermark. Skipping its
-        missing-metadata fallback avoids a full log scan while their short
-        cross-store wire lock is held; ``through=0`` then means unrequested.
-        Export/history retain the default authoritative watermark behavior.
+        Display-only callers do not request a sequence watermark. Every stored
+        source has the current marker; history never repairs an absent marker.
         """
         with _store_lock(self.path):
+            metadata = (
+                self._private_marker_unlocked()
+                if self.path.exists() or self.metadata_path.exists()
+                else WireMetadata()
+            )
             if need_sequence and self.claim_gate_enabled():
                 # Metadata reserves a sequence BEFORE the append. A failed
                 # append must never surface as a committed message watermark.
                 through = self._max_sequence_unlocked()
             else:
-                through = self.read_metadata_unlocked().last_seq if need_sequence else 0
-                if need_sequence and not through and self.path.exists():
-                    through = self._max_sequence_unlocked()
+                through = metadata.last_seq if need_sequence else 0
             try:
                 stream: BinaryIO | None = self.path.open("rb")
             except FileNotFoundError:
@@ -400,7 +413,7 @@ class WireLog:
         try:
             records = (
                 (
-                    self._public_page_record(record, size)
+                    self._public_page_record(record, size, metadata)
                     for record, size in _iter_jsonl_stream(
                         stream, boundary=boundary, label="wire snapshot"
                     )
@@ -462,12 +475,13 @@ class WireLog:
         with _store_lock(self.path):
             if self.claim_gate_enabled():
                 return self._max_sequence_unlocked()
-            sequence = self.read_metadata_unlocked().last_seq
-            return sequence if sequence else self._max_sequence_unlocked()
+            return self.read_metadata_unlocked().last_seq
 
     def _iter_log_unlocked(self) -> Iterator[Message]:
-        for record, _ in _iter_jsonl_records(self.path):
-            yield Message.from_wire(record)
+        if self.path.exists():
+            marker = self._private_marker_unlocked()
+            for message, _receipt, _initial in self._verified_private_rows_unlocked(marker):
+                yield message
 
     def _max_sequence_unlocked(self) -> int:
         return max(
@@ -658,7 +672,7 @@ class WireLog:
         try:
             data = json.loads(self.metadata_path.read_text(), object_pairs_hook=unique_wire_object)
         except FileNotFoundError as error:
-            if required or self.metadata_path.is_symlink():
+            if required or self.metadata_path.is_symlink() or self.path.exists():
                 raise RelationViolationError(
                     "Bus protocol marker is missing or redirected."
                 ) from error
@@ -693,7 +707,10 @@ class WireLog:
         if any(
             path.exists() or path.is_symlink() for path in (self.metadata_path, self.path, repair)
         ):
-            raise RelationViolationError("Existing unmarked bus data is read-only. Archive and migrate it with supervised_cutover before sending on a fresh canonical root.")
+            raise RelationViolationError(
+                "Existing unmarked bus data is read-only until its history is rewritten "
+                "into the current source format."
+            )
 
     def enable_claim_gate_unlocked(self) -> str:
         if self.path.name != "bus.jsonl":

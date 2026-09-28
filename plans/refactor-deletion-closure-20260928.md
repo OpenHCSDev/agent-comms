@@ -124,3 +124,31 @@ D22 durable rewrite remain open, along with full installed acceptance.
 Final claim-admission guard and actual native rerun: 4 passed in3.70s. The
 intermediate rerun failed before launch because Ruff removed an imported pytest
 fixture; explicit fixture binding fixed it. Both receipts retained.
+
+## D22 current history source preview
+
+One-shot tools/cutover/wire_history.py stages current Message rows and current
+WireMetadata, retaining message IDs/order/body/private evidence. Existing public
+rows are retained history only at/below admission_after_seq; no N/K is invented.
+New unattested rows above the floor are refused. Missing markers are no longer
+repaired or treated as another runtime source format.
+
+ArchivedAccess/WritableAccess share the existing declaration family/codec; central
+append refuses an archive before reserving a sequence. attach_history uses the
+same marker format and recreates the guard for the copied registry. The one-shot
+tool alone reads saved source_bus_meta.json; that alias is gone from runtime.
+
+Actual saved-source staging/certification verified all IDs: current snapshot97,
+prior private snapshot20, original history8400. Archived sources refuse append
+and preserve their bytes. Source files/live owners were untouched. Superseded
+owned previews removed (8.1MB); current candidates remain under the worktree.
+Receipts: d22-wire-preview.json, d22-saved-wire-acceptance.json.
+
+106 retained browsing/admission checks passed; one new test initially compared
+a send API ID to a Message. Corrected API assertion and reran admission family:
+4 passed. Current indexed pages/channel checks:17 passed. Deleted obsolete
+zero-sequence/nonmonotonic/public-tail reader tests and duplicate internal oracle;
+kept real bounded page and damaged-cache behavior. Full integrated suite and
+quiet installation remain open. Next: registry/goal durable rewrite, runtime
+UNKNOWN preservation, removal of supervised_cutover and remaining old callers,
+then coordinated affected-path installation.
