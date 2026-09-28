@@ -412,8 +412,8 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     root, _root_id, comms, initial, people = _root(tmp_path)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
-        claim = sealed_cohort_assignments(store, lookup)[0]
-    frame = render_selected_wake_frame(initial, claim, people[1], phase="triage")
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+    frame = render_selected_wake_frame(initial, assignment, people[1], phase="triage")
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert initial.message.body not in frame
@@ -723,7 +723,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
     first_base.mkdir()
     first_root, _first_id, first_comms, first_initial, people = _root(first_base, direct=True)
     with MutationStore(str(first_root / "coordination.sqlite3")) as store:
-        claim = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
+        assignment = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
     owner = first_comms.registry.require("beta")
     monkeypatch.setattr(runtime, "_SUPPLEMENT_BUILD_SECONDS", 0.02)
     entered, release = threading.Event(), threading.Event()
@@ -738,7 +738,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
     try:
         assert (
             await runtime._bounded_optional_awareness(
-                blocked_builder, first_initial, claim, owner, 1024
+                blocked_builder, first_initial, assignment, owner, 1024
             )
             == ""
         )
@@ -746,7 +746,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         for _ in range(40):
             assert (
                 await runtime._bounded_optional_awareness(
-                    blocked_builder, first_initial, claim, owner, 1024
+                    blocked_builder, first_initial, assignment, owner, 1024
                 )
                 == ""
             )
@@ -1331,7 +1331,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(
     assert comms.registry.require("alpha").active_turn is None
 
 
-async def test_stop_before_atomic_turn_claim_does_not_revive_or_prompt(
+async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     tmp_path: Path, monkeypatch
 ) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
@@ -1815,12 +1815,12 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
             accept_initial_cohort(comms.bus, root_id, message.seq, store)
         first_page = sealed_cohort_assignments(store, lookup, limit=100)
         assert len(first_page) == 100
-        for claim in first_page:
+        for assignment in first_page:
             # Schema-legal terminal fixture only; no forged Pi context claim.
             store._connection.execute(
                 "UPDATE wake_claims SET disposition='ignored',triage_verdict='ignore',"
                 "revision=revision+1 WHERE claim_id=? AND disposition='triage_pending'",
-                (claim.assignment_id,),
+                (assignment.assignment_id,),
             )
         assert len(sealed_cohort_assignments(store, lookup, after_seq=first_page[-1].wire_seq)) == 1
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
@@ -1930,8 +1930,8 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[2].created_at)
         assert store.participant(lookup).pointer.execution_id is None
-        claim = sealed_cohort_assignments(store, lookup)[0]
-        assert type(claim.lifecycle) is FailedAssignment
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+        assert type(assignment.lifecycle) is FailedAssignment
     diagnostics = list((root / "diagnostics").glob("*.json"))
     assert len(diagnostics) == 1
     assert json.loads(diagnostics[0].read_text())["sequences"] == [initial.message.seq]

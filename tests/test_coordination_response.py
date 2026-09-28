@@ -85,7 +85,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     )
     accepted = accept_initial_cohort(comms.bus, root_id, original.seq, store)
     assert accepted.value.member_count == accepted.value.assignment_count == 1
-    claim = accepted.value.assignments[0]
+    assignment = accepted.value.assignments[0]
     reply_target = derive_exact_reply_target(original)
     assert reply_target is not None
     store.create_execution(
@@ -94,7 +94,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         recipient.recipient_lookup,
         "owner",
         1,
-        assignment_ids=(claim.assignment_id,),
+        assignment_ids=(assignment.assignment_id,),
         exact_target=reply_target,
     )
     store.mark_pending("exec", expected_revision=1)
@@ -129,7 +129,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         original.seq,
         reply_target,
         recipient.recipient_lookup,
-        claim.assignment_id,
+        assignment.assignment_id,
         final,
     )
 

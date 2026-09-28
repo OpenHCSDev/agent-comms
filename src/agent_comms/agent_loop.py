@@ -23,7 +23,7 @@ from pathlib import Path
 from . import agent_events as events
 from . import backend
 from .activity import ActivityState
-from .channel_targets import GLOBAL_CHANNEL, is_channel_target
+from .channel_targets import BuiltinChannel, is_channel_target
 from .comms import Comms, wire
 from .messages import Message
 from .mro_dispatch import handles
@@ -135,8 +135,8 @@ class Participant:
         self._comms.agents.set_activity(name, ActivityState.THINKING, message.body[:80])
         reply = await self._ask_agent(name, message)
         if reply:
-            if is_channel_target(message.target) or message.target == "broadcast":
-                target = GLOBAL_CHANNEL if message.target == "broadcast" else message.target
+            if is_channel_target(message.target) or BuiltinChannel.is_alias(message.target):
+                target = BuiltinChannel.canonical(message.target)
             else:
                 target = message.sender
             self._comms.messaging.send(name, target, reply[:MAX_REPLY_CHARS])

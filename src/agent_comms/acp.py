@@ -648,8 +648,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         plans = SelectedWritePlans(self._comms, wire_root_id)
 
-        def check_plan_controller(claim: WakeAssignment, owner: Thread, operation_id: str) -> None:
-            bound = self._selected_write_controllers.get((owner.name, claim.wire_seq))
+        def check_plan_controller(
+            assignment: WakeAssignment, owner: Thread, operation_id: str
+        ) -> None:
+            bound = self._selected_write_controllers.get((owner.name, assignment.wire_seq))
             if bound is None or bound[0] != operation_id:
                 raise IdentityConflict("Selected write original controller is no longer bound")
             controller = bound[1]
@@ -660,16 +662,16 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise IdentityConflict("Selected write ACP controller changed")
 
         def load_plan(
-            claim: WakeAssignment, owner: Thread, admission_generation: int
+            assignment: WakeAssignment, owner: Thread, admission_generation: int
         ) -> PlannedWrite | None:
-            plan = plans.load(claim, owner, admission_generation)
+            plan = plans.load(assignment, owner, admission_generation)
             if plan is not None:
-                check_plan_controller(claim, owner, plan.operation_id)
+                check_plan_controller(assignment, owner, plan.operation_id)
             return plan
 
-        def applied_plan(claim: WakeAssignment, owner: Thread, operation_id: str) -> None:
-            plans.applied(claim, owner, operation_id)
-            self._selected_write_controllers.pop((owner.name, claim.wire_seq), None)
+        def applied_plan(assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
+            plans.applied(assignment, owner, operation_id)
+            self._selected_write_controllers.pop((owner.name, assignment.wire_seq), None)
 
         result = await SelectedExecution(
             root=self._comms.root,

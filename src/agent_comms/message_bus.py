@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from .bus_activity_index import BusActivityIndex, ChannelActivity
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
 from .bus_route_counts import BusRouteCounts
-from .channel_targets import _TAG_CHARS, GLOBAL_CHANNEL, BuiltinChannel, is_channel_target
+from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
 from .errors import (
     RelationViolationError,
     UnregisteredThreadError,
@@ -472,7 +472,7 @@ class MessageBus:
             allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
             if not set(target) <= allowed:
                 raise ValueError(f"Message target {target!r} is not a thread name or #channel.")
-        if target.startswith("#") and target != GLOBAL_CHANNEL:
+        if target.startswith("#") and target != BuiltinChannel.ALL.value:
             tag = target[1:]
             if not tag or not set(tag) <= _TAG_CHARS:
                 raise ValueError(f"Channel {target!r} has an invalid tag.")

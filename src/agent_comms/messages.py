@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
 
-from .channel_targets import _TAG_CHARS, GLOBAL_CHANNEL, BuiltinChannel, is_channel_target
+from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
 from .envelope_claim_transitions import (
     ClaimTransition,
     _claim_transition_from_wire,
@@ -128,7 +128,7 @@ class Message:
                 raise ValueError(
                     f"Message target {self.target!r} is not a thread name or #channel."
                 )
-        if self.target.startswith("#") and self.target != GLOBAL_CHANNEL:
+        if self.target.startswith("#") and self.target != BuiltinChannel.ALL.value:
             tag = self.target[1:]
             if not tag or not set(tag) <= _TAG_CHARS:
                 raise ValueError(

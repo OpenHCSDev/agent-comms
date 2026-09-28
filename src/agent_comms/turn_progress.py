@@ -315,7 +315,7 @@ class TurnProgress(events.AgentEventConsumer):
         execution = self.execution
         self.compaction_resume_activity = None
         self.terminal_fence = execution.runner.finish_turn_stream(
-            execution.session_id, execution.thread_name, execution.turn_id, execution.turn_claim
+            execution.session_id, execution.thread_name, execution.turn_id, execution.turn_lease
         )
         self.settled = True
         execution.finish_event.set()
@@ -409,7 +409,7 @@ class TurnProgress(events.AgentEventConsumer):
                                 execution.goal_permit.reservation,
                                 owner=execution.thread,
                                 goal=execution.goal,
-                                claim=execution.turn_claim,
+                                lease=execution.turn_lease,
                                 turn_id=execution.turn_id,
                                 admission=execution.turn_admission,
                                 current_owner=execution.terminal_snapshot.threads.get(

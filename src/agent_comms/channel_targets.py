@@ -55,12 +55,6 @@ class BuiltinChannel(StrEnum):
         return None if self.aggregate else self.names
 
 
-GLOBAL_CHANNEL = BuiltinChannel.ALL.value
-
-
-BROADCAST_ALIASES = BuiltinChannel.ALL.names
-
-
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
 

@@ -56,7 +56,7 @@ async def compact_context(
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
         assert task is not None
-        turn_claim = runner.comms.agents.begin_turn(thread_name, turn_id, "Compacting context")
+        turn_lease = runner.comms.agents.begin_turn(thread_name, turn_id, "Compacting context")
         runner.active_turns[session_id] = turn_id
         runner.turn_tasks[session_id] = task
         started = False
@@ -123,4 +123,4 @@ async def compact_context(
                     await runner.effects._emit_event(
                         session_id, events.ManualCompactionEnd(aborted=True)
                     )
-            await runner.settle_turn(session_id, thread_name, turn_id, turn_claim, task=task)
+            await runner.settle_turn(session_id, thread_name, turn_id, turn_lease, task=task)

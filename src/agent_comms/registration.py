@@ -218,9 +218,9 @@ class Registration:
             ):
                 raise RelationViolationError("live owner stopped or changed before turn claim")
             self._assert_maintenance_open_unlocked()
-            claimed, _owner_generation = document.lease_turn(current, turn_id, None)
+            leased, _owner_generation = document.lease_turn(current, turn_id, None)
             edit.commit()
-            return claimed, expected_generation
+            return leased, expected_generation
 
     def lease_live_turn_with_generation(
         self,

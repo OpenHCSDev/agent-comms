@@ -17,6 +17,7 @@ from math import isfinite
 from pathlib import Path
 from types import MappingProxyType
 
+from .channel_targets import BuiltinChannel, is_channel_target
 from .messages import Message
 from .routing import ScheduledTurn, TurnRouting
 
@@ -195,8 +196,9 @@ def verify_legacy_incoming_route(
             candidate.delivered_to != owner_name
             or message.sender == owner_name
             or (
-                message.target not in {owner_name, "broadcast"}
-                and not message.target.startswith("#")
+                message.target != owner_name
+                and not BuiltinChannel.is_alias(message.target)
+                and not is_channel_target(message.target)
             )
             or type(candidate.recipient_created_at) not in (int, float)
             or type(candidate.sender_created_at) not in (int, float)

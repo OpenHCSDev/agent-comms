@@ -79,11 +79,17 @@ def _member(db: sqlite3.Connection) -> None:
 
 
 def _delivery(
-    db: sqlite3.Connection, *, ordinal: int, lookup: str, name: str, kind: str, claim: str | None
+    db: sqlite3.Connection,
+    *,
+    ordinal: int,
+    lookup: str,
+    name: str,
+    kind: str,
+    assignment_id: str | None,
 ) -> None:
     db.execute(
         "INSERT INTO cohort_delivery_receipts VALUES (?,?,?,?,?,?,?)",
-        (ROOT, SEQ, ordinal, lookup, name, kind, claim),
+        (ROOT, SEQ, ordinal, lookup, name, kind, assignment_id),
     )
 
 
@@ -114,9 +120,11 @@ def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: 
             "INSERT INTO claim_batch_members VALUES (?,?,?,?,?)",
             (ROOT, SEQ, ordinal, assignment_id, lookup),
         )
-    _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
-    _delivery(db, ordinal=1, lookup="c", name="Cara", kind="unmentioned_observer", claim=None)
-    _delivery(db, ordinal=2, lookup="b", name="Bob", kind="selected", claim="claim-b")
+    _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a")
+    _delivery(
+        db, ordinal=1, lookup="c", name="Cara", kind="unmentioned_observer", assignment_id=None
+    )
+    _delivery(db, ordinal=2, lookup="b", name="Bob", kind="selected", assignment_id="claim-b")
     _seal(db)
 
 
@@ -201,9 +209,16 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
         ):
             _receipt(db, n=2, k=1)
             _member(db)
-            _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
             _delivery(
-                db, ordinal=1, lookup="b", name="Bob", kind="unmentioned_observer", claim=None
+                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+            )
+            _delivery(
+                db,
+                ordinal=1,
+                lookup="b",
+                name="Bob",
+                kind="unmentioned_observer",
+                assignment_id=None,
             )
             _seal(db)
         db = store._connection
@@ -219,9 +234,16 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Pa
             _assignment(db)
             _receipt(db, n=2, k=1)
             _member(db)
-            _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
             _delivery(
-                db, ordinal=1, lookup="b", name="Bob", kind="unmentioned_observer", claim=None
+                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+            )
+            _delivery(
+                db,
+                ordinal=1,
+                lookup="b",
+                name="Bob",
+                kind="unmentioned_observer",
+                assignment_id=None,
             )
             _seal(db)
         db = store._connection
@@ -252,7 +274,14 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
                 _assignment(db)
                 _receipt(db, n=2, k=1)
                 _member(db)
-                _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
+                _delivery(
+                    db,
+                    ordinal=0,
+                    lookup="a",
+                    name="Alice",
+                    kind="selected",
+                    assignment_id="claim-a",
+                )
                 _seal(db)
         assert (
             store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
@@ -294,35 +323,66 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(tmp_path: Path) ->
         with store._transaction() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
-            for claim, lookup in (("missing", "a"), ("claim-a", "b")):
+            for assignment_id, lookup in (("missing", "a"), ("claim-a", "b")):
                 with pytest.raises(
                     sqlite3.IntegrityError, match="does not match cohort acceptance"
                 ):
                     db.execute(
                         "INSERT INTO claim_batch_members VALUES (?,?,0,?,?)",
-                        (ROOT, SEQ, claim, lookup),
+                        (ROOT, SEQ, assignment_id, lookup),
                     )
             _member(db)
-            for kind, claim in (("selected", None), ("unmentioned_observer", "claim-a")):
+            for kind, assignment_id in (("selected", None), ("unmentioned_observer", "claim-a")):
                 with pytest.raises(sqlite3.IntegrityError):
-                    _delivery(db, ordinal=0, lookup="a", name="Alice", kind=kind, claim=claim)
+                    _delivery(
+                        db,
+                        ordinal=0,
+                        lookup="a",
+                        name="Alice",
+                        kind=kind,
+                        assignment_id=assignment_id,
+                    )
             with pytest.raises(sqlite3.IntegrityError, match="matching claim member"):
-                _delivery(db, ordinal=0, lookup="b", name="Bob", kind="selected", claim="claim-a")
+                _delivery(
+                    db, ordinal=0, lookup="b", name="Bob", kind="selected", assignment_id="claim-a"
+                )
             with pytest.raises(sqlite3.IntegrityError, match="matching claim member"):
                 _delivery(
-                    db, ordinal=0, lookup="a", name="Mallory", kind="selected", claim="claim-a"
-                )
-            _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
-            with pytest.raises(sqlite3.IntegrityError):
-                _delivery(
-                    db, ordinal=1, lookup="a", name="Other", kind="unmentioned_observer", claim=None
-                )
-            with pytest.raises(sqlite3.IntegrityError):
-                _delivery(
-                    db, ordinal=1, lookup="b", name="Alice", kind="unmentioned_observer", claim=None
+                    db,
+                    ordinal=0,
+                    lookup="a",
+                    name="Mallory",
+                    kind="selected",
+                    assignment_id="claim-a",
                 )
             _delivery(
-                db, ordinal=1, lookup="b", name="Bob", kind="unmentioned_observer", claim=None
+                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+            )
+            with pytest.raises(sqlite3.IntegrityError):
+                _delivery(
+                    db,
+                    ordinal=1,
+                    lookup="a",
+                    name="Other",
+                    kind="unmentioned_observer",
+                    assignment_id=None,
+                )
+            with pytest.raises(sqlite3.IntegrityError):
+                _delivery(
+                    db,
+                    ordinal=1,
+                    lookup="b",
+                    name="Alice",
+                    kind="unmentioned_observer",
+                    assignment_id=None,
+                )
+            _delivery(
+                db,
+                ordinal=1,
+                lookup="b",
+                name="Bob",
+                kind="unmentioned_observer",
+                assignment_id=None,
             )
             _seal(db)
 
@@ -343,7 +403,9 @@ def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
             _assignment(db)
             _receipt(db, n=1, k=1, **{field: override})
             _member(db)
-            _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
+            _delivery(
+                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+            )
             _seal(db)
         assert store._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
         assert (
@@ -359,7 +421,9 @@ def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
             _assignment(db)
             _receipt(db, n=1, k=1)
             _member(db)
-            _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
+            _delivery(
+                db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
+            )
             _seal(db)
         with pytest.raises(sqlite3.IntegrityError), store._transaction() as db:
             _receipt(db, n=1, k=1, root="b" * 32)

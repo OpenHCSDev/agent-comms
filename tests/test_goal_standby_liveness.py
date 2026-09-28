@@ -28,24 +28,24 @@ def _thread(comms, name, worktree):
 
 
 def _begin(comms, name, turn_id):
-    claim = comms.agents.begin_turn(name, turn_id)
-    comms._test_claims[name] = claim
-    return claim
+    lease = comms.agents.begin_turn(name, turn_id)
+    comms._test_leases[name] = lease
+    return lease
 
 
 def _finish(comms, name, turn_id):
     canonical = comms.registry.canonical_name(name)
-    claim = next(
-        claim
-        for claim in comms._test_claims.values()
-        if comms.registry.canonical_name(claim.identity.incarnation.name) == canonical
+    lease = next(
+        lease
+        for lease in comms._test_leases.values()
+        if comms.registry.canonical_name(lease.identity.incarnation.name) == canonical
     )
-    return comms.agents.finish_turn(claim)
+    return comms.agents.finish_turn(lease)
 
 
 def _waiting(tmp_path, *, second=False):
     comms = wire(tmp_path / "wire")
-    comms._test_claims = {}
+    comms._test_leases = {}
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
     _begin(comms, "child", "child-turn")
@@ -309,7 +309,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
 
 def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     comms, _goal = _waiting(tmp_path)
-    old_claim = comms._test_claims["child"]
+    old_claim = comms._test_leases["child"]
     old_fence = _finish(comms, "child", "child-turn")
     new_claim = _begin(comms, "child", "child-turn")
     assert new_claim.identity.generation == old_claim.identity.generation + 1
@@ -452,12 +452,12 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     wakes = []
     monkeypatch.setattr(agent.inputs, "schedule_wake", wakes.append)
     try:
-        claim = comms.agents.begin_turn(child, "child-turn")
+        lease = comms.agents.begin_turn(child, "child-turn")
         comms.goals.update_goal(
             owner, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
         )
         assert not agent.inputs.pending_turns.get(owner)
-        fence = comms.agents.finish_turn(claim)
+        fence = comms.agents.finish_turn(lease)
         assert comms.goals.release_waits_after_terminal_turn(fence) == (owner,)
         assert comms.registry.require(owner).goal.state.active
         assert comms.goals.goal_wait(owner) is None

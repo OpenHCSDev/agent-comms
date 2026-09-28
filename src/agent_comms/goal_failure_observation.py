@@ -49,7 +49,7 @@ class FailedTurnObservation:
         *,
         owner: Thread,
         goal: Goal,
-        claim: TurnLeaseFence,
+        lease: TurnLeaseFence,
         turn_id: str,
         admission: int,
         current_owner: Thread | None,
@@ -67,7 +67,7 @@ class FailedTurnObservation:
             or current_owner.goal is None
             or current_owner.goal.id != goal.id
             or current_owner.goal.revision < goal.revision
-            or current_owner.turn_generation != claim.identity.generation
+            or current_owner.turn_generation != lease.identity.generation
             or (
                 current_owner.active_turn.id
                 if current_owner.active_turn is not None
@@ -77,13 +77,13 @@ class FailedTurnObservation:
             or current_admission != admission
             or owner.goal != goal
             or reservation.goal_id != goal.id
-            or claim.identity.incarnation != owner.incarnation
-            or claim.turn_id != turn_id
-            or claim.admission_generation != admission
+            or lease.identity.incarnation != owner.incarnation
+            or lease.turn_id != turn_id
+            or lease.admission_generation != admission
             or type(admission) is not int
             or admission <= 0
-            or type(claim.identity.generation) is not int
-            or claim.identity.generation <= 0
+            or type(lease.identity.generation) is not int
+            or lease.identity.generation <= 0
             or not math.isfinite(owner.created_at)
             or not re.fullmatch(r"[0-9a-f]{32}", turn_id)
             or not isinstance(reason, FailureReason)
@@ -95,7 +95,7 @@ class FailedTurnObservation:
             owner.created_at,
             owner.worktree,
             admission,
-            claim.identity.generation,
+            lease.identity.generation,
             goal.revision,
             turn_id,
             reason,

@@ -411,7 +411,7 @@ class RegistryDocument:
         """Caller holds the registry lock and has checked live turn ownership."""
         if current.turn_generation >= (1 << 63) - 1:
             raise RelationViolationError("Turn generation exhausted")
-        claimed = replace(
+        leased = replace(
             current,
             turn_generation=current.turn_generation + 1,
             last_finished_turn_id=None,
@@ -423,10 +423,10 @@ class RegistryDocument:
                 turn_generation=current.turn_generation + 1,
             ),
         )
-        self.threads[current.name] = claimed
+        self.threads[current.name] = leased
         self.last_seen[current.name] = time.time()
         owner_generation = self.owners.generations[current.name]
-        return claimed, owner_generation
+        return leased, owner_generation
 
     def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
         """Release only this exact lease; a revoked admission cannot attest completion."""

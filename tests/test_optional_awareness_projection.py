@@ -220,7 +220,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
         root = Path(temp)
         comms, store, _index, root_id = _root(root)
         try:
-            initial, claim = _accepted(comms, store, root_id, "member000", "mandatory work")
+            initial, assignment = _accepted(comms, store, root_id, "member000", "mandatory work")
             install_private_response_schema(store)
             install_native_runtime_schema(store)
             if damage == "missing":
@@ -243,7 +243,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
             native_package=root,
         ).run()
         assert outcome is not None and outcome.response_message_id
-        assert outcome.assignment_id == claim.assignment_id and len(calls) == 1
+        assert outcome.assignment_id == assignment.assignment_id and len(calls) == 1
         assert initial.message.body in calls[0][1]
         assert "Selected source decisions through " not in calls[0][1]
 
@@ -251,25 +251,25 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
 def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        initial, claim = _accepted(comms, store, root_id, "member000", "work")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "work")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         store.create_execution(
             "reply000",
             ExecutionOrigin.WIRE,
-            claim.recipient_lookup,
+            assignment.recipient_lookup,
             owner.name,
             1,
-            assignment_ids=(claim.assignment_id,),
+            assignment_ids=(assignment.assignment_id,),
             exact_target="sender",
         )
-        current = store.assignment(claim.assignment_id)
+        current = store.assignment(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
         assert result.mandatory_complete and result.omission_reason is None
         context = json.loads(result.text)
         assert context["selected"] == [
             {
-                "claim_id": claim.assignment_id,
+                "claim_id": assignment.assignment_id,
                 "disposition": "engaged",
                 "message_id": initial.message.message_id,
                 "source_seq": initial.message.seq,
@@ -287,24 +287,26 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
 def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        initial, claim = _accepted(comms, store, root_id, "member000", "first")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "first")
         owner = _owner(comms, "member000")
-        assert not _projection(index, store, owner, 0, 1)(initial, claim, owner).mandatory_complete
+        assert not _projection(index, store, owner, 0, 1)(
+            initial, assignment, owner
+        ).mandatory_complete
         index.maintain(rebuild=True)
-        assert _projection(index, store, owner, 0, 1)(initial, claim, owner).mandatory_complete
+        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).mandatory_complete
 
         second = comms.messaging.send_initial_cohort("sender", "member000", "not yet sealed")
         index.maintain()
         # The page checkpoint can outrun the caller's minimum source watermark.
         # It must include the later candidate or omit the whole supplement.
         assert not _projection(index, store, owner, 0, initial.message.seq)(
-            initial, claim, owner
+            initial, assignment, owner
         ).mandatory_complete
-        unavailable = _projection(index, store, owner, 0, second.seq)(initial, claim, owner)
+        unavailable = _projection(index, store, owner, 0, second.seq)(initial, assignment, owner)
         assert not unavailable.mandatory_complete and unavailable.text == ""
         replaced = replace(owner, created_at=owner.created_at + 10)
         assert not _projection(index, store, owner, 0, 1)(
-            initial, claim, replaced
+            initial, assignment, replaced
         ).mandatory_complete
     finally:
         store.close()
@@ -316,14 +318,14 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         older, old_claim = _accepted(comms, store, root_id, "member000", "older")
         newer, new_claim = _accepted(comms, store, root_id, "member000", "newer")
         owner = _owner(comms, "member000")
-        for number, claim in enumerate((old_claim, new_claim)):
+        for number, assignment in enumerate((old_claim, new_claim)):
             store.create_execution(
                 f"reply{number}",
                 ExecutionOrigin.WIRE,
-                claim.recipient_lookup,
+                assignment.recipient_lookup,
                 owner.name,
                 1,
-                assignment_ids=(claim.assignment_id,),
+                assignment_ids=(assignment.assignment_id,),
                 exact_target="sender",
             )
         index.maintain(rebuild=True)
@@ -342,13 +344,15 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
 def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        initial, claim = _accepted(comms, store, root_id, "member000", "original")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "original")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
-        assert builder(initial, claim, owner).mandatory_complete
-        store.advance_owner_generation(claim.recipient_lookup, owner.name, expected_generation=1)
-        stale = builder(initial, claim, owner)
+        assert builder(initial, assignment, owner).mandatory_complete
+        store.advance_owner_generation(
+            assignment.recipient_lookup, owner.name, expected_generation=1
+        )
+        stale = builder(initial, assignment, owner)
         assert not stale.mandatory_complete and stale.text == ""
     finally:
         store.close()
@@ -359,13 +363,17 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
 ) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        initial, claim = _accepted(comms, store, root_id, "member000", "old pending")
-        store.advance_owner_generation(claim.recipient_lookup, "member000", expected_generation=1)
+        initial, assignment = _accepted(comms, store, root_id, "member000", "old pending")
+        store.advance_owner_generation(
+            assignment.recipient_lookup, "member000", expected_generation=1
+        )
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         # Even a newly captured SQL gen2+registry turn cannot assign a gen1
         # frozen claim to gen2: no per-claim generation was sealed at accept.
-        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        result = _projection(index, store, owner, 0, initial.message.seq)(
+            initial, assignment, owner
+        )
         assert not result.mandatory_complete and result.text == ""
     finally:
         store.close()
@@ -387,13 +395,15 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
         store.advance_owner_generation(
             old_claim.recipient_lookup, "member000", expected_generation=1
         )
-        current, claim = _accepted(comms, store, root_id, "member000", "new pending")
+        current, assignment = _accepted(comms, store, root_id, "member000", "new pending")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
-        result = _projection(index, store, owner, 0, current.message.seq)(current, claim, owner)
+        result = _projection(index, store, owner, 0, current.message.seq)(
+            current, assignment, owner
+        )
         assert result.mandatory_complete and result.omitted_count == 2
         context = json.loads(result.text)
-        assert [row["claim_id"] for row in context["selected"]] == [claim.assignment_id]
+        assert [row["claim_id"] for row in context["selected"]] == [assignment.assignment_id]
         assert context["open_obligations"] == []
         assert old_claim.assignment_id not in result.text and "old-reply" not in result.text
         assert old.message.seq < current.message.seq
@@ -407,13 +417,15 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
         lookup = stable_thread_lookup(comms.registry.require("member000").created_at)
         store.register_participant(lookup, "member000", "member000", committed=True)
         store.advance_owner_generation(lookup, "member000", expected_generation=1)
-        initial, claim = _accepted(comms, store, root_id, "member000", "fresh")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "fresh")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
-        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        result = _projection(index, store, owner, 0, initial.message.seq)(
+            initial, assignment, owner
+        )
         assert result.mandatory_complete and result.omitted_count == 0
         assert [row["claim_id"] for row in json.loads(result.text)["selected"]] == [
-            claim.assignment_id
+            assignment.assignment_id
         ]
     finally:
         store.close()
@@ -424,7 +436,7 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
 ) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        initial, claim = _accepted(comms, store, root_id, "member000", "original")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "original")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
@@ -436,7 +448,7 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
             return original(self, db, lookup, owner_name)
 
         monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
-        stale = builder(initial, claim, owner)
+        stale = builder(initial, assignment, owner)
         assert not stale.mandatory_complete and stale.text == ""
     finally:
         store.close()
@@ -446,11 +458,11 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
     comms, store, index, root_id = _root(tmp_path)
     try:
         prior, _ = _accepted(comms, store, root_id, "member000", "prior")
-        initial, claim = _accepted(comms, store, root_id, "member000", "current")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "current")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
-        assert builder(initial, claim, owner).mandatory_complete
+        assert builder(initial, assignment, owner).mandatory_complete
         # Disposable legacy/disk inconsistency only: supported writes freeze
         # receipt facts. Restore the original trigger before checking schema.
         db = store._connection
@@ -463,7 +475,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
             ("forged-older-id", root_id, prior.message.seq),
         )
         db.execute(trigger)
-        stale = builder(initial, claim, owner)
+        stale = builder(initial, assignment, owner)
         assert not stale.mandatory_complete and stale.text == ""
     finally:
         store.close()
@@ -480,7 +492,7 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
         try:
             _old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
             comms.threads._rename_thread("member000", "gamma")
-            current, claim = _accepted(comms, store, root_id, "gamma", "new original")
+            current, assignment = _accepted(comms, store, root_id, "gamma", "new original")
             install_private_response_schema(store)
             install_native_runtime_schema(store)
             index.maintain(rebuild=True)
@@ -493,10 +505,10 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
             root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
         ).run()
         assert outcome is not None and outcome.response_message_id
-        assert outcome.assignment_id == claim.assignment_id and len(calls) == 1
+        assert outcome.assignment_id == assignment.assignment_id and len(calls) == 1
         assert current.message.body in calls[0][1]
         assert "Selected source decisions through " in calls[0][1]
-        assert claim.assignment_id in calls[0][1]
+        assert assignment.assignment_id in calls[0][1]
         assert old_claim.assignment_id not in calls[0][1]
         assert "Nonbinding rows omitted: 1" in calls[0][1]
 
@@ -532,10 +544,12 @@ def test_other_owner_decision_never_enters_selected_context(tmp_path: Path) -> N
     comms, store, index, root_id = _root(tmp_path)
     try:
         _accepted(comms, store, root_id, "member001", "foreign-owner-message")
-        initial, claim = _accepted(comms, store, root_id, "member000", "ours")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "ours")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
-        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        result = _projection(index, store, owner, 0, initial.message.seq)(
+            initial, assignment, owner
+        )
         assert result.mandatory_complete
         context = json.loads(result.text)
         assert [row["source_seq"] for row in context["selected"]] == [initial.message.seq]
@@ -552,10 +566,12 @@ def test_many_frozen_members_do_not_become_selected_authority(
     try:
         # The chosen owner has one selected source among the large frozen N;
         # no-wake members remain absent from its mandatory selected context.
-        initial, claim = _accepted(comms, store, root_id, "#team", "@member000 do this")
+        initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 do this")
         index.maintain(rebuild=True, max_bytes=8 * 1024 * 1024)
         owner = _owner(comms, "member000")
-        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        result = _projection(index, store, owner, 0, initial.message.seq)(
+            initial, assignment, owner
+        )
         assert result.mandatory_complete
         assert len(json.loads(result.text)["selected"]) == 1
     finally:
@@ -569,11 +585,13 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
     try:
         for number in range(100):
             comms.messaging.send_initial_cohort("sender", "member001", f"other owner {number}")
-        initial, claim = _accepted(comms, store, root_id, "member000", "current work")
+        initial, assignment = _accepted(comms, store, root_id, "member000", "current work")
         assert initial.message.seq == 101
         assert index.maintain(rebuild=True, max_rows=256, max_bytes=8 * 1024 * 1024)
         owner = _owner(comms, "member000")
-        result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
+        result = _projection(index, store, owner, 0, initial.message.seq)(
+            initial, assignment, owner
+        )
         assert result.mandatory_complete
         context = json.loads(result.text)
         assert [row["source_seq"] for row in context["selected"]] == [101]

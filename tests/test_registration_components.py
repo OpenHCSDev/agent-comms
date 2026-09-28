@@ -27,9 +27,9 @@ def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
         document.prepare_registration(owner(tmp_path), RunningThreadStatus(), new_owner=False)
     )
     before = document.snapshot().owner_identity("owner")
-    claimed, generation = document.lease_turn(document.threads["owner"], "turn", None)
+    leased, generation = document.lease_turn(document.threads["owner"], "turn", None)
     assert generation == before.generation
-    assert claimed.turn_generation == 1
+    assert leased.turn_generation == 1
     document.release_turn(document.threads["owner"].turn_lease)[0]
     document.rename("owner", "renamed")
     document.unregister("renamed")
