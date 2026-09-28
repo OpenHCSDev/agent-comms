@@ -19,6 +19,9 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any, cast
 
+from .field_codec import FieldCodec
+from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection
+
 _MAX_REPLY = 4096
 _TIMEOUT = 0.75
 _UNAVAILABLE: dict[str, object] = {
@@ -26,133 +29,14 @@ _UNAVAILABLE: dict[str, object] = {
     "availability": "unavailable",
     "reason": "gateway_unavailable",
 }
-_REASONS = frozenset(
-    {
-        "gateway_unavailable",
-        "missing",
-        "invalid_store",
-        "unsupported_schema",
-        "busy",
-        "unknown_owner",
-    }
-)
-_STATUSES = frozenset({"queued", "pending", "active", "deferred", "completed", "failed"})
-_ORIGINS = frozenset({"wire", "acp", "goal", "system"})
-_PHASES = frozenset(
-    {
-        "prompt_starting",
-        "prompt_accepted",
-        "model_running",
-        "tool_running",
-        "compaction",
-        "settling",
-        "model_stalled",
-        "aborting",
-        "retrying",
-        "provider_unavailable",
-        "succeeded",
-        "attempt_failed",
-    }
-)
-_PUBLICATIONS = frozenset({"pending", "uncertain", "deferred", "published", "silent", "failed"})
-_RECOVERIES = frozenset(
-    {
-        "model_stalled",
-        "aborting",
-        "retrying",
-        "provider_unavailable",
-        "deferred",
-        "failed",
-        "recovered",
-    }
-)
-
-
-def _exact(value: object, fields: set[str]) -> bool:
-    return type(value) is dict and set(value) == fields
-
-
-def _nonnegative(value: object, minimum: int = 0) -> bool:
-    return type(value) is int and value >= minimum
 
 
 def _valid_projection(value: object, thread: str) -> bool:
-    if not isinstance(value, dict) or value.get("schema") != 1 or type(value["schema"]) is not int:
+    try:
+        projection = FieldCodec.decode(RecoveryProjection, value)
+    except (TypeError, ValueError):
         return False
-    if value.get("availability") == "unavailable":
-        return (
-            _exact(value, {"schema", "availability", "reason"})
-            and type(value["reason"]) is str
-            and value["reason"] in _REASONS
-        )
-    if not _exact(
-        value,
-        {
-            "schema",
-            "availability",
-            "owner",
-            "sampledAtMs",
-            "current",
-            "lastRecovery",
-            "connectivity",
-        },
-    ):
-        return False
-    if (
-        value["availability"] != "available"
-        or value["owner"] != thread
-        or not _nonnegative(value["sampledAtMs"])
-    ):
-        return False
-    current, recovery, connection = value["current"], value["lastRecovery"], value["connectivity"]
-    if current is not None:
-        if not _exact(
-            current, {"status", "origin", "isCurrent", "attempt", "canRetry", "publication"}
-        ):
-            return False
-        if (
-            type(current["status"]) is not str
-            or current["status"] not in _STATUSES
-            or type(current["origin"]) is not str
-            or current["origin"] not in _ORIGINS
-            or type(current["isCurrent"]) is not bool
-            or type(current["canRetry"]) is not bool
-            or (
-                current["publication"] is not None
-                and (
-                    type(current["publication"]) is not str
-                    or current["publication"] not in _PUBLICATIONS
-                )
-            )
-        ):
-            return False
-        attempt = current["attempt"]
-        if attempt is not None and (
-            not _exact(attempt, {"ordinal", "phase", "backendDone", "backendProcessExited"})
-            or not _nonnegative(attempt["ordinal"], 1)
-            or type(attempt["phase"]) is not str
-            or attempt["phase"] not in _PHASES
-            or type(attempt["backendDone"]) is not bool
-            or type(attempt["backendProcessExited"]) is not bool
-        ):
-            return False
-    if recovery is not None and (
-        not _exact(recovery, {"kind", "attempt", "elapsedMs", "observedAtMs"})
-        or type(recovery["kind"]) is not str
-        or recovery["kind"] not in _RECOVERIES
-        or not _nonnegative(recovery["attempt"], 1)
-        or not _nonnegative(recovery["elapsedMs"])
-        or not _nonnegative(recovery["observedAtMs"])
-    ):
-        return False
-    return connection is None or not (
-        not _exact(connection, {"owner", "acpClient", "observedAtMs"})
-        or type(connection["owner"]) is not str
-        or connection["owner"] not in {"connected", "reconnecting", "offline"}
-        or type(connection["acpClient"]) is not str
-        or connection["acpClient"] not in {"connected", "disconnected"}
-        or not _nonnegative(connection["observedAtMs"])
-    )
+    return not isinstance(projection, AvailableRecoveryProjection) or projection.owner == thread
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -13,7 +13,7 @@ import sqlite3
 import stat
 import time
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -28,120 +28,102 @@ from .coordination import (
     OwnerConnectivity,
     RecoveryKind,
 )
+from .field_codec import FieldCodec
+from .obligation_states import ResponseState
 
 # All fields returned to a caller are enumerated below. In particular, never
 # serialize RecoverySnapshot.to_primitive(): it includes a publication key.
 ProjectionFailure = Literal[
-    "missing", "invalid_store", "unsupported_schema", "busy", "unknown_owner"
+    "missing", "invalid_store", "unsupported_schema", "busy", "unknown_owner", "gateway_unavailable"
 ]
-PublicationStatus = Literal["pending", "uncertain", "deferred", "published", "silent", "failed"]
-_PUBLICATION_STATES: dict[ObligationState, PublicationStatus] = {
-    ObligationState.PENDING: "pending",
-    ObligationState.PUBLISHING: "uncertain",
-    ObligationState.DEFERRED: "deferred",
-    ObligationState.PUBLISHED: "published",
-    ObligationState.SILENT: "silent",
-    ObligationState.FAILED: "failed",
-}
+
+
+class ProjectionRecord:
+    def to_primitive(self) -> dict[str, object]:
+        return FieldCodec.encode(self)
+
+
+def _nonnegative(value: int, *, minimum: int = 0) -> None:
+    if value < minimum:
+        raise ValueError("projection integer is below its minimum")
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedAttempt:
+class ProjectedAttempt(ProjectionRecord):
     ordinal: int
     phase: AttemptPhase
-    backend_done: bool
+    backend_done: bool = field(metadata={"wire_name": "backendDone"})
     # Verified exit of this attempt's Pi RPC child; NOT registry-owner death.
-    backend_process_exited: bool
+    backend_process_exited: bool = field(metadata={"wire_name": "backendProcessExited"})
 
-    def to_primitive(self) -> dict[str, object]:
-        return {
-            "ordinal": self.ordinal,
-            "phase": self.phase.value,
-            "backendDone": self.backend_done,
-            "backendProcessExited": self.backend_process_exited,
-        }
+    def __post_init__(self):
+        _nonnegative(self.ordinal, minimum=1)
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedExecution:
+class ProjectedExecution(ProjectionRecord):
     # A single owner-scoped selected execution, not an unbounded history list.
     status: ExecutionStatus
     origin: ExecutionOrigin
-    is_current: bool
+    is_current: bool = field(metadata={"wire_name": "isCurrent"})
     attempt: ProjectedAttempt | None
-    can_retry: bool
-    publication: PublicationStatus | None
+    can_retry: bool = field(metadata={"wire_name": "canRetry"})
+    publication: str | None
 
-    def to_primitive(self) -> dict[str, object]:
-        return {
-            "status": self.status.value,
-            "origin": self.origin.value,
-            "isCurrent": self.is_current,
-            "attempt": self.attempt.to_primitive() if self.attempt else None,
-            "canRetry": self.can_retry,
-            "publication": self.publication,
-        }
+    def __post_init__(self):
+        if self.publication is not None and self.publication not in {
+            member.publication() for member in ResponseState.members_with(ResponseState)
+        }:
+            raise ValueError("unknown publication status")
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedRecovery:
+class ProjectedRecovery(ProjectionRecord):
     kind: RecoveryKind
     attempt: int
-    elapsed_ms: int
-    observed_at_ms: int
+    elapsed_ms: int = field(metadata={"wire_name": "elapsedMs"})
+    observed_at_ms: int = field(metadata={"wire_name": "observedAtMs"})
 
-    def to_primitive(self) -> dict[str, object]:
-        # The database only bounds reason/detail, not their contents. Neither
-        # can cross this privacy boundary, even if labeled "sanitized".
-        return {
-            "kind": self.kind.value,
-            "attempt": self.attempt,
-            "elapsedMs": self.elapsed_ms,
-            "observedAtMs": self.observed_at_ms,
-        }
+    def __post_init__(self):
+        _nonnegative(self.attempt, minimum=1)
+        _nonnegative(self.elapsed_ms)
+        _nonnegative(self.observed_at_ms)
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedConnectivity:
+class ProjectedConnectivity(ProjectionRecord):
     owner: OwnerConnectivity
-    acp_client: ACPClientConnectivity
-    observed_at_ms: int
+    acp_client: ACPClientConnectivity = field(metadata={"wire_name": "acpClient"})
+    observed_at_ms: int = field(metadata={"wire_name": "observedAtMs"})
 
-    def to_primitive(self) -> dict[str, object]:
-        return {
-            "owner": self.owner.value,
-            "acpClient": self.acp_client.value,
-            "observedAtMs": self.observed_at_ms,
-        }
+    def __post_init__(self):
+        _nonnegative(self.observed_at_ms)
 
 
 @dataclass(frozen=True, slots=True)
-class AvailableRecoveryProjection:
+class AvailableRecoveryProjection(ProjectionRecord):
     owner: str
-    sampled_at_ms: int
+    sampled_at_ms: int = field(metadata={"wire_name": "sampledAtMs"})
     current: ProjectedExecution | None
-    last_recovery: ProjectedRecovery | None
+    last_recovery: ProjectedRecovery | None = field(metadata={"wire_name": "lastRecovery"})
     connectivity: ProjectedConnectivity | None
 
-    def to_primitive(self) -> dict[str, object]:
-        return {
-            "schema": 1,
-            "availability": "available",
-            "owner": self.owner,
-            # Sampled time is neither a transaction revision nor a phase start.
-            "sampledAtMs": self.sampled_at_ms,
-            "current": self.current.to_primitive() if self.current else None,
-            "lastRecovery": self.last_recovery.to_primitive() if self.last_recovery else None,
-            "connectivity": self.connectivity.to_primitive() if self.connectivity else None,
-        }
+    schema: Literal[1] = field(default=1, metadata={"wire_required": True, "wire_order": -2})
+    availability: Literal["available"] = field(
+        default="available", metadata={"wire_required": True, "wire_order": -1}
+    )
+
+    def __post_init__(self):
+        _nonnegative(self.sampled_at_ms)
 
 
 @dataclass(frozen=True, slots=True)
-class UnavailableRecoveryProjection:
+class UnavailableRecoveryProjection(ProjectionRecord):
     reason: ProjectionFailure
-
-    def to_primitive(self) -> dict[str, object]:
-        return {"schema": 1, "availability": "unavailable", "reason": self.reason}
+    schema: Literal[1] = field(default=1, metadata={"wire_required": True, "wire_order": -2})
+    availability: Literal["unavailable"] = field(
+        default="unavailable", metadata={"wire_required": True, "wire_order": -1}
+    )
 
 
 RecoveryProjection = AvailableRecoveryProjection | UnavailableRecoveryProjection
@@ -277,7 +259,7 @@ def _read_in_transaction(
             return UnavailableRecoveryProjection("invalid_store")
         is_current = execution_id == pointer[0] and ordinal == pointer[1]
         if (pointer[0] is not None and not is_current) or (
-            is_current and status is not ExecutionStatus.ACTIVE
+            is_current and not status.declaration.active
         ):
             return UnavailableRecoveryProjection("invalid_store")
         if attempt_ordinal is not None:
@@ -288,12 +270,12 @@ def _read_in_transaction(
             attempt = ProjectedAttempt(attempt_ordinal, AttemptPhase(phase), done == 1, dead == 1)
         else:
             attempt = None
-        publication: PublicationStatus | None
+        publication: str | None
         if origin is ExecutionOrigin.WIRE:
             if obligation is None or (obligation == "published") != (receipts == 1):
                 return UnavailableRecoveryProjection("invalid_store")
             state = ObligationState(obligation)
-            publication = _PUBLICATION_STATES[state]
+            publication = state.declaration.publication()
         else:
             if obligation is not None or receipts != 0:
                 return UnavailableRecoveryProjection("invalid_store")
@@ -304,9 +286,9 @@ def _read_in_transaction(
             is_current,
             attempt,
             retry == 1
-            and status is ExecutionStatus.DEFERRED
+            and status.declaration.retry
             and attempt is not None
-            and attempt.phase is AttemptPhase.ATTEMPT_FAILED
+            and attempt.phase.declaration.failed
             and attempt.backend_done
             and attempt.backend_process_exited
             and not is_current,

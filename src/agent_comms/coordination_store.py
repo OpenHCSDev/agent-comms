@@ -21,7 +21,6 @@ from typing import Generic, TypeVar
 from .coordination import (
     ACTIVE_ATTEMPT_PHASES,
     ATTEMPT_PHASE_TRANSITIONS,
-    CLAIM_DISPOSITION_TRANSITIONS,
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
     MAX_SANITIZED_DETAIL_CHARS,
@@ -57,6 +56,7 @@ from .coordination import (
     WakeMode,
     retry_disposition_authorized,
 )
+from .coordination_errors import IdentityConflict
 from .declarations import MessageType
 
 T = TypeVar("T")
@@ -71,10 +71,6 @@ class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
 
 class StaleFence(CoordinationError):  # noqa: N818 - nominal outcome name
     """The owner, generation, pointer, token or attempt is no longer current."""
-
-
-class IdentityConflict(CoordinationError):  # noqa: N818 - nominal outcome name
-    """An immutable natural identity is already bound to different facts."""
 
 
 class RecoveryBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
@@ -548,11 +544,7 @@ class MutationStore(CoordinationStore):
             or claim.updated_at_ms != claim.accepted_at_ms
             or claim.triage_verdict is not None
             or claim.disposition
-            is not {
-                WakeMode.PASSIVE: ClaimDisposition.PASSIVE,
-                WakeMode.BOUNDED_TRIAGE: ClaimDisposition.TRIAGE_PENDING,
-                WakeMode.FULL: ClaimDisposition.FULL_PENDING,
-            }[claim.wake_mode]
+            is not ClaimDisposition(claim.wake_mode.declaration.initial_disposition())
             or claim.resolver_version != RESOLVER_VERSION
             or claim.policy_version != POLICY_VERSION
         ):
@@ -620,15 +612,8 @@ class MutationStore(CoordinationStore):
                 raise StaleRevision("claim revision changed")
             if (
                 current.execution_id is not None
-                or disposition
-                not in {
-                    ClaimDisposition.IGNORED,
-                    ClaimDisposition.DEFERRED,
-                    ClaimDisposition.FAILED,
-                    ClaimDisposition.TRIAGE_PENDING,
-                    ClaimDisposition.FULL_PENDING,
-                }
-                or disposition not in CLAIM_DISPOSITION_TRANSITIONS[current.disposition]
+                or not disposition.declaration.preengagement_target
+                or disposition.declaration not in current.lifecycle.successors()
             ):
                 raise IdentityConflict("preengagement transition is not declared")
             after = replace(
@@ -690,15 +675,15 @@ class MutationStore(CoordinationStore):
         obligation_row = self._row("obligations", "execution_id", execution_id)
         obligation = (
             ResponseObligation(
-                execution_id,
-                obligation_row["exact_target"],
-                ObligationState(obligation_row["state"]),
-                obligation_row["reason_code"],
-                obligation_row["created_at_ms"],
-                obligation_row["updated_at_ms"],
-                obligation_row["revision"],
-                obligation_row["receipt_message_id"],
-                obligation_row["receipt_seq"],
+                execution_id=execution_id,
+                exact_target=obligation_row["exact_target"],
+                state=ObligationState(obligation_row["state"]),
+                reason_code=obligation_row["reason_code"],
+                created_at_ms=obligation_row["created_at_ms"],
+                updated_at_ms=obligation_row["updated_at_ms"],
+                revision=obligation_row["revision"],
+                receipt_message_id=obligation_row["receipt_message_id"],
+                receipt_seq=obligation_row["receipt_seq"],
             )
             if obligation_row
             else None
@@ -847,22 +832,15 @@ class MutationStore(CoordinationStore):
                 if (
                     claim.recipient_lookup != owner_lookup
                     or claim.execution_id is not None
-                    or claim.disposition
-                    not in {
-                        ClaimDisposition.TRIAGE_PENDING,
-                        ClaimDisposition.FULL_PENDING,
-                        ClaimDisposition.DEFERRED,
-                    }
+                    or not claim.lifecycle.engageable
                 ):
                     raise IdentityConflict("claim cannot engage this execution")
-                verdict = (
-                    TriageVerdict.ENGAGE if claim.wake_mode is WakeMode.BOUNDED_TRIAGE else None
-                )
+                verdict = claim.lifecycle.mode.engagement_verdict
                 db.execute(
                     "UPDATE wake_claims SET disposition='engaged',triage_verdict=?,exact_target=?,"
                     "execution_id=?,revision=revision+1,updated_at_ms=? WHERE claim_id=?",
                     (
-                        verdict.value if verdict else None,
+                        verdict,
                         exact_target,
                         execution_id,
                         self._now(claim.updated_at_ms),
@@ -888,7 +866,7 @@ class MutationStore(CoordinationStore):
             snapshot = self.snapshot(execution_id)
             if snapshot.execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
-            if snapshot.execution.status is not ExecutionStatus.QUEUED:
+            if not snapshot.execution.lifecycle.queued:
                 raise IdentityConflict("only queued executions can become pending")
             db.execute(
                 "UPDATE executions SET status='pending',revision=revision+1,"
@@ -913,10 +891,7 @@ class MutationStore(CoordinationStore):
             execution = before.execution
             if execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
-            if execution.current_attempt_ordinal is not None or execution.status not in {
-                ExecutionStatus.QUEUED,
-                ExecutionStatus.PENDING,
-            }:
+            if not execution.lifecycle.unstarted:
                 raise IdentityConflict("unstarted failure requires queued/pending work")
             state = "failed"
             now = self._now(execution.updated_at_ms)
@@ -1029,13 +1004,13 @@ class MutationStore(CoordinationStore):
                 raise StaleRevision("execution or pointer revision changed")
             if participant.pointer.execution_id is not None:
                 raise StaleFence("owner has a current attempt")
-            if execution.status not in {ExecutionStatus.PENDING, ExecutionStatus.DEFERRED}:
+            if not execution.lifecycle.starts_attempt:
                 raise IdentityConflict("execution cannot start an attempt")
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("no authorized bus-keyed publication resolution")
-            if execution.status is ExecutionStatus.DEFERRED and snapshot.attempt is None:
+            if execution.lifecycle.retry and snapshot.attempt is None:
                 raise RecoveryBlocked("frozen v2 cannot resume an unstarted deferral")
-            if execution.status is ExecutionStatus.DEFERRED and not snapshot.can_retry:
+            if execution.lifecycle.retry and not snapshot.can_retry:
                 raise RecoveryBlocked("retry requires final death, replay proof, and budget")
             if ordinal != attempt_ordinal:
                 raise IdentityConflict("attempt ordinal must be contiguous")
@@ -1091,14 +1066,14 @@ class MutationStore(CoordinationStore):
             if (
                 execution.origin is ExecutionOrigin.WIRE
                 and snapshot.obligation is not None
-                and snapshot.obligation.state is ObligationState.DEFERRED
+                and snapshot.obligation.lifecycle.deferred
             ):
                 db.execute(
                     "UPDATE obligations SET state='pending',revision=revision+1,"
                     "reason_code=NULL,updated_at_ms=? WHERE execution_id=?",
                     (self._now(snapshot.obligation.updated_at_ms), execution_id),
                 )
-            if execution.status is ExecutionStatus.DEFERRED:
+            if execution.lifecycle.retry:
                 for claim in snapshot.claims:
                     db.execute(
                         "UPDATE wake_claims SET disposition='engaged',revision=revision+1,"
@@ -1311,28 +1286,7 @@ class MutationStore(CoordinationStore):
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if kind in {RecoveryKind.DEFERRED, RecoveryKind.FAILED}:
-                raise IdentityConflict("terminal audit belongs to atomic settlement")
-            if kind is RecoveryKind.RECOVERED:
-                incident = snapshot.last_recovery
-                if (
-                    snapshot.execution.status is not ExecutionStatus.ACTIVE
-                    or attempt.phase is not AttemptPhase.MODEL_RUNNING
-                    or incident is None
-                    or incident.attempt != attempt.attempt_ordinal
-                    or incident.kind
-                    not in {
-                        RecoveryKind.MODEL_STALLED,
-                        RecoveryKind.ABORTING,
-                        RecoveryKind.RETRYING,
-                        RecoveryKind.PROVIDER_UNAVAILABLE,
-                    }
-                ):
-                    raise IdentityConflict(
-                        "recovered requires a current unresolved incident and resumed model"
-                    )
-            elif kind.value != attempt.phase.value:
-                raise IdentityConflict("recovery audit must match observed attempt phase")
+            kind.declaration.validate_audit(snapshot, attempt)
             db.execute(
                 "INSERT INTO recovery_audit(execution_id,kind,reason_code,"
                 "sanitized_detail,attempt,elapsed_ms,observed_at_ms) VALUES (?,?,?,?,?,?,?)",
@@ -1366,12 +1320,9 @@ class MutationStore(CoordinationStore):
         ):
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
         if success:
-            if attempt.phase is not AttemptPhase.SETTLING:
+            if not attempt.lifecycle.settling:
                 raise IdentityConflict("silent completion requires settling phase")
-            if snapshot.obligation is not None and snapshot.obligation.state not in {
-                ObligationState.PENDING,
-                ObligationState.DEFERRED,
-            }:
+            if snapshot.obligation is not None and not snapshot.obligation.lifecycle.retryable:
                 raise IdentityConflict("wire completion requires nonpublication obligation")
             status, phase, disposition = "completed", "succeeded", "completed"
         else:
@@ -1652,7 +1603,7 @@ class RecoveryMonitorCapability:
                 )
                 kind = (
                     RecoveryKind.DEFERRED
-                    if settled.execution.status is ExecutionStatus.DEFERRED
+                    if settled.execution.lifecycle.retry
                     else RecoveryKind.FAILED
                 )
                 db.execute(
