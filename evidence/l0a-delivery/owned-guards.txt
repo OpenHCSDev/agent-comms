@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-l0a-incarnation-delivery-20260928
+configfile: pyproject.toml
+plugins: platformdirs-4.12.0, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2 items
+
+tests/test_l0a_guards.py .                                               [ 50%]
+tests/test_current_delivery.py .                                         [100%]
+
+============================== 2 passed in 0.05s ===============================

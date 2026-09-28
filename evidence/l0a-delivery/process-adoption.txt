@@ -24,12 +24,12 @@ raw = {'threads': {'project': {'name': 'project', 'tags': ['acp'], 'worktree': '
 >           document = FieldCodec.decode(cls, raw)
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-src/agent_comms/registry_document.py:96: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/registry_document.py:96:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 src/agent_comms/field_codec.py:129: in decode
     return cast(T, cls._decode(target, data))
                    ^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 cls = <class 'agent_comms.field_codec.FieldCodec'>
 target = <class 'agent_comms.registry_document.RegistryDocument'>
@@ -121,21 +121,21 @@ tmp_path = PosixPath('/home/ts/wt/comms-l0a-incarnation-delivery-20260928/.artif
         first = CommsClient(comms, agent_bin=sys.executable, agent_args=[str(program)])
         second, third = CommsClient(comms), CommsClient(comms)
         started, settled = asyncio.Event(), asyncio.Event()
-    
+
         class Client:
             async def session_update(self, session_id, update):
                 if "TURN_STARTED" in update.get("content", {}).get("text", ""):
                     started.set()
                 if update.get("_meta", {}).get("agentComms", {}).get("turnSettled"):
                     settled.set()
-    
+
         first.on_connect(Client())
         second.on_connect(Client())
 >       response = await first.new_session(str(project))
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_detached_owner.py:40: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_detached_owner.py:40:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 src/agent_comms/acp.py:179: in new_session
     return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -174,7 +174,7 @@ src/agent_comms/registry_store.py:58: in _read_unlocked
 src/agent_comms/registry_store.py:70: in _decode
     return self.record_type.from_wire(data)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 cls = <class 'agent_comms.registry_document.RegistryDocument'>
 raw = {'threads': {'project': {'name': 'project', 'tags': ['acp'], 'worktree': '/home/ts/wt/comms-l0a-incarnation-delivery-2...s_clien0/project', 'parent': None, ...}}, 'aliases': {}, 'owner_epoch_counter': 2, 'owner_epochs': {'project': 2}, ...}

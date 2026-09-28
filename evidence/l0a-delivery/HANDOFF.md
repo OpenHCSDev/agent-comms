@@ -1,6 +1,6 @@
 # Current-incarnation pending/inbox projection
 
-Parent #229 follow-up to #235, based on integrated parent364d590. Own tree ~/wt/comms-l0a-incarnation-delivery-20260928, branch fix/l0a-incarnation-delivery. No changes to parent history/D22 regions or running installs.
+Parent #229 follow-up to #235, based on parent #229, including published integration8004347. Own tree ~/wt/comms-l0a-incarnation-delivery-20260928, branch fix/l0a-incarnation-delivery. No changes to parent history/D22 regions or running installs.
 
 ## Code
 
@@ -34,4 +34,14 @@ Integrated S13 #232 dependency 5d2935f in own branch, retaining parent d0380c6. 
 - Registration live-owner/turn/compaction checks compare the captured calling process identity and expected saved identity, not PID alone.
 - Direct registry tests migrated to actual process capture; removed test's mocked os.getpid and empty fixture PID field.
 - 24 registry/process tests pass, including real OS identity capture, same-PID different-birth refusal, generation rotation, active-owner protection, saved reload and stopped restoration. Seven pending/rebind checks still pass after S13 integration.
-- Actual detached-client new_session now passes former claim_thread TypeError, launches a real worker and reaches prompt. Full prompt/reattach check then times out before its plain backend fixture emits TURN_STARTED; S10 dependency not yet integrated here. No passing end-to-end prompt claim.
+- Actual detached-client new_session now passes former claim_thread TypeError, launches a real worker and reaches prompt. Full prompt/reattach check then times out before its plain backend fixture emits TURN_STARTED; S10 is now integrated. The raw ACP diagnostic identified an unmarked isolated bus, rejected by the current canonical activation boundary. No passing end-to-end prompt claim.
+
+## Final owned closure
+
+- Published core code first at6c1a8ae; parent integrated it atbb1892e. Latest branch merges parent8004347 to test against its actual queue-emitter deletion/S9/S10/S12/S13 implementation. InputDrain conflict resolved by deleting its unused Message import as parent already did; no emitter implementation edits by this owner.
+- Final combined registry/current-delivery/real-child-lifecycle/owned-guard run: **33 passed in3.74s** (final-core.txt).
+- Cold/reopened/scaling/concurrent-append/current-incarnation selection: **9 passed in4.63s** (performance-current.txt). Reopened unchanged history decodes zero rows; appended history only decodes its increment, registry validation is bounded per snapshot, and writes cannot race index synchronization. These are focused performance invariants, not a workstation-wide CPU measurement.
+- Actual installed candidate core+Toad wheels: mounted DM rebind still passes with ProcessIdentity fixtures. Current queue callbacks preserve drafts/UNKNOWN/missing-evidence feedback. Actual in-process ACP queue admission, current emitter, retirement and mounted Toad pass using local transport and an explicitly held backend; no provider-consumption claim.
+- Owned runtime delta vs parent8004347: +357/-306; tests +198/-20. Added runtime lines provide the timestamp/source-incarnation indexed projection missing from the replaced raw route counter. Ratchet vs parent: type identity -2, boolean chains -3, string subscripts -4.
+- The two broader failures were reproduced on untouched parent364d590. Parent has accepted read-proof rename-alias closure and owns the raw-wire mutation fixture. No suppression, skipped assertions or behavior relaxation here.
+- bus_route_counts.sqlite3 remains disposable derived state; parent must reset it at quiet cutover. All live installation and durable D22 rewriting remain parent-owned.
