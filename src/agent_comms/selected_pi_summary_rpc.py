@@ -18,6 +18,7 @@ from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournal
 from .fresh_private_session import FreshPrivateSession
 from .owner_compaction_provider import NativeSummary, valid_native_usage
+from .pi_rpc import PiRpcChannel
 from .selected_pi_child_deadline import SelectedChildUnknown, arm_selected_child
 from .selected_pi_route import _request, _strict_echo
 
@@ -37,21 +38,12 @@ def _summary_response(
 ) -> SelectedSummaryResult:
     """Decode the existing native v1 protocol once at the RPC boundary."""
 
-    def unique(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("Duplicate selected response key")
-            result[key] = value
-        return result
-
     try:
         if not raw or len(raw) > _MAX_RESPONSE or not raw.endswith(b"\n"):
             raise ValueError("Incomplete bounded selected summary")
-        response = json.loads(raw, object_pairs_hook=unique)
+        response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE).wire
         if (
-            type(response) is not dict
-            or set(response) != {"id", "type", "command", "success", "data"}
+            set(response) != {"id", "type", "command", "success", "data"}
             or response["id"] != request["id"]
             or response["type"] != "response"
             or response["command"] != request["type"]

@@ -1,0 +1,214 @@
+{
+  "findings": [
+    {
+      "pattern_id": 3,
+      "title": "External enum case recovery should move to its nominal owner",
+      "why": "A function outside an enum declaration recovers multiple cases from that closed axis. The enum or a keyed strategy family should own those case semantics so consumers query behavior instead of rediscovering member identity.",
+      "capability_gap": "one nominal owner for closed-axis behavior with consumers deriving its result",
+      "relation_context": "multiple declared enum members are inspected outside their nominal owner",
+      "confidence": "high",
+      "certification": "strong_heuristic",
+      "capability_tags": [
+        "authoritative_dispatch",
+        "closed_family_dispatch",
+        "nominal_identity"
+      ],
+      "observation_tags": [
+        "branch_dispatch",
+        "closed_family_cases",
+        "dataflow_root"
+      ],
+      "detector_id": "external_enum_case_recovery",
+      "summary": "Enum `ThreadStatus` has 12 external branch site(s) across 9 function(s) for cases ThreadStatus.RUNNING, ThreadStatus.STOPPED.",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+          "line": 476,
+          "symbol": "ThreadStatus"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+          "line": 2603,
+          "symbol": "ThreadRegistry.register"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+          "line": 3274,
+          "symbol": "ThreadRegistry.heartbeat"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/operations.py",
+          "line": 3150,
+          "symbol": "Comms.start"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/operations.py",
+          "line": 3221,
+          "symbol": "Comms.restart_owners"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/operations.py",
+          "line": 3539,
+          "symbol": "Comms.stop"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+        "line": 2603,
+        "symbol": "ThreadRegistry.register"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+        "line": 476,
+        "symbol": "ThreadStatus"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "dispatch_site_count": 12,
+        "dispatch_axis": "ThreadStatus",
+        "literal_cases": [
+          "ThreadStatus.RUNNING",
+          "ThreadStatus.STOPPED"
+        ]
+      },
+      "stable_id": "1782ecf351",
+      "evidence_ids": [
+        "ac009abdf3",
+        "be907de18d",
+        "b0c41a91a4",
+        "58dd277dd2",
+        "514a0f9558",
+        "7138a3e129"
+      ]
+    },
+    {
+      "pattern_id": 5,
+      "title": "Exact tiny methods expose one repeated nominal role",
+      "why": "Several classes without one nominal ancestor own the same complete tiny method declaration. The exact method role is one maintenance object, but the current snapshot does not prove whether an existing authority or a new inheritance boundary should own it.",
+      "capability_gap": "one proved nominal authority derives the exact method role for every participant",
+      "relation_context": "unrelated classes repeat the same promotion-safe method declaration with a closed receiver contract; ownership placement remains a practitioner decision",
+      "confidence": "high",
+      "certification": "strong_heuristic",
+      "capability_tags": [
+        "shared_algorithm_authority",
+        "nominal_identity",
+        "mro_ordering"
+      ],
+      "observation_tags": [
+        "method_role",
+        "repeated_method_roles",
+        "normalized_ast"
+      ],
+      "detector_id": "exact_tiny_method_role",
+      "summary": "('to_wire',) are repeated exactly across ('ViewPredicate', 'SavedView') without one nominal ancestor and contain 1 shared statement(s); no ownership placement is selected from this snapshot.",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+          "line": 1298,
+          "symbol": "ViewPredicate.to_wire"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-historical-views-20260927/src/agent_comms/declarations.py",
+          "line": 1331,
+          "symbol": "SavedView.to_wire"
+        }
+      ],
+      "projection_evidence": null,
+      "authority_evidence": null,
+      "compression_certificate": {
+        "before_cost": {
+          "grammar_objects": 0,
+          "residual_objects": 4,
+          "wiring_objects": 0,
+          "provenance_objects": 0,
+          "ambiguity_bits": 0,
+          "independent_rate_debt": 0
+        },
+        "after_cost": {
+          "grammar_objects": 2,
+          "residual_objects": 2,
+          "wiring_objects": 2,
+          "provenance_objects": 1,
+          "ambiguity_bits": 0,
+          "independent_rate_debt": 0
+        },
+        "semantic_axes": [],
+        "margin_cost": {
+          "grammar_objects": 0,
+          "residual_objects": 0,
+          "wiring_objects": 0,
+          "provenance_objects": 0,
+          "ambiguity_bits": 0,
+          "independent_rate_debt": 1
+        }
+      },
+      "metrics": {
+        "duplicate_site_count": 2,
+        "statement_count": 1,
+        "class_count": 2,
+        "method_symbols": [
+          "ViewPredicate.to_wire",
+          "SavedView.to_wire"
+        ],
+        "shared_statement_texts": []
+      },
+      "stable_id": "6d3195b27f",
+      "evidence_ids": [
+        "60c74a2e88",
+        "30baefc784"
+      ]
+    }
+  ],
+  "plans": [],
+  "finding_payload_mode": "full",
+  "finding_count": 2,
+  "finding_counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 3,
+        "count": 1,
+        "pattern_name": "Closed-Family O(1) Dispatch"
+      },
+      {
+        "pattern_id": 5,
+        "count": 1,
+        "pattern_name": "Shared Algorithm Authority"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "exact_tiny_method_role",
+        "count": 1
+      },
+      {
+        "detector_id": "external_enum_case_recovery",
+        "count": 1
+      }
+    ]
+  },
+  "scan_status": {
+    "mode": "exact_compact_global",
+    "analyzed_detector_count": 79,
+    "omitted_detector_count": 0,
+    "complete": true,
+    "reason": "all_context_detectors_use_compact_global_projections"
+  },
+  "timing": {
+    "parse_seconds": 11.504,
+    "analysis_seconds": 0.999,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.0,
+    "analysis_cache_status": "miss",
+    "total_seconds": 12.503
+  },
+  "active_finding_surface": "raw_findings",
+  "payload_timing": {
+    "observation_graph_seconds": 0.0,
+    "semantic_descent_graph_seconds": 0.0,
+    "source_snapshot_seconds": 0.0,
+    "source_index_payload_seconds": 0.0,
+    "semantic_refactor_gate_seconds": 0.0,
+    "finding_recipe_plan_seconds": 0.0,
+    "total_seconds": 0.006
+  }
+}
