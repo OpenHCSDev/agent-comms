@@ -51,6 +51,10 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 
     @classmethod
     @abstractmethod
+    def current_value(cls, thread: Thread) -> str | None: ...
+
+    @classmethod
+    @abstractmethod
     async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect: ...
 
     @classmethod
@@ -66,10 +70,14 @@ class ModelConfigOption(ConfigOption):
     category = "model"
 
     @classmethod
+    def current_value(cls, thread: Thread) -> str | None:
+        return thread.model
+
+    @classmethod
     async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
         models = await owner.models_for(thread.name)
         return cls.select(
-            thread.model,
+            cls.current_value(thread),
             [
                 SessionConfigSelectOption(value=m.id, name=m.name, description=m.description)
                 for m in models
@@ -90,11 +98,7 @@ class ModelConfigOption(ConfigOption):
             "Model change timed out",
         )
         owner.comms.set_thread_model(thread.name, value)
-        levels = await owner.thinking_levels_for(value)
-        if thread.thinking_level not in levels:
-            owner.comms.set_thread_thinking_level(
-                thread.name, "medium" if "medium" in levels else levels[0]
-            )
+        await ThinkingLevelConfigOption.selection(owner, replace(thread, model=value))
 
 
 class ThinkingLevelConfigOption(ConfigOption):
@@ -103,12 +107,21 @@ class ThinkingLevelConfigOption(ConfigOption):
     category = "thought_level"
 
     @classmethod
-    async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
+    def current_value(cls, thread: Thread) -> str | None:
+        return thread.thinking_level
+
+    @classmethod
+    async def selection(cls, owner: ConfigOptions, thread: Thread) -> tuple[str, list[str]]:
         levels = await owner.thinking_levels_for(thread.model)
-        selected = thread.thinking_level
+        selected = cls.current_value(thread)
         if selected not in levels:
             selected = "medium" if "medium" in levels else levels[0]
             owner.comms.set_thread_thinking_level(thread.name, selected)
+        return selected, levels
+
+    @classmethod
+    async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
+        selected, levels = await cls.selection(owner, thread)
         return cls.select(
             selected,
             [SessionConfigSelectOption(value=level, name=level.title()) for level in levels],
@@ -150,7 +163,7 @@ class ConfigOptions:
         self.catalog_publish_lock = asyncio.Lock()
         self.catalog_generation = 0
         self.session_catalog_generation: dict[str, int] = {}
-        self.session_config_signature: dict[str, tuple[str | None, str | None]] = {}
+        self.session_config_signature: dict[str, tuple[tuple[str, str | None], ...]] = {}
         self.setting_requests = PendingRequests()
         self.thinking_catalog: dict[tuple[str | None, tuple[int, int]], list[str]] = {}
 
@@ -195,11 +208,18 @@ class ConfigOptions:
             for member in ConfigOption.members_with(ConfigOption)
         ]
 
+    @staticmethod
+    def signature(thread: Thread) -> tuple[tuple[str, str | None], ...]:
+        return tuple(
+            (member.declared_name, member.current_value(thread))
+            for member in ConfigOption.members_with(ConfigOption)
+        )
+
     async def session_options(self, session_id: str, thread_name: str) -> list[Any]:
         options = await self.options(thread_name)
         self.session_catalog_generation[session_id] = self.catalog_generation
         thread = self.comms.registry.require(thread_name)
-        self.session_config_signature[session_id] = thread.model, thread.thinking_level
+        self.session_config_signature[session_id] = self.signature(thread)
         return options
 
     async def refresh_auth_models(self) -> None:
@@ -273,7 +293,7 @@ class ConfigOptions:
         name = await self.sessions.sync_identity(session_id)
         await self.effects._sync_goal_execution(session_id, name)
         thread = self.comms.registry.require(name)
-        signature = thread.model, thread.thinking_level
+        signature = self.signature(thread)
         if self.session_config_signature.get(session_id) == signature:
             return
         self.session_config_signature[session_id] = signature

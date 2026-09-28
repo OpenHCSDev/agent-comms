@@ -1,7 +1,7 @@
 """Session ownership, declaration extension and actual ACP boundary contracts."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 from acp.agent.router import build_agent_router
@@ -73,15 +73,19 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
 ):
     monkeypatch.setattr(ConfigOption, "__registry__", dict(ConfigOption.__registry__))
 
-    class EffortPresetConfigOption(ConfigOption):
-        title = "Effort preset"
+    class TaskNoteConfigOption(ConfigOption):
+        title = "Task note"
         description = "Declaration extension fixture"
         category = "thought_level"
 
         @classmethod
+        def current_value(cls, thread):
+            return thread.task or "medium"
+
+        @classmethod
         async def describe(cls, config, thread):
             return cls.select(
-                thread.thinking_level or "medium",
+                cls.current_value(thread),
                 [
                     SessionConfigSelectOption(value=value, name=value.title())
                     for value in ("medium", "high")
@@ -90,7 +94,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
 
         @classmethod
         async def change(cls, config, session_id, thread, value):
-            config.comms.set_thread_thinking_level(thread.name, value)
+            config.comms.registry.register(replace(thread, task=value))
 
     router = build_agent_router(owner)
     response = await router(
@@ -99,15 +103,32 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
     assert [option.id for option in response.config_options] == [
         "model",
         "thinking_level",
-        "effort_preset",
+        "task_note",
     ]
     changed = await router(
         "session/set_config_option",
-        {"sessionId": response.session_id, "configId": "effort_preset", "value": "high"},
+        {"sessionId": response.session_id, "configId": "task_note", "value": "high"},
         False,
     )
     assert changed["configOptions"][-1]["currentValue"] == "high"
-    assert wire(owner._comms.root).registry.require(response.session_id).thinking_level == "high"
+    assert wire(owner._comms.root).registry.require(response.session_id).task == "high"
+
+    # Polling must use the same declaration catalog as parser/set dispatch.
+    # A newly declared option backed by another Thread field is not invisible.
+    updates = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+
+    owner.on_connect(Client())
+    await owner.config.sync_thread(response.session_id)
+    updates.clear()
+    thread = owner._comms.registry.require(response.session_id)
+    owner._comms.registry.register(replace(thread, task="medium"))
+    await owner.config.sync_thread(response.session_id)
+    assert len(updates) == 1
+    assert updates[0].config_options[-1].current_value == "medium"
 
 
 async def test_a_new_saved_update_is_decoded_and_published_without_consumer_edits(

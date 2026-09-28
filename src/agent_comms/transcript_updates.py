@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from abc import abstractmethod
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Self
+from typing import Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
@@ -27,11 +27,15 @@ class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     async def publish(self, session_id: str, client: Any) -> None: ...
 
     @classmethod
-    def from_legacy(cls, value: dict[str, Any]) -> Self:
+    def owner_for(cls, kind: str) -> type[TranscriptUpdate]:
         try:
-            member = cls.decode(value.get("type"))
+            return cls.decode(kind)
         except ValueError:
-            return IgnoredTranscriptUpdate()
+            return IgnoredTranscriptUpdate
+
+    @classmethod
+    def from_legacy(cls, value: dict[str, Any]) -> TranscriptUpdate:
+        member = cls.owner_for(value.get("type"))
         payload = {"kind": member.declared_name}
         for declared in fields(member):
             if declared.name in value:
@@ -40,13 +44,11 @@ class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
 
     @classmethod
     def from_transcript(cls, event: TranscriptEvent) -> TranscriptUpdate:
-        return cls.from_legacy(
-            {
-                "type": event.kind,
-                "text": event.text,
-                "route": event.routing.reply if event.routing else None,
-            }
-        )
+        # Comms already decoded the saved record. Project its typed fields;
+        # only the legacy dictionary boundary above needs A2 decoding.
+        member = cls.owner_for(event.kind)
+        values = {"text": event.text, "route": event.routing.reply if event.routing else None}
+        return member(**{f.name: values[f.name] for f in fields(member) if f.name in values})
 
 
 @dataclass(frozen=True, kw_only=True)
