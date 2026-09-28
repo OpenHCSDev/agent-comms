@@ -81,6 +81,7 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
+    reconcile_unchanged_source: ClassVar[bool] = False
 
     @classmethod
     @abstractmethod
@@ -103,6 +104,16 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 
         raise CompactionJournalError("Selected summary refusal transition forbidden")
 
+    def fail(self, reason: str) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary failure transition forbidden")
+
+    def retire_unchanged_source(self) -> SummaryState:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
+
     def verifies_original(
         self, journal: CompactionJournal, session: str, operation_id: str, source_json: str
     ) -> bool:
@@ -116,6 +127,9 @@ class ReservedSummary(SummaryState):
     def refuse(self, reason: str) -> SummaryState:
         return RefusedSummary(reason)
 
+    def fail(self, reason: str) -> SummaryState:
+        return FailedSummary(reason)
+
     @classmethod
     def successors(cls):
         return (
@@ -124,13 +138,43 @@ class ReservedSummary(SummaryState):
             ManualCommittedSummary,
             DeclinedPrestartSummary,
             RefusedSummary,
+            FailedSummary,
         )
 
 
 class UnknownSummary(SummaryState):
+    reconcile_unchanged_source = True
+
+    def retire_unchanged_source(self) -> SummaryState:
+        return RetiredUnknownSummary()
+
     @classmethod
     def successors(cls):
-        return (UnknownSummary,)
+        return (UnknownSummary, RetiredUnknownSummary)
+
+
+class RetiredUnknownSummary(SummaryState):
+    """Provider outcome stays unknown; writer-fenced evidence excludes a native write."""
+
+    terminal = True
+    settled_without_original = True
+
+    @classmethod
+    def successors(cls):
+        return ()
+
+
+@dataclass(frozen=True)
+class FailedSummary(SummaryState):
+    """A correlated summary failure attested no native write or original input."""
+
+    reason: str
+    terminal = True
+    settled_without_original = True
+
+    @classmethod
+    def successors(cls):
+        return ()
 
 
 @dataclass(frozen=True)

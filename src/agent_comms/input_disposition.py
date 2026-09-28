@@ -163,6 +163,10 @@ class InputDispositions(LockedStore[InputDocument]):
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
 
+    def finish_unbound(self, key: str) -> bool:
+        """Caller ended the owning turn under its wire fence; never permits replay."""
+        return self._transition(key, lambda row: row.finish_unbound())
+
     def review_for_goal(
         self,
         keys: tuple[str, ...],
