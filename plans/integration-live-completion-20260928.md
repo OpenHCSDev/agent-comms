@@ -15,6 +15,10 @@ No feature is complete merely because a draft exists or a PR was merged.
   Eighteen family/transcript/codec integration checks pass.
 - [ ] Dalton: finish T2 core262/Toad122 caller/request/deletion/actual-path closure,
   update on merged272; return complete published heads to parent and Carver.
+  Parent has integrated core85363055 (declared requests, current callers,
+  declaration-owned display errors with structured input status). All35 focused
+  checks pass; aggregate coverage threshold alone returned exit1. Dalton is
+  finishing actual-path receipts and related caller corrections.
 - [ ] Carver: integrate Toad120/121/123/124 in own persistent integration tree;
   resolve overlapping declarations with T2, test installed UI/native behavior.
 - [ ] Parent: integrate final T2 and paired core270, review and merge the completed
@@ -22,6 +26,9 @@ No feature is complete merely because a draft exists or a PR was merged.
   its discovery behavior is verified in merged120.
 - [ ] Parent: stage final immutable runtime, verify actual isolated installed
   owner/ACP/UI/bus path, then quiet live cutover and fresh attachment checks.
+  Core85363055 installed in candidate. One-shot operator prepared; readonly
+  preflight passed with four idle owners and no attached Toad/ACP clients.
+  Actual installation still awaits the final tested paired Toad build.
 - [ ] Parent: verify compaction/recovery, readable error/log views, channel
   participation feedback, commands/goals/history/rendering in the live pair.
 - [ ] Parent: reconcile source PRs, publish actual live state and cleanup artifacts.
@@ -56,3 +63,8 @@ operator from tools/cutover after installation, retaining a concise result recei
 Worktrees stay under ~/wt; shared main and other agents' trees remain untouched.
 Use bounded tests, stop completed test processes, clean owned disposable copies,
 and monitor disk/RAM. Latest check: root8.9GB free, home27GB free, RAM8GB available.
+
+2026-09-28 cleanup: verified the original isolated live-provider test owner dead
+and removed its143792851-byte fork plus544-byte proof. Original user session and
+the small result receipt are retained. Latest resource check: root8.9GB free,
+home26GB free, RAM9.8GB available.
