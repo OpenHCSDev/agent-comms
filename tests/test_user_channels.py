@@ -34,13 +34,13 @@ async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#openhcs", "anyone receive this?", worktree=str(tmp_path))
         for name in ("first", "second"):
-            await agent._drain_inbox(name)
+            await agent.inputs.drain_inbox(name)
         await asyncio.gather(
-            *(asyncio.wait_for(agent._wake_tasks[name], 2) for name in ("first", "second"))
+            *(asyncio.wait_for(agent.inputs.wake_tasks[name], 2) for name in ("first", "second"))
         )
         messages = comms.channel_history("#openhcs")
         assert len([message for message in messages if message.membership is not None]) == 2
@@ -52,7 +52,7 @@ async def test_user_channel_wakes_members_and_returns_answers_without_feedback(
             "second received it",
         }
         for name in ("first", "second"):
-            await agent._drain_inbox(name)
+            await agent.inputs.drain_inbox(name)
         await asyncio.sleep(0.05)
         # Agent-authored unmentioned channel replies remain informational and
         # do not recursively wake peers.
@@ -81,12 +81,12 @@ async def test_channel_requests_keep_their_reply_destinations(tmp_path, monkeypa
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#first", "first request", worktree=str(tmp_path))
         comms.send_user_message("#second", "second request", worktree=str(tmp_path))
-        await agent._drain_inbox("worker")
-        await asyncio.wait_for(agent._wake_tasks["worker"], 2)
+        await agent.inputs.drain_inbox("worker")
+        await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 2)
         assert comms.channel_history("#first")[-1].body == "Reply: first request"
         assert comms.channel_history("#second")[-1].body == "Reply: second request"
     finally:
@@ -108,12 +108,12 @@ async def test_human_channel_mention_wakes_only_named_member(tmp_path, monkeypat
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#team", "@beta please answer", worktree=str(tmp_path))
         for name in ("alpha", "beta"):
-            await agent._drain_inbox(name)
-        await asyncio.wait_for(agent._wake_tasks["beta"], 2)
+            await agent.inputs.drain_inbox(name)
+        await asyncio.wait_for(agent.inputs.wake_tasks["beta"], 2)
         await asyncio.sleep(0.05)
         assert calls == ["beta"]
     finally:
@@ -135,12 +135,12 @@ async def test_agent_channel_mention_wakes_only_named_member(tmp_path, monkeypat
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send("alpha", "#team", "@beta please investigate")
         for name in ("alpha", "beta"):
-            await agent._drain_inbox(name)
-        await asyncio.wait_for(agent._wake_tasks["beta"], 2)
+            await agent.inputs.drain_inbox(name)
+        await asyncio.wait_for(agent.inputs.wake_tasks["beta"], 2)
         assert [name for name, _ in calls] == ["beta"]
         assert "Response policy: mentioned_only" in calls[0][1]
         assert "only resolved mentioned identities may respond: @beta" in calls[0][1]
@@ -150,7 +150,7 @@ async def test_agent_channel_mention_wakes_only_named_member(tmp_path, monkeypat
         # Unmentioned agent-authored channel chatter remains informational.
         comms.send("alpha", "#team", "status update")
         for name in ("alpha", "beta"):
-            await agent._drain_inbox(name)
+            await agent.inputs.drain_inbox(name)
         await asyncio.sleep(0.05)
         assert [name for name, _ in calls] == ["beta"]
     finally:

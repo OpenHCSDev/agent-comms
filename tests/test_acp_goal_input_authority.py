@@ -20,7 +20,7 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     updates = []
 
@@ -75,7 +75,7 @@ async def replay(agent):
         async def session_update(self, session_id, update):
             updates.append(update)
 
-    await agent._replay_transcript("project", "project", client=Client())
+    await agent.sessions.transcript.replay("project", "project", client=Client())
     return [
         item["text"]
         for item in updates[0].field_meta["agentComms"]["transcript"]
@@ -101,7 +101,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             public_id, command = await queue_followup(agent, kwargs)
         goal = comms.update_goal('project', SetGoalAction(text='Read files until stopped'))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
-        assert agent._goal_store.snapshot(goal.id).state == "reserved"
+        assert agent.turns.goal_store.snapshot(goal.id).state == "reserved"
         if not queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
         observed.update(goal=goal, public_id=public_id)
@@ -117,13 +117,13 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Goal set and work completed this turn.")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn(
+        await agent.turns.run_agent_turn(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
         )
         assert comms.registry.require("project").goal.active
-        state = agent._goal_store.snapshot(observed["goal"].id)
+        state = agent.turns.goal_store.snapshot(observed["goal"].id)
         assert state.state == "ready" and state.number == 2
         key = "acp:" + observed["public_id"]
         assert InputDispositions(comms.root).status(key) == (
@@ -142,7 +142,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
     tmp_path, monkeypatch, change
 ):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
-    store = agent._open_goal_store()
+    store = agent.turns.open_goal_store()
     original_goal = comms.update_goal('project', SetGoalAction(text='Read files until stopped'), owner_store=store)
     observed = {}
 
@@ -171,9 +171,9 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         yield ae.StreamSettled()
         yield ae.Done(ok=change is None, text="Finished reading this section.")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn(
+        await agent.turns.run_agent_turn(
             "project", "project", "Continue working toward the active goal.", autonomous_goal=True
         )
         key = "acp:" + observed["public_id"]

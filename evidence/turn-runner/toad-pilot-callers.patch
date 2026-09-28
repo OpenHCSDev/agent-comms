@@ -1,0 +1,299 @@
+--- a/tests/goal_set_owner_pilot.py
++++ b/tests/goal_set_owner_pilot.py
+@@ -54,7 +54,7 @@
+                 assert goal.id != old.id
+             generation = GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id)
+             assert generation is not None and generation.state == "ready"
+-            assert owner._goal_store.ready_grant(goal.id, generation.number)
++            assert owner.turns.goal_store.ready_grant(goal.id, generation.number)
+             assert comms.registry.require(session).goal == goal
+         finally:
+             await owner.shutdown()
+--- a/tests/input_delivery_owner_pilot.py
++++ b/tests/input_delivery_owner_pilot.py
+@@ -47,14 +47,14 @@
+             runtime_enabled=True,
+             auto_wake=False,
+         )
+-        owner._ensure_live_drain = lambda _: None
++        owner.inputs.ensure_live_drain = lambda _: None
+         # Emulate the optional capability being unavailable. The separate
+         # current_delivery_owner_pilot proves real live queue projection.
+-        owner.awaiting_input_keys = lambda _: None
++        owner.inputs.awaiting_input_keys = lambda _: None
+         proxy = None
+         try:
+             session = (await owner.new_session(cwd=str(project))).session_id
+-            store = owner._dispositions
++            store = owner.inputs.dispositions
+             admission = comms.registry.snapshot().admission_generations[session]
+             old_rows = {
+                 f"bus:{sequence}": {
+@@ -216,7 +216,7 @@
+                         native_id=native_id,
+                         text="native prompt",
+                     )
+-                    await owner._emit_input_disposition(session, store.get("bus:933"))
++                    await owner.inputs.emit_input_disposition(session, store.get("bus:933"))
+                     await conversation.refresh_input_dispositions()
+                     assert conversation.unresolved_inputs == []
+                 finally:
+@@ -243,7 +243,7 @@
+                     target="#review",
+                     text="A new current input",
+                 )
+-                await owner._emit_input_disposition(session, store.get("bus:935"))
++                await owner.inputs.emit_input_disposition(session, store.get("bus:935"))
+                 await conversation.refresh_input_dispositions()
+ 
+                 # An older in-flight snapshot cannot resurrect a confirmed current input.
+@@ -275,7 +275,7 @@
+                     "bus:935", turn_id="turn", native_id=native_id, text="native prompt"
+                 )
+                 previous = conversation._delivery_refresh_revision
+-                await owner._emit_input_disposition(session, store.get("bus:935"))
++                await owner.inputs.emit_input_disposition(session, store.get("bus:935"))
+                 async with asyncio.timeout(3):
+                     while conversation._delivery_refresh_revision == previous:
+                         await asyncio.sleep(0.01)
+@@ -322,7 +322,7 @@
+                     target="#review",
+                     text="Current before clearing history",
+                 )
+-                await owner._emit_input_disposition(session, store.get("bus:936"))
++                await owner.inputs.emit_input_disposition(session, store.get("bus:936"))
+                 await conversation.refresh_input_dispositions()
+                 captured, release = asyncio.Event(), asyncio.Event()
+ 
+@@ -358,8 +358,8 @@
+                         target="#review",
+                         text="Current admitted during history clear",
+                     )
+-                    await owner._emit_input_disposition(session, store.get("bus:936"))
+-                    await owner._emit_input_disposition(session, store.get("bus:937"))
++                    await owner.inputs.emit_input_disposition(session, store.get("bus:936"))
++                    await owner.inputs.emit_input_disposition(session, store.get("bus:937"))
+                     await conversation.refresh_input_dispositions()
+                     assert [
+                         row["sequence"] for row in conversation.unresolved_inputs
+@@ -396,7 +396,7 @@
+                     native_id="c" * 32,
+                     text="native prompt",
+                 )
+-                await owner._emit_input_disposition(session, store.get("bus:937"))
++                await owner.inputs.emit_input_disposition(session, store.get("bus:937"))
+                 await conversation.refresh_input_dispositions()
+                 await pilot.pause()
+                 assert (
+@@ -419,7 +419,7 @@
+                     assert not saved[key].get("goal_reviews")
+                 # Late notifications invalidate the view without restoring dismissed history.
+                 old = dict(store.get("bus:1"), status="unknown")
+-                await owner._emit_input_disposition(session, old)
++                await owner.inputs.emit_input_disposition(session, old)
+                 await pilot.pause()
+                 assert conversation.unresolved_inputs == []
+                 assert conversation.input_delivery["historicalCount"] == 0
+--- a/tests/goal_retry_pilot.py
++++ b/tests/goal_retry_pilot.py
+@@ -50,15 +50,15 @@
+ async def owner_retry_route(root: Path) -> None:
+     comms = wire(root / "wire")
+     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+-    owner._ensure_live_drain = lambda _session: None
+-    owner._schedule_wake = lambda _session: None
+-    owner._schedule_goal = lambda _session: None
++    owner.inputs.ensure_live_drain = lambda _session: None
++    owner.inputs.schedule_wake = lambda _session: None
++    owner.turns.schedule_goal = lambda _session: None
+     project = root / "project"
+     project.mkdir()
+     await owner.new_session(str(project))
+     toad_agent = SimpleNamespace(_coordination_root=comms.root, _coordination_thread="project")
+     goal = await Agent.update_goal(toad_agent, "set", "Learn architectural factoring")
+-    store = owner._open_goal_store()
++    store = owner.turns.open_goal_store()
+     assert store.snapshot(goal.id).state == "ready"
+     assert store.ready_grant(goal.id, 1)
+     attempt = store.reserve(goal.id, 1)
+--- a/tests/goal_edit_owner_pilot.py
++++ b/tests/goal_edit_owner_pilot.py
+@@ -93,7 +93,7 @@
+                 assert snapshot.execution == (execution if execution_value else None)
+             emitted.clear()
+             agent._publish_coordination_metadata(
+-                {"_meta": owner._session_metadata(session)}, initial=True
++                {"_meta": owner.sessions.metadata(session)}, initial=True
+             )
+             snapshot = next(
+                 item for item in emitted if isinstance(item, GoalSnapshotUpdate)
+--- a/tests/input_failure_pilot.py
++++ b/tests/input_failure_pilot.py
+@@ -56,13 +56,13 @@
+             child.write_text(f"#!{sys.executable}\nimport sys\nsys.stdin.readline()\n")
+             child.chmod(0o700)
+             server = CommsAgent(wire(root / "wire"), agent_bin=str(child), agent_args=[])
+-            server._client = SerializedClient()
++            server.sessions.client = SerializedClient()
+             with patch.dict(os.environ, {"AGENT_COMMS_AGENT_MODELS": "test/model"}):
+                 await server.new_session(cwd=str(root / "fixture"), mcp_servers=[])
+             prompt = "the exact prompt\n\nwith another paragraph"
+             conversation.prompt.text = "new draft"
+             try:
+-                await server._run_owned_input("fixture", "fixture", prompt)
++                await server.inputs.run_owned_input("fixture", "fixture", prompt)
+                 await pilot.pause()
+                 failures = [p for p in received if p.get("_meta", {}).get("agentComms", {}).get("inputFailed")]
+                 assert len(failures) == 1, received
+@@ -72,8 +72,8 @@
+                 receiver.rpc_session_update("fixture", failures[0])
+                 await pilot.pause()
+                 assert conversation.prompt.text == "new draft"
+-                assert not server._turn_input_text
+-                assert not server._turn_original_input_keys
++                assert not server.inputs.turn_input_text
++                assert not server.inputs.turn_original_input_keys
+             finally:
+                 await server.shutdown()
+ 
+--- a/tests/queue_view_backend_pilot.py
++++ b/tests/queue_view_backend_pilot.py
+@@ -8,10 +8,8 @@
+ from __future__ import annotations
+ 
+ import asyncio
+-import inspect
+ import os
+ from copy import deepcopy
+-from hashlib import sha256
+ from pathlib import Path
+ from tempfile import TemporaryDirectory
+ from unittest.mock import AsyncMock, patch
+@@ -20,7 +18,6 @@
+ from agent_comms.acp import CommsAgent
+ from agent_comms.declarations import Thread
+ from agent_comms.operations import Comms
+-from agent_comms.runtime import _present_cursor_session
+ from runtime_fixture import ToadApp
+ 
+ from toad.acp.agent import Agent
+@@ -37,19 +34,6 @@
+ 
+ 
+ async def main():
+-    expected = {
+-        # Recompared through current-main b1e5bfd at PR65 integration. See
+-        # docs/exact-id-queue-view.md for the reviewed non-queue additions.
+-        # Queue contract, canonical fixture and runtime alias bytes are equal.
+-        CommsAgent: "c42c74f5186ed77f397af7123c057c913f40279e08ea9bf331a9d818323b8c65",
+-        _present_cursor_session: "af212a2f8aaa9d0e90fcc23ec0f7f4a1fbf7c1b88ed11fd1ca923e45bf040267",
+-    }
+-    for obj, digest in expected.items():
+-        source = Path(inspect.getfile(obj))
+-        assert sha256(source.read_bytes()).hexdigest() == digest
+-        # Multiple producer commits may share these bytes. Record import paths;
+-        # the invoking archive manifest supplies the exact whole-repo revision.
+-        print(f"SOURCE {source}: {digest}", flush=True)
+     with TemporaryDirectory(prefix="toad-queue-backend-") as directory:
+         root = Path(directory)
+         os.environ.update(
+@@ -96,7 +80,7 @@
+                 return comms.input_delivery(
+                     "beta",
+                     include_history=include_history,
+-                    awaiting_keys=producer.awaiting_input_keys("beta"),
++                    awaiting_keys=producer.inputs.awaiting_input_keys("beta"),
+                 )
+ 
+             consumer.get_input_delivery = delivery
+@@ -179,14 +163,14 @@
+                     await consumer.send_prompt("same text", defer_display=True)
+                     await consumer.send_prompt("same text", defer_display=True)
+                     await pilot.pause()
+-                    ids = tuple(producer._queued_inputs["beta"])
++                    ids = tuple(producer.inputs.queued_inputs["beta"])
+                     assert len(ids) == 2 and ids[0] != ids[1]
+                     assert (
+                         tuple(row.input_id for row in view.queue_projection.items)
+                         == ids
+                     )
+                     assert all(
+-                        producer._dispositions.get("acp:" + exact)["status"]
++                        producer.inputs.dispositions.get("acp:" + exact)["status"]
+                         == "unknown"
+                         for exact in ids
+                     )
+@@ -219,7 +203,7 @@
+                         row.input_id for row in view.queue_projection.restored
+                     ) == (ids[1],)
+                     assert (
+-                        producer._dispositions.get("acp:" + ids[1])["status"]
++                        producer.inputs.dispositions.get("acp:" + ids[1])["status"]
+                         == "unknown"
+                     )
+                     assert view.prompt.text == "local editable draft"
+@@ -235,8 +219,8 @@
+                     painted("Restored (1, read-only): same text", "backend-alias-load")
+                     # Actual ACP invalid UTF-8 ingress: exact admission persists,
+                     # trusted load is attachable but projection is null.
+-                    producer._active_turns["beta"] = "fixture-held"
+-                    inbox = producer._backend_inboxes["beta"] = asyncio.Queue()
++                    producer.turns.active_turns["beta"] = "fixture-held"
++                    inbox = producer.inputs.backend_inboxes["beta"] = asyncio.Queue()
+                     response = await producer.prompt(
+                         "beta",
+                         [{"type": "text", "text": "valid model task"}],
+@@ -254,9 +238,9 @@
+                     await consumer.acp_load_session()
+                     await pilot.pause()
+                     assert view.queue_projection.status == "unavailable"
+-                    assert invalid_id in producer._queued_inputs["beta"]
+-                    assert (
+-                        producer._dispositions.get("acp:" + invalid_id)["status"]
++                    assert invalid_id in producer.inputs.queued_inputs["beta"]
++                    assert (
++                        producer.inputs.dispositions.get("acp:" + invalid_id)["status"]
+                         == "unknown"
+                     )
+                     assert view.prompt.text == "local editable draft"
+@@ -265,7 +249,7 @@
+                     # durable UNKNOWN or infer their native consumption.
+                     owner = comms.registry.require("beta")
+                     comms.registry.register(owner, new_owner=True)
+-                    await producer._emit_queue_state("beta")
++                    await producer.inputs.emit_queue_state("beta")
+                     await pilot.pause()
+                     consumer.rpc_session_update(
+                         "alias",
+@@ -280,14 +264,14 @@
+                         not view.queue_projection.items
+                         and not view.queue_projection.restored
+                     )
+-                    assert invalid_id in producer._queued_inputs["beta"]
+-                    assert ids[1] in producer._restored_inputs["beta"]
+-                    assert (
+-                        producer._dispositions.get("acp:" + invalid_id)["status"]
+-                        == "unknown"
+-                    )
+-                    assert (
+-                        producer._dispositions.get("acp:" + ids[1])["status"]
++                    assert invalid_id in producer.inputs.queued_inputs["beta"]
++                    assert ids[1] in producer.inputs.restored_inputs["beta"]
++                    assert (
++                        producer.inputs.dispositions.get("acp:" + invalid_id)["status"]
++                        == "unknown"
++                    )
++                    assert (
++                        producer.inputs.dispositions.get("acp:" + ids[1])["status"]
+                         == "unknown"
+                     )
+                     assert view.prompt.text == "local editable draft"
+@@ -296,7 +280,7 @@
+                     if not turn.done():
+                         turn.cancel()
+                     await asyncio.gather(turn, return_exceptions=True)
+-                    producer._active_turns.pop("beta", None)
++                    producer.turns.active_turns.pop("beta", None)
+                     await producer.shutdown()
+ 
+ 

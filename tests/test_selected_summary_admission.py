@@ -477,8 +477,8 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
     comms.attach_session("project", str(session), pid=os.getpid())
@@ -487,19 +487,19 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
 
     async def events(*args, **kwargs):
         thread = comms.registry.snapshot().threads["project"]
-        key = agent._turn_original_input_keys["project"][0]
+        key = agent.inputs.turn_original_input_keys["project"][0]
         text = args[2]
         digest = hashlib.sha256(text.encode()).hexdigest()
         identity = SelectedAdmissionIdentity(
             "project",
             thread.pid,
             float(thread.created_at).hex(),
-            agent._active_turns["project"],
+            agent.turns.active_turns["project"],
             key,
             comms.registry.snapshot().admission_generations["project"],
             f"{comms.registry.snapshot().admission_generations['project']}:{digest}",
             digest,
-            hashlib.sha256(agent._dispositions.get(key)["source_text"].encode()).hexdigest(),
+            hashlib.sha256(agent.inputs.dispositions.get(key)["source_text"].encode()).hexdigest(),
             backend._session_revision(str(session)),
             backend._session_revision(str(session)),
         )
@@ -508,16 +508,16 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
             operation_id, "split_turn", admission=identity
         )
         assert token is not None
-        agent._selected_summary_admissions["project"] = token  # fake owner only; no producer
+        agent.inputs.selected_summary_admissions["project"] = token  # fake owner only; no producer
         with kwargs["send_boundary"](None, "c" * 32, text) as allowed:
             observed.append(allowed)
         with kwargs["send_boundary"](None, "d" * 32, text) as allowed:
             observed.append(allowed)
         yield ae.Done(ok=False, text="Provider-free fake")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_owned_input("project", "project", "original fake input")
+        await agent.inputs.run_owned_input("project", "project", "original fake input")
         assert observed == [True, False]
         assert not native_input_admitted(comms.root, str(session))
     finally:

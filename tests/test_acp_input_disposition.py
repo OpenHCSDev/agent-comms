@@ -50,11 +50,11 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
             reason_code="pi_input_id_unavailable",
         )
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     agent.on_connect(Client())
     await agent.new_session(str(tmp_path / "project"))
     try:
-        await agent._run_owned_input("project", "project", "testing", display_text="testing")
+        await agent.inputs.run_owned_input("project", "project", "testing", display_text="testing")
         texts = [
             update.content.text
             for update in updates
@@ -71,7 +71,7 @@ async def test_preflight_failure_keeps_its_reason_visible(tmp_path, monkeypatch)
 async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     updates = []
 
     class Client:
@@ -85,8 +85,8 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
     async def events(*args, **kwargs):
         yield ae.InputStarted(id=None)
         comms.send("peer", "project", "late direct")
-        assert await agent._drain_inbox("project") == 1
-        assert agent._forwarded_inputs["project"] == {"bus-1"}
+        assert await agent.inputs.drain_inbox("project") == 1
+        assert agent.inputs.forwarded_inputs["project"] == {"bus-1"}
         goal = comms.update_goal('project', SetGoalAction(text='Long-term architecture work'))
         assert goal is not None
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
@@ -101,8 +101,8 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
             yield ae.InputRefused(id="bus-1")
             # Inspect before the turn finishes: refusal removes this input from
             # awaiting authority, even though the steering lookup remains.
-            assert "project" in agent._active_turns
-            assert agent._steering_input_keys["project"] == {"bus-1": "bus:1"}
+            assert "project" in agent.turns.active_turns
+            assert agent.inputs.steering_input_keys["project"] == {"bus-1": "bus:1"}
             refused = await proxy.request("input_dispositions")
             assert refused["inputs"] == []
             assert refused["historicalCount"] == 1
@@ -113,18 +113,18 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
                 .get("inputDeliveryChanged")
                 for update in updates
             )
-            before = agent._dispositions.get("bus:1")
+            before = agent.inputs.dispositions.get("bus:1")
             cleared = await proxy.request("dismiss_historical_inputs")
             assert cleared["dismissedHistoricalCount"] == 1
-            assert agent._dispositions.get("bus:1") == {**before, "notice_dismissed": True}
+            assert agent.inputs.dispositions.get("bus:1") == {**before, "notice_dismissed": True}
         finally:
             await proxy.close()
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Goal set")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn("project", "project", "Set a goal")
+        await agent.turns.run_agent_turn("project", "project", "Set a goal")
         goal = comms.registry.require("project").goal
         assert goal is not None and goal.status == "active"
         assert GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).state == "ready"
@@ -143,20 +143,20 @@ async def test_direct_cannot_launch_text_backend_without_native_start_proof(tmp_
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="/bin/echo", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
 
     async def unexpected_backend(*args, **kwargs):
         raise AssertionError("Text backend launched for a direct without native proof")
         yield {}
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
     try:
         comms.send("peer", "project", "do not run unproved")
-        assert await agent._drain_inbox("project") == 1
-        assert not agent._pending_turns.get("project")
-        assert not agent._wake_tasks.get("project")
+        assert await agent.inputs.drain_inbox("project") == 1
+        assert not agent.inputs.pending_turns.get("project")
+        assert not agent.inputs.wake_tasks.get("project")
         assert InputDispositions(comms.root).status("bus:1") == "unknown"
     finally:
         await agent.shutdown()
@@ -167,14 +167,14 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "alpha")
     comms.send("peer", "project", "beta")
-    assert await agent._drain_inbox("project") == 2
-    assert len(agent._pending_turns["project"]) == 2
+    assert await agent.inputs.drain_inbox("project") == 2
+    assert len(agent.inputs.pending_turns["project"]) == 2
     receipts = []
 
     async def events(*args, **kwargs):
@@ -186,10 +186,10 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
         yield ae.InputStarted(id=None)
         yield ae.Done(ok=True, text="done")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         InputDrain.schedule_wake(agent.inputs, "project")
-        await asyncio.wait_for(agent._wake_tasks["project"], timeout=3)
+        await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=3)
         assert receipts == [f"{1:032x}", f"{2:032x}"]
         assert InputDispositions(comms.root).status("bus:1") == "started"
         assert InputDispositions(comms.root).status("bus:2") == "started"
@@ -206,18 +206,18 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "review this")
     comms.acknowledge("project")  # Human/UI read is not model start.
 
     try:
-        assert await agent._drain_inbox("project") == 1
+        assert await agent.inputs.drain_inbox("project") == 1
         rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
         assert [(row["sequence"], row["status"]) for row in rows] == [(1, "unknown")]
-        assert len(agent._pending_turns["project"]) == 1
+        assert len(agent.inputs.pending_turns["project"]) == 1
         comms.update_goal('project', SetGoalAction(text='new goal'))
 
         backend_calls = []
@@ -226,10 +226,10 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
             backend_calls.append(args)
             yield ae.Done(ok=False, text="not sent")
 
-        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
-        pending = agent._pending_turns.pop("project")
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        pending = agent.inputs.pending_turns.pop("project")
         with pytest.raises(RequestError):
-            await agent._run_agent_turn(
+            await agent.turns.run_agent_turn(
                 "project", "project", pending[0].prompt, origins=(pending[0].origin,)
             )
         assert backend_calls == []
@@ -243,13 +243,13 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "use the intended project")
-    await agent._drain_inbox("project")
-    pending = agent._pending_turns.pop("project")[0]
+    await agent.inputs.drain_inbox("project")
+    pending = agent.inputs.pending_turns.pop("project")[0]
     other_project = tmp_path / "other-project"
     other_project.mkdir()
     before = comms.registry.snapshot().admission_generations["project"]
@@ -261,9 +261,11 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
             authorized.append(allowed)
         yield ae.Done(ok=False, text="not sent")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn("project", "project", pending.prompt, origins=(pending.origin,))
+        await agent.turns.run_agent_turn(
+            "project", "project", pending.prompt, origins=(pending.origin,)
+        )
         assert authorized == [False]
         assert comms.registry.snapshot().admission_generations["project"] == before
         assert InputDispositions(comms.root).status("bus:1") == "unknown"
@@ -276,9 +278,9 @@ async def test_late_subscriber_receives_persisted_unknown(tmp_path):
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
-    agent._schedule_wake = lambda _session: None
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+    agent.inputs.schedule_wake = lambda _session: None
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "do the task")
     updates = []
@@ -308,10 +310,10 @@ async def test_late_subscriber_receives_persisted_unknown(tmp_path):
         )
 
     try:
-        await agent._drain_inbox("project")
+        await agent.inputs.drain_inbox("project")
         # The projection runs on every platform; POSIX also checks the real
         # late socket subscribe route that invokes it.
-        await agent.replay_unknown_inputs("project", client=LateClient())
+        await agent.inputs.replay_unknown_inputs("project", client=LateClient())
         assert_unknown_replayed()
         if os.name != "nt":
             updates.clear()
@@ -329,24 +331,24 @@ async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_p
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "do not run after stop")
-    await agent._drain_inbox("project")
-    assert len(agent._pending_turns["project"]) == 1
+    await agent.inputs.drain_inbox("project")
+    assert len(agent.inputs.pending_turns["project"]) == 1
     comms.stop("project")
 
     async def unexpected_backend(*args, **kwargs):
         raise AssertionError("Stopped owner launched a backend")
         yield {}
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
     try:
         InputDrain.schedule_wake(agent.inputs, "project")
-        await asyncio.wait_for(agent._wake_tasks["project"], timeout=2)
-        assert not agent._pending_turns.get("project")
+        await asyncio.wait_for(agent.inputs.wake_tasks["project"], timeout=2)
+        assert not agent.inputs.pending_turns.get("project")
         assert InputDispositions(comms.root).unknown(frozenset({"project"}))[0]["sequence"] == 1
     finally:
         await agent.shutdown()
@@ -358,7 +360,10 @@ async def test_started_then_ack_only_direct_survives_reopen_without_replay(tmp_p
     stub = tmp_path / "pi-direct-stub"
     session_file = tmp_path / "pi-session.jsonl"
     session_file.touch()
-    stub.write_text(f"#!{sys.executable}\n" + f"session_file = {str(session_file)!r}\n" + """
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        + f"session_file = {str(session_file)!r}\n"
+        + """
 import json, sys
 from pathlib import Path
 launches = Path(session_file + '.launches')
@@ -380,32 +385,35 @@ send({"type":"agent_settled"})
 # Exit after ACK-only steering: there is deliberately no second input start.
 # A persistent owner correctly refuses to settle this pending input and does
 # not request final stats. Waiting for those requests deadlocks the fixture.
-""")
+"""
+    )
     stub.chmod(0o755)
     with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
         comms = wire(Path(wire_dir))
         agent = CommsAgent(comms, agent_bin=str(stub), agent_args=[], runtime_enabled=True)
         await agent.new_session(str(tmp_path / "project"))
-        agent._drain_tasks["project"].cancel()
-        await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
         comms.send("peer", "project", "first direct")
-        await agent._drain_inbox("project")
-        first = agent._pending_turns.pop("project")[0]
+        await agent.inputs.drain_inbox("project")
+        first = agent.inputs.pending_turns.pop("project")[0]
 
         async def wait_for_inbox():
             async with asyncio.timeout(3):
-                while "project" not in agent._backend_inboxes:
+                while "project" not in agent.inputs.backend_inboxes:
                     await asyncio.sleep(0.01)
 
         try:
             turn = asyncio.create_task(
-                agent._run_agent_turn("project", "project", first.prompt, origins=(first.origin,))
+                agent.turns.run_agent_turn(
+                    "project", "project", first.prompt, origins=(first.origin,)
+                )
             )
             await wait_for_inbox()
             comms.send("peer", "project", "second direct")
-            await agent._drain_inbox("project")
+            await agent.inputs.drain_inbox("project")
             await asyncio.wait_for(turn, timeout=5)
 
             reopened = InputDispositions(comms.root)
@@ -413,14 +421,15 @@ send({"type":"agent_settled"})
             assert reopened.status("bus:2") == "unknown"
             assert comms.registry.require("project").session_file == str(session_file)
             second_agent = CommsAgent(wire(comms.root), agent_bin="/bin/echo")
-            second_agent._sessions["project"] = "project"
-            second_agent._inbox_cursors["project"], second_agent._legacy_through["project"] = (
-                second_agent._delivery_cursors.initialize(
-                    frozenset({"project"}),
-                    "project",
-                    high_water=second_agent._comms.message_high_water(),
-                    fresh=False,
-                )
+            second_agent.sessions.bindings["project"] = "project"
+            (
+                second_agent.inputs.inbox_cursors["project"],
+                second_agent.inputs.legacy_through["project"],
+            ) = second_agent.inputs.delivery_cursors.initialize(
+                frozenset({"project"}),
+                "project",
+                high_water=second_agent._comms.message_high_water(),
+                fresh=False,
             )
 
             class SilentClient:
@@ -428,8 +437,8 @@ send({"type":"agent_settled"})
                     pass
 
             second_agent.on_connect(SilentClient())
-            assert await second_agent._drain_inbox("project") == 0
-            assert not second_agent._pending_turns.get("project")
+            assert await second_agent.inputs.drain_inbox("project") == 0
+            assert not second_agent.inputs.pending_turns.get("project")
             assert Path(str(session_file) + ".launches").read_text() == "x"
             assert reopened.status("bus:1") == "started"
             assert reopened.status("bus:2") == "unknown"
@@ -452,12 +461,12 @@ async def run():
     comms = wire(Path(sys.argv[1]))
     agent = CommsAgent(comms, agent_bin='/bin/echo', runtime_enabled=True)
     await agent.new_session(sys.argv[2])
-    agent._drain_tasks['project'].cancel()
-    await asyncio.gather(agent._drain_tasks['project'], return_exceptions=True)
-    agent._schedule_wake = lambda _session: None
+    agent.inputs.drain_tasks['project'].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks['project'], return_exceptions=True)
+    agent.inputs.schedule_wake = lambda _session: None
     comms.register(Thread(name='peer', tags=frozenset(), worktree=sys.argv[2]))
     comms.send('peer', 'project', 'survive hard exit')
-    await agent._drain_inbox('project')
+    await agent.inputs.drain_inbox('project')
     assert InputDispositions(comms.root).status('bus:1') == 'unknown'
     os._exit(0)
 
@@ -489,21 +498,21 @@ asyncio.run(run())
         reopened = wire(Path(wire_dir))
         assert InputDispositions(reopened.root).status("bus:1") == "unknown"
         owner = CommsAgent(reopened, agent_bin="/bin/echo")
-        owner._sessions["project"] = "project"
-        owner._inbox_cursors["project"], owner._legacy_through["project"] = (
-            owner._delivery_cursors.initialize(
+        owner.sessions.bindings["project"] = "project"
+        owner.inputs.inbox_cursors["project"], owner.inputs.legacy_through["project"] = (
+            owner.inputs.delivery_cursors.initialize(
                 frozenset({"project"}),
                 "project",
                 high_water=reopened.message_high_water(),
                 fresh=False,
             )
         )
-        assert owner._inbox_cursors["project"] == 1
+        assert owner.inputs.inbox_cursors["project"] == 1
 
         class SilentClient:
             async def session_update(self, **kwargs):
                 pass
 
         owner.on_connect(SilentClient())
-        assert asyncio.run(owner._drain_inbox("project")) == 0
-        assert not owner._pending_turns.get("project")
+        assert asyncio.run(owner.inputs.drain_inbox("project")) == 0
+        assert not owner.inputs.pending_turns.get("project")

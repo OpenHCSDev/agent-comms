@@ -311,14 +311,14 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
 
             owner.on_connect(Client())
             await owner.new_session(str(root / "project"))
-            owner._drain_tasks["project"].cancel()
-            await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
+            owner.inputs.drain_tasks["project"].cancel()
+            await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
             if surface in {"acp_goal_original", "acp_terminal_goal"}:
-                owner._comms.update_goal('project', SetGoalAction(text='Continue useful work'), owner_store=owner._open_goal_store())
+                owner._comms.update_goal('project', SetGoalAction(text='Continue useful work'), owner_store=owner.turns.open_goal_store())
 
         async def collect():
             if owner is not None:
-                await owner._run_owned_input("project", "project", "ORIGINAL_INPUT")
+                await owner.inputs.run_owned_input("project", "project", "ORIGINAL_INPUT")
                 return
             async for event in backend.stream_agent_events(
                 native_bin,
@@ -403,7 +403,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 await asyncio.wait_for(task, 10)
                 assert len(requests) == 1 and not started.is_set()
                 assert any(
-                    row["status"] == "unknown" for row in owner._dispositions._read().values()
+                    row["status"] == "unknown" for row in owner.inputs.dispositions._read().values()
                 )
                 return
             if surface in {"revoked", "oversized"}:
@@ -450,12 +450,12 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 if surface == "acp_terminal_goal":
                     assert owner._comms.registry.require("project").goal.status == "active"
             else:
-                assert await asyncio.to_thread(
-                    cancelled.wait, 2
-                ), "Original request was not cancelled"
-            assert len(requests) == (
-                3 if surface == "priority" else 2
-            ), "No retry or duplicate prompt after explicit interruption"
+                assert await asyncio.to_thread(cancelled.wait, 2), (
+                    "Original request was not cancelled"
+                )
+            assert len(requests) == (3 if surface == "priority" else 2), (
+                "No retry or duplicate prompt after explicit interruption"
+            )
             if surface == "priority":
                 assert [e.id for e in events if isinstance(e, ae.InputStarted)] == [
                     None,
@@ -469,9 +469,9 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 assert events[-1].text == "NEW_FINAL" * (2 if surface == "priority" else 1), events
                 assert not any(isinstance(e, ae.Error) for e in events), events
             else:
-                assert not owner._queued_inputs.get("project")
+                assert not owner.inputs.queued_inputs.get("project")
                 assert all(
-                    row["status"] == "started" for row in owner._dispositions._read().values()
+                    row["status"] == "started" for row in owner.inputs.dispositions._read().values()
                 )
                 assert not any(
                     isinstance(row.get("content"), dict)
@@ -550,8 +550,10 @@ async def _mounted_send_now(
 
     async with app.run_test(size=(120, 40)) as pilot:
         await until(
-            lambda: getattr(app.screen, "conversation", None) is not None
-            and app.screen.conversation.agent_ready
+            lambda: (
+                getattr(app.screen, "conversation", None) is not None
+                and app.screen.conversation.agent_ready
+            )
         )
         view = app.screen.conversation
 

@@ -27,12 +27,12 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
     monkeypatch.setenv("PI_AGENT_ID", "parent")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
     comms.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
     comms.begin_turn("child", "child-review-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
-    store = agent._open_goal_store()
+    store = agent.turns.open_goal_store()
     goal = comms.update_goal('parent', SetGoalAction(text='Review @child work'), owner_store=store)
     report = next(tool for tool in TOOLS if tool.name == "comms_goal")
     calls = []
@@ -68,9 +68,9 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Waiting" if len(calls) == 1 else "Received")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn("parent", "parent", "Delegate work", autonomous_goal=True)
+        await agent.turns.run_agent_turn("parent", "parent", "Delegate work", autonomous_goal=True)
         current = comms.registry.require("parent").goal
         assert current.active and current.text == "Review @child work"
         wait = comms.goal_wait("parent")
@@ -80,7 +80,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         assert (
             GoalExecution.from_wire(
                 json.loads(
-                    json.dumps(agent._session_metadata("parent")["agentComms"]["goalExecution"])
+                    json.dumps(agent.sessions.metadata("parent")["agentComms"]["goalExecution"])
                 )
             )
             == execution
@@ -93,8 +93,8 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         view = next(view for view in comms.thread_views() if view.thread.name == "parent")
         assert view.presentation.summary == "Standby · waiting for @child"
         assert store.snapshot(goal.id).number == 2
-        agent._schedule_goal("parent")
-        assert not agent._pending_turns.get("parent")
+        agent.turns.schedule_goal("parent")
+        assert not agent.inputs.pending_turns.get("parent")
 
         edited = comms.update_goal('parent', EditGoalAction(expect=GoalPrecondition(expected_goal=current), text='Review @child thoroughly'))
         assert edited.id == goal.id and edited.revision == current.revision + 1
@@ -104,18 +104,18 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         assert store.snapshot(goal.id).number == 2
 
         if wake == "owner":
-            await agent._run_owned_input("parent", "parent", "New owner instruction")
+            await agent.inputs.run_owned_input("parent", "parent", "New owner instruction")
         else:
             comms.registry.rename("child", "renamed-child")
             message = comms.send_message("renamed-child", "parent", "Implementation ready")
             if wake == "revoked":
                 monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-            await agent._drain_inbox("parent")
+            await agent.inputs.drain_inbox("parent")
             if wake == "revoked":
                 comms.update_goal('parent', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
                 InputDrain.schedule_wake(agent.inputs, "parent")
-            await asyncio.wait_for(agent._wake_tasks["parent"], timeout=2)
-            assert agent._dispositions.status(f"bus:{message.seq}") == (
+            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], timeout=2)
+            assert agent.inputs.dispositions.status(f"bus:{message.seq}") == (
                 "unknown" if wake == "revoked" else "started"
             )
         assert len(calls) == (1 if wake == "revoked" else 2)
@@ -132,9 +132,9 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi")
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    store = agent._open_goal_store()
+    store = agent.turns.open_goal_store()
     goal = comms.update_goal('parent', SetGoalAction(text='Work'), owner_store=store)
     owner = comms.registry.require("parent")
     admission = comms.registry.snapshot().admission_generations["parent"]
@@ -145,7 +145,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     old_grant = store.ready_grant(goal.id, 1)
     try:
         with _store_lock(comms._wire_lock_path), pytest.raises(StaleAttempt, match="owner changed"):
-            agent._ready_goal_grant_locked(
+            agent.turns.ready_goal_grant_locked(
                 owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
             )
         assert store.ready_grant(goal.id, 1) == old_grant
@@ -368,15 +368,15 @@ async def test_standby_refuses_reply_that_arrived_before_wait(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
     comms.register(Thread("child", frozenset(), str(tmp_path)))
     goal = comms.update_goal('parent', SetGoalAction(text='Delegate work'))
     message = comms.send_message("child", "parent", "Finished immediately")
     try:
         if already_drained:
-            await agent._drain_inbox("parent")
-            assert agent._dispositions.status(f"bus:{message.seq}") == "unknown"
+            await agent.inputs.drain_inbox("parent")
+            assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
         with pytest.raises(ValueError, match=f"Dependency reply {message.seq}.*pending or UNKNOWN"):
             comms.update_goal('parent', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))
         assert comms.goal_wait("parent") is None
@@ -384,11 +384,11 @@ async def test_standby_refuses_reply_that_arrived_before_wait(
         if already_drained:
             # It is still a fresh ordinary direct DM. That does not turn a
             # pre-wait reply into a qualifying declared dependency receipt.
-            pending = agent._pending_turns.get("parent", [])
+            pending = agent.inputs.pending_turns.get("parent", [])
             assert len(pending) == 1
             assert pending[0].direct_interrupt_goal_id == goal.id
             assert pending[0].goal_wait_id is None
         else:
-            assert not agent._pending_turns.get("parent")
+            assert not agent.inputs.pending_turns.get("parent")
     finally:
         await agent.shutdown()

@@ -307,11 +307,11 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
     monkeypatch.setenv("PI_AGENT_ID", "b")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     await owner.new_session(str(tmp_path / "b"))
     comms.register(Thread("a", frozenset(), str(tmp_path), pid=os.getpid()))
     comms.begin_turn("a", "a-admission-in-flight")
-    goal = comms.update_goal('b', SetGoalAction(text='Review dependency and wait'), owner_store=owner._open_goal_store())
+    goal = comms.update_goal('b', SetGoalAction(text='Review dependency and wait'), owner_store=owner.turns.open_goal_store())
     args = {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]}
     report = {"goal_id": goal.id, "status": "standby", "progress": "Wait", "wait_for": ["a"]}
     try:
@@ -321,7 +321,7 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
         assert before["standby_review"]["reviewed_inputs"] == []
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             invoke_tool(comms, "comms_goal", report)
-        await owner._drain_inbox("b")
+        await owner.inputs.drain_inbox("b")
         after = invoke_tool(comms, "comms_inbox", args)
         assert after["standby_review"]["reviewed_inputs"] == [f"bus:{message.seq}"]
         assert message.body in after["standby_review"]["messages"][0]["text"]
@@ -331,11 +331,11 @@ async def test_pending_dependency_becomes_reviewable_after_owner_admission(tmp_p
             {**report, "reviewed_inputs": after["standby_review"]["reviewed_inputs"]},
         )
         assert comms.goal_wait("b") is not None
-        assert owner._dispositions.status(f"bus:{message.seq}") == "unknown"
+        assert owner.inputs.dispositions.status(f"bus:{message.seq}") == "unknown"
         # The pre-standby drain legitimately queued one ordinary direct-DM
         # interrupt (no goal permit, wait/witness captured then). It must be
         # stale after the standby transition and never replay the input.
-        pending = owner._pending_turns.get("b", [])
+        pending = owner.inputs.pending_turns.get("b", [])
         assert len(pending) == 1 and pending[0].direct_interrupt_goal_id == goal.id
         assert pending[0].goal_wait_id is None
     finally:

@@ -91,12 +91,14 @@ async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_p
 
     async def stream(*args, **kwargs):
         yield ContextWarning("context warning")
-        observed.append(comms.activity_of(owner._sessions[session.session_id]).detail)
+        observed.append(comms.activity_of(owner.sessions.bindings[session.session_id]).detail)
         yield events.Done("done", True)
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", stream)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", stream)
     try:
-        await owner._run_agent_turn(session.session_id, owner._sessions[session.session_id], "task")
+        await owner.turns.run_agent_turn(
+            session.session_id, owner.sessions.bindings[session.session_id], "task"
+        )
         assert observed == ["context warning"]
     finally:
         await owner.shutdown()
@@ -129,12 +131,12 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     owner = CommsAgent(comms, agent_bin="unused")
     claim = comms.begin_turn("bot", "turn")
-    owner._active_turns["session"] = "turn"
+    owner.turns.active_turns["session"] = "turn"
     effects = []
 
     async def emit(session, event):
         assert comms.registry.require("bot").active_turn is None
-        assert "session" not in owner._active_turns
+        assert "session" not in owner.turns.active_turns
         assert event == events.TurnSettled("turn")
         effects.append("publish")
         if publication_fails:
@@ -148,9 +150,9 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     monkeypatch.setattr(comms, "release_waits_after_terminal_turn", release)
     if publication_fails:
         with pytest.raises(RuntimeError, match="client closed"):
-            await owner.settle_turn("session", "bot", "turn", claim)
+            await owner.turns.settle_turn("session", "bot", "turn", claim)
     else:
-        await owner.settle_turn("session", "bot", "turn", claim)
+        await owner.turns.settle_turn("session", "bot", "turn", claim)
     assert effects == ["publish", "release"]
 
 
@@ -160,22 +162,26 @@ async def test_stream_settlement_defers_waiters_and_preserves_replacement_turn(
     comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     owner = CommsAgent(comms, agent_bin="unused")
     claim = comms.begin_turn("bot", "turn")
-    owner._active_turns["session"] = "turn"
+    owner.turns.active_turns["session"] = "turn"
     released = []
     monkeypatch.setattr(comms, "release_waits_after_terminal_turn", released.append)
-    fence = owner.finish_turn_stream("session", "bot", "turn", claim)
+    fence = owner.turns.finish_turn_stream("session", "bot", "turn", claim)
     assert released == []
-    owner._active_turns["session"] = "replacement"
-    await owner.settle_turn(
+    owner.turns.active_turns["session"] = "replacement"
+    await owner.turns.settle_turn(
         "session", "bot", "turn", claim, stream_settled=True, terminal_fence=fence
     )
     assert released == [fence]
-    assert owner._active_turns["session"] == "replacement"
+    assert owner.turns.active_turns["session"] == "replacement"
 
 
 def test_internal_event_consumers_do_not_recover_string_tags():
     root = Path(__file__).parents[1] / "src" / "agent_comms"
-    for filename, method in (("acp.py", "_run_agent_turn"), ("agent_loop.py", "_ask_agent")):
+    for filename, method in (
+        ("owned_turn.py", "stream"),
+        ("turn_progress.py", "consume"),
+        ("agent_loop.py", "_ask_agent"),
+    ):
         tree = ast.parse((root / filename).read_text())
         function = next(
             n for n in ast.walk(tree) if isinstance(n, ast.AsyncFunctionDef) and n.name == method

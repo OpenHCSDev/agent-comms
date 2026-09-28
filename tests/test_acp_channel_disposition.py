@@ -19,13 +19,13 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
 ):
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     await agent.new_session(str(tmp_path / "worker"))
     comms.update_tags("worker", add=frozenset({"team"}))
     message = comms.send_user_message("#team", "Durable request", worktree=str(tmp_path))
     observed = []
-    advance = agent._delivery_cursors.advance
+    advance = agent.inputs.delivery_cursors.advance
 
     def durable_before_cursor(aliases, through):
         if through >= message.seq:
@@ -34,17 +34,17 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
             observed.append(through)
         advance(aliases, through)
 
-    monkeypatch.setattr(agent._delivery_cursors, "advance", durable_before_cursor)
+    monkeypatch.setattr(agent.inputs.delivery_cursors, "advance", durable_before_cursor)
 
     async def unexpected_backend(*args, **kwargs):
         raise AssertionError("Revoked UNKNOWN input must not launch a backend")
         yield {}
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", unexpected_backend)
     try:
-        await agent._drain_inbox("worker")
+        await agent.inputs.drain_inbox("worker")
         assert observed
-        assert len(agent._pending_turns["worker"]) == 1
+        assert len(agent.inputs.pending_turns["worker"]) == 1
         if revocation == "goal":
             comms.update_goal('worker', SetGoalAction(text='New goal'))
         elif revocation == "stop":
@@ -52,13 +52,13 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         else:
             await agent.shutdown()
             agent = CommsAgent(wire(comms.root), agent_bin="pi", runtime_enabled=True)
-            monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
             await agent.load_session(str(tmp_path / "worker"), "worker")
-            await agent._drain_inbox("worker")
+            await agent.inputs.drain_inbox("worker")
         if revocation != "reopen":
             InputDrain.schedule_wake(agent.inputs, "worker")
-            await asyncio.wait_for(agent._wake_tasks["worker"], 2)
-        assert not agent._pending_turns.get("worker")
+            await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 2)
+        assert not agent.inputs.pending_turns.get("worker")
         updates = []
 
         class Client:
@@ -67,11 +67,11 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
 
         ledger = InputDispositions(comms.root)
         before = ledger._read()
-        cursor_before = agent._delivery_cursors.path.read_bytes()
-        await agent.replay_unknown_inputs("worker", Client())
+        cursor_before = agent.inputs.delivery_cursors.path.read_bytes()
+        await agent.inputs.replay_unknown_inputs("worker", Client())
         unknown = [row["_meta"]["agentComms"]["inputDisposition"] for row in updates]
         overview = agent._comms.input_delivery(
-            "worker", include_history=True, awaiting_keys=agent.awaiting_input_keys("worker")
+            "worker", include_history=True, awaiting_keys=agent.inputs.awaiting_input_keys("worker")
         )
         assert overview["inputs"] == unknown
         assert overview["dismissedHistoricalCount"] == 0
@@ -93,9 +93,9 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         ]
         assert [row["sequence"] for row in ledger.unknown(frozenset({"worker"}))] == [message.seq]
         assert ledger._read() == before
-        assert agent._delivery_cursors.path.read_bytes() == cursor_before
-        assert await agent._drain_inbox("worker") == 0
-        assert not agent._pending_turns.get("worker")
+        assert agent.inputs.delivery_cursors.path.read_bytes() == cursor_before
+        assert await agent.inputs.drain_inbox("worker") == 0
+        assert not agent.inputs.pending_turns.get("worker")
         assert ledger._read() == before
     finally:
         await agent.shutdown()
@@ -104,7 +104,7 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
 async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     for name in ("alpha", "beta"):
         await agent.new_session(str(tmp_path / name))
         comms.update_tags(name, add=frozenset({"team"}))
@@ -121,15 +121,15 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Received")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         messages = [
             comms.send_user_message("#team", text, worktree=str(tmp_path))
             for text in ("Request one", "Request two")
         ]
         for name in ("alpha", "beta"):
-            await agent._drain_inbox(name)
-        await asyncio.gather(*(agent._wake_tasks[name] for name in ("alpha", "beta")))
+            await agent.inputs.drain_inbox(name)
+        await asyncio.gather(*(agent.inputs.wake_tasks[name] for name in ("alpha", "beta")))
         rows = list(InputDispositions(comms.root)._read().values())
         assert len(rows) == 4
         assert {(row["owner"], row["sequence"], row["status"]) for row in rows} == {
@@ -159,21 +159,22 @@ from agent_comms.acp import CommsAgent
 async def run():
     comms = wire(Path(sys.argv[1]))
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    agent._ensure_live_drain = lambda session: None
-    agent._schedule_wake = lambda session: None
+    agent.inputs.ensure_live_drain = lambda session: None
+    agent.inputs.schedule_wake = lambda session: None
     await agent.new_session(sys.argv[2])
     comms.update_tags("worker", add=frozenset({"team"}))
     message = comms.send_user_message("#team", "CRASH_REQUEST", worktree=sys.argv[2])
-    advance = agent._delivery_cursors.advance
+    advance = agent.inputs.delivery_cursors.advance
     def before_cursor(aliases, through):
         if through == message.seq and sys.argv[3] == "before_cursor":
-            assert agent._dispositions.unknown(frozenset({"worker"}))[0]["sequence"] == message.seq
+            pending = agent.inputs.dispositions.unknown(frozenset({"worker"}))[0]
+            assert pending["sequence"] == message.seq
             os._exit(0)
         advance(aliases, through)
-    agent._delivery_cursors.advance = before_cursor
-    await agent._drain_inbox("worker")
-    assert agent._pending_turns["worker"]
-    assert agent._dispositions.unknown(frozenset({"worker"}))[0]["sequence"] == message.seq
+    agent.inputs.delivery_cursors.advance = before_cursor
+    await agent.inputs.drain_inbox("worker")
+    assert agent.inputs.pending_turns["worker"]
+    assert agent.inputs.dispositions.unknown(frozenset({"worker"}))[0]["sequence"] == message.seq
     os._exit(0)
 asyncio.run(run())
 """
@@ -201,13 +202,13 @@ asyncio.run(run())
         assert result.returncode == 0, result.stderr
         comms = wire(root / "wire")
         agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             await agent.load_session(str(root / "worker"), "worker")
-            await agent._drain_inbox("worker")
-            assert not agent._pending_turns.get("worker")
-            assert not agent._wake_tasks.get("worker")
-            rows = agent._dispositions.unknown(frozenset({"worker"}))
+            await agent.inputs.drain_inbox("worker")
+            assert not agent.inputs.pending_turns.get("worker")
+            assert not agent.inputs.wake_tasks.get("worker")
+            rows = agent.inputs.dispositions.unknown(frozenset({"worker"}))
             assert len(rows) == 1 and rows[0]["native_id"] is None
             assert rows[0]["source_text"].endswith("CRASH_REQUEST")
         finally:
@@ -222,7 +223,7 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
 
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     await agent.new_session(str(tmp_path / "worker"))
     comms.update_tags("worker", add=frozenset({"team"}))
@@ -230,7 +231,7 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
         comms.send_user_message("#team", body, worktree=str(tmp_path))
         for body in ("FIRST", "SECOND")
     )
-    await agent._drain_inbox("worker")
+    await agent.inputs.drain_inbox("worker")
     prompt = "\n\n".join(ScheduledTurn.incoming(message).prompt for message in messages)
     if mismatch == "original":
         prompt = ScheduledTurn.incoming(messages[0]).prompt
@@ -243,10 +244,10 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
         assert not kwargs["native_start"](None, "a" * 32, text)
         yield ae.Done(ok=False, text="Refused malformed batch")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn("worker", "worker", prompt, origins=origins)
-        rows = agent._dispositions.unknown(frozenset({"worker"}))
+        await agent.turns.run_agent_turn("worker", "worker", prompt, origins=origins)
+        rows = agent.inputs.dispositions.unknown(frozenset({"worker"}))
         assert {row["sequence"] for row in rows} == {message.seq for message in messages}
         assert all(row["native_id"] is None for row in rows)
     finally:

@@ -97,7 +97,7 @@ async def run(args):
                 "response": response.model_dump(), "seconds": time.time() - started
             })
             save()
-            assert not agent._emitted_errors, agent._emitted_errors
+            assert not agent.turns.emitted_errors, agent.turns.emitted_errors
             return response
 
         background = "\n".join(
@@ -119,8 +119,8 @@ async def run(args):
         report["session_file"] = str(native_file)
         info = comms.agent_info_of(name)
         decision = await read_selected_compaction_decision(
-            agent._persistent_backends[name], session_file=owner.session_file,
-            expected_launcher=agent._agent_bin, provider="openai-codex",
+            agent.turns.persistent_backends[name], session_file=owner.session_file,
+            expected_launcher=agent.turns.agent_bin, provider="openai-codex",
             model_id="gpt-6-sol", context_tokens=info.context_used,
             context_window=info.context_size,
         )
@@ -172,7 +172,7 @@ async def run(args):
                 followup = [text for text in answers if text.startswith("QUEUE_FOLLOWUP_OK")]
                 if followup and comms.registry.require(name).active_turn is None:
                     break
-                assert not agent._emitted_errors, agent._emitted_errors
+                assert not agent.turns.emitted_errors, agent.turns.emitted_errors
                 await asyncio.sleep(0.1)
         assert len(followup) == 1, followup
         assert all(fact in followup[0] for fact in ("ORCHID-7301", "Thursday", "14:30", "cobalt", "cedar")), followup
@@ -197,7 +197,7 @@ async def run(args):
         assert sum(text.strip() == "QUEUE_ORIGINAL_OK" for text in answers) == 1
         assert not [row for row in rows.values() if row["status"] == "unknown"]
         assert not [row for row in attempts if row["status"] in ("unknown", "reserved")]
-        assert not agent._emitted_errors, agent._emitted_errors
+        assert not agent.turns.emitted_errors, agent.turns.emitted_errors
         report.update({
             "verified_success": True, "original_input": original_row,
             "queued_input": queued_row, "native_start_positions": positions,

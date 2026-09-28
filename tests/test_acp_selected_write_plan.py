@@ -67,7 +67,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.register(
                 Thread(
-                    name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    name,
+                    frozenset({"team"}),
+                    str(work),
+                    pid=os.getpid(),
+                    created_at=incarnation,
+                    model="test/fake",
                 )
             )
         root_id = comms.initialize_private_initial_protocol()
@@ -90,18 +95,18 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             private_nk_wire_root_id=root_id,
             private_nk_native_package=package,
         )
-        agent._sessions["beta"] = "beta"
-        agent._session_titles["beta"] = "beta"
-        agent._session_worktrees["beta"] = str(work)
-        agent._sessions["alpha"] = "alpha"
-        agent._session_titles["alpha"] = "alpha"
-        agent._session_worktrees["alpha"] = str(work)
+        agent.sessions.bindings["beta"] = "beta"
+        agent.sessions.titles["beta"] = "beta"
+        agent.sessions.worktrees["beta"] = str(work)
+        agent.sessions.bindings["alpha"] = "alpha"
+        agent.sessions.titles["alpha"] = "alpha"
+        agent.sessions.worktrees["alpha"] = str(work)
 
         class AttachedClient:
             async def session_update(self, **_kwargs):
                 return None
 
-        agent._client = AttachedClient()  # explicit attached direct ACP test controller
+        agent.sessions.client = AttachedClient()  # explicit attached direct ACP test controller
         prior_seq = 0
         if scenario == "older_claims":
             for index in range(100):
@@ -207,7 +212,9 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             return
         if scenario in {"reconnect", "lost_process_state"}:
             if scenario == "reconnect":
-                agent._client = AttachedClient()  # different ACP controller, same owner process
+                agent.sessions.client = (
+                    AttachedClient()
+                )  # different ACP controller, same owner process
             else:
                 agent._selected_write_controllers.clear()  # owner-process crash loses binding
             with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
@@ -247,7 +254,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         sender_pid = os.getpid()
         comms.register(Thread("sender", frozenset(), str(work), pid=sender_pid, created_at=61001.0))
         comms.register(
-            Thread("alpha", frozenset({"team"}), str(work), pid=sender_pid, created_at=61002.0)
+            Thread(
+                "alpha",
+                frozenset({"team"}),
+                str(work),
+                pid=sender_pid,
+                created_at=61002.0,
+                model="test/fake",
+            )
         )
         root_id = comms.initialize_private_initial_protocol()
         comms.initialize_private_claim_protocol()
@@ -284,7 +298,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         try:
             assert process.pid != sender_pid
             comms.register(
-                Thread("beta", frozenset({"team"}), str(work), pid=process.pid, created_at=61003.0)
+                Thread(
+                    "beta",
+                    frozenset({"team"}),
+                    str(work),
+                    pid=process.pid,
+                    created_at=61003.0,
+                    model="test/fake",
+                )
             )
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 store.register_participant(

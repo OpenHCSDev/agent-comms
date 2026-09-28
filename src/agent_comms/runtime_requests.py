@@ -103,7 +103,7 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
             raise RuntimeError("This process no longer owns the thread.")
         session_id = next(
             key
-            for key, value in server.agent._sessions.items()
+            for key, value in server.agent.sessions.bindings.items()
             if server.agent._comms.registry.canonical_name(value) == name
         )
         return RuntimeRequestContext(server, reader, client, session_id, name)
@@ -126,17 +126,17 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         agent = ctx.server.agent
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
-        await agent._replay_transcript(
+        await agent.sessions.transcript.replay(
             ctx.session_id,
             ctx.name,
             client=ctx.client,
             snapshots=self.transcript_snapshots,
             diffs=self.transcript_diffs,
         )
-        await agent.replay_turn_state(ctx.session_id, client=ctx.client)
-        await agent.replay_unknown_inputs(ctx.session_id, client=ctx.client)
-        config_options = await agent._config_options(ctx.name)
-        metadata = agent._session_metadata(ctx.name)
+        await agent.turns.replay_turn_state(ctx.session_id, client=ctx.client)
+        await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)
+        config_options = await agent.sessions.config.options(ctx.name)
+        metadata = agent.sessions.metadata(ctx.name)
         await ctx.send(
             {
                 "controllerToken": ctx.client.token,
@@ -217,12 +217,9 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
     instructions: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        handler = getattr(ctx.server.agent, "compact_context", None)
-        if handler is None:
-            from .manual_compaction_bridge import compact_context
+        from .manual_compaction_bridge import compact_context
 
-            return await compact_context(ctx.server.agent, ctx.session_id, self.instructions)
-        return await handler(ctx.session_id, self.instructions)
+        return await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -241,7 +238,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
         return ctx.server.agent._comms.input_delivery(
             ctx.name,
             include_history=self.include_history,
-            awaiting_keys=ctx.server.agent.awaiting_input_keys(ctx.session_id),
+            awaiting_keys=ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
         )
 
 
@@ -249,9 +246,9 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         result = ctx.server.agent._comms.dismiss_historical_inputs(
-            ctx.name, awaiting_keys=ctx.server.agent.awaiting_input_keys(ctx.session_id)
+            ctx.name, awaiting_keys=ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
         )
-        await ctx.server.agent.emit_input_delivery_changed(ctx.session_id)
+        await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
         return result
 
 
@@ -324,7 +321,7 @@ class EditGoalRuntimeRequest(
     GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
 ):
     async def change(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.server.agent.edit_goal(
+        await ctx.server.agent.turns.edit_goal(
             ctx.session_id, self.goal_id, self.expected_revision, self.text
         )
 
@@ -334,7 +331,7 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
     status: str | None = None
 
     async def change(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.server.agent.update_goal(
+        await ctx.server.agent.turns.update_goal(
             ctx.session_id, self.status, self.goal_id, self.expected_revision
         )
 
@@ -344,7 +341,7 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
     revision_purpose = "retry"
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        goal = await ctx.server.agent.retry_goal(
+        goal = await ctx.server.agent.turns.retry_goal(
             ctx.session_id, self.goal_id, self.expected_revision
         )
         return {"goal": goal.to_wire()}
@@ -353,5 +350,5 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        goal = await ctx.server.agent.set_goal(ctx.session_id, self.text)
+        goal = await ctx.server.agent.turns.set_goal(ctx.session_id, self.text)
         return {"goal": goal.to_wire()}

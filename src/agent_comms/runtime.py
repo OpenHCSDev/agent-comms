@@ -171,8 +171,8 @@ class RuntimeServer:
 
         def bound() -> bool:
             return _expected_client is _UNBOUND_PUBLICATION_CLIENT or (
-                self.agent._client is _expected_client
-                and self.agent._sessions.get(session_id) == _expected_thread
+                self.agent.sessions.client is _expected_client
+                and self.agent.sessions.bindings.get(session_id) == _expected_thread
             )
 
         def sockets_bound() -> bool:
@@ -183,7 +183,7 @@ class RuntimeServer:
         if not bound() or not sockets_bound():
             return False
         delivered = False
-        client = self.agent._client
+        client = self.agent.sessions.client
         if client is not None:
             await client.session_update(session_id=session_id, update=update)
             delivered = True
@@ -358,8 +358,8 @@ class RuntimeProxy:
                     json.dumps(
                         SubscribeRuntimeRequest(
                             thread=self.session_id,
-                            transcript_snapshots=self.agent._transcript_snapshots,
-                            transcript_diffs=self.agent._transcript_diffs,
+                            transcript_snapshots=self.agent.sessions.transcript.snapshots,
+                            transcript_diffs=self.agent.sessions.transcript.diffs,
                         ).to_wire()
                     )
                     + "\n"
@@ -385,8 +385,8 @@ class RuntimeProxy:
             raise
 
     async def update(self, data: dict[str, Any]) -> None:
-        if "update" in data and self.agent._client is not None:
-            await self.agent._client.session_update(
+        if "update" in data and self.agent.sessions.client is not None:
+            await self.agent.sessions.client.session_update(
                 session_id=self.session_id,
                 update=_present_cursor_session(data["update"], self.session_id),
             )
@@ -406,9 +406,9 @@ class RuntimeProxy:
             async def ask() -> None:
                 outcome: dict[str, Any] = {"outcome": "cancelled"}
                 try:
-                    if self.agent._client is not None and token == self._controller_token:
+                    if self.agent.sessions.client is not None and token == self._controller_token:
                         reply = await asyncio.wait_for(
-                            self.agent._client.request_permission(
+                            self.agent.sessions.client.request_permission(
                                 session_id=self.session_id,
                                 tool_call=request["toolCall"],
                                 options=request["options"],
@@ -464,13 +464,11 @@ class RuntimeProxy:
             while not self._closed:
                 try:
                     reader, metadata = await self._subscribe_once()
-                    image_support = getattr(self.agent, "_proxy_image_support", None)
-                    if isinstance(image_support, dict):
-                        image_support[self.session_id] = (
-                            metadata.get("agentComms", {}).get("imagePrompts") is True
-                        )
-                    if "configOptions" in metadata and self.agent._client is not None:
-                        await self.agent._client.session_update(
+                    self.agent.sessions.proxy_image_support[self.session_id] = (
+                        metadata.get("agentComms", {}).get("imagePrompts") is True
+                    )
+                    if "configOptions" in metadata and self.agent.sessions.client is not None:
+                        await self.agent.sessions.client.session_update(
                             session_id=self.session_id,
                             update={
                                 "sessionUpdate": "config_option_update",

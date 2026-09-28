@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from agent_comms import acp, cohort_foreground, coordinated_runtime, worker
+from agent_comms.input_drain import InputDrain
 from test_coordinated_runtime import _fake_model
 
 
@@ -25,7 +26,7 @@ async def main(base: Path) -> None:
     fake, calls = _fake_model(decision="FULL")
     coordinated_runtime.run_native_pi_turn = fake
     original_load = acp.CommsAgent.load_session
-    acp.CommsAgent._ensure_live_drain = lambda self, _: None  # fixture-only dispatch hold
+    InputDrain.ensure_live_drain = lambda self, _: None  # fixture-only dispatch hold
 
     async def loaded(self, *args, **kwargs):
         result = await original_load(self, *args, **kwargs)

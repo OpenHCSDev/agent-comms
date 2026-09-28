@@ -75,7 +75,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
 
     agent.on_connect(Client())
     comms.set_project(session, str(new))
-    await agent._sync_session_identity(session)
+    await agent.sessions.sync_identity(session)
     assert updates[-1].field_meta["agentComms"]["worktree"] == str(new)
     await agent.shutdown()
     resumed = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[])
@@ -109,11 +109,11 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.prompt(session, [{"type": "text", "text": "Change projects"}])
-        agent._schedule_wake(session)
-        await asyncio.wait_for(agent._wake_tasks[session], timeout=2)
+        agent.inputs.schedule_wake(session)
+        await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=2)
         assert len(calls) == 2
         assert calls[0][0] == str(old)
         assert calls[1][0] == str(new) and calls[1][1] == session_file
@@ -139,14 +139,14 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
         await asyncio.sleep(60)
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     prompt = asyncio.create_task(agent.prompt(session, [{"type": "text", "text": "switch"}]))
     try:
         await asyncio.wait_for(changed.wait(), timeout=2)
         await agent.cancel(session)
         assert (await prompt).stop_reason == "cancelled"
         assert comms.registry.require(session).worktree == str(new)
-        assert not agent._pending_turns.get(session)
+        assert not agent.inputs.pending_turns.get(session)
     finally:
         await agent.shutdown()
 
@@ -178,7 +178,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
             proxies.append(proxy)
             assert (await proxy.subscribe())["agentComms"]["worktree"] == str(old)
         comms.set_project(session, str(new))
-        await owner._sync_session_identity(session)
+        await owner.sessions.sync_identity(session)
         async with asyncio.timeout(2):
             while not all(
                 any(

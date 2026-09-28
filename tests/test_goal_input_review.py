@@ -14,12 +14,12 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     await agent.new_session(str(tmp_path / "worker"))
     comms.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
     comms.begin_turn("parent", "parent-delegation-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
-    goal = comms.update_goal('worker', SetGoalAction(text='Delegate and wait'), owner_store=agent._open_goal_store())
+    goal = comms.update_goal('worker', SetGoalAction(text='Delegate and wait'), owner_store=agent.turns.open_goal_store())
     messages = [
         comms.send_message("parent", "worker", text) for text in ("Set standby", "Yes wait")
     ]
@@ -32,11 +32,11 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         "wait_for": ["parent"],
     }
     try:
-        await agent._drain_inbox("worker")
+        await agent.inputs.drain_inbox("worker")
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             report.invoke(comms, args)
         admission = comms.registry.snapshot().admission_generations["worker"]
-        agent._dispositions.record(
+        agent.inputs.dispositions.record(
             "acp:owner-input",
             seq=None,
             owner="worker",
@@ -61,15 +61,15 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
                     "reviewed_inputs": [row["inputId"] for row in result["unresolved_inputs"]],
                 },
             )
-        assert all(not agent._dispositions.get(key).get("goal_reviews") for key in keys)
-        assert not agent._dispositions.get("acp:owner-input").get("goal_reviews")
+        assert all(not agent.inputs.dispositions.get(key).get("goal_reviews") for key in keys)
+        assert not agent.inputs.dispositions.get("acp:owner-input").get("goal_reviews")
         with pytest.raises(ValueError, match="pending or UNKNOWN"):
             report.invoke(comms, {**args, "reviewed_inputs": keys[1:]})
-        assert all(not agent._dispositions.get(key).get("goal_reviews") for key in keys)
+        assert all(not agent.inputs.dispositions.get(key).get("goal_reviews") for key in keys)
         with pytest.raises(ValueError, match="recipient"):
             report.invoke(comms, {**args, "reviewed_inputs": ["bus:999999"]})
         unrelated = comms.send_message("other", "worker", "Not a declared dependency")
-        await agent._drain_inbox("worker")
+        await agent.inputs.drain_inbox("worker")
         scoped = comms.goal_input_review("worker", goal.id, ["parent"])
         assert scoped["reviewed_inputs"] == keys
         assert len(scoped["excluded_inputs"]) == 2
@@ -83,31 +83,31 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         # DMs: they remain typed ordinary interrupts (proven fresh by their
         # unattempted dispositions) and dispatch later, never as replayed
         # dependency replies.
-        pending = agent._pending_turns.get("worker", [])
+        pending = agent.inputs.pending_turns.get("worker", [])
         assert pending and all(turn.direct_interrupt_goal_id == goal.id for turn in pending)
         assert all(turn.goal_wait_id is None for turn in pending)
         for turn in pending:
-            row = agent._dispositions.get(turn.direct_interrupt_input_key)
+            row = agent.inputs.dispositions.get(turn.direct_interrupt_input_key)
             assert row is not None and row["status"] == "unknown" and row["native_id"] is None
-        agent._schedule_goal("worker")
+        agent.turns.schedule_goal("worker")
         # The standby wait still defers any goal turn; the ordinary interrupts
         # stay queued and unattempted.
-        assert agent._pending_turns.get("worker")
+        assert agent.inputs.pending_turns.get("worker")
         again = comms.goal_input_review("worker", goal.id, ["parent"])
         assert again["reviewed_inputs"] == []
         assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
         for key in keys:
-            row = agent._dispositions.get(key)
+            row = agent.inputs.dispositions.get(key)
             assert row["status"] == "unknown" and row["native_id"] is None
-            assert agent._dispositions.reviewed_for_goal(row, goal.id)
+            assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
         # Durable explicit handling survives reopening and a later wait declaration.
         reopened = wire(comms.root)
         reopened.update_goal('worker', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
         reopened.update_goal('worker', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('parent',)))
         fresh = comms.send_message("parent", "worker", "New result")
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _: None)
-        await agent._drain_inbox("worker")
-        pending = agent._pending_turns["worker"]
+        await agent.inputs.drain_inbox("worker")
+        pending = agent.inputs.pending_turns["worker"]
         fresh_entries = [turn for turn in pending if turn.origin.seq == fresh.seq]
         assert len(fresh_entries) == 1
         # After standby the same sender is a declared dependency: this fresh
