@@ -206,6 +206,21 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         reply = json.dumps({"decision": decision}) if "bounded triage" in prompt else "42"
         from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 
+        observer = _.get("observe_event")
+        if observer is not None:
+            from agent_comms.pi_events import PiEvent
+
+            await observer(
+                PiEvent.from_wire(
+                    {
+                        "type": "response",
+                        "id": "native-prompt",
+                        "command": "prompt",
+                        "success": True,
+                    }
+                )
+            )
+            await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
             reply,
             NativeContextProof(
