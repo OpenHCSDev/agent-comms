@@ -328,3 +328,14 @@ builder copies source, so a rebuild needs the paired tree pin. Parent install/pi
 owner notified; guard remains enforced and prepared package untouched. PR248 merged;
 continuation is draft PR255. Parent separately deleting broadcast aliases; leave
 its assigned files untouched until checkpoint, then remove now-retired alias test.
+
+## Owner start and thread lifecycle fixtures
+
+Remainder-thirteen15passed12failed50skipped3.53s; mounted Toad cases remain explicit
+opt-ins, not represented as passed. Actual stopped-owner tool startup now pins
+canonical root/package and Pi, rather than unconfigured echo. Lifecycle fixtures
+carry ProcessIdentity.capture. Sort metadata uses canonical publish_ordinary and
+acquires its actual process; event times/rename preservation retained. Deleted
+obsolete automatic legacy registry/session-header migration test. Focused14:
+13passed1failed3.32s; corrected own-process acquisition then final sort case passes.
+Parent alias-owned files withheld from remainder until published checkpoint.
