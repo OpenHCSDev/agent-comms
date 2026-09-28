@@ -1,10 +1,13 @@
-# C0 operations — active implementation
+# C0 operations — completed source handoff
 
-Base: main b5ec95a (lease PR174 and pin175). Tree:
+Source: `ab41680afb122efcf69223da94ca82cc0d21946d`. PR178 draft:
+https://github.com/OpenHCSDev/agent-comms/pull/178
+
+Base: current main177 `7eaa38d` (includes PR176 checkpoint migration). Tree:
 `/home/ts/wt/comms-refactor-c0-operations-20260928`.
 
-Lease closure is complete/merged. C0 dependency inventory is complete;
-component extraction and current-caller migration are active, not yet accepted.
+Lease closure is complete/merged. C0 operations implementation and focused
+local acceptance are complete. Parent owns combined declaration/Toad integration.
 No live changes or checkpoint migration changes.
 
 ## Ownership/import boundary for Darwin and parent
@@ -40,8 +43,8 @@ shared-self mixins, `__getattr__`, or old module re-export. Ten explicit owner
 modules consume Registration/MessageBus/ChannelCatalog/ReadLedger rather than
 copying them. Goals own waits/pauses; goal actions take Goals rather than Comms.
 Relationships now receive registry/bus/views explicitly, removing its root
-backpointer. Eleven redundant Comms forwarding methods disappear in favor of
-direct owner APIs. The complete current method/field/import map is in
+backpointer. Ten old operation entrypoints are replaced with direct owner APIs; the ledger
+guard now extends the real SharedLedger owner. The complete current method/field/import map is in
 `caller-map.json`; the goals operation module is `goal_management.py`, reserving
 `goals.py` for Darwin's Goal declarations.
 
@@ -73,6 +76,35 @@ proofs and are not reported as initial-green batches.
   behavior tests, not native codemod equivalence proof.
 - I/F lint and diff whitespace checks pass.
 
-Remaining: rebase current main checkpoint changes; declaration-import integration
-once Darwin publishes destinations; parent paired Toad migration/activation.
+Remaining (parent): combine Darwin declaration source and paired Toad changes,
+then installed activation. Operations source has no remaining implementation blocker.
+The new components currently use the actual main177 declarations. Apply
+`declaration-imports.patch` when combining Darwin source: it moves every new
+component import using his canonical symbol-owners.json. No compatibility
+aggregator is introduced. Current source is based on main177, with176 behavior intact.
 No CI gate or additional provider run is requested.
+
+## Final closure and integration evidence
+
+- Removed operational package-root re-exports too: Comms/wire, result records,
+  transcript records and observation interval now import from actual owners.
+  All current core/test/script callers and embedded subprocess imports migrated.
+  The canonical mapping remains stable for parent Toad work.
+- Rebase176 conflict acceptance: 5 passed (existing-root preserve/append,
+  invalid-prefix refusal and managed new-root default checkpoint install).
+- Public import/end-to-end subprocess acceptance after export deletion: 3 passed.
+- Current I/F lint and diff check pass. No repeated optional suites or CI wait.
+- Preserved failed logs and scan evidence; large logs compressed. Cleaned owned
+  exited test fixture/cache data (53MB before cleanup); no live data/worktrees
+  touched. `changed-files.txt` is the exact production/test/script/doc delta.
+- Direct Darwin queue was unavailable; parent supplied declaration map and now
+  owns serial integration. Goal declaration remains his `goals.py`; operational
+  Goals component is solely `goal_management.py`.
+
+### Scope strength
+
+This removes the Comms shared-self mechanism and makes its explicit components
+own stores, caches, launch pins and cross-store transactions. Most method bodies
+retain behavior; file relocation alone is not claimed as lower case-extension
+cost. S7's separate WireLog/Publisher and universal LockedStore adoption are not
+claimed complete by this operations task. Parent planning owns those leftovers.
