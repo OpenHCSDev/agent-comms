@@ -70,6 +70,7 @@ from .native_prompt_binding import (
     read_expected_prompt_binding,
 )
 from .native_prompt_send import PromptAdmissionBusy
+from .native_runtime_input import NativeRuntimeInput
 from .native_source_cursor import advance_current_native_cursor
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_registry_guard import _require_no_private_owner_rename
@@ -296,17 +297,6 @@ def _require_owner(store: MutationStore, lookup: str, owner: Thread, generation:
         or not owner.role.executable
     ):
         raise StaleFence("cohort recipient is not this live registered owner generation")
-
-
-def _proof_columns(result: NativeTurnResult) -> tuple[str, str, str, int, str]:
-    proof = result.context
-    return (
-        proof.session_id,
-        str(proof.session_file),
-        proof.session_entry_id,
-        proof.request_generation,
-        proof.llm_context_digest,
-    )
 
 
 def _execution_id(assignment: WakeAssignment) -> str:
@@ -1112,24 +1102,22 @@ class SelectedExecution:
                     self.owner,
                     self.participant.participant_generation,
                 )
-                reserved = db.execute(
-                    "SELECT * FROM native_runtime_inputs WHERE input_id=?", (self.input_id,)
-                ).fetchone()
+                reserved = NativeRuntimeInput.one(db, input_id=self.input_id)
                 stage = "triage" if fence is None else "full"
                 execution_id = None if fence is None else fence.execution_id
                 ordinal = None if fence is None else fence.attempt_ordinal
                 if reserved is None or (
-                    reserved["stage"],
-                    reserved["claim_id"],
-                    reserved["owner_lookup"],
-                    reserved["owner_thread"],
-                    reserved["owner_generation"],
-                    reserved["execution_id"],
-                    reserved["attempt_ordinal"],
-                    reserved["owner_token_digest"],
-                    reserved["sent_owner_admission_epoch"],
-                    reserved["session_id"],
-                    reserved["verdict"],
+                    reserved.stage,
+                    reserved.assignment_id,
+                    reserved.owner_lookup,
+                    reserved.owner_thread,
+                    reserved.owner_generation,
+                    reserved.execution_id,
+                    reserved.attempt_ordinal,
+                    reserved.owner_token_digest,
+                    reserved.sent_owner_admission_generation,
+                    reserved.session_id,
+                    reserved.verdict,
                 ) != (
                     stage,
                     self.assignment.assignment_id,
@@ -1263,10 +1251,11 @@ class SelectedExecution:
                 with journal.ordinary_input_send_fence(saved, private_input_id=self.input_id):
                     # Bind the input ID to the owner admission in which Pi is sent
                     # the prompt, never a later caller-provided epoch.
-                    updated = db.execute(
-                        "UPDATE native_runtime_inputs SET sent_owner_admission_epoch=? "
-                        "WHERE input_id=? AND sent_owner_admission_epoch IS NULL",
-                        (self.owner_admission_generation, self.input_id),
+                    updated = NativeRuntimeInput.update(
+                        db,
+                        where="input_id=? AND sent_owner_admission_generation IS NULL",
+                        parameters=(self.input_id,),
+                        sent_owner_admission_generation=self.owner_admission_generation,
                     )
                     if updated.rowcount != 1:
                         raise StaleFence("native input admission was already bound")
@@ -1323,10 +1312,9 @@ class SelectedExecution:
                 or not current.lifecycle.triage_pending
             ):
                 raise IdentityConflict("triage claim changed before native input reservation")
-            if db.execute(
-                "SELECT 1 FROM native_runtime_inputs WHERE claim_id=?",
-                (self.assignment.assignment_id,),
-            ).fetchone():
+            if NativeRuntimeInput.select(
+                db, where="assignment_id=?", parameters=(self.assignment.assignment_id,)
+            ):
                 raise IdentityConflict("triage input was previously dispatched; no retry")
             now = self.store._now(current.updated_at_ms)
             # This CAS and the ID reservation commit together BEFORE the Pi launch.
@@ -1337,20 +1325,17 @@ class SelectedExecution:
             )
             if update.rowcount != 1:
                 raise IdentityConflict("triage reservation lost its claim CAS")
-            db.execute(
-                "INSERT INTO native_runtime_inputs"
-                "(input_id,stage,claim_id,execution_id,attempt_ordinal,owner_lookup,"
-                "owner_thread,owner_generation,owner_token_digest) "
-                "VALUES (?,'triage',?,NULL,NULL,?,?,?,?)",
-                (
-                    input_id,
-                    self.assignment.assignment_id,
-                    self.assignment.recipient_lookup,
-                    self.owner.name,
-                    self.participant.participant_generation,
-                    _token_digest(token),
-                ),
-            )
+            NativeRuntimeInput(
+                input_id=input_id,
+                stage="triage",
+                assignment_id=self.assignment.assignment_id,
+                execution_id=None,
+                attempt_ordinal=None,
+                owner_lookup=self.assignment.recipient_lookup,
+                owner_thread=self.owner.name,
+                owner_generation=self.participant.participant_generation,
+                owner_token_digest=_token_digest(token),
+            ).insert(db)
         return input_id, token
 
     def _verify_native(
@@ -1394,9 +1379,7 @@ class SelectedExecution:
                 self.owner,
                 self.participant.participant_generation,
             )
-            reserved = self.store._connection.execute(
-                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (self.input_id,)
-            ).fetchone()
+            reserved = NativeRuntimeInput.one(self.store._connection, input_id=self.input_id)
             binding = read_expected_prompt_binding(self.store, self.input_id)
             execution_id = None if fence is None else fence.execution_id
             ordinal = None if fence is None else fence.attempt_ordinal
@@ -1412,21 +1395,18 @@ class SelectedExecution:
             )
             if (
                 reserved is None
-                or tuple(
-                    reserved[field]
-                    for field in (
-                        "input_id",
-                        "stage",
-                        "claim_id",
-                        "execution_id",
-                        "attempt_ordinal",
-                        "owner_lookup",
-                        "owner_thread",
-                        "owner_generation",
-                    )
+                or (
+                    reserved.input_id,
+                    reserved.stage,
+                    reserved.assignment_id,
+                    reserved.execution_id,
+                    reserved.attempt_ordinal,
+                    reserved.owner_lookup,
+                    reserved.owner_thread,
+                    reserved.owner_generation,
                 )
                 != expected_identity
-                or reserved["session_id"] is not None
+                or reserved.session_id is not None
                 or binding is None
                 or (
                     binding.input_id,
@@ -1489,27 +1469,30 @@ class SelectedExecution:
                 self.participant.participant_generation,
             )
             current = self.store.assignment(self.assignment.assignment_id)
-            row = db.execute(
-                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (self.input_id,)
-            ).fetchone()
+            row = NativeRuntimeInput.one(db, input_id=self.input_id)
             if (
                 current.revision != self.assignment.revision + 1
                 or not current.lifecycle.deferred
                 or current.lifecycle.execution_id is not None
                 or row is None
-                or row["stage"] != "triage"
-                or row["claim_id"] != self.assignment.assignment_id
-                or row["owner_thread"] != self.owner.name
-                or row["owner_generation"] != self.participant.participant_generation
-                or row["owner_token_digest"] != _token_digest(self.token)
-                or row["session_id"] is not None
+                or row.stage != "triage"
+                or row.assignment_id != self.assignment.assignment_id
+                or row.owner_thread != self.owner.name
+                or row.owner_generation != self.participant.participant_generation
+                or row.owner_token_digest != _token_digest(self.token)
+                or row.session_id is not None
             ):
                 raise StaleFence("triage proof belongs to a different or already settled dispatch")
-            updated = db.execute(
-                "UPDATE native_runtime_inputs SET session_id=?,session_file=?,"
-                "session_entry_id=?,request_generation=?,llm_context_digest=?,verdict=? "
-                "WHERE input_id=? AND session_id IS NULL",
-                (*_proof_columns(result), decision.lower(), self.input_id),
+            updated = NativeRuntimeInput.update(
+                db,
+                where="input_id=? AND session_id IS NULL",
+                parameters=(self.input_id,),
+                session_id=result.context.session_id,
+                session_file=str(result.context.session_file),
+                session_entry_id=result.context.session_entry_id,
+                request_generation=result.context.request_generation,
+                llm_context_digest=result.context.llm_context_digest,
+                verdict=decision.lower(),
             )
             if updated.rowcount != 1:
                 raise StaleFence("triage proof was previously committed")
@@ -1580,27 +1563,21 @@ class SelectedExecution:
                 not in {row.assignment_id for row in snapshot.assignments}
             ):
                 raise StaleFence("full input cannot bind to the current attempt")
-            if db.execute(
-                "SELECT 1 FROM native_runtime_inputs WHERE execution_id=?",
-                (self.execution_id,),
-            ).fetchone():
+            if NativeRuntimeInput.select(
+                db, where="execution_id=?", parameters=(self.execution_id,)
+            ):
                 raise IdentityConflict("a full-turn input already exists; no automatic replay")
-            db.execute(
-                "INSERT INTO native_runtime_inputs"
-                "(input_id,stage,claim_id,execution_id,attempt_ordinal,owner_lookup,"
-                "owner_thread,owner_generation,owner_token_digest) "
-                "VALUES (?,'full',?,?,?,?,?,?,?)",
-                (
-                    input_id,
-                    self.assignment.assignment_id,
-                    self.execution_id,
-                    fence.attempt_ordinal,
-                    self.assignment.recipient_lookup,
-                    self.owner.name,
-                    self.participant.participant_generation,
-                    _token_digest(fence.token),
-                ),
-            )
+            NativeRuntimeInput(
+                input_id=input_id,
+                stage="full",
+                assignment_id=self.assignment.assignment_id,
+                execution_id=self.execution_id,
+                attempt_ordinal=fence.attempt_ordinal,
+                owner_lookup=self.assignment.recipient_lookup,
+                owner_thread=self.owner.name,
+                owner_generation=self.participant.participant_generation,
+                owner_token_digest=_token_digest(fence.token),
+            ).insert(db)
         return input_id
 
     def _record_full_result(self, fence: OwnerFence, result: NativeTurnResult) -> None:
@@ -1613,27 +1590,29 @@ class SelectedExecution:
                 self.participant.participant_generation,
             )
             snapshot, _ = self.store._assert_fence(fence)
-            row = db.execute(
-                "SELECT * FROM native_runtime_inputs WHERE input_id=?", (self.input_id,)
-            ).fetchone()
+            row = NativeRuntimeInput.one(db, input_id=self.input_id)
             if (
                 row is None
-                or row["stage"] != "full"
-                or row["claim_id"] != self.assignment.assignment_id
-                or row["execution_id"] != fence.execution_id
-                or row["attempt_ordinal"] != fence.attempt_ordinal
-                or row["owner_thread"] != self.owner.name
-                or row["owner_generation"] != self.participant.participant_generation
-                or row["owner_token_digest"] != _token_digest(fence.token)
-                or row["session_id"] is not None
+                or row.stage != "full"
+                or row.assignment_id != self.assignment.assignment_id
+                or row.execution_id != fence.execution_id
+                or row.attempt_ordinal != fence.attempt_ordinal
+                or row.owner_thread != self.owner.name
+                or row.owner_generation != self.participant.participant_generation
+                or row.owner_token_digest != _token_digest(fence.token)
+                or row.session_id is not None
                 or snapshot.execution.exact_target is None
             ):
                 raise StaleFence("full-turn proof does not bind to the exact current attempt")
-            update = db.execute(
-                "UPDATE native_runtime_inputs SET session_id=?,session_file=?,"
-                "session_entry_id=?,request_generation=?,llm_context_digest=? "
-                "WHERE input_id=? AND session_id IS NULL",
-                (*_proof_columns(result), self.input_id),
+            update = NativeRuntimeInput.update(
+                db,
+                where="input_id=? AND session_id IS NULL",
+                parameters=(self.input_id,),
+                session_id=result.context.session_id,
+                session_file=str(result.context.session_file),
+                session_entry_id=result.context.session_entry_id,
+                request_generation=result.context.request_generation,
+                llm_context_digest=result.context.llm_context_digest,
             )
             if update.rowcount != 1:
                 raise StaleFence("full-turn proof was previously committed")

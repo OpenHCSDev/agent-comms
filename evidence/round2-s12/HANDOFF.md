@@ -1,3 +1,84 @@
+# S12 continuation — active, not merge-ready closure
+
+Foundation #230 merged at reviewed cca3b282. Caller closure draft #237. Current branch:
+`refactor/round2-s12-caller-closure`.
+
+## Latest caller/table closure
+
+- `CurrentExecutions`, `ReplayAssessments`, `PublicationIntents` are now sole
+  behavior and table owners. Deleted CurrentExecutionPointer, ReplayAssessment,
+  PublicationIntent classes; no aliases. Updated imports/calls in
+  coordination_response.py, publisher.py and wire_log.py. Parent #229 should
+  use PublicationIntents if any newly added wire code still names the old type.
+- Participants/aliases/generations/pointers and recovery/replay callers use
+  typed reads/writes. PublicationReceipt reads its join without a hand mapper.
+- `Todo` owns todos.sqlite3 schema and all typed access; no _todo mapper,
+  _assignment_token serializer or raw positional inserts remain.
+- `tools/cutover/todos.py` stages durable tasks exactly once. It never replaces
+  the source or an existing stage. Actual previous main TodoStore -> current
+  reopened stage preserved 3 tasks, insertion order, revisions, goal reference,
+  current owner, release/transfer retry evidence and done state. Source unchanged.
+  Parent runs it at the quiet cutover and deletes it after installation.
+- Local receipts: row-owner-closure.log 189 passed/1 skipped;
+  declaration-constraints.log 85 passed; todo-durable-cutover.log actual staged
+  conversion passed. These are local behavior checks, no installed activation.
+- SqlStorage SQLite conversion methods are to_sql/from_sql, leaving the
+  DeclaredFamily.decode name lookup intact. The shared new-case SQLite test
+  caught and now covers that collision, enum constraints, generated columns,
+  autoincrement and ANY's refusal to coerce a stored string into a typed integer.
+- Copernicus owns BusRouteCounts and pending/inbox regions; parent owns history,
+  required WireAccess/admission_after_seq and #229/0330ad9. Those features are
+  preserved on integration; this work adds no metadata owner or fabricated proof.
+
+## Stable NativeRuntimeInput API for Pascal
+
+```python
+from agent_comms.native_runtime_input import NativeRuntimeInput
+reserved = NativeRuntimeInput.one(db, input_id=input_id)
+# reserved is NativeRuntimeInput or None
+# reserved.assignment_id
+# reserved.sent_owner_admission_generation
+```
+
+All other native input fields retain typed current meaning. The derived physical
+table is `native_runtime_input`; schema version 4. Current cursor table is
+`current_native_cursor`, fields owner_admission_generation and assignment_id.
+`history_views.py` (parent) must use native_runtime_input and n.assignment_id.
+`selected_tool_broker.py` (Pascal S10) must use the API above. No aliases provided.
+
+## Current local evidence
+
+197 behavior/family/fast-guard checks passed, one skipped. Receipt
+closure-prepublish.log. Tests exercise real SQLite and filesystem/process boundaries;
+native Pi replies are synthetic here. No provider/installed activation claim.
+The first run found one test hardcoding prior schema_version=2; the concurrency
+behavior now compares the owner constant. Six fast marked guards passed locally
+(closure-guards-initial.log). Full caller closure is still in progress.
+
+## Runtime cutover exact scope
+
+- `coordination.sqlite3`: schema_meta, participants, participant_aliases,
+  owner_generations, executions, attempts, current_executions, wake_claims,
+  execution_claims, replay_assessments, obligations, publication_intents,
+  publication_receipts, connectivity, recovery_audit; native_runtime_schema_meta,
+  native_runtime_input, current_native_cursor. Reset the runtime file under the
+  parent's quiet lock after durable admission_after_seq is established.
+- `native_prompt_bindings.sqlite3`: snapshot_meta, prompt_binding. Parent owns
+  reset of the private snapshot and pending intent protocol, preserving UNKNOWN
+  as history; this code never repairs/replays uncertain prompts.
+- Durable todos are rewritten once with the tool above, never reset. Other
+  durable history tables remain to classify and migrate as their callers close.
+
+Parent #229/6fd9857 owns floor/D22. Preserve required admission_after_seq;
+acceptance/selection strictly >H, empty native proof 0. Canonical plain history
+<=H is legal history, never a new wake. No invented old recipients or parallel
+migration store. Installed UNKNOWN reset and durable rewrite proof remain parent
+work. This branch performs no live writes/restarts/resets/installation.
+
+---
+
+## Prior foundation receipts
+
 # S12 A13 foundation (surface still open)
 
 No production table or stored data is changed by this foundation. It provides

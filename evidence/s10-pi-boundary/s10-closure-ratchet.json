@@ -1,0 +1,63 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "18d1863d3cf3f00dd86ac88106112860d623f1af",
+  "paths": [
+    "src/agent_comms/backend.py",
+    "src/agent_comms/child_process.py",
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/cohort_foreground.py",
+    "src/agent_comms/continued_private_session.py",
+    "src/agent_comms/coordinated_runtime.py",
+    "src/agent_comms/coordinated_runtime_schema.py",
+    "src/agent_comms/coordination.py",
+    "src/agent_comms/coordination_response.py",
+    "src/agent_comms/coordination_store.py",
+    "src/agent_comms/goal_actions.py",
+    "src/agent_comms/goal_history.py",
+    "src/agent_comms/goal_management.py",
+    "src/agent_comms/goal_waits.py",
+    "src/agent_comms/goals.py",
+    "src/agent_comms/historical_native_inputs.py",
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/native_entries.py",
+    "src/agent_comms/native_pi.py",
+    "src/agent_comms/native_prompt_binding.py",
+    "src/agent_comms/native_runtime_input.py",
+    "src/agent_comms/native_source_cursor.py",
+    "src/agent_comms/nk_foreground.py",
+    "src/agent_comms/owner_lifecycle.py",
+    "src/agent_comms/pi_events.py",
+    "src/agent_comms/private_sidecar.py",
+    "src/agent_comms/publisher.py",
+    "src/agent_comms/recovery_gateway.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registry_store.py",
+    "src/agent_comms/selected_pi_child_deadline.py",
+    "src/agent_comms/selected_pi_summary_rpc.py",
+    "src/agent_comms/selected_tool_broker.py",
+    "src/agent_comms/thread_management.py",
+    "src/agent_comms/threads.py",
+    "src/agent_comms/todos.py",
+    "src/agent_comms/tools.py",
+    "src/agent_comms/turn_inputs.py",
+    "src/agent_comms/turn_runner.py",
+    "src/agent_comms/typed_table.py",
+    "src/agent_comms/wire_log.py"
+  ],
+  "base": {
+    "TypeIdentity": 158,
+    "LongBooleanChain": 153,
+    "StringSubscript": 444
+  },
+  "head": {
+    "TypeIdentity": 144,
+    "LongBooleanChain": 147,
+    "StringSubscript": 249
+  },
+  "delta": {
+    "TypeIdentity": -14,
+    "LongBooleanChain": -6,
+    "StringSubscript": -195
+  }
+}

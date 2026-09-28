@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.backend import PersistentPiSession, _session_revision
+from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.selected_pi_child_deadline import SelectedChildUnknown
-from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 
 CHILD = r"""
 import json,sys,sqlite3,time
@@ -74,18 +74,16 @@ async def selected(tmp_path, mode="success"):
     file.write_text('{"type":"session","version":3,"id":"session"}\n')
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
     received = tmp_path / "received.json"
-    child = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-u",
-        "-c",
-        CHILD,
-        mode,
-        str(journal.path),
-        str(received),
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        start_new_session=True,
+    child = await AttachedChild.start(
+        (
+            sys.executable,
+            "-u",
+            "-c",
+            CHILD,
+            mode,
+            str(journal.path),
+            str(received),
+        )
     )
     persistent = PersistentPiSession()
     persistent.proc = child
@@ -123,9 +121,6 @@ async def selected(tmp_path, mode="success"):
         yield run, persistent, journal, file, received
     finally:
         await persistent.close_idle()
-        if child.returncode is None:
-            child.kill()
-            await child.wait()
 
 
 async def test_existing_child_summary_preserves_native_metadata_and_blocks_replay(tmp_path):
@@ -252,14 +247,9 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
     script = (
         Path(__file__).resolve().parents[1] / "stack/test-native-selected-compaction-summary.mjs"
     )
-    child = await asyncio.create_subprocess_exec(
-        "node",
-        str(script),
+    child = await AttachedChild.start(
+        ("node", str(script)),
         env=env,
-        start_new_session=True,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
     )
     persistent = PersistentPiSession()
     persistent.proc = child

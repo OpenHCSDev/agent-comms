@@ -567,7 +567,7 @@ async def stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
-    ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+    ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
@@ -669,7 +669,7 @@ class TurnSession:
         ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
-        ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+        ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
     ):
         self.agent_bin = agent_bin
