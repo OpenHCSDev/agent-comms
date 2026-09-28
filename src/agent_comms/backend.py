@@ -1610,6 +1610,18 @@ class TurnSession:
         self.error_text = "" if self.retained else await self.stderr_task
         if (
             self.preflight_failure == FailureReason.PREFLIGHT_EXIT
+            and self.error_text.strip()
+            and not (self.image_input_sent or self.inherited_image_sensitive)
+        ):
+            self.record_failure(
+                failures.InputIdUnavailable(
+                    "Pi native input-ID capability preflight ended before attestation. "
+                    "The prompt was not sent. Backend startup reported:\n"
+                    + self.error_text.strip()
+                )
+            )
+        if (
+            self.preflight_failure == FailureReason.PREFLIGHT_EXIT
             and self.proof_journal_bytes is not None
             and ("Truncated or oversized native input proof journal" in self.error_text)
         ):

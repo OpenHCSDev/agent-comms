@@ -198,6 +198,10 @@ def main(package: Path) -> None:
         shutil.copyfile(stack / source, package / "dist" / target)
     for name in ("selected_claimed_write.mjs", "channel_coding_tools.mjs"):
         shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
+    subprocess.run(
+        ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
+        env=environment, check=True, timeout=60,
+    )
 
 
 

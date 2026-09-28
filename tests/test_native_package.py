@@ -188,7 +188,9 @@ def test_node_loader_environment_is_not_package_authority(package, tmp_path, mon
 
     monkeypatch.setattr(commit, "run_authority_child", launch)
     with (tmp_path / "authority").open("w") as fd:
-        assert bridge._call(fd.fileno(), {}, 1)["status"] == "unknown"
+        from agent_comms.compaction_states import UnknownOperation
+
+        assert isinstance(bridge._call(fd.fileno(), {}, 1).state, UnknownOperation)
     assert os.environ[variable] == "untrusted-loader"  # Parent environment not mutated.
 
 
@@ -234,7 +236,7 @@ def launcher(tmp_path):
         repo / "stack/native-import-fence.mjs", staged / "dist/agent-comms-import-fence.mjs"
     )
     (staged / "dist/agent-comms-imports.json").write_text(
-        json.dumps({"version": 1, "extensionEntries": [], "peerAliases": {}})
+        json.dumps({"version": 2, "extensionEntries": [], "peerAliases": {}})
     )
     (staged / "dependency.js").write_text("// full tree coverage, not in short manifest\n")
     manifest = (
