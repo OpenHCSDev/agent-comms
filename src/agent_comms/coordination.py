@@ -15,6 +15,7 @@ import os
 import sqlite3
 import stat
 import tempfile
+from abc import ABC, abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -50,6 +51,15 @@ MAX_PUBLICATION_PAYLOAD_BYTES: Final = 120_000
 MAX_REASON_CODE_CHARS: Final = 64
 MAX_SANITIZED_DETAIL_CHARS: Final = 512
 MAX_IDENTIFIER_CHARS: Final = 256
+
+
+class PrivateRuntimeSchema(ABC):
+    """Installation capability on the canonical private schema declarations."""
+
+    @classmethod
+    @abstractmethod
+    def install(cls, store) -> None:
+        """Install absent current state; reject drift without repairing it."""
 
 
 class MessageAudience(StrEnum):

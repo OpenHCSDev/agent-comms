@@ -18,16 +18,12 @@ from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_initials
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked, StaleFence
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -60,10 +56,6 @@ def _session(tmp_path, *, package=True):
     comms.threads.register(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        install_private_cohort_schema(store)
-        install_private_response_schema(store)
-        install_native_runtime_schema(store)
-        install_prompt_binding_schema(store)
         store.register_participant(
             stable_thread_lookup(owner.created_at), "beta", "beta", committed=True
         )
@@ -339,11 +331,6 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         )
     )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        install_private_cohort_schema(store)
-        install_private_response_schema(store)
-        install_native_runtime_schema(store)
-        install_prompt_binding_schema(store)
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
