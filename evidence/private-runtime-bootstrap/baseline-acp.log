@@ -1,0 +1,329 @@
+.............FFFFFF..F.....F                                             [100%]
+=================================== FAILURES ===================================
+_______ test_acp_session_selected_native_pipeline_never_uses_legacy_ack ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-a5iafuf7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96abb16250>
+
+    async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_path, monkeypatch):
+        comms, agent, root_id = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        sent = invoke_tool(
+            comms, "comms_send", {"from": "sender", "to": "beta", "body": "Compute 17+25"}
+        )
+        original = comms.bus.log.message_by_id(sent["id"])
+>       before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'privateNativeCursor'
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:552: KeyError
+_______ test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot ________
+
+fut = <coroutine object Event.wait at 0x7f96ab9e0900>, timeout = 5
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f96ab938e50 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-q7l7ufw6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96abb032a0>
+
+    async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_path, monkeypatch):
+        """ACP metadata orders a delayed epoch-2 update below trusted epoch-3 load.
+    
+        This tests the backend contract, not a Toad widget or provider acceptance.
+        """
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        delivered = []
+    
+        async def update(*, session_id, update):
+            assert session_id == "beta"
+            cursor = (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor")
+            if cursor and cursor["status"] == "proven":
+                entered.set()
+                await release.wait()
+            delivered.append(update)
+    
+        async def noop(*_args, **_kwargs):
+            return None
+    
+        async def no_options(*_args, **_kwargs):
+            return []
+    
+        monkeypatch.setattr(agent._runtime, "session_update", update)
+        monkeypatch.setattr(agent._runtime, "start", noop)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(agent.sessions.config, "options", no_options)
+        drain = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+>       await asyncio.wait_for(entered.wait(), timeout=5)
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:641: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f96b2017700>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+_______ test_observed_mid_session_admission_change_invalidates_old_proof _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-bturt842')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96ab8eb540>
+
+    async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_path, monkeypatch):
+        """No reattach is required for a registry stop/heartbeat admission bump."""
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            assert session_id == "beta"
+            cursor = (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor")
+            if cursor is not None:
+                updates.append(cursor)
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"})
+        assert await agent.inputs.drain_inbox("beta") == 1
+>       proven = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'privateNativeCursor'
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:681: KeyError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+_____________ test_unavailable_cursor_metadata_retains_owner_scope _____________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-6ub66ncm')
+
+    async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
+        comms, agent, _ = _session(tmp_path)
+>       before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'privateNativeCursor'
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:701: KeyError
+____ test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-_v857thf')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96ab8ebbd0>
+
+    async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model()
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            if cursor := (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor"):
+                updates.append(cursor)
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        comms.messaging.send_message("sender", "beta", "first")
+        assert await agent.inputs.drain_inbox("beta") == 1
+>       assert updates[-1]["status"] == "proven"
+               ^^^^^^^^^^^
+E       IndexError: list index out of range
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:732: IndexError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+________ test_contended_cursor_refresh_still_invalidates_replaced_owner ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-ktvmp5c9')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96b1890b40>
+
+    async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            if cursor := (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor"):
+                updates.append(cursor)
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        await agent._publish_private_cursor("beta", "beta")
+>       scope = updates[-1]["scope"]
+                ^^^^^^^^^^^
+E       IndexError: list index out of range
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:761: IndexError
+__________ test_acp_private_no_wake_has_delivery_receipt_but_no_model __________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-dgfqy6ez')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96ab79eba0>
+
+    async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
+        comms, agent, root_id = _session(tmp_path)
+        alpha = Thread(
+            "alpha",
+            frozenset({"team"}),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+        comms.threads.register(alpha)
+        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            store.register_participant(
+                stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True
+            )
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        sent = invoke_tool(
+            comms,
+            "comms_send",
+            {"from": "sender", "to": "#team", "body": "@alpha review this."},
+        )
+        original = comms.bus.log.message_by_id(sent["id"])
+        assert await agent.inputs.drain_inbox("beta") == 0
+        assert calls == []
+>       cursor = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'privateNativeCursor'
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:831: KeyError
+_________ test_acp_mismatched_root_and_bad_package_cannot_accept_claim _________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-4upuxekp')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96aba7b930>
+
+    async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
+        comms, agent, root_id = _session(tmp_path)
+        sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+        original = comms.bus.log.message_by_id(sent["id"])
+        agent._private_nk_wire_root_id = "f" * 32
+>       with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'explicit matching root'
+E         Actual message: 'private N/K ACP root does not match configuration'
+
+.artifacts/base/tests/test_acp_private_nk_delivery.py:1002: AssertionError
+=========================== short test summary info ============================
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_acp_session_selected_native_pipeline_never_uses_legacy_ack
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_observed_mid_session_admission_change_invalidates_old_proof
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_unavailable_cursor_metadata_retains_owner_scope
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_contended_cursor_refresh_still_invalidates_replaced_owner
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_acp_private_no_wake_has_delivery_receipt_but_no_model
+FAILED .artifacts/base/tests/test_acp_private_nk_delivery.py::test_acp_mismatched_root_and_bad_package_cannot_accept_claim
+8 failed, 20 passed in 20.07s

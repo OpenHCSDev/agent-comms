@@ -1,0 +1,33 @@
+Resolved 28 packages in 432ms
+   Building agent-comms @ file:///home/ts/wt/comms-private-runtime-bootstrap-20260928
+      Built agent-comms @ file:///home/ts/wt/comms-private-runtime-bootstrap-20260928
+Prepared 1 package in 119ms
+Installed 28 packages in 46ms
+ + agent-client-protocol==0.12.1
+ + agent-comms==0.1.0 (from file:///home/ts/wt/comms-private-runtime-bootstrap-20260928)
+ + annotated-types==0.8.0
+ + ast-serialize==0.11.2
+ + black==26.5.1
+ + click==8.5.0
+ + coverage==7.16.2
+ + execnet==2.1.2
+ + iniconfig==2.3.0
+ + librt==0.15.0
+ + metaclass-registry==0.2.1
+ + mypy==2.3.0
+ + mypy-extensions==1.1.0
+ + packaging==26.3
+ + pathspec==1.1.1
+ + platformdirs==4.12.1
+ + pluggy==1.6.0
+ + pydantic==2.13.5
+ + pydantic-core==2.46.5
+ + pygments==2.21.0
+ + pytest==9.1.1
+ + pytest-asyncio==1.4.0
+ + pytest-cov==7.1.0
+ + pytest-xdist==3.8.0
+ + pytokens==0.4.1
+ + ruff==0.16.0
+ + typing-extensions==4.16.0
+ + typing-inspection==0.4.4
