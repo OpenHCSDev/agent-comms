@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,15 @@ from .declarations import (
 )
 
 _NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
+
+
+class FutureInputQueue(ABC):
+    """Process-local queue authority; never reconstructed from UNKNOWN rows."""
+
+    @abstractmethod
+    def future_inputs(
+        self, owner: Thread, pending_input_key: str | None
+    ) -> dict[str, dict[str, Any]]: ...
 
 
 class InputDispositions:
@@ -112,6 +122,71 @@ class InputDispositions:
             }
             self._write(rows)
             return True
+
+    def compaction_rows(
+        self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None = None
+    ) -> dict[str, dict[str, Any]]:
+        """Fence the current owner's source, exempting exact live future acceptances.
+
+        Call with the wire lock held. Queue receipts are minted only after
+        record() fsyncs and are withdrawn on clear/promotion/shutdown. Their
+        exact rows must still be unattempted. Foreign owners cannot correct
+        this original; their ingress is outside this source snapshot.
+        """
+        with _store_lock(self.path):
+            return self._compaction_rows_unlocked(owner, pending_input_key, queue)
+
+    def _compaction_rows_unlocked(
+        self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None
+    ) -> dict[str, dict[str, Any]]:
+        """Caller retains both the wire and disposition locks through native CAS."""
+        assert owner.active_turn is not None
+        admission = owner.active_turn.admission_generation
+        rows = self._read()
+        pending = rows.get(pending_input_key) if pending_input_key else None
+        if pending_input_key is not None and (
+            not pending_input_key.startswith("acp:")
+            or pending is None
+            or pending["sequence"] is not None
+            or pending["target"] != owner.name
+            or pending["owner"] != owner.name
+            or pending["admission"] != admission
+            or pending["status"] != "unknown"
+            or pending["turn_id"] is not None
+            or pending["native_id"] is not None
+            or pending["sent_text"] is not None
+        ):
+            raise RelationViolationError("Original owner input already attempted")
+        future = queue.future_inputs(owner, pending_input_key) if queue is not None else {}
+        if any(rows.get(key) != receipt for key, receipt in future.items()):
+            raise RelationViolationError("Queued owner input changed after acceptance")
+        relevant = {}
+        for key, row in rows.items():
+            if row["owner"] != owner.name:
+                continue
+            if (
+                key != pending_input_key
+                and key in future
+                and (
+                    row == future[key]
+                    and row["admission"] == admission
+                    and row["status"] == "unknown"
+                    and row["sequence"] is None
+                    and row["target"] == owner.name
+                    and row["turn_id"] is None
+                    and row["native_id"] is None
+                    and row["sent_text"] is None
+                )
+            ):
+                continue
+            if admission is None or (
+                row["admission"] == admission
+                and row["status"] == "unknown"
+                and key != pending_input_key
+            ):
+                raise RelationViolationError("Unsettled owner input; compaction not dispatched")
+            relevant[key] = row
+        return relevant
 
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
         """Bind a single UNKNOWN attempt to Pi's private ID before its send."""

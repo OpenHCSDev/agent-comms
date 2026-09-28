@@ -15,6 +15,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_drain import InputDrain
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
 
@@ -167,7 +168,7 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "alpha")
     comms.send("peer", "project", "beta")
@@ -186,7 +187,7 @@ async def test_two_queued_directs_need_two_distinct_native_starts(tmp_path, monk
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
-        CommsAgent._schedule_wake(agent, "project")
+        InputDrain.schedule_wake(agent.inputs, "project")
         await asyncio.wait_for(agent._wake_tasks["project"], timeout=3)
         assert receipts == [f"{1:032x}", f"{2:032x}"]
         assert InputDispositions(comms.root).status("bus:1") == "started"
@@ -206,7 +207,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "review this")
     comms.acknowledge("project")  # Human/UI read is not model start.
@@ -243,7 +244,7 @@ async def test_project_change_after_queue_denies_stale_project_send(tmp_path, mo
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "use the intended project")
     await agent._drain_inbox("project")
@@ -329,7 +330,7 @@ async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_p
     await agent.new_session(str(tmp_path / "project"))
     agent._drain_tasks["project"].cancel()
     await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
     comms.send("peer", "project", "do not run after stop")
     await agent._drain_inbox("project")
@@ -342,7 +343,7 @@ async def test_stop_before_wake_leaves_direct_unknown_without_backend_send(tmp_p
 
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
     try:
-        CommsAgent._schedule_wake(agent, "project")
+        InputDrain.schedule_wake(agent.inputs, "project")
         await asyncio.wait_for(agent._wake_tasks["project"], timeout=2)
         assert not agent._pending_turns.get("project")
         assert InputDispositions(comms.root).unknown(frozenset({"project"}))[0]["sequence"] == 1
@@ -386,7 +387,7 @@ send({"type":"agent_settled"})
         await agent.new_session(str(tmp_path / "project"))
         agent._drain_tasks["project"].cancel()
         await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
-        monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         comms.register(Thread(name="peer", tags=frozenset(), worktree=str(tmp_path)))
         comms.send("peer", "project", "first direct")
         await agent._drain_inbox("project")
@@ -441,6 +442,7 @@ def test_hard_exit_after_direct_record_never_replays_on_reopen():
 import asyncio, os, sys
 from pathlib import Path
 from agent_comms import Thread
+from agent_comms.input_drain import InputDrain
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire

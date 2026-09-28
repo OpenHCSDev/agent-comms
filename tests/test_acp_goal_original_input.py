@@ -20,7 +20,7 @@ async def owner(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent, "_schedule_wake", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     updates = []
 
     class Client:
