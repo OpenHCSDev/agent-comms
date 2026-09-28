@@ -45,3 +45,7 @@ Integrated S13 #232 dependency 5d2935f in own branch, retaining parent d0380c6. 
 - Owned runtime delta vs parent8004347: +357/-306; tests +198/-20. Added runtime lines provide the timestamp/source-incarnation indexed projection missing from the replaced raw route counter. Ratchet vs parent: type identity -2, boolean chains -3, string subscripts -4.
 - The two broader failures were reproduced on untouched parent364d590. Parent has accepted read-proof rename-alias closure and owns the raw-wire mutation fixture. No suppression, skipped assertions or behavior relaxation here.
 - bus_route_counts.sqlite3 remains disposable derived state; parent must reset it at quiet cutover. All live installation and durable D22 rewriting remain parent-owned.
+
+## A1 table membership correction
+
+`RouteTable` scopes the existing `TypedTable.members_with` discovery. Both table creation and whole-projection reset now derive membership from the row declarations; the create tuple and paired reset statements are deleted. No other table catalog exists in bus_route_counts.py. Row-specific queries still reference their owning row declarations. A new-case check declares an additional scoped table and proves initialization/reset pick it up without changing BusRouteCounts. Seven focused incarnation/index/reopen checks pass in3.51s (table-scope.txt). This follow-up is runtime +10/-6, tests +16/-0; no new registry or adapter.
