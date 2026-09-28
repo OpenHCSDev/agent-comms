@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -72,7 +73,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     blocked = wire(tmp_path).registry.require("worker").goal
     assert blocked is not None and blocked.state.declared_name == "blocked"
     assert blocked.state.reason == reason
-    assert result["goal"]["block_reason"] == reason
+    assert FieldCodec.decode(Goal, result["goal"]).state.reason == reason
     assert result["goal_execution"]["block_reason"] == reason
     assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == blocked
 
@@ -80,7 +81,9 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     assert execution is not None and execution.block_reason == reason
     assert "Blocked · Need the exact ACP error text" in execution.presentation("worker").summary
     assert GoalExecution.from_wire(result["goal_execution"]) == execution
-    assert comms.views.thread_detail("worker")["goal"]["block_reason"] == reason
+    assert (
+        FieldCodec.decode(Goal, comms.views.thread_detail("worker")["goal"]).state.reason == reason
+    )
 
 
 def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):

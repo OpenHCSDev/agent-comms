@@ -6,9 +6,11 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
+from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
@@ -43,7 +45,7 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
     try:
         result = await proxy.request("set_goal", text="testing goal")
         goal = result["goal"]
-        assert goal["status"] == "active"
+        assert FieldCodec.decode(Goal, goal).state.declared_name == "active"
         assert comms.registry.require(session).goal.id == goal["id"]
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(goal["id"])
         assert generation is not None and generation.lifecycle == ReadyGeneration()
@@ -70,7 +72,7 @@ async def test_explicit_retry_recovers_registry_goal_missing_ledger(tmp_path, mo
             "retry_goal", goal_id=legacy.id, expected_revision=blocked.revision
         )
         assert result["goal"]["id"] == legacy.id
-        assert result["goal"]["status"] == "active"
+        assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(legacy.id)
         assert (
             generation is not None

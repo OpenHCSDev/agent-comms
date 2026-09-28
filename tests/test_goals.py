@@ -3,6 +3,7 @@
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -15,6 +16,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
+from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
@@ -61,7 +63,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
         comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}
     )
     assert result["goal"]["id"] == goal.id
-    assert result["goal"]["status"] == "active"
+    assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
     assert comms.registry.require("worker").goal.progress == "Explicitly resumed by the user"
 
     with pytest.raises(ValueError, match="cannot be resumed"):

@@ -1,0 +1,41 @@
+{
+  "base_revision": "bf68bbbf5eed95dd79f890fc50886a4481d40a7d",
+  "head_revision": "62adf9a82666d49490018396e5814dccd28a46ad",
+  "paths": [
+    "src/agent_comms/backend.py",
+    "src/agent_comms/child_process.py",
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/cohort_foreground.py",
+    "src/agent_comms/goal_actions.py",
+    "src/agent_comms/goal_history.py",
+    "src/agent_comms/goal_management.py",
+    "src/agent_comms/goal_waits.py",
+    "src/agent_comms/goals.py",
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/nk_foreground.py",
+    "src/agent_comms/owner_lifecycle.py",
+    "src/agent_comms/recovery_gateway.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/registry_store.py",
+    "src/agent_comms/thread_management.py",
+    "src/agent_comms/threads.py",
+    "src/agent_comms/tools.py",
+    "src/agent_comms/turn_inputs.py"
+  ],
+  "base": {
+    "TypeIdentity": 37,
+    "LongBooleanChain": 61,
+    "StringSubscript": 148
+  },
+  "head": {
+    "TypeIdentity": 35,
+    "LongBooleanChain": 56,
+    "StringSubscript": 140
+  },
+  "delta": {
+    "TypeIdentity": -2,
+    "LongBooleanChain": -5,
+    "StringSubscript": -8
+  }
+}

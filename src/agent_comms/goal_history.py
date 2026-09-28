@@ -1,9 +1,9 @@
-"""Durable goal revision history alongside the rolling-compatible registry.
+"""Durable goal revision history alongside the registry.
 
 The registry Goal remains the current-state authority. A history intent is
 synced before that registry changes; only a synced commit, or a later guarded
-reconciliation against the registry, makes the transition readable. Older
-registry writers can replace registry.json without erasing this journal.
+reconciliation against the registry, makes the transition readable. Registry
+snapshots can change without erasing this journal.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class GoalHistoryEntry:
     after: Goal | None
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.project(self, "wire")
+        return FieldCodec.encode(self)
 
 
 class GoalHistoryStore:
@@ -125,13 +125,13 @@ class GoalHistoryStore:
 
     @staticmethod
     def _encode(goal: Goal | None) -> str | None:
-        return json.dumps(goal.to_wire(), sort_keys=True) if goal is not None else None
+        return json.dumps(FieldCodec.encode(goal), sort_keys=True) if goal is not None else None
 
     @staticmethod
     def _decode(raw: str | None) -> Goal | None:
         try:
             value = json.loads(raw) if raw is not None else None
-            return Goal.from_wire(value) if value is not None else None
+            return FieldCodec.decode(Goal, value) if value is not None else None
         except (TypeError, ValueError) as error:
             raise GoalHistoryError("Goal history contains an invalid goal snapshot.") from error
 

@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "imported_package": "/home/ts/wt/comms-refactor2-l0a-20260928/.artifacts/wheel-candidate/agent_comms/__init__.py",
+  "operations": [
+    "register",
+    "set_goal",
+    "fresh_thread_read",
+    "goal_history",
+    "stop",
+    "archive",
+    "history_preserved"
+  ],
+  "goal_id": "0bb24ccaeb24496faa7a6fb4e0559968"
+}

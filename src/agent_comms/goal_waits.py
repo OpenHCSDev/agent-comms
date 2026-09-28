@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
@@ -135,7 +134,6 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
         targets: tuple[GoalWaitTarget, ...],
         rows: dict[str, GoalWait],
         snapshot: RegistrySnapshot,
-        process_alive: Callable[[int], bool],
     ) -> tuple[str, ...]:
         """Find waits with no path to a live active turn outside the wait graph.
 
@@ -189,7 +187,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                     or peer_wait.revision > peer_goal.revision
                 ):
                     peer_wait = None
-                if GoalWaits.target_has_active_turn(target, snapshot) and process_alive(peer.pid):
+                if GoalWaits.target_has_active_turn(target, snapshot) and peer.process_alive:
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before
                     # its turn finishes. Legacy unbound waits remain open here.

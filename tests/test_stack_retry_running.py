@@ -12,9 +12,11 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
+from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -182,7 +184,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                 goal_id=goal.id,
                 expected_revision=blocked.revision,
             )
-            assert result["goal"]["status"] == "active"
+            assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
             generation = GoalAttemptStore(store.root).snapshot(goal.id)
             assert (generation.number, generation.lifecycle, generation.attempt_id) == (
                 2,
