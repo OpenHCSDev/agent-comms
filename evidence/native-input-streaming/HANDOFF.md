@@ -70,7 +70,7 @@ manifest was changed to bless an incomplete package.
 
 ## Current source accounting
 
-Checkpoint976be19: production source/patches +163/-259; tests including native
+Checkpoint976be19: production source/patches +169/-253; tests including native
 JavaScript +156/-236 (before added live-claim regressions). Evidence is separate.
 No whole-history cap remains in the native input injection or Python proof
 reader; no replaced startup injection is kept alongside the implementation.
