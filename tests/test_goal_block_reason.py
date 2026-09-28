@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -17,24 +18,23 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
-from agent_comms.operations import wire
 from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 
 def _owner(tmp_path):
     comms = wire(tmp_path)
-    comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    goal = comms.update_goal("worker", SetGoalAction(text="Finish selected work"))
+    comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal
 
 
 def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, monkeypatch):
     comms, original = _owner(tmp_path)
-    progressed = comms.update_goal("worker", ActiveGoalAction(progress="Verified 2 of 3 items"))
+    progressed = comms.goals.update_goal("worker", ActiveGoalAction(progress="Verified 2 of 3 items"))
     assert progressed is not None
-    before_history = comms.goal_history("worker", goal_id=original.id)
+    before_history = comms.goals.goal_history("worker", goal_id=original.id)
     before_registry = (tmp_path / "registry.json").read_bytes()
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     tool = next(tool for tool in TOOLS if tool.name == "comms_goal")
@@ -46,12 +46,12 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
         {"block_reason": "x" * 1025},
     ):
         with pytest.raises(ValueError, match="reason"):
-            comms.update_goal(
+            comms.goals.update_goal(
                 "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=original.id), **kwargs)
             )
         assert comms.registry.require("worker").goal == progressed
         assert (tmp_path / "registry.json").read_bytes() == before_registry
-        assert comms.goal_history("worker", goal_id=original.id) == before_history
+        assert comms.goals.goal_history("worker", goal_id=original.id) == before_history
 
     with pytest.raises(ValueError, match="nonempty reason"):
         tool.invoke(
@@ -74,20 +74,20 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     assert blocked.state.reason == reason
     assert result["goal"]["block_reason"] == reason
     assert result["goal_execution"]["block_reason"] == reason
-    assert comms.goal_history("worker", goal_id=original.id)[-1].after == blocked
+    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == blocked
 
-    execution = comms.goal_execution("worker")
+    execution = comms.goals.goal_execution("worker")
     assert execution is not None and execution.block_reason == reason
     assert "Blocked · Need the exact ACP error text" in execution.presentation("worker").summary
     assert GoalExecution.from_wire(result["goal_execution"]) == execution
-    assert comms.thread_detail("worker")["goal"]["block_reason"] == reason
+    assert comms.views.thread_detail("worker")["goal"]["block_reason"] == reason
 
 
 def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     comms, started = _owner(tmp_path)
-    progressed = comms.update_goal("worker", ActiveGoalAction(progress="Verified step"))
+    progressed = comms.goals.update_goal("worker", ActiveGoalAction(progress="Verified step"))
     assert progressed is not None
-    blocked = comms.block_goal_after_failed_turn(
+    blocked = comms.goals.block_goal_after_failed_turn(
         "worker",
         started_goal=started,
         expected_worktree=str(tmp_path),
@@ -96,12 +96,12 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     assert blocked is not None
     assert blocked.progress == "Verified step\n\nAttempt outcome uncertain; inspect before Retry."
     assert blocked.state.reason == "Attempt outcome uncertain; inspect before Retry."
-    assert wire(tmp_path).goal_execution("worker").block_reason == blocked.state.reason
+    assert wire(tmp_path).goals.goal_execution("worker").block_reason == blocked.state.reason
 
     comms2, started2 = _owner(tmp_path / "another")
-    completed = comms2.update_goal("worker", CompletedGoalAction(progress="Reported completion"))
+    completed = comms2.goals.update_goal("worker", CompletedGoalAction(progress="Reported completion"))
     assert completed is not None
-    revoked = comms2.block_unverified_goal_completion(
+    revoked = comms2.goals.block_unverified_goal_completion(
         "worker",
         expected_goal=completed,
         expected_worktree=str(tmp_path / "another"),
@@ -117,7 +117,7 @@ def test_legacy_blocked_row_is_labeled_unavailable_not_inferred_from_progress(tm
     thread = comms.registry.require("worker")
     legacy = Goal(goal.text, goal.id, state=BlockedGoal(), progress="Unrelated old progress")
     comms.registry.register(replace(thread, goal=legacy), comms.registry.status("worker"))
-    observed = wire(tmp_path).goal_execution("worker")
+    observed = wire(tmp_path).goals.goal_execution("worker")
     assert observed is not None
     assert observed.block_reason is None
     assert observed.presentation("worker").summary == "Blocked · reason unavailable"
@@ -128,8 +128,8 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     from agent_comms.goal_attempts import GoalAttemptStore
 
     comms, original = _owner(tmp_path)
-    comms.register(replace(comms.registry.require("worker"), pid=os.getpid()))
-    progressed = comms.update_goal(
+    comms.threads.register(replace(comms.registry.require("worker"), pid=os.getpid()))
+    progressed = comms.goals.update_goal(
         "worker", PausedGoalAction(progress="Half verified by the owner")
     )
     assert progressed is not None
@@ -145,7 +145,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
         "Retry to authorize a new attempt. Your messages can still be sent."
     )
     with pytest.raises(ValueError, match="interrupted goal attempt is unresolved"):
-        comms.update_goal(
+        comms.goals.update_goal(
             "worker",
             ActiveGoalAction(
                 expect=GoalPrecondition(expected_owner_pid=os.getpid(), goal_id=original.id)
@@ -158,7 +158,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     # Prior progress is retained; the refusal is stored separately as the reason.
     assert reloaded.progress == "Half verified by the owner"
     assert reloaded.state.reason == refusal
-    execution = comms.goal_execution("worker")
+    execution = comms.goals.goal_execution("worker")
     assert execution is not None and execution.block_reason == refusal
     assert "Blocked · The interrupted goal attempt" in execution.presentation("worker").summary
-    assert comms.goal_history("worker", goal_id=original.id)[-1].after == reloaded
+    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == reloaded

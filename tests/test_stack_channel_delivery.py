@@ -10,8 +10,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_drain import InputDrain
 from agent_comms.threads import Thread
@@ -111,23 +111,23 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         warmup_proc = None
         try:
             await agent.new_session(str(project))
-            comms.update_tags("worker", add=frozenset({"team"}))
-            comms.register(Thread("peer", frozenset({"team"}), str(project)))
+            comms.channels.update_tags("worker", add=frozenset({"team"}))
+            comms.threads.register(Thread("peer", frozenset({"team"}), str(project)))
             turn = asyncio.create_task(agent.inputs.run_owned_input("worker", "worker", "Warmup"))
             assert await asyncio.to_thread(started.wait, 15)
             if case != "steer":
                 release.set()
                 await asyncio.wait_for(turn, 20)
                 warmup_proc = agent.turns.persistent_backends["worker"].proc
-                message = comms.send_user_message(
+                message = comms.messaging.send_user_message(
                     "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
                 )
             else:
-                message = comms.send_message("peer", "#team", "@worker STEER_CHANNEL_REQUEST")
+                message = comms.messaging.send_message("peer", "#team", "@worker STEER_CHANNEL_REQUEST")
             messages = [message]
             if case in {"batch", "batch_rename"}:
                 messages.append(
-                    comms.send_user_message(
+                    comms.messaging.send_user_message(
                         "#team", "SECOND_CHANNEL_REQUEST", worktree=str(project)
                     )
                 )
@@ -137,9 +137,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
             assert agent.inputs.dispositions.status(key) == "unknown"
             if case == "goal":
-                comms.update_goal("worker", SetGoalAction(text="Changed goal"))
+                comms.goals.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":
-                comms.stop("worker")
+                comms.owners.stop("worker")
                 await agent.sessions.sync_identity("worker")
                 assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":
@@ -188,7 +188,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     assert row["status"] == "started"
                     assert row["native_id"] == matched[0]["inputId"]
                     assert origin.body in json.dumps(matched[0])
-                replayed = wire(comms.root).thread_transcript_page("worker").events
+                replayed = wire(comms.root).transcripts.thread_transcript_page("worker").events
                 incoming = [
                     event
                     for event in replayed
@@ -199,7 +199,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 ]
                 assert [event.text for event in incoming] == [origin.body for origin in messages]
             if case in {"deliver", "rename", "batch_rename"}:
-                assert comms.channel_history("#team")[-1].body == "RECEIVED"
+                assert comms.views.channel_history("#team")[-1].body == "RECEIVED"
             if not success:
                 updates = []
 

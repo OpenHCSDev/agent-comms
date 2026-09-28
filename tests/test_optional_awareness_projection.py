@@ -14,12 +14,12 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms import coordination_cohort as cohort
 from agent_comms.bus_publication import CommittedInitial, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination import ExecutionOrigin, WakeClaim
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
-from agent_comms.operations import Comms
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex
@@ -34,9 +34,9 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
     for number in range(recipients):
-        comms.register(
+        comms.threads.register(
             Thread(
                 f"member{number:03}",
                 frozenset({"team"}),
@@ -45,7 +45,7 @@ def _root(
                 model="openai-codex/gpt-6-sol",
             )
         )
-    root_id = comms.initialize_private_initial_protocol()
+    root_id = comms.messaging.initialize_private_initial_protocol()
     store = MutationStore(str(root / "coordination.sqlite3"))
     install_private_cohort_schema(store)
     return comms, store, WakeCandidateIndex(comms.bus), root_id
@@ -54,7 +54,7 @@ def _root(
 def _accepted(
     comms: Comms, store: MutationStore, root_id: str, target: str, body: str
 ) -> tuple[CommittedInitial, WakeClaim]:
-    message = comms.send_initial_cohort("sender", target, body)
+    message = comms.messaging.send_initial_cohort("sender", target, body)
     initial = comms.bus.read_initial_cohort(root_id, message.seq)
     for recipient in initial.audience.recipients:
         store.register_participant(
@@ -105,7 +105,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
 ) -> None:
     comms, store, _index, root_id = _root(tmp_path)
     try:
-        message = comms.send_initial_cohort("sender", "#team", "@member000 @member001 act")
+        message = comms.messaging.send_initial_cohort("sender", "#team", "@member000 @member001 act")
         initial = comms.bus.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.register_participant(
@@ -160,7 +160,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
 ) -> None:
     comms, store, _index, root_id = _root(tmp_path)
     try:
-        message = comms.send_initial_cohort("sender", "member000", "fresh")
+        message = comms.messaging.send_initial_cohort("sender", "member000", "fresh")
         initial = comms.bus.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.register_participant(
@@ -293,7 +293,7 @@ def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) 
         index.maintain(rebuild=True)
         assert _projection(index, store, owner, 0, 1)(initial, claim, owner).mandatory_complete
 
-        second = comms.send_initial_cohort("sender", "member000", "not yet sealed")
+        second = comms.messaging.send_initial_cohort("sender", "member000", "not yet sealed")
         index.maintain()
         # The page checkpoint can outrun the caller's minimum source watermark.
         # It must include the later candidate or omit the whole supplement.
@@ -477,7 +477,7 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
         comms, store, index, root_id = _root(root)
         try:
             _old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
-            comms._rename_thread("member000", "gamma")
+            comms.threads._rename_thread("member000", "gamma")
             current, claim = _accepted(comms, store, root_id, "gamma", "new original")
             install_private_response_schema(store)
             install_native_runtime_schema(store)
@@ -505,8 +505,8 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
     comms, store, index, root_id = _root(tmp_path)
     try:
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
-        comms._rename_thread("member000", "gamma")
-        current_message = comms.send_initial_cohort("sender", "gamma", "new selected")
+        comms.threads._rename_thread("member000", "gamma")
+        current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
         current = comms.bus.read_initial_cohort(root_id, current_message.seq)
         receipt = accept_initial_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(receipt.claims) == 1
@@ -566,7 +566,7 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
     comms, store, index, root_id = _root(tmp_path)
     try:
         for number in range(100):
-            comms.send_initial_cohort("sender", "member001", f"other owner {number}")
+            comms.messaging.send_initial_cohort("sender", "member001", f"other owner {number}")
         initial, claim = _accepted(comms, store, root_id, "member000", "current work")
         assert initial.message.seq == 101
         assert index.maintain(rebuild=True, max_rows=256, max_bytes=8 * 1024 * 1024)

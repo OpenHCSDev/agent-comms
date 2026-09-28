@@ -15,6 +15,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
@@ -22,7 +23,6 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.operations import Comms
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
@@ -52,11 +52,11 @@ def _root(tmp_path: Path):
         Thread("other", frozenset(), str(tmp_path), pid=os.getpid()),
     ]
     for person in people:
-        comms.register(person)
-    root_id = comms.initialize_private_initial_protocol()
-    comms.initialize_private_claim_protocol()
+        comms.threads.register(person)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_claim_protocol()
     install_private_bus_checkpoint(comms.bus)  # fresh private root only
-    first = comms.send_initial_cohort("sender", "#team", "selected one")
+    first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -81,8 +81,8 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
     )
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
-        comms.send_initial_cohort("sender", "other", f"unrelated-{number:04}-" + "x" * 8700)
-    second = comms.send_initial_cohort("sender", "#team", "selected after 1000 other rows")
+        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number:04}-" + "x" * 8700)
+    second = comms.messaging.send_initial_cohort("sender", "#team", "selected after 1000 other rows")
     assert second.seq == first.seq + 1001 and comms.bus._path.stat().st_size > 8 * 1024 * 1024
     if migrate_existing:
         # Build the large fixture through the real certified publisher, then
@@ -126,8 +126,8 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
         )
     assert len(bad_calls) == 1  # failed input is UNKNOWN; never retry it
     for number in range(101):
-        comms.send_initial_cohort("sender", "other", f"unrelated-{number}")
-    later = comms.send_initial_cohort("sender", "alpha", "later selected")
+        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
+    later = comms.messaging.send_initial_cohort("sender", "alpha", "later selected")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, later.seq, store)
     good, good_calls = _fake_model(decision="IGNORE")
@@ -165,7 +165,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
 
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", uncertain)
     with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-        comms.send_initial_cohort("sender", "other", "uncertain other original")
+        comms.messaging.send_initial_cohort("sender", "other", "uncertain other original")
     assert len(comms.bus._path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:

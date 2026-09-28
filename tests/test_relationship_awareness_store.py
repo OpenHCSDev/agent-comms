@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Comms, locked_store
+from agent_comms import locked_store
+from agent_comms.comms import Comms
 from agent_comms.display_order import ThreadSort
 from agent_comms.locked_store import LockedStore
 from agent_comms.passive_channel_awareness import (

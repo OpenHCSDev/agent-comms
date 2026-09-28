@@ -288,7 +288,7 @@ class RuntimeProxy:
             root = getattr(agent, "_coordination_root", None)
             if root is None:
                 raise ValueError("Runtime proxy needs a coordination root.")
-            from .operations import wire
+            from .comms import wire
 
             comms = wire(root)
         self._comms = comms

@@ -15,6 +15,7 @@ from acp.schema import (
 from . import agent_events as events
 from .activity import ActivityState
 from .channel_targets import is_channel_target
+from .comms import Comms
 from .diagnostics import record_terminal_failure, terminal_failure_reason
 from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import LaunchPermit, StaleAttempt
@@ -22,7 +23,6 @@ from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .messages import MessageType
 from .mro_dispatch import MroDispatch, handles
-from .operations import Comms
 from .routing import MessageRoute
 from .transcript_updates import SentTranscriptUpdate
 from .turn_lease import FinishedTurnFence
@@ -45,7 +45,7 @@ class TurnEventPublication(MroDispatch):
         execution = self.execution
         await execution.runner.sync_goal_execution(execution.session_id, execution.thread_name)
         sent = await asyncio.to_thread(
-            execution.runner.comms.sent_tool_message,
+            execution.runner.comms.messaging.sent_tool_message,
             event.name,
             event.output,
             bool(event.ok),
@@ -142,12 +142,12 @@ class TurnProgress(events.AgentEventConsumer):
     async def compaction_started(self, event: events.CompactionStart) -> None:
         execution = self.execution
         if self.compaction_resume_activity is None:
-            current_activity = execution.runner.comms.activity_of(execution.thread_name)
+            current_activity = execution.runner.comms.agents.activity_of(execution.thread_name)
             self.compaction_resume_activity = (
                 current_activity.state,
                 current_activity.detail,
             )
-        execution.runner.comms.set_activity(
+        execution.runner.comms.agents.set_activity(
             execution.thread_name, ActivityState.WORKING, "Compacting context"
         )
 
@@ -155,7 +155,7 @@ class TurnProgress(events.AgentEventConsumer):
     async def compaction_ended(self, event: events.CompactionEnd) -> None:
         execution = self.execution
         if self.compaction_resume_activity is not None:
-            execution.runner.comms.set_activity(
+            execution.runner.comms.agents.set_activity(
                 execution.thread_name, *self.compaction_resume_activity
             )
             self.compaction_resume_activity = None
@@ -163,8 +163,8 @@ class TurnProgress(events.AgentEventConsumer):
     @handles(events.CompactionEvent)
     async def invalidate_context(self, event: events.CompactionEvent) -> None:
         execution = self.execution
-        info = execution.runner.comms.agent_info_of(execution.thread_name)
-        execution.runner.comms.set_agent_info(
+        info = execution.runner.comms.agents.agent_info_of(execution.thread_name)
+        execution.runner.comms.agents.set_agent_info(
             execution.thread_name,
             model=info.model if info else None,
             session_name=info.session_name if info else None,
@@ -188,7 +188,7 @@ class TurnProgress(events.AgentEventConsumer):
                 # Publish it once as visible, non-waking progress; the
                 # final reply contains only subsequent assistant text.
                 for target in execution.reply_targets:
-                    execution.runner.comms.send(
+                    execution.runner.comms.messaging.send(
                         execution.thread_name, target, progress, notice=True
                     )
                 self.reply_parts.clear()
@@ -244,7 +244,7 @@ class TurnProgress(events.AgentEventConsumer):
             ):
                 # Block the latest same-ID goal under the wire lock,
                 # retaining any newer progress from a concurrent update.
-                execution.runner.comms.block_goal_after_failed_turn(
+                execution.runner.comms.goals.block_goal_after_failed_turn(
                     execution.thread_name,
                     started_goal=execution.goal,
                     expected_worktree=execution.thread.worktree,
@@ -279,7 +279,7 @@ class TurnProgress(events.AgentEventConsumer):
             and execution.runner.comms.registry.require(execution.thread_name).session_file
             != session_file
         ):
-            execution.runner.comms.attach_session(execution.thread_name, str(session_file))
+            execution.runner.comms.threads.attach_session(execution.thread_name, str(session_file))
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
         execution = self.execution
@@ -335,7 +335,7 @@ class TurnProgress(events.AgentEventConsumer):
             # Retain the next activity without hiding active compaction.
             self.compaction_resume_activity = (state, detail)
         else:
-            execution.runner.comms.set_activity(execution.thread_name, state, detail)
+            execution.runner.comms.agents.set_activity(execution.thread_name, state, detail)
 
     async def publish_result(self):
         execution = self.execution
@@ -357,7 +357,7 @@ class TurnProgress(events.AgentEventConsumer):
                 and execution.current_goal.id == execution.goal.id
                 and execution.current_goal.state.active
             ):
-                execution.runner.comms.block_goal_after_failed_turn(
+                execution.runner.comms.goals.block_goal_after_failed_turn(
                     execution.thread_name,
                     started_goal=execution.goal,
                     expected_worktree=execution.thread.worktree,
@@ -430,7 +430,7 @@ class TurnProgress(events.AgentEventConsumer):
                     and execution.current_goal.id == execution.goal.id
                 ):
                     execution.diagnostic = "Goal turn ended without verified terminal progress."
-                    execution.runner.comms.block_goal_after_failed_turn(
+                    execution.runner.comms.goals.block_goal_after_failed_turn(
                         execution.thread_name,
                         started_goal=execution.goal,
                         expected_worktree=execution.thread.worktree,
@@ -438,7 +438,7 @@ class TurnProgress(events.AgentEventConsumer):
                     )
         if execution.origins and self.settled and self.terminal_ok is True:
             await asyncio.to_thread(
-                execution.runner.comms.record_turn_routing,
+                execution.runner.comms.transcripts.record_turn_routing,
                 execution.thread_name,
                 execution.checkpoint,
                 execution.routing,
@@ -446,7 +446,7 @@ class TurnProgress(events.AgentEventConsumer):
         if self.terminal_ok is True:
             if self.reply_parts:
                 for target in execution.reply_targets:
-                    execution.runner.comms.send(
+                    execution.runner.comms.messaging.send(
                         execution.thread_name,
                         target,
                         "".join(self.reply_parts),
@@ -478,7 +478,7 @@ class TurnProgress(events.AgentEventConsumer):
                 execution.prefix = (
                     "Request failed" if target in execution.reply_targets else "Delivery failed"
                 )
-                execution.runner.comms.send(
+                execution.runner.comms.messaging.send(
                     execution.thread_name,
                     target,
                     f"{execution.prefix}: backend turn did not complete. "
@@ -495,7 +495,7 @@ class TurnProgress(events.AgentEventConsumer):
                     "agentComms": {
                         "transcriptChanged": True,
                         "transcriptCursor": asdict(
-                            execution.runner.comms.transcript_checkpoint(execution.thread_name)
+                            execution.runner.comms.transcripts.transcript_checkpoint(execution.thread_name)
                         ),
                     }
                 },
@@ -557,7 +557,7 @@ class TurnProgress(events.AgentEventConsumer):
                 and execution.current.id == originated_id
                 and isinstance(execution.current.state, (ActiveGoal, CompletedGoal))
             ):
-                execution.runner.comms.update_goal(
+                execution.runner.comms.goals.update_goal(
                     execution.thread_name,
                     BlockedGoalAction(
                         expect=GoalPrecondition(

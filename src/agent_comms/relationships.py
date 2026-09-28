@@ -11,6 +11,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass, field, fields, replace
+from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, Literal
 
@@ -25,7 +26,9 @@ from .store_files import _store_lock, file_revision
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from .operations import Comms
+    from .history_views import HistoryViews
+    from .message_bus import MessageBus
+    from .registration import Registration
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,9 +290,13 @@ class ThreadRelationships:
     RECENT_BYTES = 2 * 1024 * 1024
     RECENT_MESSAGES = 512
 
-    def __init__(self, comms: Comms):
-        self.comms = comms
-        self.store = RelationshipStore(comms.root / RelationshipStore.filename)
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, views: HistoryViews):
+        self.root = root
+        self.registry = registry
+        self.bus = bus
+        self.views = views
+        self._wire_lock_path = root / "wire"
+        self.store = RelationshipStore(root / RelationshipStore.filename)
         self._lock = RLock()
         self._recent_revision: tuple[int, int, int, int] | None = None
         self._recent: tuple[Message, ...] = ()
@@ -297,15 +304,15 @@ class ThreadRelationships:
 
     def revision(self) -> tuple:
         return (
-            *self.comms.revision().files,
+            *self.views.revision().files,
             file_revision(self.store.path),
-            self.comms.revision().expiry_tick,
+            self.views.revision().expiry_tick,
         )
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        with _store_lock(self.comms._wire_lock_path):
-            registry = self.comms.registry.snapshot()
-            thread = self.comms.registry.require(owner)
+        with _store_lock(self._wire_lock_path):
+            registry = self.registry.snapshot()
+            thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
             return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
 
@@ -377,9 +384,9 @@ class ThreadRelationships:
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
         """Read-only mutual view; never changes an explicit contact or delivery."""
-        with _store_lock(self.comms._wire_lock_path):
-            registry = self.comms.registry.snapshot()
-            thread = self.comms.registry.require(owner)
+        with _store_lock(self._wire_lock_path):
+            registry = self.registry.snapshot()
+            thread = self.registry.require(owner)
             contacts, diagnostics = self._goal_contacts(registry)
             return (
                 tuple(
@@ -392,9 +399,9 @@ class ThreadRelationships:
 
     def contact_projection(self, owner: str) -> ContactProjection:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        with _store_lock(self.comms._wire_lock_path):
-            registry = self.comms.registry.snapshot()
-            thread = self.comms.registry.require(owner)
+        with _store_lock(self._wire_lock_path):
+            registry = self.registry.snapshot()
+            thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
             explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
             contacts, diagnostics = self._goal_contacts(registry)
@@ -444,11 +451,11 @@ class ThreadRelationships:
             raise ValueError("Expected add, update or remove")
         if len(note) > 2000:
             raise ValueError("Collaboration notes are limited to 2000 characters")
-        with _store_lock(self.comms._wire_lock_path):
-            first = self.comms.registry.require(owner)
+        with _store_lock(self._wire_lock_path):
+            first = self.registry.require(owner)
             if not first.role.executable:
                 raise ValueError("Collaborations relate agent threads")
-            registry = self.comms.registry.snapshot()
+            registry = self.registry.snapshot()
             peer = registry.aliases.get(peer, peer)
             result = None
 
@@ -466,9 +473,9 @@ class ThreadRelationships:
     def set_order(self, owner: str, group: str, order: ThreadSort) -> ThreadSort:
         if group not in {"children", "collaborating"}:
             raise ValueError("This relationship group has no selectable sort")
-        with _store_lock(self.comms._wire_lock_path):
-            thread = self.comms.registry.require(owner)
-            registry = self.comms.registry.snapshot()
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(owner)
+            registry = self.registry.snapshot()
             self.store.update(
                 lambda document: document.resolved(registry).ordered(thread, group, order)
             )
@@ -476,7 +483,7 @@ class ThreadRelationships:
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
         """Read bounded tail bytes once per bus revision, using core envelopes."""
-        path = self.comms.root / "bus.jsonl"
+        path = self.root / "bus.jsonl"
         revision = file_revision(path)
         with self._lock:
             if revision == self._recent_revision:
@@ -505,16 +512,16 @@ class ThreadRelationships:
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        with _store_lock(self.comms._wire_lock_path):
-            thread = self.comms.registry.require(owner)
-            registry = self.comms.registry.snapshot()
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(owner)
+            registry = self.registry.snapshot()
             state = self.store.read().resolved(registry)
             edges = state.collaborations
             goal_contacts, goal_diagnostics = self._goal_contacts(registry)
-            delivery = self.comms.bus._delivery_scope(thread.name)
+            delivery = self.bus._delivery_scope(thread.name)
         people = {
             view.thread.name: view
-            for view in self.comms.thread_views(show_stopped=True, show_archived=True)
+            for view in self.views.thread_views(show_stopped=True, show_archived=True)
         }
         messages, limited = self._recent_messages()
 
@@ -567,7 +574,7 @@ class ThreadRelationships:
                 orders[row.group] = row.order
         # Existing declaration-owned timestamp sort, shared with channel members.
         sent = (
-            self.comms.last_sent_timestamps() if ThreadSort.LAST_MESSAGE in orders.values() else {}
+            self.views.last_sent_timestamps() if ThreadSort.LAST_MESSAGE in orders.values() else {}
         )
 
         def ordered(entries: list[RelationshipEntry], group: str) -> tuple[RelationshipEntry, ...]:
@@ -630,7 +637,7 @@ class ThreadRelationships:
             )
         return ThreadCommsSnapshot(
             thread.name,
-            str(self.comms.root.resolve()),
+            str(self.root.resolve()),
             (
                 RelationshipGroup("inbound", "Last inbound", tuple(inbound.values())),
                 RelationshipGroup("outbound", "Last outbound", tuple(outbound.values())),

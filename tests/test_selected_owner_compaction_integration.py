@@ -204,9 +204,9 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
 
     from agent_comms import backend
     from agent_comms.acp import CommsAgent
+    from agent_comms.comms import wire
     from agent_comms.errors import RelationViolationError
     from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.operations import wire
     from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
     if private_session:
@@ -252,7 +252,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 pid=os.getpid(),
             )
         )
-        comms.set_agent_info(
+        comms.agents.set_agent_info(
             "proj",
             model=info.model,
             context_used=info.context_used,
@@ -397,7 +397,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 )
                 # The previous real response updated usage to the tiny fixture
                 # result. Supply a new observed threshold crossing for cycle two.
-                comms.set_agent_info(
+                comms.agents.set_agent_info(
                     "proj",
                     model=info.model,
                     context_used=info.context_used,

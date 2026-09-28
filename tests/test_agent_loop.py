@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.agent_loop import Participant
-from agent_comms.operations import wire
+from agent_comms.comms import wire
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -28,21 +28,21 @@ class TestParticipantDMs:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
-        comms.register(Thread(name="bot", tags=frozenset({"bot"}), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset({"bot"}), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
         participant.start()
         assert participant._thread_name == "bot"
 
-        comms.send("human", "bot", "fix the flake")
+        comms.messaging.send("human", "bot", "fix the flake")
 
         await participant._tick("bot")
 
-        dm = [m.body for m in comms.dm_history("bot", "human")]
+        dm = [m.body for m in comms.views.dm_history("bot", "human")]
         assert dm == ["fix the flake", "on-it"]
         # Reply went back as a DM to the sender.
-        assert comms.pending_count("human") == 1
+        assert comms.bus.pending_count("human") == 1
 
 
 class TestParticipantChannels:
@@ -52,16 +52,16 @@ class TestParticipantChannels:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset({"ci"}), worktree=str(tmp_path)))
-        comms.register(Thread(name="bot", tags=frozenset({"ci", "bot"}), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset({"ci"}), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset({"ci", "bot"}), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
         participant.start()
 
-        comms.send("human", "#ci", "flake again")
+        comms.messaging.send("human", "#ci", "flake again")
         await participant._tick("bot")
 
-        channel = [m.body for m in comms.channel_history("#ci")]
+        channel = [m.body for m in comms.views.channel_history("#ci")]
         assert channel == ["flake again", "seen"]
 
 
@@ -78,17 +78,17 @@ class TestParticipantLifecycle:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(identity), agent_args=[])
         participant.start()
-        comms.rename_self("auditor")
-        comms.send("human", "bot", "identity check")
+        comms.threads.rename_self("auditor")
+        comms.messaging.send("human", "bot", "identity check")
 
         await participant._tick("bot")
 
         assert participant._thread_name == "auditor"
-        replies = [message for message in comms.dm_history("human", "auditor")]
+        replies = [message for message in comms.views.dm_history("human", "auditor")]
         assert replies[-1].sender == "auditor"
         assert replies[-1].body == f"auditor|{root}"
 
@@ -102,15 +102,15 @@ class TestParticipantLifecycle:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset(), worktree=str(sender_wt)))
-        comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(sender_wt)))
+        comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(capture), agent_args=[])
         participant.start()
-        comms.send("human", "bot", "where are you")
+        comms.messaging.send("human", "bot", "where are you")
         await participant._tick("bot")
 
-        dm = [m.body for m in comms.dm_history("bot", "human")]
+        dm = [m.body for m in comms.views.dm_history("bot", "human")]
         assert any(str(sender_wt) in body for body in dm)
 
     def test_start_without_env_uses_participant_name(self, tmp_path, monkeypatch):
@@ -126,14 +126,14 @@ class TestParticipantLifecycle:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
-        comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
         participant = Participant(root=root, agent_bin="definitely-not-real-bin-xyz", agent_args=[])
         participant.start()
-        comms.send("human", "bot", "hello")
+        comms.messaging.send("human", "bot", "hello")
         await participant._tick("bot")
         # No crash, no reply.
-        assert comms.pending_count("human") == 0
+        assert comms.bus.pending_count("human") == 0
 
 
 class TestParticipantActivity:
@@ -145,17 +145,17 @@ class TestParticipantActivity:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
-        comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
         participant.start()
-        comms.send("human", "bot", "fix the flake")
+        comms.messaging.send("human", "bot", "fix the flake")
         await participant._tick("bot")
 
-        states = [e.state.value for e in comms.activity._load() if e.thread == "bot"]
+        states = [e.state.value for e in comms.agents.activity._load() if e.thread == "bot"]
         assert states == ["thinking", "idle"]
-        assert comms.activity_of("bot").state is ActivityState.IDLE
+        assert comms.agents.activity_of("bot").state is ActivityState.IDLE
 
     async def test_working_activity_on_tool_use(self, tmp_path, monkeypatch):
 
@@ -190,15 +190,15 @@ class TestParticipantActivity:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
         monkeypatch.chdir(tmp_path)
         comms = wire(root)
-        comms.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
-        comms.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
 
         participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
         participant.start()
-        comms.send("human", "bot", "check cwd")
+        comms.messaging.send("human", "bot", "check cwd")
         await participant._tick("bot")
 
-        states = [(e.state.value, e.detail) for e in comms.activity._load() if e.thread == "bot"]
+        states = [(e.state.value, e.detail) for e in comms.agents.activity._load() if e.thread == "bot"]
         assert ("working", "bash: ") in [(s, d) for s, d in states] or any(
             s == "working" for s, d in states
         )

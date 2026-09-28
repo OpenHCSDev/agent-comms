@@ -5,8 +5,8 @@ import sqlite3
 
 import pytest
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.threads import Thread
 
 GOAL_PROMPT = (
@@ -30,12 +30,12 @@ def saved_row(native_id, text, *, images=False, role="user"):
 @pytest.mark.parametrize("paged", [False, True])
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path, paged):
     comms = wire(tmp_path / "wire")
-    comms.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
-    comms.record_input_display("a" * 32, None)
-    comms.record_input_display("b" * 32, "Please inspect this image\nthen continue.")
+    comms.transcripts.record_input_display("a" * 32, None)
+    comms.transcripts.record_input_display("b" * 32, "Please inspect this image\nthen continue.")
     # Send now checks the same already-bound ID again; it cannot change its display.
-    comms.record_input_display("b" * 32, "User follow-up: private wrapper")
+    comms.transcripts.record_input_display("b" * 32, "User follow-up: private wrapper")
     session = tmp_path / "session.jsonl"
     rows = [
         saved_row("a" * 32, GOAL_PROMPT),
@@ -47,12 +47,12 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
         saved_row("a" * 32, "assistant reply", role="assistant"),
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    comms.attach_session("worker", str(session))
+    comms.threads.attach_session("worker", str(session))
     reopened = wire(comms.root)
     events = (
-        reopened.thread_transcript_page("worker").events
+        reopened.transcripts.thread_transcript_page("worker").events
         if paged
-        else reopened.thread_transcript("worker")
+        else reopened.transcripts.thread_transcript("worker")
     )
     assert [event.text for event in events if event.kind == "context"] == [
         GOAL_PROMPT,
@@ -68,13 +68,13 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 
 def test_existing_route_database_accepts_new_input_annotations_on_reopen(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.record_input_display("a" * 32, "first input")
+    comms.transcripts.record_input_display("a" * 32, "first input")
     # This is exactly the schema present before input display was introduced.
-    with sqlite3.connect(comms.transcript_routes.database_path) as connection:
+    with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
         connection.execute("DROP TABLE input_display")
     reopened = wire(comms.root)
-    reopened.record_input_display("b" * 32, None)
-    with reopened.transcript_routes.for_session("new-session.jsonl") as routes:
+    reopened.transcripts.record_input_display("b" * 32, None)
+    with reopened.transcripts.routes.for_session("new-session.jsonl") as routes:
         assert routes.input_display("a" * 32) is None
         assert routes.input_display("b" * 32).text is None
 
@@ -93,9 +93,9 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
-    comms.record_input_display("a" * 32, None)
-    comms.record_input_display("b" * 32, "test2")
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    comms.transcripts.record_input_display("a" * 32, None)
+    comms.transcripts.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))
     updates = []
 
@@ -124,7 +124,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
 
 def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
     comms = wire(tmp_path / "wire")
-    events = comms._transcript_message_events(
+    events = comms.transcripts._transcript_message_events(
         {
             "role": "assistant",
             "content": [

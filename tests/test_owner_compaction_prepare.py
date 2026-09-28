@@ -14,10 +14,10 @@ import pytest
 from agent_comms import backend, owner_compaction_runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
+from agent_comms.comms import Comms, wire
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
-from agent_comms.operations import Comms, wire
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
 from agent_comms.owner_compaction_runtime import compact_owner_once
@@ -132,8 +132,8 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
     prepared, source = candidate
     before = session.read_bytes()
     comms = Comms(root)
-    comms.register(Thread("peer", frozenset(), str(root)))
-    comms.send("peer", "owner", "Retain this corrected requirement")
+    comms.threads.register(Thread("peer", frozenset(), str(root)))
+    comms.messaging.send("peer", "owner", "Retain this corrected requirement")
     with pytest.raises(RelationViolationError, match="source changed"):
         bridge.commit(
             owner,
@@ -218,11 +218,11 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
     persistent = PersistentPiSession()
     original = session.read_bytes()
     comms = Comms(root)
-    comms.register(Thread("peer", frozenset(), str(root)))
+    comms.threads.register(Thread("peer", frozenset(), str(root)))
 
     async def corrected_summary(metadata):
         assert metadata.tokens_before > 0
-        comms.send("peer", "owner", "Correction after preparation")
+        comms.messaging.send("peer", "owner", "Correction after preparation")
         return "Now stale"
 
     with pytest.raises(RelationViolationError, match="source changed"):
@@ -453,7 +453,7 @@ async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(sess
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    comms.attach_session("project", str(session), pid=os.getpid())
+    comms.threads.attach_session("project", str(session), pid=os.getpid())
     current = comms.registry.require("project")
     comms.registry.register(replace(current, goal=Goal("retain exact history", "goal-e2e")))
     owner, epoch = comms.registry.live_owner_with_generation("project")

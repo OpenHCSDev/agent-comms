@@ -15,9 +15,8 @@ Unknown references raise — the system is fail-closed.
 
 ## Components
 
-- **Core** — domain owners in `threads`, `messages`, `channels`, `goals`,
-  `registry_document`, `message_bus` and `shared_ledger`; operations compose them.
-  Import declarations from their defining modules.
+- **Core** (`agent_comms.comms` and its state-owning components) — zero
+  dependencies. Threads, messages, registry, JSONL bus, shared ledger.
 - **CLI** (`agent-comms`) — JSON over stdout; the adapter surface for the pi
   extension and other process-based clients.
 - **ACP server** (`agent-comms-acp`) — Agent Client Protocol agent over
@@ -53,13 +52,13 @@ coding turn.
 
 ```python
 from pathlib import Path
-from agent_comms.operations import wire
 from agent_comms.threads import Thread
+from agent_comms.comms import wire
 
 comms = wire(Path("~/.agent-comms").expanduser())
-comms.register(Thread(name="PR111", tags=frozenset({"base"}), worktree=str(Path("~/wt/pr111").expanduser())))
-comms.broadcast("PR111", "CI is green")
-comms.inbox("fixer")
+comms.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree=str(Path("~/wt/pr111").expanduser())))
+comms.messaging.broadcast("PR111", "CI is green")
+comms.bus.inbox("fixer")
 ```
 
 Humans join the same wire — register a thread with your name and read the

@@ -20,11 +20,11 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import Comms
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_process import CompactionTransportUnknownError
 from agent_comms.registration import Registration
@@ -360,8 +360,8 @@ def test_malformed_bus_refuses_source_capture_without_repair(native):
 def test_new_correction_send_invalidates_pre_summary_source(native):
     bridge, owner, epoch, witness = native
     comms = Comms(bridge.root)
-    comms.register(Thread("peer", frozenset(), str(bridge.root)))
-    comms.send("peer", "owner", "Correction: retain the newer requirement")
+    comms.threads.register(Thread("peer", frozenset(), str(bridge.root)))
+    comms.messaging.send("peer", "owner", "Correction: retain the newer requirement")
     with pytest.raises(RelationViolationError, match="source changed"):
         bridge.commit(owner, epoch, witness, "stale summary", 42)
     assert bridge.journal.unresolved(witness["sessionFile"]) == ()
@@ -516,7 +516,7 @@ def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, 
     call = bridge._call
     children = []
     script = """
-import fcntl,sys
+import fcntl, sys
 from pathlib import Path
 from dataclasses import replace
 from agent_comms.goals import Goal
@@ -524,21 +524,19 @@ from agent_comms.messages import Message, MessageType
 from agent_comms.message_bus import MessageBus
 from agent_comms.registration import Registration
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import Comms
+from agent_comms.comms import Comms
 root = Path(sys.argv[1])
 mutation = sys.argv[2]
-lock_name = {'bus':'bus.jsonl','input':'input_dispositions.json','send':'wire'}.get(
-    mutation,'registry.json')
+lock_name = {'bus': 'bus.jsonl', 'input': 'input_dispositions.json', 'send': 'wire'}.get(mutation, 'registry.json')
 with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     try:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        print('blocked',flush=True)
+        print('blocked', flush=True)
     else:
         raise AssertionError('authority escaped before native write')
 if mutation == 'input':
-    InputDispositions(root).record('acp:late',seq=None,owner='owner',
-        admission=int(sys.argv[3]),target='owner',text='late correction')
+    InputDispositions(root).record('acp:late', seq=None, owner='owner', admission=int(sys.argv[3]), target='owner', text='late correction')
 else:
     registry = Registration(root / 'registry.json')
     if mutation == 'stop':
@@ -547,13 +545,12 @@ else:
         registry.heartbeat('owner')
     elif mutation == 'goal':
         owner = registry.snapshot().threads['owner']
-        registry.register(replace(owner,goal=Goal('new','new-goal')))
+        registry.register(replace(owner, goal=Goal('new', 'new-goal')))
     elif mutation == 'bus':
-        MessageBus(root / 'bus.jsonl', registry).publish(
-            Message(sender='owner',target='broadcast',body='late message',type=MessageType.INFO))
+        MessageBus(root / 'bus.jsonl', registry).publish(Message(sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
     else:
-        Comms(root).send('owner','broadcast','late message')
-print('changed',flush=True)
+        Comms(root).messaging.send('owner', 'broadcast', 'late message')
+print('changed', flush=True)
 """
 
     def with_competitor(*args):

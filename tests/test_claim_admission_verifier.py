@@ -20,12 +20,12 @@ from agent_comms.claim_admission import (
 )
 from agent_comms.claim_states import FullPendingClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import _engage
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
 from agent_comms.envelope_claim_transitions import WakeAdmission
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
-from agent_comms.operations import Comms
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -47,14 +47,14 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         resource.write_text("value = 1\n")
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
-            comms.register(
+            comms.threads.register(
                 Thread(
                     name, frozenset({"team"}), str(worktree), pid=os.getpid(), created_at=created
                 )
             )
-        root_id = comms.initialize_private_initial_protocol()
-        comms.initialize_private_claim_protocol()
-        message = comms.send_initial_cohort("sender", "#team", "@Alice investigate")
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_claim_protocol()
+        message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
         initial = comms.bus.read_initial_cohort(root_id, message.seq)
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
@@ -110,7 +110,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 publish_selected_resource_claim(
                     comms, store, replace(admission, recipient_lookup=bob_lookup), "Bob", resource
                 )
-            assert comms.claim_projection().get(str(resource)) is None
+            assert comms.bus.claim_projection().get(str(resource)) is None
             append = comms.bus._append_private_unlocked
 
             def append_then_lose_receipt(metadata: dict[str, int | str], row: dict) -> None:
@@ -121,14 +121,14 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 patch.setattr(comms.bus, "_append_private_unlocked", append_then_lose_receipt)
                 with pytest.raises(ClaimEnvelopeUnknownError):
                     publish_selected_resource_claim(comms, store, admission, owner.name, resource)
-            selected_owner = Comms(root).claim_projection()[str(resource)]
+            selected_owner = Comms(root).bus.claim_projection()[str(resource)]
             assert selected_owner.admission == admission
             assert selected_owner.resource == str(resource)
             assert (
                 publish_selected_resource_claim(comms, store, admission, owner.name, resource)
                 == selected_owner
             )
-            assert len(comms.full_history()) == 2
+            assert len(comms.views.full_history()) == 2
             # Simulate a crash after the durable rename intent but before SQL
             # owner CAS: an already selected attempt and exact resource claim
             # must not admit a new claim or touch the existing file.
@@ -254,4 +254,4 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 verify_selected_wake(comms, store, admission, "Alice")
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(comms, store, admission, "Alice", resource)
-            assert len(comms.full_history()) == 2
+            assert len(comms.views.full_history()) == 2

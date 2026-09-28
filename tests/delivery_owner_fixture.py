@@ -4,8 +4,8 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 
@@ -18,7 +18,7 @@ async def queued_delivery_owner(root):
     comms = wire(root / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     session = (await owner.new_session(str(project))).session_id
-    comms.register(Thread("peer", frozenset(), str(project)))
+    comms.threads.register(Thread("peer", frozenset(), str(project)))
     ledger = owner.inputs.dispositions
     admission = comms.registry.snapshot().admission_generations[session]
     for key in ("acp:earlier-unbound", "acp:earlier-bound"):
@@ -34,7 +34,7 @@ async def queued_delivery_owner(root):
     await lock.acquire()
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     try:
-        incoming = comms.send_message("peer", session, "New input must remain awaiting")
+        incoming = comms.messaging.send_message("peer", session, "New input must remain awaiting")
         await owner.inputs.drain_inbox(session)
         assert owner.inputs.pending_turns[session][0].origin == incoming
         assert owner.inputs.wake_tasks[session] and not owner.inputs.wake_tasks[session].done()

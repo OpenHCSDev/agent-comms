@@ -45,6 +45,7 @@ from . import backend, manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup, unique_wire_object
 from .cohort_foreground import _accept_visible_initials, _preflight
+from .comms import Comms, wire
 from .coordinated_runtime import run_one_sealed_claim
 from .coordination import CoordinationError, WakeClaim
 from .coordination_store import (
@@ -57,9 +58,14 @@ from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
 from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
-from .operations import Comms, wire
 from .routing import MessageRoute
-from .runtime import UNBOUND_CONTROLLER, RuntimeProxy, RuntimeServer, SocketClient, socket_path
+from .runtime import (
+    UNBOUND_CONTROLLER,
+    RuntimeProxy,
+    RuntimeServer,
+    SocketClient,
+    socket_path,
+)
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
@@ -786,7 +792,7 @@ def main() -> int:
     private_nk = private_nk_from_environment()
     comms = wire(private_nk.validated_root) if private_nk is not None else wire()
     if private_nk is not None:
-        comms.pin_private_nk_launch(
+        comms.owners.pin_private_nk_launch(
             private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
         )
 

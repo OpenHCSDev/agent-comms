@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.comms import Comms
 from agent_comms.coordination import CoordinationStore, canonical_publication_key
 from agent_comms.messages import Message, MessageType
 from agent_comms.recovery_projection import (
@@ -487,13 +488,13 @@ def test_wal_mode_refused_before_shared_memory_sidecar(tmp_path: Path):
 
 
 def test_no_owner_process_start_or_gateway_calls(private_db: Path, monkeypatch):
-    import agent_comms.operations as operations
+
 
     def prohibited(*_args, **_kwargs):
         raise AssertionError("reader must not start an owner or mutate a Comms registry")
 
-    monkeypatch.setattr(operations.Comms, "ensure_owner", prohibited)
-    monkeypatch.setattr(operations.Comms, "start", prohibited)
+    monkeypatch.setattr(Comms, "ensure_owner", prohibited)
+    monkeypatch.setattr(Comms, "start", prohibited)
     before_pid = os.getpid()
     assert isinstance(view(private_db), AvailableRecoveryProjection)
     assert os.getpid() == before_pid

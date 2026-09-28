@@ -197,10 +197,10 @@ class TestStatusCommand:
         from agent_comms.activity import ActivityState
 
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        from agent_comms.operations import wire
+        from agent_comms.comms import wire
 
         comms = wire(tmp_path)
-        comms.set_activity("a", ActivityState.WORKING, "bash: echo hi")
+        comms.agents.set_activity("a", ActivityState.WORKING, "bash: echo hi")
         code, out = cli(tmp_path, "status")
         row = out["status"][0]
         assert row["thread"] == "a" and row["state"] == "working"

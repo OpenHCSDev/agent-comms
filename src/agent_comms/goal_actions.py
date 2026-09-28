@@ -10,7 +10,7 @@ from uuid import uuid4
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
-from .goal_pauses import GoalPauseEvent, GoalPauseEvents
+from .goal_pauses import GoalPauseEvent
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -22,11 +22,12 @@ from .goal_states import (
 )
 from .goal_waits import GoalWait, GoalWaits
 from .goals import Goal
+from .owner_lifecycle import OwnerLifecycle
 from .threads import Thread
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
-    from .operations import Comms
+    from .goal_management import Goals
 
 
 class ModelInvocable:
@@ -56,7 +57,7 @@ class GoalPrecondition:
         thread, goal = ctx.thread, ctx.thread.goal
         if self.expected_owner_pid is not None and (
             thread.pid != self.expected_owner_pid
-            or not ctx.comms.registry.status(thread.name).running
+            or not ctx.goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         if self.expected_goal is not None and goal != self.expected_goal:
@@ -75,7 +76,7 @@ class GoalPrecondition:
 
 @dataclass(frozen=True)
 class GoalActionContext:
-    comms: Comms
+    goals: Goals
     thread: Thread
     actor: type = RuntimeInvocable
     owner_store: GoalAttemptStore | None = None
@@ -118,7 +119,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
         self.before_publish(goal, ctx)
-        ctx.comms.registry.register(
+        ctx.goals.registry.register(
             replace(
                 ctx.thread,
                 goal=goal,
@@ -126,13 +127,13 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
                     ctx.report_turn if ctx.model_report else ctx.thread.last_goal_report_turn
                 ),
             ),
-            ctx.comms.registry.status(ctx.thread.name),
+            ctx.goals.registry.status(ctx.thread.name),
         )
         if not self.preserve_wait and ctx.thread.goal is not None:
-            GoalWaits(ctx.comms.root / GoalWaits.filename).clear(ctx.thread.goal.id)
+            ctx.goals.waits.clear(ctx.thread.goal.id)
         if goal is not None and goal.state.pause_source is not None:
             # Audit only; current pause authority is already durable in Goal.
-            GoalPauseEvents(ctx.comms.root / GoalPauseEvents.filename).record(
+            ctx.goals.pauses.record(
                 GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source)
             )
         return goal
@@ -206,8 +207,8 @@ class ActiveGoalAction(
                     progress=goal.progress,
                     revision=goal.revision + 1,
                 )
-                ctx.comms.registry.register(
-                    replace(thread, goal=blocked), ctx.comms.registry.status(thread.name)
+                ctx.goals.registry.register(
+                    replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
                 )
                 raise ValueError(refusal)
             elif not generation.lifecycle.allows_resume(thread.active_turn is not None):
@@ -227,13 +228,13 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         assert goal is not None
         thread = ctx.thread
         report_turn = ctx.report_turn
-        review = ctx.comms._goal_input_review(thread, goal.id, self.wait_for)
+        review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
         wait_targets = review.targets
         from .input_disposition import AcpDeliveryCursors, InputDispositions
 
         aliases = review.owners
-        cursor = AcpDeliveryCursors(ctx.comms.root).cursor(aliases)
-        dispositions = InputDispositions(ctx.comms.root)
+        cursor = AcpDeliveryCursors(ctx.goals.root).cursor(aliases)
+        dispositions = InputDispositions(ctx.goals.root)
         unknown = {row["key"]: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
         if any(key not in unknown or unknown[key]["sequence"] is None for key in reviewed_keys):
@@ -248,7 +249,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         senders = review.senders
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
-        pending = ctx.comms.bus._history_page(
+        pending = ctx.goals.bus._history_page(
             lambda message: (
                 message.target in aliases
                 and message.sender in senders
@@ -270,10 +271,10 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 "for a later reply. Do not pass excluded owner or other dependency inputs. "
                 "This does not mark them STARTED or replay them."
             )
-        snapshot = ctx.comms.registry.snapshot()
+        snapshot = ctx.goals.registry.snapshot()
         if not any(
             GoalWaits.target_has_active_turn(target, snapshot)
-            and ctx.comms._process_alive(
+            and OwnerLifecycle._process_alive(
                 snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
             )
             for target in wait_targets
@@ -288,9 +289,9 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         closed = GoalWaits.closed_wait_group(
             thread.name,
             wait_targets,
-            GoalWaits(ctx.comms.root / GoalWaits.filename).read(),
+            ctx.goals.waits.read(),
             snapshot,
-            ctx.comms._process_alive,
+            OwnerLifecycle._process_alive,
         )
         if closed:
             names = ", ".join(f"@{name}" for name in closed)
@@ -308,12 +309,12 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         )
         # Commit scheduling authority first. A crash before the registry
         # progress update must leave this same goal waiting, not runnable.
-        GoalWaits(ctx.comms.root / GoalWaits.filename).record(
+        ctx.goals.waits.record(
             GoalWait(
                 goal.id,
                 uuid4().hex,
                 goal.revision,
-                ctx.comms.message_high_water(),
+                ctx.goals.bus.latest_sequence(),
                 wait_targets,
                 owner_created_at=thread.created_at,
                 report_turn_id=thread.active_turn.id if thread.active_turn else None,
@@ -371,7 +372,7 @@ class ReplacementGoalAction(GoalAction):
             # remaining visible goal is safely unlaunchable.
             from .goal_attempts import GoalAttemptStore
 
-            private = ctx.comms.root / "goal-private"
+            private = ctx.goals.root / "goal-private"
             if (private / "goal_attempts.sqlite3").exists():
                 attempts = GoalAttemptStore(private)
                 generation = attempts.snapshot(goal.id)
@@ -395,7 +396,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
-                goal.text, goal.id, goal.revision, ctx.thread, ctx.comms.registry.snapshot()
+                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
         if ctx.owner_store is not None:
@@ -427,7 +428,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
             text=text,
             revision=revision,
             mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.comms.registry.snapshot()
+                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
 

@@ -17,13 +17,13 @@ import pytest
 
 from agent_comms import nk_foreground as foreground
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
 from agent_comms.nk_foreground import reserve_foreground_owner
-from agent_comms.operations import Comms
 from agent_comms.threads import Thread
 from test_cohort_foreground import _configured_thread, _fake_package
 from test_coordinated_runtime import _fake_model
@@ -51,8 +51,8 @@ def _private_root(tmp_path: Path):
     root.mkdir(mode=0o700)
     (root / "work").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.register(Thread("sender", frozenset(), str(root / "work"), pid=os.getpid()))
-    return root, comms, comms.initialize_private_initial_protocol()
+    comms.threads.register(Thread("sender", frozenset(), str(root / "work"), pid=os.getpid()))
+    return root, comms, comms.messaging.initialize_private_initial_protocol()
 
 
 def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL") -> None:
@@ -138,7 +138,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
         assert duplicate.exitcode == 0
         assert comms.registry.require("beta").pid == ready[1]
 
-        message = comms.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+        message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
         initial = comms.bus.read_initial_cohort(root_id, message.seq)
         assert len(initial.audience.recipients) == 2
         assert (
@@ -170,7 +170,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
                 ]
                 == 1
             )
-        assert comms.channel_history("#team")[-1].sender == "beta"
+        assert comms.views.channel_history("#team")[-1].sender == "beta"
         assert not (root / "read_markers.json").exists()
     finally:
         for child in (*children, duplicate):
@@ -198,8 +198,8 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             native_package=root / "fake-pi",
             opt_in=True,
         )
-        comms.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
-        message = comms.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+        comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+        message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
         _accept(root, root_id, comms, message)
         failing, attempts = _fake_model(fail_on=1)
         with (
@@ -235,7 +235,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, comms, root_id = _private_root(tmp_path)
-    comms.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
+    comms.threads.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", _fake_package)
@@ -253,7 +253,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
         events.append(payload)
         if payload.get("status") == "ready":
             assert comms.registry.require("beta").pid == os.getpid()
-            message = comms.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+            message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
             _accept(root, root_id, comms, message)
 
     monkeypatch.setattr(foreground, "_emit", emit)

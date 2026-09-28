@@ -8,10 +8,10 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import ForkSpec
 from agent_comms.acp import CommsAgent
-from agent_comms.operations import wire
+from agent_comms.comms import wire
 from agent_comms.runtime import RuntimeProxy, _present_cursor_session, socket_path
+from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 
 
@@ -148,7 +148,7 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp_path):
     comms = wire(tmp_path / "wire")
     old_pid, new_pid = 901001, 901002
-    comms.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
     client = CommsAgent(comms)
     updates = []
 
@@ -237,7 +237,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         comms.registry.unregister("renamed")
         comms.registry.begin_delete("renamed")
         comms.registry.remove("renamed")
-        comms.register(Thread("worker", frozenset(), str(tmp_path), pid=901003))
+        comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=901003))
         with pytest.raises(RuntimeError, match="identity changed"):
             await proxy.request("cancel")
     finally:
@@ -260,7 +260,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
 async def test_request_only_proxy_never_replays_after_request_was_received(tmp_path):
     comms = wire(tmp_path / "wire")
     old_pid, new_pid = 902001, 902002
-    comms.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=old_pid))
     old_path = socket_path(comms.root, old_pid)
     new_path = socket_path(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
@@ -409,7 +409,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
         )
         + "\n"
     )
-    comms.attach_session(response.session_id, str(transcript))
+    comms.threads.attach_session(response.session_id, str(transcript))
     proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
     try:
         await proxy.subscribe()
@@ -435,11 +435,11 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
     comms = wire(tmp_path / "wire")
     session = tmp_path / "parent.jsonl"
     session.write_text("")
-    comms.register(
+    comms.threads.register(
         Thread(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
     )
-    comms.send("parent", "#all", "old broadcast must not be delivered")
-    child = comms.fork(
+    comms.messaging.send("parent", "#all", "old broadcast must not be delivered")
+    child = comms.threads.fork(
         ForkSpec(name="child", parent="parent", task="initial turn"), pi_bin="/bin/echo"
     )
     first, second = CommsAgent(comms), CommsAgent(comms)
@@ -464,22 +464,22 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         # Wait for the idle event emitted after its initial turn instead.
         await until(
             lambda: (
-                (activity := comms.activity.all_current().get("child")) is not None
+                (activity := comms.agents.activity.all_current().get("child")) is not None
                 and activity.state.value == "idle"
             )
         )
         # The owner need not broadcast an unsolicited initial answer: a
         # completed local turn is not proof that any channel was addressed.
-        assert all(m.sender != "child" for m in comms.channel_history("#all"))
+        assert all(m.sender != "child" for m in comms.views.channel_history("#all"))
         assert comms.registry.require("child").pid == child.pid
         assert comms.registry.status("child").declared_name == "running"
-        assert comms.activity_of("child").state.value == "idle"
+        assert comms.agents.activity_of("child").state.value == "idle"
         for agent in (first, second):
             response = await agent.load_session(str(tmp_path), "child")
             assert response.field_meta["agentComms"]["ownerPid"] == child.pid
         assert comms.registry.require("child").pid == child.pid
-        comms.send("parent", "child", "second round without polling or sleeping")
-        comms.acknowledge("child")  # Reading in a UI must not eat the agent's delivery.
+        comms.messaging.send("parent", "child", "second round without polling or sleeping")
+        comms.messaging.acknowledge("child")  # Reading in a UI must not eat the agent's delivery.
         await until(
             lambda: all(
                 any("incoming" in u.get("_meta", {}).get("agentComms", {}) for u in updates)
@@ -496,40 +496,40 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
             assert incoming[0]["sender"] == "parent"
             assert "second round" in incoming[0]["body"]
         responses = [
-            m for m in comms.full_history() if m.sender == "child" and "second round" in m.body
+            m for m in comms.views.full_history() if m.sender == "child" and "second round" in m.body
         ]
         assert len(responses) <= 1
         assert all(m.target == "parent" for m in responses)
         assert all("old broadcast must not be delivered" not in m.body for m in responses)
-        assert all(m.sender != "child" for m in comms.channel_history("#all"))
+        assert all(m.sender != "child" for m in comms.views.channel_history("#all"))
         # A UI prompt is forwarded to that same owner, not run by either client.
         response = await second.prompt("child", [{"type": "text", "text": "third round"}])
         assert response.stop_reason == "end_turn"
         assert comms.registry.require("child").pid == child.pid
         await first.shutdown()
-        assert comms._process_alive(child.pid)
+        assert comms.owners._process_alive(child.pid)
         assert comms.registry.status("child").declared_name == "running"
-        comms.rename_managed_thread("child", "renamed child", owner_pid=child.pid)
+        comms.threads.rename_managed_thread("child", "renamed child", owner_pid=child.pid)
         response = await second.prompt("child", [{"type": "text", "text": "after rename"}])
         assert response.stop_reason == "end_turn"
         assert comms.registry.require("child").name == "renamed-child"
         assert len(comms.registry.all_threads()) == 2
-        comms.stop("parent")
-        deleted = comms.delete("parent")
+        comms.owners.stop("parent")
+        deleted = comms.threads.delete("parent")
         assert deleted.detached_children == ("renamed-child",)
         assert comms.registry.require("child").parent is None
         assert comms.registry.require("child").pid == child.pid
         response = await second.prompt("child", [{"type": "text", "text": "after parent deletion"}])
         assert response.stop_reason == "end_turn"
-        assert comms._process_alive(child.pid)
+        assert comms.owners._process_alive(child.pid)
     finally:
         await first.shutdown()
         await second.shutdown()
-        await asyncio.to_thread(comms.stop, "child")
+        await asyncio.to_thread(comms.owners.stop, "child")
         # Reap the child started by fork (otherwise /proc retains a zombie).
         with suppress(ChildProcessError):
             await asyncio.to_thread(os.waitpid, child.pid, 0)
-    comms.delete("child")
+    comms.threads.delete("child")
     assert "child" not in comms.registry
     assert "renamed-child" not in comms.registry
 
@@ -540,10 +540,10 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     comms = wire(tmp_path)
     session = tmp_path / "parent.jsonl"
     session.write_text("")
-    comms.register(
+    comms.threads.register(
         Thread(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
     )
-    comms.register(Thread(name="child", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread(name="child", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     with pytest.raises(RelationViolationError, match="already exists"):
-        comms.fork(ForkSpec(name="child", parent="parent", task="duplicate"))
+        comms.threads.fork(ForkSpec(name="child", parent="parent", task="duplicate"))
     assert comms.registry.require("child").pid == os.getpid()

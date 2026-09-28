@@ -1,0 +1,152 @@
+..........F...........................FF................                 [100%]
+=================================== FAILURES ===================================
+_________ test_separate_processes_serialize_one_private_user_identity __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/publication/test_separate_processes_serial0')
+
+    def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) -> None:
+        comms, _, root_id, _ = _root(tmp_path)
+        program = (
+            "import sys; from agent_comms.comms import Comms; "
+            "m=Comms(sys.argv[1]).send_user_message('#team',sys.argv[2],worktree=sys.argv[3]); "
+            "print(m.seq, m.message_id)"
+        )
+        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+        processes = [
+            subprocess.Popen(
+                [sys.executable, "-c", program, str(comms.root), f"child-{n}", str(tmp_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            for n in range(2)
+        ]
+        receipts = [process.communicate(timeout=15) for process in processes]
+>       assert all(process.returncode == 0 for process in processes), receipts
+E       AssertionError: [('', 'Traceback (most recent call last):
+E           File "<string>", line 1, in <module>
+E             import sys; from agent_comms.co...     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E         AttributeError: \'Comms\' object has no attribute \'send_user_message\'
+E         ')]
+E       assert False
+E        +  where False = all(<generator object test_separate_processes_serialize_one_private_user_identity.<locals>.<genexpr> at 0x7f87255d25a0>)
+
+tests/test_private_human_ingress.py:284: AssertionError
+__ test_sigkill_across_claim_send_recovers_one_row_or_none[before_bus_append] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/publication/test_sigkill_across_claim_send0')
+phase = 'before_bus_append'
+
+    @pytest.mark.parametrize("phase", ["before_bus_append", "after_bus_append_before_fsync"])
+    def test_sigkill_across_claim_send_recovers_one_row_or_none(tmp_path: Path, phase: str) -> None:
+        comms, _ = _participants(tmp_path)
+        code = r"""
+    import os, signal, sys
+    from pathlib import Path
+    sys.path.insert(0, sys.argv[2])
+    from agent_comms import declarations
+    from agent_comms.comms import Comms
+    root = Path(sys.argv[1]); phase = sys.argv[3]
+    bus = root / 'bus.jsonl'
+    real_fsync = os.fsync
+    def kill_at_boundary(fd):
+        name = os.readlink(f'/proc/self/fd/{fd}')
+        if (phase == 'before_bus_append' and '.bus_meta.json.' in name
+            or phase == 'after_bus_append_before_fsync' and name == str(bus)):
+            os.kill(os.getpid(), signal.SIGKILL)
+        real_fsync(fd)
+    declarations.os.fsync = kill_at_boundary
+    Comms(root, private_claim_writes=True).send_message(
+        'alice', 'bob', 'Interrupted claim', claims=['a.py'])
+    """
+        source = str(Path(__file__).resolve().parents[1] / "src")
+        env = os.environ.copy()
+        for key in (
+            "PI_AGENT_ID",
+            "PI_PARENT_ID",
+            "PI_AGENT_TAGS",
+            "AGENT_COMMS_THREAD",
+            "AGENT_COMMS_TAGS",
+        ):
+            env.pop(key, None)
+        child = subprocess.run(
+            [sys.executable, "-c", code, str(comms.root), source, phase],
+            env=env,
+            capture_output=True,
+            check=False,
+            timeout=8,
+        )
+>       assert child.returncode == -signal.SIGKILL, child.stderr.decode(errors="replace")
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 17, in <module>
+E             Comms(root, private_claim_writes=True).send_message(
+E             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E         AttributeError: 'Comms' object has no attribute 'send_message'
+E         
+E       assert 1 == -<Signals.SIGKILL: 9>
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', "\nimport os, signal,...^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: \'Comms\' object has no attribute \'send_message\'\n').returncode
+E        +  and   <Signals.SIGKILL: 9> = signal.SIGKILL
+
+tests/test_envelope_bus_integration.py:733: AssertionError
+_ test_sigkill_across_claim_send_recovers_one_row_or_none[after_bus_append_before_fsync] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-c0-operations-20260928/.artifacts/c0/tests/publication/test_sigkill_across_claim_send1')
+phase = 'after_bus_append_before_fsync'
+
+    @pytest.mark.parametrize("phase", ["before_bus_append", "after_bus_append_before_fsync"])
+    def test_sigkill_across_claim_send_recovers_one_row_or_none(tmp_path: Path, phase: str) -> None:
+        comms, _ = _participants(tmp_path)
+        code = r"""
+    import os, signal, sys
+    from pathlib import Path
+    sys.path.insert(0, sys.argv[2])
+    from agent_comms import declarations
+    from agent_comms.comms import Comms
+    root = Path(sys.argv[1]); phase = sys.argv[3]
+    bus = root / 'bus.jsonl'
+    real_fsync = os.fsync
+    def kill_at_boundary(fd):
+        name = os.readlink(f'/proc/self/fd/{fd}')
+        if (phase == 'before_bus_append' and '.bus_meta.json.' in name
+            or phase == 'after_bus_append_before_fsync' and name == str(bus)):
+            os.kill(os.getpid(), signal.SIGKILL)
+        real_fsync(fd)
+    declarations.os.fsync = kill_at_boundary
+    Comms(root, private_claim_writes=True).send_message(
+        'alice', 'bob', 'Interrupted claim', claims=['a.py'])
+    """
+        source = str(Path(__file__).resolve().parents[1] / "src")
+        env = os.environ.copy()
+        for key in (
+            "PI_AGENT_ID",
+            "PI_PARENT_ID",
+            "PI_AGENT_TAGS",
+            "AGENT_COMMS_THREAD",
+            "AGENT_COMMS_TAGS",
+        ):
+            env.pop(key, None)
+        child = subprocess.run(
+            [sys.executable, "-c", code, str(comms.root), source, phase],
+            env=env,
+            capture_output=True,
+            check=False,
+            timeout=8,
+        )
+>       assert child.returncode == -signal.SIGKILL, child.stderr.decode(errors="replace")
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 17, in <module>
+E             Comms(root, private_claim_writes=True).send_message(
+E             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E         AttributeError: 'Comms' object has no attribute 'send_message'
+E         
+E       assert 1 == -<Signals.SIGKILL: 9>
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', "\nimport os, signal,...^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: \'Comms\' object has no attribute \'send_message\'\n').returncode
+E        +  and   <Signals.SIGKILL: 9> = signal.SIGKILL
+
+tests/test_envelope_bus_integration.py:733: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_private_human_ingress.py::test_separate_processes_serialize_one_private_user_identity
+FAILED tests/test_envelope_bus_integration.py::test_sigkill_across_claim_send_recovers_one_row_or_none[before_bus_append]
+FAILED tests/test_envelope_bus_integration.py::test_sigkill_across_claim_send_recovers_one_row_or_none[after_bus_append_before_fsync]
+3 failed, 53 passed in 8.81s

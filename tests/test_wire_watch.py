@@ -6,7 +6,7 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.operations import Comms, wire
+from agent_comms.comms import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import open_wire_watcher
@@ -15,8 +15,8 @@ from agent_comms.wire_watch import open_wire_watcher
 @pytest.mark.asyncio
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     comms = Comms(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
-    root_id = comms.initialize_private_initial_protocol()
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    root_id = comms.messaging.initialize_private_initial_protocol()
     guard = PrivateRegistryGuard(comms.registry.store.path, root_id)
     watcher = open_wire_watcher(tmp_path)
     if watcher is None:

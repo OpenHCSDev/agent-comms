@@ -8,8 +8,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import wire
 from agent_comms.cli import main
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -19,7 +19,7 @@ from agent_comms.turn_lease import ActiveTurn
 def setup_owners(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     for index, name in enumerate(("one", "two", "stopped"), 1):
-        comms.register(
+        comms.threads.register(
             Thread(
                 name,
                 frozenset({"team"}),
@@ -30,8 +30,8 @@ def setup_owners(tmp_path, monkeypatch):
             )
         )
     comms.registry.unregister("stopped")
-    monkeypatch.setattr(comms, "_process_alive", lambda pid: pid > 0)
-    monkeypatch.setattr(comms, "_is_local_participant", lambda thread, wait=True: True)
+    monkeypatch.setattr(comms.owners, '_process_alive', lambda pid: pid > 0)
+    monkeypatch.setattr(comms.owners, '_is_local_participant', lambda thread, wait=True: True)
     stopped = []
 
     def signal(pid, _signal):
@@ -43,16 +43,16 @@ def setup_owners(tmp_path, monkeypatch):
         comms.registry.register(updated, new_owner=True)
         return updated
 
-    monkeypatch.setattr(comms, "_signal_local_owner", signal)
-    monkeypatch.setattr(comms, "_wait_for_owner_exit", lambda pid, timeout: True)
-    monkeypatch.setattr(comms, "_launch_owner_unlocked", launch)
+    monkeypatch.setattr(comms.owners, '_signal_local_owner', signal)
+    monkeypatch.setattr(comms.owners, '_wait_for_owner_exit', lambda pid, timeout: True)
+    monkeypatch.setattr(comms.owners, '_launch_owner_unlocked', launch)
     return comms, stopped
 
 
 def test_bulk_restart_preserves_state_and_does_not_revive_stopped(tmp_path, monkeypatch):
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     old = comms.registry.require("one")
-    results = comms.restart_owners()
+    results = comms.owners.restart_owners()
     assert stopped == ["one", "two"]
     assert [receipt.thread for receipt in results] == stopped
     assert results[0].previous_pid == old.pid
@@ -63,35 +63,35 @@ def test_bulk_restart_preserves_state_and_does_not_revive_stopped(tmp_path, monk
 def test_restart_requires_exact_queued_owner_incarnation(tmp_path, monkeypatch):
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     live = {10001, 10002}
-    monkeypatch.setattr(comms, "_process_alive", lambda pid: pid in live)
-    original_signal = comms._signal_local_owner
+    monkeypatch.setattr(comms.owners, '_process_alive', lambda pid: pid in live)
+    original_signal = comms.owners._signal_local_owner
 
     def signal_and_exit(pid, sig):
         original_signal(pid, sig)
         live.discard(pid)
 
-    monkeypatch.setattr(comms, "_signal_local_owner", signal_and_exit)
-    original_launch = comms._launch_owner_unlocked
+    monkeypatch.setattr(comms.owners, '_signal_local_owner', signal_and_exit)
+    original_launch = comms.owners._launch_owner_unlocked
 
     def launch_and_live(thread, agent_bin, agent_args):
         updated = original_launch(thread, agent_bin, agent_args)
         live.add(updated.pid)
         return updated
 
-    monkeypatch.setattr(comms, "_launch_owner_unlocked", launch_and_live)
+    monkeypatch.setattr(comms.owners, '_launch_owner_unlocked', launch_and_live)
     snapshot = comms.registry.snapshot()
     owner = snapshot.threads["one"]
     expected = (owner.pid, owner.created_at, snapshot.admission_generations["one"])
     with pytest.raises(ValueError, match="Queued owner incarnation changed"):
-        comms.restart_owners(
+        comms.owners.restart_owners(
             ["one"], expected_incarnations={"one": (expected[0], expected[1], expected[2] - 1)}
         )
     assert stopped == []
-    (result,) = comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    (result,) = comms.owners.restart_owners(["one"], expected_incarnations={"one": expected})
     assert result.previous_pid == expected[0]
     assert stopped == ["one"]
     with pytest.raises(ValueError, match="Queued owner incarnation changed"):
-        comms.restart_owners(["one"], expected_incarnations={"one": expected})
+        comms.owners.restart_owners(["one"], expected_incarnations={"one": expected})
     assert stopped == ["one"]
 
 
@@ -101,8 +101,8 @@ def test_guarded_restart_fences_post_signal_wake_before_exit(tmp_path, monkeypat
     original = snapshot.threads["one"]
     expected = (original.pid, original.created_at, snapshot.admission_generations["one"])
     live = {original.pid}
-    monkeypatch.setattr(comms, "_process_alive", lambda pid: pid in live)
-    monkeypatch.setattr(comms, "_signal_local_owner", lambda pid, signal: live.discard(pid))
+    monkeypatch.setattr(comms.owners, '_process_alive', lambda pid: pid in live)
+    monkeypatch.setattr(comms.owners, '_signal_local_owner', lambda pid, signal: live.discard(pid))
     observed = []
 
     def wait_after_signal(pid, timeout):
@@ -116,8 +116,8 @@ def test_guarded_restart_fences_post_signal_wake_before_exit(tmp_path, monkeypat
         observed.append(comms.registry.require("one").active_turn)
         return True
 
-    monkeypatch.setattr(comms, "_wait_for_owner_exit", wait_after_signal)
-    (result,) = comms.restart_owners(["one"], expected_incarnations={"one": expected})
+    monkeypatch.setattr(comms.owners, '_wait_for_owner_exit', wait_after_signal)
+    (result,) = comms.owners.restart_owners(["one"], expected_incarnations={"one": expected})
     assert result.previous_pid == original.pid
     assert observed == [None]
 
@@ -136,7 +136,7 @@ def test_direct_claim_racing_final_preflight_is_not_erased_or_signaled(tmp_path,
 
     monkeypatch.setattr(comms.registry, "fence_idle_owner", racing_fence)
     with pytest.raises(RelationViolationError, match="Idle owner changed before restart fence"):
-        comms.restart_owners(["one"], expected_incarnations={"one": expected})
+        comms.owners.restart_owners(["one"], expected_incarnations={"one": expected})
     assert stopped == []
     assert comms.registry.require("one").active_turn.id == "raced"
 
@@ -149,7 +149,7 @@ def test_explicit_start_cannot_reopen_stopped_live_restart_fence(tmp_path, monke
         original, expected_admission_generation=snapshot.admission_generations["one"]
     )
     with pytest.raises(RelationViolationError, match="Cannot reactivate a stopped incarnation"):
-        comms.start("one")
+        comms.owners.start("one")
     assert comms.registry.status("one") == StoppedThreadStatus()
     assert comms.registry.require("one").pid == original.pid
     assert stopped == []
@@ -168,9 +168,9 @@ def test_start_racing_fence_after_proof_cannot_reopen_admission(tmp_path, monkey
             )
         return True
 
-    monkeypatch.setattr(comms, "_is_local_participant", proof_and_fence)
+    monkeypatch.setattr(comms.owners, '_is_local_participant', proof_and_fence)
     with pytest.raises(RelationViolationError):
-        comms.start("one")
+        comms.owners.start("one")
     assert comms.registry.status("one") == StoppedThreadStatus()
     assert comms.registry.require("one").active_turn is None
     assert stopped == []
@@ -181,17 +181,17 @@ def test_bulk_preflight_refuses_busy_before_stopping_any_owner(tmp_path, monkeyp
     busy = comms.registry.require("two")
     comms.registry.register(replace(busy, active_turn=ActiveTurn("turn", busy.pid)))
     with pytest.raises(ValueError, match="active turn"):
-        comms.restart_owners()
+        comms.owners.restart_owners()
     assert stopped == []
 
 
 def test_restart_rejects_unverifiable_or_nonrunning_owners(tmp_path, monkeypatch):
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="no running owner"):
-        comms.restart_owners(["stopped"])
-    monkeypatch.setattr(comms, "_is_local_participant", lambda thread: False)
+        comms.owners.restart_owners(["stopped"])
+    monkeypatch.setattr(comms.owners, '_is_local_participant', lambda thread: False)
     with pytest.raises(ValueError, match="unverifiable"):
-        comms.restart_owners(["one"])
+        comms.owners.restart_owners(["one"])
     assert not stopped
 
 
@@ -200,7 +200,7 @@ def test_restart_refuses_self(tmp_path, monkeypatch):
     current = comms.registry.require("one")
     comms.registry.register(replace(current, pid=os.getpid()))
     with pytest.raises(ValueError, match="itself"):
-        comms.restart_owners(["one"])
+        comms.owners.restart_owners(["one"])
     assert not stopped
 
 
@@ -221,23 +221,23 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     session = tmp_path / "session.jsonl"
     session.write_text("")
     comms = wire(tmp_path / "wire")
-    comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
-    owner = comms.ensure_owner("worker", agent_bin="/bin/echo")
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    owner = comms.owners.ensure_owner("worker", agent_bin="/bin/echo")
 
     async def ready(pid):
         async with asyncio.timeout(10):
             while not socket_path(comms.root, pid).exists():
-                assert comms._process_alive(pid)
+                assert comms.owners._process_alive(pid)
                 await asyncio.sleep(0.05)
 
     try:
         await ready(owner.pid)
-        receipts = await asyncio.to_thread(comms.restart_owners, ["worker"], agent_bin="/bin/echo")
+        receipts = await asyncio.to_thread(comms.owners.restart_owners, ["worker"], agent_bin="/bin/echo")
         assert receipts[0].previous_pid == owner.pid
         assert receipts[0].pid != owner.pid
-        assert not comms._process_alive(owner.pid)
+        assert not comms.owners._process_alive(owner.pid)
         await ready(receipts[0].pid)
         assert comms.registry.require("worker").session_file == str(session)
         assert comms.registry.require("worker").active_turn is None
     finally:
-        await asyncio.to_thread(comms.stop, "worker")
+        await asyncio.to_thread(comms.owners.stop, "worker")

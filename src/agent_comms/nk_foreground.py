@@ -23,11 +23,11 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .comms import Comms
 from .coordinated_runtime import CoordinatedTurn, run_one_sealed_claim
 from .coordination_store import PublicationActivationBlocked
 from .errors import RelationViolationError
 from .native_pi import _private_session_dir, _trusted_package
-from .operations import Comms
 from .store_files import _store_lock
 from .threads import Thread
 
@@ -113,9 +113,9 @@ def reserve_foreground_owner(
         canonical = comms.registry.canonical_name(owner.name)
         if canonical != owner.name or canonical in comms.registry.all_threads():
             raise RelationViolationError("Foreground recipient already exists")
-        comms._require_available_new_tags(owner.tags)
+        comms.channels._require_available_new_tags(owner.tags)
         comms.registry.register(owner)
-        comms.channel_catalog.remember_tags(owner.tags, owner.created_at)
+        comms.channels.catalog.remember_tags(owner.tags, owner.created_at)
     return ForegroundOwner(root, wire_root_id, owner.name, package)
 
 

@@ -5,11 +5,12 @@ from dataclasses import asdict
 import pytest
 from acp.schema import NewSessionResponse
 
-from agent_comms import Comms, TranscriptCursor, TranscriptPage, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
+from agent_comms.transcripts import TranscriptCursor, TranscriptPage
 
 
 @pytest.mark.asyncio
@@ -20,7 +21,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     )
     comms = wire(tmp_path / "wire")
     assert isinstance(comms, Comms)
-    comms.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
     agent = CommsAgent(comms, agent_bin="nonexistent-pi", runtime_enabled=False, auto_wake=False)
 
     session = NewSessionResponse(

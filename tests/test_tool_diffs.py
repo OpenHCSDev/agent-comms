@@ -5,11 +5,13 @@ import sys
 
 import pytest
 
-from agent_comms import TranscriptEvent, backend, wire
 from agent_comms import agent_events as ae
+from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
+from agent_comms.transcripts import TranscriptEvent
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -108,8 +110,8 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
         + "\n"
     )
     comms = wire(tmp_path / "wire")
-    comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
-    page = comms.thread_transcript_page("worker", max_messages=1)
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
     saved = TranscriptEvent.from_wire(page.events[0].to_wire())
     assert saved.diff == live.diff

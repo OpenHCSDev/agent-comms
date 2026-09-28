@@ -12,7 +12,7 @@ from acp import RequestError
 from acp.agent.router import build_agent_router
 
 from agent_comms.acp import CommsAgent
-from agent_comms.operations import wire
+from agent_comms.comms import wire
 from test_manual_compaction import LoopbackProvider, saved_session, wrapper
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
@@ -38,7 +38,7 @@ async def test_toad_wire_compact_uses_loopback_and_saved_session(
             auto_wake=False,
         )
         session = (await agent.new_session(cwd=str(worktree))).session_id
-        agent._comms.attach_session(session, str(session_file), pid=os.getpid())
+        agent._comms.threads.attach_session(session, str(session_file), pid=os.getpid())
         updates = []
 
         class Client:

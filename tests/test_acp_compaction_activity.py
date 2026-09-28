@@ -5,7 +5,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.activity import ActivityState
-from agent_comms.operations import wire
+from agent_comms.comms import wire
 
 
 @pytest.mark.asyncio
@@ -20,9 +20,9 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
     await agent.new_session(str(tmp_path / "project"))
 
     def activity(state, detail):
-        current = comms.activity_of("project")
+        current = comms.agents.activity_of("project")
         assert (current.state, current.detail) == (state, detail)
-        view = next(item for item in comms.thread_views() if item.thread.name == "project")
+        view = next(item for item in comms.views.thread_views() if item.thread.name == "project")
         assert view.activity == current
         assert detail in view.presentation.summary
 
@@ -40,15 +40,15 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
         yield ae.CompactionEnd(aborted=aborted, summary="saved summary")
         activity(ActivityState.WORKING, "Read next file")
         yield ae.ToolEnd(id="next-tool", name="read", ok=True)
-        assert comms.activity_of("project").state is ActivityState.THINKING
+        assert comms.agents.activity_of("project").state is ActivityState.THINKING
         yield ae.StreamSettled()
-        assert comms.activity_of("project").state is ActivityState.IDLE
+        assert comms.agents.activity_of("project").state is ActivityState.IDLE
         yield ae.Done(ok=not aborted, text="Done")
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Read these files")
-        assert comms.activity_of("project").state is ActivityState.IDLE
+        assert comms.agents.activity_of("project").state is ActivityState.IDLE
     finally:
         await agent.shutdown()
 
@@ -63,11 +63,11 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
 
     async def events(*args, **kwargs):
         yield ae.CompactionStart(reason="threshold")
-        assert comms.activity_of("project").detail == "Compacting context"
+        assert comms.agents.activity_of("project").detail == "Compacting context"
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Read files")
-        assert comms.activity_of("project").state is ActivityState.IDLE
+        assert comms.agents.activity_of("project").state is ActivityState.IDLE
     finally:
         await agent.shutdown()

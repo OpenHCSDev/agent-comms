@@ -13,6 +13,7 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
+from .comms import Comms
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import (
@@ -25,7 +26,6 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .messages import Message, MessageType
-from .operations import Comms
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import _store_lock
 from .threads import Thread

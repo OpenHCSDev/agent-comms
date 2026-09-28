@@ -10,8 +10,8 @@ import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordination_store import IdentityConflict, MutationStore
-from agent_comms.operations import Comms
 from agent_comms.ordinary_delivery_bridge import (
     install_ordinary_delivery_schema,
     read_ordinary_delivery_candidates,
@@ -38,7 +38,7 @@ def _root(tmp_path: Path):
         Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid()),
     ]
     for person in people:
-        comms.register(person)
+        comms.threads.register(person)
     private = tmp_path / "private"
     private.mkdir(mode=0o700)
     private_root_id = "0" * 32
@@ -57,7 +57,7 @@ def _root(tmp_path: Path):
 
 def test_ordinary_send_records_candidate_without_wake_or_claim(tmp_path: Path):
     root, root_id, comms, people, private = _root(tmp_path)
-    ordinary = comms.send_message("sender", "#team", "A normal channel post")
+    ordinary = comms.messaging.send_message("sender", "#team", "A normal channel post")
     lookup = stable_thread_lookup(people[1].created_at)
     with MutationStore(str(private / "coordination.sqlite3")) as store:
         candidate = record_ordinary_delivery(
@@ -98,9 +98,9 @@ def test_ordinary_send_records_candidate_without_wake_or_claim(tmp_path: Path):
 
 def test_uncommitted_or_missing_participant_refuses(tmp_path: Path):
     root, root_id, comms, people, private = _root(tmp_path)
-    ordinary = comms.send_message("sender", "#team", "Another normal post")
+    ordinary = comms.messaging.send_message("sender", "#team", "Another normal post")
     uncommitted = Thread("drifter", frozenset(), str(tmp_path), pid=os.getpid())
-    comms.register(uncommitted)
+    comms.threads.register(uncommitted)
     drift_lookup = stable_thread_lookup(uncommitted.created_at)
     with MutationStore(str(private / "coordination.sqlite3")) as store:
         store.register_participant(drift_lookup, "drifter", "drifter", committed=False)

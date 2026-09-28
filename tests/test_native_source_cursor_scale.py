@@ -41,7 +41,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     assert first is not None and first.cursor_status == "proven"
     for number in range(recipients - 1):
         member = Thread(f"member{number:03}", frozenset({"team"}), str(tmp_path), pid=os.getpid())
-        comms.register(member)
+        comms.threads.register(member)
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             store.register_participant(
                 stable_thread_lookup(member.created_at),
@@ -50,8 +50,8 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
                 committed=True,
             )
     for number in range(101):
-        comms.send_initial_cohort("sender", "member000", f"unrelated-{number}")
-    selected = comms.send_initial_cohort("sender", "#team", "@alpha answer this exact source")
+        comms.messaging.send_initial_cohort("sender", "member000", f"unrelated-{number}")
+    selected = comms.messaging.send_initial_cohort("sender", "#team", "@alpha answer this exact source")
     frozen = comms.bus.read_initial_cohort(root_id, selected.seq)
     assert len(frozen.audience.recipients) == recipients
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -90,9 +90,9 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    comms.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
     for number in range(101):
-        comms.send_initial_cohort("sender", "other", f"unrelated-{number}")
+        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
     # The dedicated cursor scan cannot cross the second bounded page. The
     # already committed original still produces its one fake native input.
     monkeypatch.setattr(cursor_module, "_MAX_COVERAGE_PAGES", 1)
@@ -116,10 +116,10 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         await runtime.run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         )
-    comms.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
     for number in range(101):
-        comms.send_initial_cohort("sender", "other", f"unrelated-{number}")
-    later = comms.send_initial_cohort("sender", "alpha", "new exact selected work")
+        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
+    later = comms.messaging.send_initial_cohort("sender", "alpha", "new exact selected work")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, later.seq, store)
     good, calls = _fake_model(decision="IGNORE")
@@ -155,7 +155,7 @@ async def test_legacy_cross_epoch_cursor_reopen_denied_without_mutating_sql(tmp_
     comms.registry.rename("alpha", "alpha-new")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         store.advance_owner_generation(lookup, "alpha-new", expected_generation=1)
-    second_message = comms.send_initial_cohort("sender", "alpha-new", "new selected")
+    second_message = comms.messaging.send_initial_cohort("sender", "alpha-new", "new selected")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second_message.seq, store)
     second = await runtime.run_one_sealed_claim(
