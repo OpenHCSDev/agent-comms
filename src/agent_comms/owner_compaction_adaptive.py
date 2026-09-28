@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
-import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -83,10 +82,6 @@ async def maybe_compact_owner_turn(
     provider, model_id = owner.model.split("/", 1)
     if not provider or not model_id:
         return False
-    if summary_strategy is None:
-        executable = Path(shutil.which(launcher) or launcher).resolve()
-        if executable.name not in {"pi-native", "pi-comms-native"}:
-            return False
     package = NativePiRpcLaunch.package_for_command(launcher)
     # A selected child owns effective settings including project trust and model
     # overrides. Detached injected strategies still need conservative file proof.

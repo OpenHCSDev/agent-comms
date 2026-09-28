@@ -1,119 +1,104 @@
-# S9 PR236 — implementation in progress, not install-ready
-
-## Latest source update (supersedes dependency list below)
-
-K4 uses shared A12 run_inherited; deleted owner_compaction_process, launcher and
-watchdog plus their structural tests. Direct native parentPID/FD proof retained.
-K5 fresh/manual consumers now use S10 StartupMetadataEntry and its concrete
-model/thinking declarations. All S9 guards pass. Deleted inert correction_revision
-from OwnerCompactionAttestation, exact Registration consumers and tests; actual
-correction checks stay on CompactionSource input/wire witnesses.
-
-New evidence: a12-authority-first38pass; a12-native-authority36pass (real pinned
-native, owner SIGKILL before/after write, inherited locks, timeout and UNKNOWN);
-final-source-boundary76pass/1deselected. The excluded ACP case has a concrete
-shared ThreadManagement(pid=) producer failure, reported232/235. The first manual
-batch has8actual stock-Pi startup failures: canonical S10 decoder incorrectly
-limits parentId to8hex although saved native IDs can be UUIDs. Reported234;
-fresh selected parent matching remains consumer-owned and exact. Other2failures
-were tests of deleted supervisor methods, now deleted rather than ported.
-See STATUS.md for actual remaining dependency repairs. No install claim.
-
+# S9 PR236 — source deletion and acceptance handoff
 
 Branch: `refactor/round2-s9-compaction-20260928`.
-Owned tree: `/home/ts/wt/comms-refactor2-s9-20260928`.
+Tree: `/home/ts/wt/comms-refactor2-s9-20260928`.
 PR: https://github.com/OpenHCSDev/agent-comms/pull/236
 
-## Implemented source and deletions
+## Source owners and deleted mechanisms
 
-- K1: PiCompactionSettings owns reserveTokens/keepRecentTokens and bounds;
-  PiCompactionDecision inherits those fields to preserve Pi's flat native RPC.
-  SelectedSettings, adaptive settings dict and copied manual token defaults deleted.
-- K2/A14: PiHelper composes shared A12 BoundedRun with FieldCodec. Four actual
-  package `.mjs` programs own settings, preparation, reopen and manual preflight;
-  embedded programs removed. Existing import fence remains on native execution.
-  Manual /compact retains its independently pinned stock-Pi authority and refusal
-  for canonical native sessions; no guard bypass or new provider path.
-- K3: all five CompactionJournal tables now derive DDL, records, reads, writes and
-  indexes from A13. Stored lifecycle members replace status/commit/reason column
-  mirrors. Deleted from_row/from_columns/load machinery and predecessor schema
-  migration. Transactions, EXTRA/DELETE checks, directory fsync, uniqueness,
-  input-before-journal locks and one-use returned ACKs remain the actual owners.
-  Current A13 continued_private_session reader is integrated; fresh_private_session
-  has no SQL table (its remaining exact native metadata seam is below).
-- K4 manual: AttachedChild owns launch/finish/stop; local signal/group/shutdown
-  implementations deleted. Consumer joins cleanup before releasing its session
-  fence, including cancellation. Authority-child adoption remains below.
-- K5: typed helper outputs, selected evidence envelope and declared native outcomes
-  replace keyset parsers. NativeOutcome's state-specific fields replace raw evidence
-  and the mirrored native_fields roster; committed digest/return-code checks remain.
-- K6: admission source projection derives from its declared fields; commit consumes
-  typed SummaryFiles/SummaryUsage directly instead of encode/redecode and repeated
-  primitive checks. Payload/source/owner/correction/CAS checks remain.
-- Unreferenced selected_source_snapshot and test-only exchange_fake_rpc deleted.
-  No production caller used them. Obsolete compatibility/schema/parser/supervision
-  tests are deleted; current native/durability/UNKNOWN behavior remains covered.
-  Removed the old all-states commit_id/decline_reason placeholders as well; only
-  the relevant lifecycle member carries each field. The affected current caller
-  passes (terminal-field-caller.log); the larger run passed69 before that obsolete
-  fixture assertion was replaced with its actual ReservedSummary contract.
+| Step | Actual owner / complete caller migration | Deleted |
+| --- | --- | --- |
+| K1 | PiCompactionSettings + PiCompactionDecision; selected payload, adaptive decision and native request consumers | SelectedSettings, copied manual token defaults and duplicate settings dictionaries |
+| K2/A14 | PiHelper declares script/request/result, runs through A12 and FieldCodec; four packaged programs for settings/prepare/reopen/manual preflight | Embedded Python JS strings; dead selected_source_snapshot and fake exchange transport |
+| K3 | Five CompactionJournal TypedTables and existing A13 native input readers; lifecycle declarations determine stored state/indexes | from_row/from_columns/load, raw row extraction, schema/column/status mirrors and schema conversion |
+| K4 | A12 AttachedChild for manual Pi; BoundedRun.run_inherited for direct-parent authority with retained FDs and independent hard deadline | owner_compaction_process, compaction_child_launcher, compaction_child_watchdog; manual signal/group/shutdown code and structural tests |
+| K5 | NativeOutcome family, helper result records and S10 StartupMetadataEntry; fresh/manual startup consumers use the single native family | Raw outcome/keyset parsers, native_fields roster, startup raw type dispatch and separate ID regex |
+| K6 | SelectedAdmissionSource projection, typed SummaryFiles/SummaryUsage and committed native metadata; typed original-retirement witness | Repeated primitive validations, nullable terminal-field placeholders and inert correction_revision echo |
 
-## Current local evidence (overlapping batches are not additive)
+The correction_revision deletion touches only the corresponding Registration
+attest/guard arguments, validation and returned receipt field. Canonical lock,
+process identity, generation, goal/turn and native FD authority remain unchanged.
+Actual wire/input correction checks remain on CompactionSource.
 
-- journal-boundary-current.log: **107 passed, 2 skipped**. Includes actual SQLite
-  reopen/rollback/race/fsync, selected input/no-replay and returned-ACK behaviors,
-  strict native receipts and A13 guards. The two existing opt-in native cases were
-  not enabled in this source batch.
-- native-current-boundaries.log: **7 passed**, actual pinned local native commit,
-  metadata preservation and tamper rejection, pre-summary capture, saved-session
-  reopen and new-case A14 test. Synthetic input only, no provider requests.
-- a14-manual-current.log: **42 passed**, real stock Pi with loopback-only fixtures,
-  manual refusal/no-retry, saved-session checks and A14. No external provider.
-- a14-newcase.log: **1 passed**, one newly declared helper inherits actual child
-  execution and strict result rejection without runner changes.
-- wheel-helpers.log: all **4** `.mjs` files shipped, contents match source wheel.
-- saved-journal.json: read-only SQLite backup from actual preserved private root;
-  **96** old raw UNKNOWN markers retained unchanged, candidate refuses old schema.
-  Other tables in this particular saved journal are empty; behavior evidence for
-  their nonempty cases is the journal/native tests above. Original never written.
-- owned-lint.log: current owned production/component/guard lint passes.
-- guards-pending.log: intentionally truthful **3 failures**, exactly the remaining
-  authority-child local supervision/deleted files and fresh native keysets below.
-  These guards are permanent `refactor_guard` tests; no exception list.
+A12 through62adf9a and S10 startup429232b are integrated, including A13's current
+native/coordinator tables. Their implementation remains in232/234/237. S9 does
+not introduce another process launcher, native entry registry or SQL mechanism.
 
-Initial failed receipts retained locally: old native package fixture mismatch;
-obsolete constructor/spawn mock; missing optional fixture model/window/settings;
-transitional A13 API adoption. Current receipts above supersede these failures.
-S9 is not complete while its guards fail. No CI wait, live mutation or deployment.
+## Current local acceptance
 
-## Exact remaining shared seams and next edits
+Batches overlap; counts are not additive. All requests below were local fixtures,
+with no external provider calls, live owner changes or native package mutation.
 
-1. A12/Lovelace PR232: expose direct-parent inherited-authority child with existing
-   launch gate + pidfd watchdog armed BEFORE exec release, retained authority FDs,
-   deadline surviving owner death. Native commit compares parentPid to process.ppid;
-   NamespacedChild cannot substitute a different PID/parent lineage. Request posted
-   on232. Then S9 deletes owner_compaction_process's local supervisor and both
-   compaction_child_launcher/compaction_child_watchdog files and their structural
-   tests, consuming A12. Real owner-death/native authority test stays required.
-2. S10 PR234: canonical strict startup model/thinking entry declarations + capability,
-   including id/parentId/timestamp. Request posted on234. S9 will migrate
-   FreshPrivateSession.verify_selected_startup and manual startup-tail verification;
-   no second native entry registry or partial header decoder will be introduced.
-3. A12 repeated cancellation cleanup fix is owned by Lovelace, already reproduced
-   by S10; S9 consumes the corrected shared owner rather than another cleanup shim.
+| Receipt | Result and actual boundary |
+| --- | --- |
+| guards-current.log | **3 passed**, zero exceptions including manual bridge; no local supervision, embedded JS, exact keysets, raw SQL rows or duplicate settings owner |
+| current-owned-lint.log | Owned S9 production and guard lint passes |
+| a12-native-authority.log | **36 passed** actual pinned native CAS, metadata/tamper checks, owner SIGKILL before/after write, retained locks, timeout and UNKNOWN/reconciliation |
+| a12-authority-first.log | **38 passed** authority span, package verification and typed native outcomes |
+| a12-cancel-native-current.log | **3 passed** owner/inner/all-task cancellation: commit settles before turn lock release; corrupt reopen refuses provider launch |
+| all-native-helpers.log | **14 passed** real pinned settings/preparation/reopen helpers and A14 new-case strict result contract |
+| final-source-boundary.log | **76 passed, 1 deselected** journal/returned ACK/owner/guard behavior; exact ACP dependency failure recorded separately below |
+| startup-contract-first.log | **66 passed, 2 opt-in skips, 1 failure**; strict fresh startup and S9 guards pass, ACP fails in shared ThreadManagement before compaction |
+| typed-original-retirement.log | **18 passed, 32 deselected, 1 same ACP failure** after replacing raw retirement witness key reads |
+| a14-manual-current.log | Earlier **42 passed** actual stock-Pi/manual/A14 batch, BEFORE stricter startup declaration adoption; does not supersede current manual failure |
+| wheel-helpers.log | All four shipped `.mjs` programs match source in built wheel |
+| saved-journal.json | Actual read-only saved journal backup:96 old raw UNKNOWN records unchanged; candidate refuses old schema; other four tables empty in that saved source |
 
-Dependencies integrated: main230; A13 committed native reader ownership d41b9ac;
-A12 through175d188; S10 through6f25dc8. Their broader changes remain their owners'
-PRs; parent integrates232/234 with236 serially. Selected RPC merge preserves typed
-SummaryFiles/SummaryUsage, error causes and production persistent-child ownership.
+Initial failed receipts are retained. The first cancellation rerun patched all
+asyncio child creation and consequently blocked the new read-only A14 child; the
+corrected test intercepts only the actual provider launcher, retaining real helper
+execution and the no-launch/no-mutation assertion. Deleted manual supervisor tests
+are not ported to A12 mocks.
 
-## Quiet cutover (parent only)
+## Concrete remaining integration acceptance
 
-Do not install this draft. When all source guards/shared seams pass, quiesce owners
-and prove no compaction is in flight; preserve the old journal as evidence, reset
-runtime compaction journal together with coordinated runtime input/admission state
-at the reviewed no-replay highwater. Candidate accepts exactly the new A13 schema;
-there is no in-src converter. Preserve wire/native histories/UNKNOWN evidence;
-never replay their old attempts. Parent owns actual install/reset/relaunch and
-configured-provider acceptance. Rollback selects old code plus its preserved old
-runtime snapshot, with no automatic retry of anything uncertain.
+1. **L0A235 / A12:** ThreadManagement.claim_thread still constructs Thread(pid=),
+   although Thread now owns ProcessIdentity. Actual ACP new_session fails before
+   S9 executes. Reported directly on232/235; no constructor alias or local patch
+   is retained in S9. Integrate the existing owner's direct caller repair, then
+   rerun the affected ACP admission/manual-bridge paths.
+2. **S10 strict startup declaration:** its8hex parentId constraint rejects actual
+   stock-Pi metadata appended to a saved session with UUID entry IDs. Eight real
+   manual loopback cases fail before any HTTP request. S10 owns the external parent
+   string/null contract repair; fresh S9 attestation separately compares exact
+   bootstrap/model parent identities. startup-manual-real.log retains the failure.
+3. **S10 generic-text retirement:** manual_compaction's single rpc_args_for consumer
+   is being moved to NativePiRpcLaunch.rpc_arguments. Removed local --print
+   allowance and its fixture argument. The shared methods are in Pascal's current
+   code; the paired callers are published in236 and require his committed contract
+   before execution. S9 also removes the adaptive basename gate so a verified
+   route-selected pi/directcli cannot silently disable compaction.
+   The canonical manual-bridge refusal must also recognize route-selected `pi`
+   and a direct pinned cli.js, not only two executable basenames. Exact authority
+   retention/consumer seam sent to Pascal; no second classifier will be created.
+
+S9 is not install-ready while those real paths fail. Source guards alone do not
+certify the runtime. There is no CI wait and no request for new paid acceptance.
+
+## L0 literals and policy boundaries
+
+See L0-BOUNDARIES.md. The actual Pi dependency `openai/internal/shims.mjs` and the
+pinned native digest prefix `agent-comms-metadata-v1\n` are external literals,
+not old internal identifiers/comments. They remain exact. Manual stock-Pi
+/compact and journaled owner compaction remain distinct; canonical-native manual
+refusal stays in force. No unjournaled writer or provider retry is introduced.
+
+## Quiet cutover — parent only
+
+Store classification: `compaction-commits.sqlite3` (all five declared tables) is
+runtime exclusion/receipt state and is archived then reset. Native session JSONL,
+its `.input-proof` journal and the wire remain durable history/evidence and are
+not reset by S9. Temporary manual profiles are disposable and removed after A12
+has retired the child; shipped helper programs are package code, not caches.
+
+Quiesce owners and prove no compaction is in flight. Preserve the old journal as
+evidence; reset runtime journal together with coordinated runtime input/admission
+state at the reviewed no-replay highwater. Candidate accepts only its A13 schema;
+there is no converter in src. Preserve wire/native histories and UNKNOWN evidence;
+never replay old attempts. Parent owns actual reset/install/relaunch/acceptance.
+Rollback selects old code with its preserved runtime snapshot, without retrying
+uncertain work.
+
+Authored source/test counts exclude dependency merges (change-counts.json):
+production907added/1960deleted; tests332added/1232deleted at ebe49b5. Counts will
+be refreshed after the final paired launch-contract consumer lands.
