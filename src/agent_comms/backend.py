@@ -33,16 +33,23 @@ from contextlib import AbstractContextManager, aclosing, contextmanager, nullcon
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from . import agent_events as events
+from . import pi_commands as commands
+from . import pi_events as pi
+from . import turn_failure as failures
+from . import turn_phase as phases
 from .declarations import _store_lock
 from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
-from .tool_results import ToolDiff
+from .pi_rpc import PiRpcChannel
+from .pi_rpc import PiRpcChannel as _JsonLineReader
+from .turn_inputs import InputForwarding
+from .turn_stats import StatsRequest
+from .turn_usage import UsageAccount
 
 
 def compaction_summary(value: Any) -> str:
@@ -83,7 +90,6 @@ CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 # newline) after reading the proof journal; byte size alone is not the cause.
 _NATIVE_PROOF_JOURNAL_WARN_BYTES = 96 * 1024 * 1024
 PROMPT_START_TIMEOUT_SECONDS = 180.0
-_SESSION_MUTATING_COMMANDS = frozenset({"new_session", "switch_session", "fork", "clone"})
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
 _MCP_LIVE_STATES = frozenset(
     {
@@ -173,41 +179,6 @@ def _pi_mcp_live_receipt(payload: dict[str, Any], input_id: str) -> dict[str, An
             if type(row[key]) is not int or not 0 <= row[key] <= 10_000:
                 return None
     return data
-
-
-class _JsonLineReader:
-    """Read whole JSONL records regardless of asyncio's transport buffer limit.
-
-    Pi's end-of-turn events may contain many messages in one record. Retain
-    consumed fragments across cancellation when the finish signal wins the
-    read race, so the next read can finish the same record without losing bytes.
-    """
-
-    def __init__(self, reader: asyncio.StreamReader):
-        self.reader = reader
-        self.chunks: list[bytes] = []
-
-    async def readline(self, *, max_bytes: int | None = None) -> bytes:
-        size = sum(map(len, self.chunks))
-        while True:
-            try:
-                line = await self.reader.readuntil(b"\n")
-            except asyncio.LimitOverrunError as error:
-                if max_bytes is not None and size + error.consumed > max_bytes:
-                    self.chunks.clear()
-                    raise ValueError("Native RPC record exceeds transport limit") from error
-                self.chunks.append(await self.reader.readexactly(error.consumed))
-                size += error.consumed
-                continue
-            except asyncio.IncompleteReadError as error:
-                line = error.partial
-            if max_bytes is not None and size + len(line) > max_bytes:
-                self.chunks.clear()
-                raise ValueError("Native RPC record exceeds transport limit")
-            self.chunks.append(line)
-            record = b"".join(self.chunks)
-            self.chunks.clear()
-            return record
 
 
 _FileRevision = tuple[int, int, int, int, int]
@@ -506,7 +477,7 @@ async def discover_thinking_levels(
         reader = _JsonLineReader(proc.stdout)
         async with asyncio.timeout(10):
             while line := await reader.readline():
-                payload = json.loads(line)
+                payload = PiRpcChannel.decode_record(line)
                 if payload.get("id") != "thinking" or payload.get("type") != "response":
                     continue
                 values = (payload.get("data") or {}).get("levels", [])
@@ -563,7 +534,7 @@ async def discover_models(
                 await proc.stdin.drain()
                 async with asyncio.timeout(10):
                     while line := await reader.readline():
-                        payload = json.loads(line)
+                        payload = PiRpcChannel.decode_record(line)
                         if payload.get("id") != "models" or payload.get("type") != "response":
                             continue
                         for item in (payload.get("data") or {}).get("models", []):
@@ -634,12 +605,12 @@ async def compact_session(
         command["customInstructions"] = custom_instructions
     result: dict[str, Any] = {"ok": False, "error": "Compaction process ended unexpectedly."}
     try:
-        proc.stdin.write((json.dumps(command) + "\n").encode())
+        proc.stdin.write(PiRpcChannel.command_bytes(commands.PiCommand.from_wire(command)))
         await proc.stdin.drain()
         reader = _JsonLineReader(proc.stdout)
         async with asyncio.timeout(300):
             while line := await reader.readline():
-                payload = json.loads(line)
+                payload = PiRpcChannel.decode_record(line)
                 if payload.get("type") != "response" or payload.get("id") != "compact":
                     continue
                 if payload.get("success"):
@@ -785,7 +756,7 @@ async def stream_agent_events(
         ):
             try:
                 async with aclosing(
-                    _stream_agent_events(
+                    TurnSession(
                         agent_bin,
                         agent_args,
                         task,
@@ -805,7 +776,7 @@ async def stream_agent_events(
                         persistent_session=persistent_session,
                         ui_request=ui_request,
                         startup=startup,
-                    )
+                    ).run()
                 ) as stream:
                     async for event in stream:
                         if isinstance(event, events.Done):
@@ -833,470 +804,71 @@ async def stream_agent_events(
             )
 
 
-async def _stream_agent_events(
-    agent_bin: str,
-    agent_args: Sequence[str],
-    task: str,
-    cwd: str,
-    env_extra: dict[str, str] | None = None,
-    session_file: str | None = None,
-    steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
-    finish_event: asyncio.Event | None = None,
-    fork_session: bool = False,
-    images: Sequence[ImageInput] = (),
-    model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
-    rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
-    require_input_id: bool = True,
-    send_boundary: (
-        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-    ) = None,
-    interrupt_boundary: (
-        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-    ) = None,
-    native_start: Callable[[str | None, str, str], bool] | None = None,
-    persistent_session: PersistentPiSession | None = None,
-    ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
-    startup: NativeStartupAdmission | None = None,
-) -> AsyncGenerator[events.AgentEvent, None]:
-    if shutil.which(agent_bin) is None and not Path(agent_bin).is_file():
-        yield events.Done(text=f"agent backend {agent_bin!r} not found", ok=False)
-        return
+class TurnSession:
+    """One Pi turn: owns input admission, native identity, settlement and child lifetime."""
 
-    rpc_args = rpc_args_for(agent_bin, agent_args)
-    if images and rpc_args is None:
-        yield events.Done(text="This backend does not support image prompts.", ok=False)
-        return
-    stdin_payload: bytes | None = None
-    argv: list[str]
-    prompt_id = (
-        f"agent-comms-prompt-{secrets.token_hex(16)}"
-        if persistent_session is not None
-        else "agent-comms-prompt"
-    )
-    preflight_id = f"agent-comms-preflight-{secrets.token_hex(16)}"
-    original_input_id = secrets.token_hex(16)
-    prompt_payload = b""
-    if rpc_args is not None:
-        argv = [agent_bin, *rpc_args]
-        if session_file:
-            argv += ["--fork" if fork_session else "--session", session_file]
-        prompt_payload = (
-            json.dumps(
-                {
-                    "id": prompt_id,
-                    "type": "prompt",
-                    "inputId": original_input_id,
-                    "message": task,
-                    **({"images": [image.to_rpc() for image in images]} if images else {}),
-                }
-            )
-            + "\n"
-        ).encode()
-        # Stock Pi silently ignores inputId; never send a potentially paid
-        # initial prompt until its copied native capability is attested.
-        stdin_payload = (json.dumps({"type": "get_state", "id": preflight_id}) + "\n").encode()
-        if not require_input_id:
-            stdin_payload += prompt_payload
-    else:
-        argv = [agent_bin, *agent_args, task]
+    def __init__(
+        self,
+        agent_bin: str,
+        agent_args: Sequence[str],
+        task: str,
+        cwd: str,
+        env_extra: dict[str, str] | None = None,
+        session_file: str | None = None,
+        steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
+        finish_event: asyncio.Event | None = None,
+        fork_session: bool = False,
+        images: Sequence[ImageInput] = (),
+        model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
+        rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
+        require_input_id: bool = True,
+        send_boundary: Callable[[str | None, str, str], AbstractContextManager[bool | None]]
+        | None = None,
+        interrupt_boundary: Callable[[str | None, str, str], AbstractContextManager[bool | None]]
+        | None = None,
+        native_start: Callable[[str | None, str, str], bool] | None = None,
+        persistent_session: PersistentPiSession | None = None,
+        ui_request: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+        startup: NativeStartupAdmission | None = None,
+    ):
+        self.agent_bin = agent_bin
+        self.agent_args = agent_args
+        self.task = task
+        self.cwd = cwd
+        self.env_extra = env_extra
+        self.session_file = session_file
+        self.steering_queue = steering_queue
+        self.finish_event = finish_event
+        self.fork_session = fork_session
+        self.images = images
+        self.model_wait_timeout = model_wait_timeout
+        self.rpc_abort_grace = rpc_abort_grace
+        self.require_input_id = require_input_id
+        self.send_boundary = send_boundary
+        self.interrupt_boundary = interrupt_boundary
+        self.native_start = native_start
+        self.persistent_session = persistent_session
+        self.ui_request = ui_request
+        self.startup = startup
+        self.inputs = InputForwarding()
+        self.stats = StatsRequest()
+        self.usage = UsageAccount()
 
-    env = os.environ.copy()
-    if env_extra:
-        env.update(env_extra)
-    if rpc_args is not None and env.get("AGENT_COMMS_MANAGED") == "1":
-        env["PI_WORKTREE"] = str(Path(cwd).resolve())
-        bootstrap = Path(__file__).with_name("pi_project_bootstrap.mjs").resolve().as_uri()
-        flag = f"--import={bootstrap}"
-        options = env.get("NODE_OPTIONS", "")
-        if flag not in options:
-            env["NODE_OPTIONS"] = f"{options} {flag}".strip()
-    launch_key = (
-        agent_bin,
-        tuple(rpc_args or agent_args),
-        str(Path(cwd).resolve()),
-        tuple(sorted(env.items())),
-        auth_revision(),
-    )
-    reused = False
-    if persistent_session is not None:
-        reused = (
-            rpc_args is not None
-            and not fork_session
-            and persistent_session.reusable(launch_key, session_file)
-        )
-        if not reused:
-            await persistent_session.close()
-    loop = asyncio.get_running_loop()
-    validated_session_id: str | None = None
-    if persistent_session is not None and persistent_session.reopen_required is not None:
-        if session_file != persistent_session.reopen_required or not require_input_id:
-            yield events.Done(
-                text="Saved native session requires explicit validated reopen.",
-                ok=False,
-                reason_code="compaction_reopen_invalid",
-            )
-            return
-        try:
-            from .native_session_reopen import validate_native_reopen
-
-            validated_session_id = await asyncio.to_thread(
-                validate_native_reopen,
-                agent_bin,
-                session_file,
-                expected_session_id=persistent_session.reopen_session_id,
-            )
-        except ValueError:
-            yield events.Done(
-                text="Saved native session failed strict reopen validation.",
-                ok=False,
-                reason_code="compaction_reopen_invalid",
-            )
-            return
-    if not reused and rpc_args is not None and require_input_id and startup is not None:
-        await startup.acquire(finish_event)
-    launch_started_at = loop.time()
-    session_bytes: int | None = None
-    proof_journal_bytes: int | None = None
-    if session_file:
-        with suppress(OSError):
-            session_bytes = Path(session_file).stat().st_size
-        with suppress(OSError):
-            proof_journal_bytes = Path(f"{session_file}.input-proof").stat().st_size
-    if reused:
-        assert persistent_session is not None and persistent_session.proc is not None
-        proc = persistent_session.proc
-        spawn_ms = 0
-    else:
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                cwd=cwd if Path(cwd).is_dir() else None,
-                env=env,
-                stdin=(
-                    asyncio.subprocess.PIPE
-                    if stdin_payload is not None
-                    else asyncio.subprocess.DEVNULL
-                ),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                start_new_session=os.name == "posix",
-            )
-        except OSError as exc:
-            yield events.Done(text=f"agent launch failed: {exc}", ok=False)
-            return
-        spawn_ms = round((loop.time() - launch_started_at) * 1000)
-
-    owner = asyncio.current_task()
-    if owner is not None:
-        _ACTIVE_PROCESSES[owner] = proc
-
-    assert proc.stdout is not None
-    assert proc.stderr is not None
-
-    async def stderr_tail() -> str:
+    async def stderr_tail(self) -> str:
         tail = b""
-        assert proc.stderr is not None
-        while chunk := await proc.stderr.read(4096):
-            tail = (tail + chunk)[-16_000:]
+        assert self.proc.stderr is not None
+        while chunk := (await self.proc.stderr.read(4096)):
+            tail = (tail + chunk)[-16000:]
         return tail.decode(errors="replace").strip()
 
-    stderr_task = (
-        persistent_session.stderr_task
-        if reused and persistent_session is not None
-        else asyncio.create_task(stderr_tail())
-    )
-    assert stderr_task is not None
-    if owner is not None:
-        _ACTIVE_STDERR_TASKS[owner] = stderr_task
-    prompt_dispatched = False
-    if stdin_payload is not None and proc.stdin is not None:
-        # pi's rpc protocol keeps stdin open while it streams; closing it
-        # after the prompt makes the backend exit before responding.
-        try:
-            prompt_dispatched = not require_input_id and rpc_args is not None
-            proc.stdin.write(stdin_payload)
-            await proc.stdin.drain()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    text_parts: list[str] = []
-    assistant_message_parts: list[str] = []
-    ok = True
-    fail_reason = ""
-    diagnostic: dict[str, int] = {}
-    preflight_failure: str | None = None
-    error_message: str | None = None
-    image_input_sent = bool(images)
-    inherited_image_sensitive = bool(
-        reused and persistent_session is not None and persistent_session.sensitive_diagnostics
-    )
-    assert proc.stdout is not None
-
-    if rpc_args is None:
-        while True:
-            chunk = await proc.stdout.read(4096)
-            if not chunk:
-                break
-            piece = chunk.decode(errors="replace")
-            text_parts.append(piece)
-            yield events.Chunk(text=piece)
-        code = await proc.wait()
-        if owner is not None:
-            _ACTIVE_PROCESSES.pop(owner, None)
-        error_text = await stderr_task
-        yield events.Done(
-            text=(
-                "".join(text_parts).strip()
-                if code == 0
-                else (
-                    "Image prompt failed; backend diagnostics withheld."
-                    if images and error_text
-                    else error_text or f"Backend exited with code {code}"
-                )
-            ),
-            ok=code == 0,
-        )
-        return
-
-    steering_task: asyncio.Task[None] | None = None
-    pending_inputs: list[tuple[str | None, str, str | dict[str, Any], str]] = []
-    accepted_forwarded: set[str] = set()
-    input_state_changed = asyncio.Event()
-    explicit_interrupt = False
-    rejected_commands: list[events.AgentEvent] = []
-    rejected_signal = asyncio.Event()
-    session_identity_uncertain = False
-    input_uncertain = False
-    authority_revoked = False
-    followup_start_unrecognized = False
-    final_assistant_stop = False
-    forwarded_generation = 0
-    if steering_queue is not None and proc.stdin is not None:
-        stdin = proc.stdin
-
-        async def forward_steering() -> None:
-            nonlocal fail_reason, input_uncertain, authority_revoked
-            nonlocal final_assistant_stop, image_input_sent, forwarded_generation
-            while True:
-                message = await steering_queue.get()
-                original = dict(message) if isinstance(message, dict) else message
-                command: dict[str, Any] = (
-                    dict(original)
-                    if isinstance(original, dict)
-                    else {
-                        "type": "prompt",
-                        "message": original,
-                        "streamingBehavior": "steer",
-                    }
-                )
-                if command.get("type") == "interrupt_steering":
-                    selected: list[str] = command.pop("_input_ids", [])
-                    while True:
-                        input_state_changed.clear()
-                        candidates = [item for item in pending_inputs if item[0] in selected]
-                        if not candidates or all(
-                            item[0] in accepted_forwarded for item in candidates
-                        ):
-                            break
-                        await input_state_changed.wait()
-                    if not candidates:
-                        continue
-                    public_id, sent_text, _, native_id = candidates[0]
-                    boundary = (
-                        interrupt_boundary(public_id, native_id, sent_text)
-                        if interrupt_boundary
-                        else nullcontext(True)
-                    )
-                    with boundary as authorized:
-                        if authorized:
-                            stdin.write(
-                                (
-                                    json.dumps(
-                                        {
-                                            "type": "interrupt_steering",
-                                            "inputIds": [item[3] for item in candidates],
-                                        }
-                                    )
-                                    + "\n"
-                                ).encode()
-                            )
-                    if not authorized:
-                        authority_revoked = True
-                        input_uncertain = True
-                        final_assistant_stop = False
-                        fail_reason = "Input authority changed before immediate steering."
-                        await _terminate_process(proc)
-                        return
-                    await stdin.drain()
-                    continue
-                if command.get("type") == "prompt":
-                    public_input_id = command.pop("_input_id", None)
-                    if public_input_id is None:
-                        public_input_id = f"agent-comms-steer-{uuid4().hex}"
-                    native_input_id = secrets.token_hex(16)
-                    command["id"] = public_input_id
-                    command["inputId"] = native_input_id
-                    if not require_input_id and not isinstance(original, dict):
-                        command["message"] = (
-                            f"[agent-comms input-id: {public_input_id}]\n{original}"
-                        )
-                    pending_inputs.append(
-                        (public_input_id, command["message"], original, native_input_id)
-                    )
-                if command.get("type") in _SESSION_MUTATING_COMMANDS:
-                    # Reject before writing: Pi may tear down A and bind B even
-                    # before its RPC response. Rejection is not a failed A turn.
-                    rejected_commands.append(
-                        events.Error(
-                            reason_code="steering_command_rejected",
-                            command=command["type"],
-                            id=command.get("id"),
-                            text=f"Mid-turn {command['type']} is not supported.",
-                        )
-                    )
-                    rejected_signal.set()
-                    continue
-                if command.get("type") == "prompt":
-                    boundary_context = _maintenance_send_boundary(
-                        Path(
-                            (env_extra or {}).get("AGENT_COMMS_ROOT")
-                            or os.environ.get("AGENT_COMMS_ROOT")
-                            or str(
-                                Path(tempfile.gettempdir())
-                                / f"agent-comms-startup-{getpass.getuser()}"
-                            )
-                        ),
-                        send_boundary,
-                        public_input_id,
-                        native_input_id,
-                        command["message"],
-                    )
-                    with boundary_context as authorized:
-                        if authorized:
-                            if command.get("images"):
-                                image_input_sent = True
-                            forwarded_generation += 1
-                            stdin.write((json.dumps(command) + "\n").encode())
-                    if not authorized:
-                        if authorized is False:
-                            # The owner stopped or its admission changed after
-                            # the original send. That attempt is uncertain.
-                            authority_revoked = True
-                            input_uncertain = True
-                            final_assistant_stop = False
-                            fail_reason = "Input authority changed before Pi prompt send."
-                            await _terminate_process(proc)
-                            return
-                        # This follow-up never crossed the send boundary.
-                        # Its owner keeps the durable UNKNOWN disposition,
-                        # but it cannot invalidate the original started turn.
-                        pending_inputs[:] = [
-                            item for item in pending_inputs if item[3] != native_input_id
-                        ]
-                        rejected_commands.append(events.InputRefused(id=public_input_id))
-                        rejected_signal.set()
-                        continue
-                else:
-                    stdin.write((json.dumps(command) + "\n").encode())
-                await stdin.drain()
-
-        if not require_input_id:
-            steering_task = asyncio.create_task(forward_steering())
-            if owner is not None:
-                _ACTIVE_STEERING[owner] = steering_task
-
-    # RPC mode: JSON lines with agent events. Keep stdin open after the turn
-    # long enough to ask Pi for its authoritative current context estimate.
-    model_name: str | None = None
-    session_name: str | None = None
-    active_session_file = session_file
-    initial_session_id: str | None = None
-    initial_session_file: str | None = None
-    initial_session_observed = False
-    context_used: int | None = None
-    context_size: int | None = None
-    confirmed_context_used: int | None = None
-    provisional_usage = False
-    provider_response_index = 0
-    compaction_usage_recorded = False
-    # A prompt ACK can mean handled/queued, and a final from an unrelated run
-    # cannot complete this prompt. Observe this prompt's user message first.
-    initial_prompt_acknowledged = False
-    native_capability_confirmed = not require_input_id
-    capability_failed = False
-    prompt_start_deadline: float | None = None
-    initial_input_started = False
-    live_status_seen = False
-    stats_requested = False
-    stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
-    stats_usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
-    stats_responses: set[str] = set()
-    stats_complete = False
-    stats_failed = False
-    stats_busy = False
-    stats_generation = 0
-    settlement_count = 0
-    stats_settlement_count = 0
-    agent_settled_seen = False
-    reader = (
-        persistent_session.reader
-        if reused and persistent_session is not None
-        else _JsonLineReader(proc.stdout)
-    )
-    assert reader is not None
-    preflight_wait_started_at = loop.time()
-    preflight_budget = NATIVE_STARTUP_POLICY.readiness_timeout(
-        session_bytes, base_seconds=CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
-    )
-    preflight_deadline = preflight_wait_started_at + preflight_budget
-    if not require_input_id:
-        prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
-    last_model_progress = loop.time()
-    phase = "prompt_acceptance"
-    prompt_accepted = False
-    active_tools: set[str] = set()
-    tool_ever_started = False
-    output_started = False
-    forwarded_input_started = False
-    compaction_started = False
-    prestart_compaction_failed = False
-    retry_recovery_pending = False
-    retry_recovery_reason = "provider_auto_retry_progress"
-    started_during_abort: list[str | None] = []
-    ui_seen: set[str] = set()
-
-    async def request_stats() -> None:
-        nonlocal stats_requested, stats_state_id, stats_usage_id
-        nonlocal stats_generation, stats_settlement_count
-        if proc.stdin is None or stats_requested:
-            return
-        stats_requested = True
-        stats_generation = forwarded_generation
-        stats_settlement_count = settlement_count
-        stats_state_id = f"agent-comms-stats-state-{secrets.token_hex(16)}"
-        stats_usage_id = f"agent-comms-stats-usage-{secrets.token_hex(16)}"
-        try:
-            state_request = {"type": "get_state"}
-            usage_request = {"type": "get_session_stats"}
-            if persistent_session is not None:
-                state_request["id"] = stats_state_id
-                usage_request["id"] = stats_usage_id
-            proc.stdin.write((json.dumps(state_request) + "\n").encode())
-            proc.stdin.write((json.dumps(usage_request) + "\n").encode())
-            await proc.stdin.drain()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    async def read_rpc_line(timeout: float | None) -> bytes:
-        # A rejected command must be visible even while Pi is in a tool or
-        # model wait (both may have an unbounded read timeout).
-        if rejected_signal.is_set():
+    async def read_rpc_line(self, timeout: float | None) -> bytes:
+        if self.rejected_signal.is_set():
             return b"\n"
-        read_task = asyncio.create_task(reader.readline())
-        reject_task = asyncio.create_task(rejected_signal.wait())
+        read_task = asyncio.create_task(self.reader.readline())
+        reject_task = asyncio.create_task(self.rejected_signal.wait())
         finish_task = (
-            asyncio.create_task(finish_event.wait())
-            if finish_event is not None and not stats_requested
+            asyncio.create_task(self.finish_event.wait())
+            if self.finish_event is not None and (not self.stats.requested)
             else None
         )
         tasks = {read_task, reject_task}
@@ -1308,17 +880,14 @@ async def _stream_agent_events(
             )
             if not done:
                 raise TimeoutError
-            # Do not discard an already-read record when two signals race.
             if read_task in done:
                 return read_task.result()
             if finish_task is not None and finish_task in done:
-                # Cancel the pending read before request_stats can yield; a
-                # completed-but-discarded record would lose Pi evidence.
                 read_task.cancel()
                 await asyncio.gather(read_task, return_exceptions=True)
-                if require_input_id and not native_capability_confirmed:
+                if self.require_input_id and (not self.native_capability_confirmed):
                     return b""
-                await request_stats()
+                await self.stats.request(self)
             return b"\n"
         finally:
             for pending in tasks:
@@ -1326,109 +895,39 @@ async def _stream_agent_events(
                     pending.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    def mark_pending_input_started(payload: dict[str, Any]) -> tuple[bool, str | None]:
-        nonlocal forwarded_input_started
-        message = payload.get("message") or {}
-        if message.get("role") != "user":
-            return False, None
-        content = message.get("content", "")
-        text = (
-            content
-            if isinstance(content, str)
-            else "\n".join(part.get("text", "") for part in content if part.get("type") == "text")
-        )
-        native_id = message.get("inputId")
-        for index, (input_id, queued_text, _, expected_native_id) in enumerate(pending_inputs):
-            if (
-                # Native ID plus exact text is Pi's authoritative start. An
-                # ACK may arrive later and is neither required nor sufficient.
-                (require_input_id or input_id in accepted_forwarded)
-                and text == queued_text
-                and (not require_input_id or native_id == expected_native_id)
-            ):
-                if native_start is not None and not native_start(
-                    input_id, expected_native_id, queued_text
-                ):
-                    return False, None
-                accepted_forwarded.discard(input_id)
-                pending_inputs.pop(index)
-                forwarded_input_started = True
-                return True, input_id
-        return False, None
-
-    def restore_pending_inputs() -> None:
-        if steering_queue is None or not pending_inputs:
-            return
-        queued: list[str | dict[str, Any]] = []
-        while not steering_queue.empty():
-            queued.append(steering_queue.get_nowait())
-        # Never replay a prompt after it was written: the provider opportunity
-        # is uncertain even if Pi emitted no matching user start. Preserve the
-        # unresolved input in owner-side accounting instead of enqueueing it.
-        # Unsent ACP inputs remain in steering_queue and retain their order.
-        for item in queued:
-            steering_queue.put_nowait(item)
-        pending_inputs.clear()
-
-    if owner is not None:
-        _ACTIVE_INPUT_RESTORERS[owner] = restore_pending_inputs
-
-    async def abort_stalled_rpc() -> None:
-        nonlocal compaction_started, tool_ever_started, output_started
-        if steering_task is not None:
-            steering_task.cancel()
-            await asyncio.gather(steering_task, return_exceptions=True)
-        if proc.stdin is not None and proc.returncode is None:
-            abort_deadline = loop.time() + max(0.0, rpc_abort_grace)
+    async def abort_stalled_rpc(self) -> None:
+        if self.steering_task is not None:
+            self.steering_task.cancel()
+            await asyncio.gather(self.steering_task, return_exceptions=True)
+        if self.proc.stdin is not None and self.proc.returncode is None:
+            abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
             try:
-                proc.stdin.write(
+                self.proc.stdin.write(
                     (json.dumps({"id": "agent-comms-watchdog", "type": "abort"}) + "\n").encode()
                 )
-                remaining = max(0.0, abort_deadline - loop.time())
-                await asyncio.wait_for(proc.stdin.drain(), timeout=remaining)
-                while remaining := max(0.0, abort_deadline - loop.time()):
-                    response = await asyncio.wait_for(reader.readline(), timeout=remaining)
+                remaining = max(0.0, abort_deadline - self.loop.time())
+                await asyncio.wait_for(self.proc.stdin.drain(), timeout=remaining)
+                while remaining := max(0.0, abort_deadline - self.loop.time()):
+                    response = await asyncio.wait_for(self.reader.readline(), timeout=remaining)
                     if not response:
                         break
                     try:
-                        abort_payload = json.loads(response)
+                        abort_payload = PiRpcChannel.decode_record(response)
                     except json.JSONDecodeError:
                         continue
-                    abort_kind = abort_payload.get("type")
-                    if abort_kind == "message_start" and not session_identity_uncertain:
-                        # A B-session user message cannot prove A's queued
-                        # follow-up began. Preserve it for the old owner.
-                        matched, input_id = mark_pending_input_started(abort_payload)
-                        if matched:
-                            started_during_abort.append(input_id)
-                    elif abort_kind in {"tool_execution_start", "tool_execution_update"}:
-                        tool_ever_started = True
-                    elif abort_kind == "message_update":
-                        delta = abort_payload.get("assistantMessageEvent") or {}
-                        if delta.get("type") in {
-                            "text_delta",
-                            "thinking_delta",
-                            "toolcall_start",
-                            "toolcall_delta",
-                            "toolcall_end",
-                        } and (delta.get("delta") or delta.get("type", "").startswith("toolcall")):
-                            output_started = True
-                    elif abort_kind in {
-                        "compaction_start",
-                        "summarization_retry_scheduled",
-                        "summarization_retry_attempt_start",
-                    }:
-                        compaction_started = True
-                    if abort_kind == "response" and abort_payload.get("command") == "abort":
+                    abort_payload.observe_abort(self)
+                    if (
+                        isinstance(abort_payload, pi.Response)
+                        and abort_payload.get("command") == "abort"
+                    ):
                         break
             except (TimeoutError, OSError):
-                # Pi may close its pipe after we observed a session rebind.
-                # Abort is best effort; the child is terminated below.
                 pass
-        if proc.returncode is None:
-            await _terminate_process(proc)
+        if self.proc.returncode is None:
+            await _terminate_process(self.proc)
 
     def turn_state(
+        self,
         state: str,
         reason_code: str,
         elapsed_ms: int,
@@ -1437,282 +936,302 @@ async def _stream_agent_events(
         attempt: tuple[int | None, int | None] | None = None,
     ) -> events.TurnState:
         replay_safe = not (
-            prompt_dispatched
-            or tool_ever_started
-            or output_started
-            or forwarded_input_started
-            or compaction_started
+            self.prompt_dispatched
+            or self.tool_ever_started
+            or self.output_started
+            or self.inputs.started
+            or self.compaction_started
         )
         return events.TurnState(
             state=state,
             reason_code=reason_code,
             elapsed_ms=max(0, elapsed_ms),
-            phase=event_phase or phase,
+            phase=event_phase or self.phase.declared_name,
             retryable=replay_safe,
             replay_safe=replay_safe,
-            side_effects_possible=prompt_dispatched
-            or tool_ever_started
-            or forwarded_input_started
-            or compaction_started,
+            side_effects_possible=self.prompt_dispatched
+            or self.tool_ever_started
+            or self.inputs.started
+            or self.compaction_started,
             attempt={"current": attempt[0], "max": attempt[1]} if attempt is not None else None,
         )
 
-    def positive_tokens(usage: Any) -> int | None:
-        if not isinstance(usage, dict):
-            return None
-        tokens = usage.get("totalTokens")
-        return tokens if type(tokens) is int and tokens > 0 else None
-
-    def context_info() -> events.AgentInfo:
+    def context_info(self) -> events.AgentInfo:
         return events.AgentInfo(
-            model=model_name,
-            session_name=session_name,
-            session_file=active_session_file,
-            context_used=context_used,
-            context_size=context_size,
+            model=self.model_name,
+            session_name=self.session_name,
+            session_file=self.active_session_file,
+            context_used=self.usage.used,
+            context_size=self.usage.size,
         )
 
-    def retry_made_progress(payload: dict[str, Any]) -> bool:
-        kind = payload.get("type")
-        message = payload.get("message") or {}
-        if kind == "message_start" and message.get("role") == "assistant":
-            return True
-        if kind == "message_end" and message.get("role") == "assistant":
-            return message.get("stopReason") not in {"error", "aborted"}
-        if kind == "message_update":
-            delta = payload.get("assistantMessageEvent") or {}
-            return delta.get("type") in {
-                "text_delta",
-                "thinking_delta",
-                "toolcall_start",
-                "toolcall_delta",
-                "toolcall_end",
-            } and bool(delta.get("delta") or delta.get("type", "").startswith("toolcall"))
-        return kind in {"tool_execution_start", "agent_settled"}
+    async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
+        self.finished = self.skip = False
+        async for event in self.prepare_launch():
+            yield event
+        if self.finished:
+            return
+        async for event in self.validate_reopen():
+            yield event
+        if self.finished:
+            return
+        async for event in self.spawn_child():
+            yield event
+        if self.finished:
+            return
+        async for event in self.initialize_output():
+            yield event
+        if self.finished:
+            return
+        async for event in self.initialize_rpc():
+            yield event
+        if self.finished:
+            return
+        while True:
+            self.skip = False
+            async for event in self.receive_record():
+                yield event
+            if self.finished:
+                break
+            if self.skip:
+                continue
+            async for event in self.attest_input():
+                yield event
+            if self.finished:
+                break
+            if self.skip:
+                continue
+            async for event in self.guard_identity():
+                yield event
+            if self.finished:
+                break
+            if self.skip:
+                continue
+            async for event in self.observe_progress():
+                yield event
+            if self.finished:
+                break
+            if self.skip:
+                continue
+            async for emitted in self.payload.apply(self):
+                yield emitted
+            self.phase = self.phase.on(self.payload, self.active_tools)
+            if self.finished:
+                break
+            if self.skip:
+                continue
+            async for event in self.settle_or_continue():
+                yield event
+            if self.finished:
+                break
+            if self.skip:
+                continue
+        self.finished = False
+        async for event in self.retain_or_close():
+            yield event
+        if self.finished:
+            return
+        async for event in self.finish_diagnostics():
+            yield event
+        if self.finished:
+            return
+        async for event in self.finish_result():
+            yield event
+        if self.finished:
+            return
 
-    while True:
-        while rejected_commands:
-            yield rejected_commands.pop(0)
-        rejected_signal.clear()
+    def record_failure(self, failure: failures.TurnFailure) -> None:
+        if failure.supersedes(self.failure):
+            self.failure = failure
+
+    @property
+    def fail_reason(self) -> str:
+        return self.failure.text if self.failure else ""
+
+    async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
+        while self.rejected_commands:
+            yield self.rejected_commands.pop(0)
+        self.rejected_signal.clear()
         try:
-            if stats_requested:
-                read_timeout: float | None = 5.0
-            elif require_input_id and not native_capability_confirmed:
-                read_timeout = max(0.0, preflight_deadline - loop.time())
-            elif active_tools or model_wait_timeout is None:
-                read_timeout = None
+            if self.stats.requested:
+                self.read_timeout: float | None = 5.0
+            elif self.require_input_id and (not self.native_capability_confirmed):
+                self.read_timeout = max(0.0, self.preflight_deadline - self.loop.time())
+            elif self.active_tools or self.model_wait_timeout is None:
+                self.read_timeout = None
             else:
-                read_timeout = max(0.0, last_model_progress + model_wait_timeout - loop.time())
-            # Pi may compact a saved session before it emits this prompt's
-            # authoritative user start. That work has its own progress wait;
-            # the input-start clock resumes after compaction completes.
-            if (
-                prompt_start_deadline is not None
-                and not initial_input_started
-                and phase != "compaction"
-            ):
-                start_wait = max(0.0, prompt_start_deadline - loop.time())
-                read_timeout = (
-                    min(read_timeout, start_wait) if read_timeout is not None else start_wait
+                self.read_timeout = max(
+                    0.0, self.last_model_progress + self.model_wait_timeout - self.loop.time()
                 )
-            line = await read_rpc_line(read_timeout)
+            if (
+                self.prompt_start_deadline is not None
+                and (not self.initial_input_started)
+                and (not self.phase.pauses_input_clock)
+            ):
+                self.start_wait = max(0.0, self.prompt_start_deadline - self.loop.time())
+                self.read_timeout = (
+                    min(self.read_timeout, self.start_wait)
+                    if self.read_timeout is not None
+                    else self.start_wait
+                )
+            self.line = await self.read_rpc_line(self.read_timeout)
         except TimeoutError:
-            if require_input_id and not native_capability_confirmed:
-                capability_failed = True
-                elapsed_ms = round((loop.time() - launch_started_at) * 1000)
-                wait_ms = round((loop.time() - preflight_wait_started_at) * 1000)
-                preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
-                diagnostic = {
-                    "elapsed_ms": elapsed_ms,
-                    "wait_ms": wait_ms,
-                    "spawn_ms": spawn_ms,
-                    "budget_ms": round(preflight_budget * 1000),
+            async for event in self.handle_timeout():
+                yield event
+            return
+        if not self.line:
+            if self.require_input_id and (not self.native_capability_confirmed):
+                self.preflight_failure = FailureReason.PREFLIGHT_EXIT
+                self.diagnostic = {
+                    "elapsed_ms": round((self.loop.time() - self.launch_started_at) * 1000),
+                    "spawn_ms": self.spawn_ms,
                 }
-                if session_bytes is not None:
-                    diagnostic["session_bytes"] = session_bytes
-                session_size = session_bytes if session_bytes is not None else "unknown"
-                fail_reason = (
-                    "Pi native input-ID capability preflight timed out "
-                    f"(phase=await_get_state, elapsed_ms={elapsed_ms}, "
-                    f"wait_ms={wait_ms}, budget_ms={round(preflight_budget * 1000)}, "
-                    f"spawn_ms={spawn_ms}, session_bytes={session_size})."
+                if self.session_bytes is not None:
+                    self.diagnostic["session_bytes"] = self.session_bytes
+                self.record_failure(
+                    failures.InputIdUnavailable(
+                        "Pi native input-ID capability preflight ended before attestation."
+                    )
                 )
-                await _terminate_process(proc)
-                break
-            if (
-                prompt_start_deadline is not None
-                and not initial_input_started
-                and phase != "compaction"
-            ):
-                fail_reason = "Pi RPC run ended without this prompt's user message start."
-                await _terminate_process(proc)
-                break
-            if stats_requested:
-                break
-            elapsed_ms = round((loop.time() - last_model_progress) * 1000)
-            if not prompt_accepted:
-                reason_code = "prompt_acceptance_timeout"
-                stalled_phase = "prompt_acceptance"
-            elif phase == "compaction":
-                reason_code = "compaction_no_progress"
-                stalled_phase = phase
-            elif phase == "summarization_retry":
-                reason_code = "summarization_retry_no_progress"
-                stalled_phase = phase
-            elif phase == "provider_retry":
-                reason_code = "retry_no_progress"
-                stalled_phase = phase
-            else:
-                reason_code = "model_no_progress"
-                stalled_phase = "model_wait"
-            if prompt_accepted:
-                yield turn_state(
-                    "model_stalled", reason_code, elapsed_ms, event_phase=stalled_phase
-                )
-            yield turn_state("aborting", reason_code, elapsed_ms, event_phase="shutdown")
-            await abort_stalled_rpc()
-            for input_id in started_during_abort:
-                yield events.InputStarted(id=input_id)
-            failed_elapsed_ms = round((loop.time() - last_model_progress) * 1000)
-            yield turn_state("failed", reason_code, failed_elapsed_ms, event_phase="shutdown")
-            fail_reason = (
-                f"Model produced no RPC progress for {model_wait_timeout:g} seconds."
-                if prompt_accepted
-                else f"Pi did not accept the prompt within {model_wait_timeout:g} seconds."
-            )
-            break
-        if not line:
-            if require_input_id and not native_capability_confirmed:
-                capability_failed = True
-                preflight_failure = FailureReason.PREFLIGHT_EXIT
-                diagnostic = {
-                    "elapsed_ms": round((loop.time() - launch_started_at) * 1000),
-                    "spawn_ms": spawn_ms,
-                }
-                if session_bytes is not None:
-                    diagnostic["session_bytes"] = session_bytes
-                fail_reason = "Pi native input-ID capability preflight ended before attestation."
-            break
-        line = line.strip()
-        if not line:
-            continue
+            self.finished = True
+            return
+        self.line = self.line.strip()
+        if not self.line:
+            self.skip = True
+            return
         try:
-            payload = json.loads(line)
+            self.payload = PiRpcChannel.decode_record(self.line)
         except json.JSONDecodeError:
-            continue
-        kind = payload.get("type")
-        command = payload.get("command")
-        if require_input_id and not native_capability_confirmed:
-            if kind != "response" or command != "get_state":
-                # Pi may not emit model/tool events before the initial prompt.
-                # Treat any preflight ambiguity as refusal, not launch authority.
-                capability_failed = True
-                fail_reason = "Pi native input-ID capability preflight returned another event."
-                await _terminate_process(proc)
-                break
-            state = payload.get("data")
+            self.skip = True
+            return
+
+    async def attest_input(self) -> AsyncIterator[events.AgentEvent]:
+        if self.require_input_id and (not self.native_capability_confirmed):
             if (
-                payload.get("id") != preflight_id
-                or payload.get("success") is not True
-                or not isinstance(state, dict)
-                or state.get("nativeInputProofCapability") != NATIVE_INPUT_CAPABILITY
+                not isinstance(self.payload, pi.Response)
+                or self.payload.command_type is not commands.GetState
             ):
-                capability_failed = True
-                fail_reason = "Pi native input-ID capability preflight failed."
-                await _terminate_process(proc)
-                break
-            if (
-                reused
-                and persistent_session is not None
-                and (
-                    state.get("sessionId") != persistent_session.session_id
-                    or state.get("sessionFile") != persistent_session.session_file
+                self.record_failure(
+                    failures.InputIdUnavailable(
+                        "Pi native input-ID capability preflight returned another event."
+                    )
                 )
-            ) or (
-                validated_session_id is not None
+                await _terminate_process(self.proc)
+                self.finished = True
+                return
+            self.state = self.payload.get("data")
+            if (
+                self.payload.get("id") != self.preflight_id
+                or self.payload.get("success") is not True
+                or (not isinstance(self.state, dict))
+                or (self.state.get("nativeInputProofCapability") != NATIVE_INPUT_CAPABILITY)
+            ):
+                self.record_failure(
+                    failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+                )
+                await _terminate_process(self.proc)
+                self.finished = True
+                return
+            if (
+                self.reused
+                and self.persistent_session is not None
                 and (
-                    state.get("sessionId") != validated_session_id
-                    or state.get("sessionFile") != session_file
+                    self.state.get("sessionId") != self.persistent_session.session_id
+                    or self.state.get("sessionFile") != self.persistent_session.session_file
+                )
+                or (
+                    self.validated_session_id is not None
+                    and (
+                        self.state.get("sessionId") != self.validated_session_id
+                        or self.state.get("sessionFile") != self.session_file
+                    )
                 )
             ):
-                session_identity_uncertain = True
-                fail_reason = _IDENTITY_FAILURE_TEXT
-                await _terminate_process(proc)
-                break
-            native_capability_confirmed = True
-            if startup is not None:
-                startup.release()
+                self.session_identity_uncertain = True
+                self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+                await _terminate_process(self.proc)
+                self.finished = True
+                return
+            self.native_capability_confirmed = True
+            if self.startup is not None:
+                self.startup.release()
             if (
-                proof_journal_bytes is not None
-                and proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
+                self.proof_journal_bytes is not None
+                and self.proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
             ):
                 yield events.Notice(
-                    text="[agent-comms warning] Pi native input proof journal measures at least "
-                    "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
-                    "byte size is only an advisory. Preserve the session and journal; "
-                    "arrange a reviewed checkpoint or upgrade before further growth."
+                    text=(
+                        "[agent-comms warning] Pi native input proof journal measures at least "
+                        "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
+                        "byte size is only an advisory. Preserve the session and journal; "
+                        "arrange a reviewed checkpoint or upgrade before further growth."
+                    )
                 )
-            prompt_start_deadline = loop.time() + PROMPT_START_TIMEOUT_SECONDS
-            assert proc.stdin is not None
+            self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
+            assert self.proc.stdin is not None
             try:
-                boundary_context = _maintenance_send_boundary(
+                self.boundary_context = _maintenance_send_boundary(
                     Path(
-                        (env_extra or {}).get("AGENT_COMMS_ROOT")
+                        (self.env_extra or {}).get("AGENT_COMMS_ROOT")
                         or os.environ.get("AGENT_COMMS_ROOT")
                         or str(
                             Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}"
                         )
                     ),
-                    send_boundary,
+                    self.send_boundary,
                     None,
-                    original_input_id,
-                    task,
+                    self.original_input_id,
+                    self.task,
                 )
-                with boundary_context as authorized:
-                    if authorized:
-                        prompt_dispatched = True
-                        proc.stdin.write(prompt_payload)
-                if not authorized:
-                    fail_reason = "Input authority changed before Pi prompt send."
-                    await _terminate_process(proc)
-                    break
-                await proc.stdin.drain()
+                with self.boundary_context as self.authorized:
+                    if self.authorized:
+                        self.prompt_dispatched = True
+                        self.proc.stdin.write(self.prompt_payload)
+                if not self.authorized:
+                    self.record_failure(
+                        failures.InputMissing("Input authority changed before Pi prompt send.")
+                    )
+                    await _terminate_process(self.proc)
+                    self.finished = True
+                    return
+                await self.proc.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
-                fail_reason = "Pi RPC prompt could not be sent after capability preflight."
-                await _terminate_process(proc)
-                break
-        # Rejected commands never reach Pi. Any session-changing response we
-        # nevertheless observe is unsolicited; even a failed/cancelled response
-        # cannot prove Pi kept A bound. Check state/stats BEFORE projecting any
-        # metadata, text, tool, retry, settlement, or provider error from B.
-        data = payload.get("data")
-        identity_changed = kind == "response" and command in _SESSION_MUTATING_COMMANDS
-        if (
-            kind == "response"
-            and payload.get("success")
-            and isinstance(data, dict)
-            and command in {"get_state", "get_session_stats"}
-            and initial_session_observed
-        ):
-            identity_changed = identity_changed or bool(
-                (
-                    initial_session_id
-                    and data.get("sessionId")
-                    and data["sessionId"] != initial_session_id
+                self.record_failure(
+                    failures.InputIdUnavailable(
+                        "Pi RPC prompt could not be sent after capability preflight."
+                    )
                 )
+                await _terminate_process(self.proc)
+                self.finished = True
+                return
+
+    async def guard_identity(self) -> AsyncIterator[events.AgentEvent]:
+        self.data = self.payload.get("data")
+        self.identity_changed = isinstance(self.payload, pi.Response) and issubclass(
+            self.payload.command_type, commands.MutatesSession
+        )
+        if (
+            isinstance(self.payload, pi.Response)
+            and self.payload.get("success")
+            and isinstance(self.data, dict)
+            and issubclass(self.payload.command_type, commands.SessionSnapshot)
+            and self.initial_session_observed
+        ):
+            self.identity_changed = self.identity_changed or bool(
+                self.initial_session_id
+                and self.data.get("sessionId")
+                and (self.data["sessionId"] != self.initial_session_id)
                 or (
-                    initial_session_file
-                    and data.get("sessionFile")
-                    and data["sessionFile"] != initial_session_file
+                    self.initial_session_file
+                    and self.data.get("sessionFile")
+                    and (self.data["sessionFile"] != self.initial_session_file)
                 )
             )
-        if identity_changed:
-            session_identity_uncertain = True
-            context_used = None
-            confirmed_context_used = None
-            provisional_usage = False
-            text_parts.clear()
-            yield context_info()  # Only A's previously observed metadata.
+        if self.identity_changed:
+            self.session_identity_uncertain = True
+            self.usage.invalidate()
+            self.text_parts.clear()
+            yield self.context_info()
             yield events.TurnState(
                 state="failed",
                 reason_code="session_identity_uncertain",
@@ -1722,733 +1241,596 @@ async def _stream_agent_events(
                 replay_safe=False,
                 side_effects_possible=True,
             )
-            fail_reason = _IDENTITY_FAILURE_TEXT
-            await abort_stalled_rpc()
-            break
-        if kind == "extension_ui_request":
-            if payload.get("method") == "setStatus":
-                if (
-                    not live_status_seen
-                    and not agent_settled_seen
-                    and not stats_requested
-                    and require_input_id
-                    and native_capability_confirmed
-                    and initial_prompt_acknowledged
-                    and initial_input_started
-                    and initial_session_observed
-                    and isinstance(initial_session_id, str)
-                    and bool(initial_session_id)
-                    and not session_identity_uncertain
-                    and not input_uncertain
-                ):
-                    receipt = _pi_mcp_live_receipt(payload, original_input_id)
-                    if receipt is not None:
-                        live_status_seen = True
-                        yield events.McpLiveStatus(receipt=receipt)
-                continue
-            # The only return path for Pi dialogs is this exact child stdin.
-            # Never relay a request across a new child/session or infer a human
-            # controller from an ACP subscriber/broadcast update.
-            request_id = payload.get("id")
-            method = payload.get("method")
-            if type(request_id) is not str or not request_id or len(request_id) > 128:
-                fail_reason = "Pi extension UI request lacked a bounded ID."
-                await _terminate_process(proc)
-                break
-            if method not in {"confirm", "select", "input", "editor"}:
-                continue  # Fire-and-forget UI notification has no response.
-            choice: dict[str, Any] | None = None
-            if (
-                request_id not in ui_seen
-                and len(ui_seen) < 64
-                and ui_request is not None
-                and initial_prompt_acknowledged
-                and initial_input_started
-                and initial_session_observed
-                and isinstance(initial_session_id, str)
-                and initial_session_id
-                and not session_identity_uncertain
-                and not input_uncertain
-            ):
-                ui_seen.add(request_id)
-                with suppress(Exception):
-                    # Controller errors deny; do not expose raw UI/extension text.
-                    choice = await asyncio.wait_for(ui_request(payload), timeout=15)
-            response: dict[str, Any] = {
-                "type": "extension_ui_response",
-                "id": request_id,
-                "cancelled": True,
-            }
-            if method == "confirm" and isinstance(choice, dict):
-                response = {
-                    "type": "extension_ui_response",
-                    "id": request_id,
-                    "confirmed": choice.get("confirmed") is True,
-                }
-            elif method == "select" and isinstance(choice, dict):
-                options = payload.get("options")
-                if (
-                    isinstance(options, list)
-                    and type(choice.get("value")) is str
-                    and choice["value"] in options
-                ):
-                    response = {
-                        "type": "extension_ui_response",
-                        "id": request_id,
-                        "value": choice["value"],
-                    }
-            try:
-                if proc.stdin is None or proc.returncode is not None:
-                    raise BrokenPipeError
-                proc.stdin.write((json.dumps(response) + "\n").encode())
-                await asyncio.wait_for(proc.stdin.drain(), timeout=2)
-            except (BrokenPipeError, ConnectionResetError, TimeoutError):
-                fail_reason = "Pi extension UI response could not reach the requesting child."
-                await _terminate_process(proc)
-                break
-            continue
-        now = loop.time()
-        if stats_requested and kind == "response" and persistent_session is not None:
-            response_id = payload.get("id")
-            if isinstance(response_id, str) and response_id in {stats_state_id, stats_usage_id}:
-                if payload.get("success") is True:
-                    stats_responses.add(response_id)
-                    stats_complete = len(stats_responses) == 2
-                    if response_id == stats_state_id and isinstance(data, dict):
-                        stats_busy = (
-                            data.get("isStreaming") is True or data.get("isCompacting") is True
+            self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+            await self.abort_stalled_rpc()
+            self.finished = True
+            return
+
+    async def observe_progress(self) -> AsyncIterator[events.AgentEvent]:
+        self.now = self.loop.time()
+        if isinstance(self.payload, pi.Response):
+            self.response_command = self.reader.correlate(self.payload)
+        if (
+            self.stats.requested
+            and isinstance(self.payload, pi.Response)
+            and (self.persistent_session is not None)
+        ):
+            self.response_id = self.payload.get("id")
+            if isinstance(self.response_id, str) and self.response_id in {
+                self.stats.state_id,
+                self.stats.usage_id,
+            }:
+                if self.payload.get("success") is True:
+                    self.stats.responses.add(self.response_id)
+                    self.stats.complete = len(self.stats.responses) == 2
+                    if self.response_id == self.stats.state_id and isinstance(self.data, dict):
+                        self.stats.busy = (
+                            self.data.get("isStreaming") is True
+                            or self.data.get("isCompacting") is True
                         )
                 else:
-                    stats_failed = True
-        initial_prompt_response = (
-            kind == "response" and command == "prompt" and payload.get("id") == prompt_id
+                    self.stats.failed = True
+        self.initial_prompt_response = (
+            isinstance(self.payload, pi.Response)
+            and self.payload.command_type is commands.Prompt
+            and (self.payload.get("id") == self.prompt_id)
         )
-        if kind == "response" and command == "prompt" and not initial_prompt_response:
-            queued_response_id = payload.get("id")
-            if payload.get("success") is True and any(
-                item[0] == queued_response_id for item in pending_inputs
+        if (
+            isinstance(self.payload, pi.Response)
+            and self.payload.command_type is commands.Prompt
+            and (not self.initial_prompt_response)
+        ):
+            self.queued_response_id = self.payload.get("id")
+            if self.payload.get("success") is True and any(
+                item[0] == self.queued_response_id for item in self.inputs.pending
             ):
-                accepted_forwarded.add(queued_response_id)
-            input_state_changed.set()
-        if kind == "steering_interrupt_started":
-            explicit_interrupt = True
-        elif kind == "steering_interrupt_completed":
-            explicit_interrupt = False
-            text_parts.clear()
-            error_message = None
-            final_assistant_stop = False
+                self.inputs.accepted.add(self.queued_response_id)
+            self.inputs.changed.set()
+        if isinstance(self.payload, pi.SteeringInterruptStarted):
+            self.explicit_interrupt = True
+        elif isinstance(self.payload, pi.SteeringInterruptCompleted):
+            self.explicit_interrupt = False
+            self.text_parts.clear()
+            self.error_message = None
+            self.final_assistant_stop = False
             yield events.SteeringInterrupted()
         elif (
-            kind == "response"
-            and command == "interrupt_steering"
-            and payload.get("success") is False
+            isinstance(self.payload, pi.Response)
+            and self.payload.command_type is commands.InterruptSteering
+            and (self.payload.get("success") is False)
         ):
-            yield events.Error(text=str(payload.get("error") or "Send now was refused"))
-        if retry_recovery_pending and retry_made_progress(payload):
-            if kind in {"message_start", "message_end", "message_update"}:
-                output_started = True
-            elif kind == "tool_execution_start":
-                tool_ever_started = True
-            retry_recovery_pending = False
-            yield turn_state("recovered", retry_recovery_reason, 0, event_phase="model_wait")
-        if kind in {"agent_start", "agent_end", "message_start", "message_update", "message_end"}:
-            prompt_accepted = True
-            if (
-                kind == "agent_start"
-                or (kind == "agent_end" and payload.get("willRetry") is True)
-                or (
-                    kind == "message_start"
-                    and (payload.get("message") or {}).get("role") in {"user", "assistant"}
-                )
-            ):
-                # A new run/message invalidates the previous final stop until
-                # this run itself ends with an authoritative assistant stop.
-                final_assistant_stop = False
-            last_model_progress = now
-            if not active_tools and phase not in {
-                "compaction",
-                "summarization_retry",
-                "provider_retry",
-            }:
-                phase = "model_wait"
-        if initial_prompt_response:
-            last_model_progress = now
-            if payload.get("success"):
-                initial_prompt_acknowledged = True
-                prompt_accepted = True
-                phase = "model_wait"
-            else:
-                error_message = (
-                    "Image prompt failed; backend diagnostics withheld."
-                    if image_input_sent or inherited_image_sensitive
-                    else str(payload.get("error") or "Prompt was rejected")
-                )
-                yield turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
-                yield events.Error(text=error_message)
-                break
-        elif kind == "auto_retry_start":
-            final_assistant_stop = False
-            prompt_accepted = True
-            retry_recovery_pending = True
-            retry_recovery_reason = "provider_auto_retry_progress"
-            elapsed_ms = round((now - last_model_progress) * 1000)
-            last_model_progress = now
-            phase = "provider_retry"
-            current = payload.get("attempt") if isinstance(payload.get("attempt"), int) else None
-            maximum = (
-                payload.get("maxAttempts") if isinstance(payload.get("maxAttempts"), int) else None
+            yield events.Error(text=str(self.payload.get("error") or "Send now was refused"))
+        if self.retry_recovery_pending and self.payload.retry_progress:
+            self.output_started |= self.payload.output_progress
+            self.tool_ever_started |= self.payload.tool_progress
+            self.retry_recovery_pending = False
+            yield self.turn_state(
+                "recovered", self.retry_recovery_reason, 0, event_phase="model_wait"
             )
-            yield turn_state(
-                "retrying",
-                "provider_auto_retry",
-                elapsed_ms,
-                event_phase="model_wait",
-                attempt=(current, maximum),
-            )
-        elif kind == "auto_retry_end":
-            last_model_progress = now
-            phase = "model_wait"
-            if payload.get("success"):
-                # Acceptance/completion of Pi's retry command does not prove the
-                # retried model produced anything. Keep RETRYING until model
-                # progress or a successful settlement is observed.
-                error_message = None
-            else:
-                retry_recovery_pending = False
-                error_message = "Provider retry attempts were exhausted."
-                yield turn_state("failed", "provider_retry_exhausted", 0, event_phase="model_wait")
-        elif kind in {"summarization_retry_scheduled", "summarization_retry_attempt_start"}:
-            compaction_started = True
-            elapsed_ms = round((now - last_model_progress) * 1000)
-            last_model_progress = now
-            phase = "summarization_retry"
-            current = payload.get("attempt") if isinstance(payload.get("attempt"), int) else None
-            maximum = (
-                payload.get("maxAttempts") if isinstance(payload.get("maxAttempts"), int) else None
-            )
-            yield turn_state(
-                "retrying",
-                "summarization_retry",
-                elapsed_ms,
-                event_phase="model_wait",
-                attempt=(current, maximum),
-            )
-        elif kind == "summarization_retry_finished":
-            last_model_progress = now
-            phase = "model_wait"
-            if payload.get("success") or payload.get("result"):
-                yield turn_state(
-                    "recovered", "summarization_retry_succeeded", 0, event_phase="model_wait"
-                )
-        elif kind == "compaction_start":
-            compaction_started = True
-            compaction_usage_recorded = False
-            last_model_progress = now
-            phase = "compaction"
-            # A compaction in flight invalidates the prior context meter even
-            # when it later aborts. Only a fresh authoritative measurement
-            # can safely repopulate usage.
-            context_used = None
-            confirmed_context_used = None
-            provisional_usage = False
-            yield context_info()
-            reason = payload.get("reason")
-            yield events.CompactionStart(
-                reason=reason if reason in {"manual", "threshold", "overflow"} else "unknown"
-            )
-        elif kind == "compaction_progress":
-            # Each chunk finished a separate provider response. Keep the
-            # no-progress watchdog bounded to the current response, not the
-            # full history length.
-            last_model_progress = now
-            phase = "compaction"
-            chunk_index = payload.get("chunkIndex")
-            usage = payload.get("usage")
-            if isinstance(usage, dict):
-                provider_response_index += 1
-                compaction_usage_recorded = True
-                yield events.ProviderUsage(response_id=str(provider_response_index), usage=usage)
-            done = payload.get("sourceBytesDone")
-            total = payload.get("sourceBytesTotal")
-            measured = type(done) is int and type(total) is int and 0 <= done <= total and total > 0
-            if type(chunk_index) is int and (chunk_index > 0 or chunk_index == 0 and measured):
-                yield events.CompactionProgress(
-                    chunk_index=chunk_index,
-                    source_bytes_done=done if measured else None,
-                    source_bytes_total=total if measured else None,
-                    summary_phase=(
-                        payload["summaryPhase"]
-                        if isinstance(payload.get("summaryPhase"), str) and payload["summaryPhase"]
-                        else None
-                    ),
-                )
-        elif kind == "compaction_end":
-            last_model_progress = now
-            phase = "model_wait"
-            result = payload.get("result")
-            completed = payload.get("aborted") is False and isinstance(result, dict)
-            if (
-                completed
-                and not compaction_usage_recorded
-                and isinstance(result.get("usage"), dict)
-            ):
-                provider_response_index += 1
-                yield events.ProviderUsage(
-                    response_id=str(provider_response_index), usage=result["usage"]
-                )
-            if completed and not initial_input_started and prompt_start_deadline is not None:
-                prompt_start_deadline = now + PROMPT_START_TIMEOUT_SECONDS
-            # A committed compaction starts a new context epoch. Aborted or
-            # malformed completion remains UNKNOWN rather than fabricating 0.
-            context_used = None
-            confirmed_context_used = None
-            provisional_usage = False
-            yield context_info()
-            reason = payload.get("reason")
-            summary = result.get("summary") if completed else None
-            yield events.CompactionEnd(
-                reason=reason if reason in {"manual", "threshold", "overflow"} else "unknown",
-                aborted=not completed,
-                summary=compaction_summary(summary) if isinstance(summary, str) else None,
-                context_used=None,
-                will_retry=payload.get("willRetry") is True,
-            )
-            if not completed and not initial_input_started:
-                # Pi otherwise continues with the uncompressed history and
-                # can send the same oversized context to the model. An
-                # attempted summary is uncertain, so only an explicit new
-                # decision may retry it.
-                prestart_compaction_failed = True
-                fail_reason = (
-                    "Context compaction failed before this input started; "
-                    "inspect ACP diagnostics."
-                )
-                yield turn_state(
-                    "failed", "prestart_compaction_failed", 0, event_phase="compaction"
-                )
-                await _terminate_process(proc)
-                break
-            if payload.get("willRetry"):
-                final_assistant_stop = False
-                retry_recovery_pending = True
-                retry_recovery_reason = "overflow_retry_progress"
-                yield turn_state(
-                    "retrying", "overflow_compaction_retry", 0, event_phase="model_wait"
-                )
-        elif kind == "message_start" and (payload.get("message") or {}).get("role") == "assistant":
-            assistant_message_parts.clear()
-        elif kind == "message_start" and (payload.get("message") or {}).get("role") == "user":
-            message = payload["message"]
-            content = message.get("content")
-            if isinstance(content, str):
-                user_text = content
-            elif isinstance(content, list):
-                user_text = "\n".join(
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict) and part.get("type") == "text"
-                )
-            else:
-                user_text = None
-            native_id = message.get("inputId")
-            if (
-                initial_prompt_acknowledged
-                and not initial_input_started
-                and not input_uncertain
-                and user_text == task
-                and (not require_input_id or native_id == original_input_id)
-            ):
-                if native_start is not None and not native_start(None, original_input_id, task):
-                    input_uncertain = True
-                    fail_reason = "Pi input start did not match the durable attempt."
-                    await abort_stalled_rpc()
-                    break
-                initial_input_started = True
-                if native_start is not None:
-                    yield events.InputStarted(id=None)
-                if steering_queue is not None and proc.stdin is not None and steering_task is None:
-                    steering_task = asyncio.create_task(forward_steering())
-                    if owner is not None:
-                        _ACTIVE_STEERING[owner] = steering_task
-            elif initial_input_started and not input_uncertain:
-                matched, input_id = mark_pending_input_started(payload)
-                if matched:
-                    yield events.InputStarted(id=input_id)
-                else:
-                    # A second original, foreign, or unstarted queued input
-                    # cannot make the assistant's final stop authoritative.
-                    input_uncertain = True
-                    followup_start_unrecognized = True
-                    final_assistant_stop = False
-                    fail_reason = "Pi RPC saw an unrecognized follow-up user message start."
-                    await abort_stalled_rpc()
-                    break
-            else:
-                input_uncertain = True
-                final_assistant_stop = False
-                fail_reason = "Pi RPC run ended without this prompt's user message start."
-                await abort_stalled_rpc()
-                break
-        elif kind == "response" and payload.get("command") == "set_model":
-            yield events.ModelChanged(
-                id=payload.get("id"),
-                ok=bool(payload.get("success")),
-                error=payload.get("error", "Model change failed"),
-            )
-        elif kind == "response" and payload.get("command") == "set_thinking_level":
-            yield events.ThinkingChanged(
-                id=payload.get("id"),
-                ok=bool(payload.get("success")),
-                error=payload.get("error", "Thinking level change failed"),
-            )
-        elif kind == "response" and payload.get("success"):
-            command = payload.get("command")
-            data = payload.get("data") or {}
-            if command == "get_state":
-                state_id = data.get("sessionId")
-                state_file = data.get("sessionFile")
-                if not initial_session_observed:
-                    initial_session_id = state_id
-                    initial_session_file = state_file
-                    initial_session_observed = True
-                model = data.get("model") or {}
-                provider = model.get("provider")
-                model_id = model.get("id") or model.get("name")
-                model_name = (
-                    f"{provider}/{model_id}" if provider and model_id else model_id or provider
-                )
-                session_name = data.get("sessionName")
-                active_session_file = state_file or active_session_file
-                context_size = model.get("contextWindow")
-                yield events.AgentInfo(
-                    model=model_name,
-                    thinking_level=data.get("thinkingLevel"),
-                    session_name=session_name,
-                    session_file=active_session_file,
-                    context_used=context_used,
-                    context_size=context_size,
-                )
-            elif command == "get_session_stats":
-                context = data.get("contextUsage") or {}
-                tokens = context.get("tokens") if isinstance(context, dict) else None
-                if type(tokens) is int and tokens > 0:
-                    context_used = tokens
-                    confirmed_context_used = tokens
-                # Pi's positive stats already reflect its current branch and
-                # post-compaction usage check. Zero/null are unknown, not an
-                # overwrite. Context can decrease: never take a global max.
-                if isinstance(context, dict) and not session_identity_uncertain:
-                    context_size = context.get("contextWindow") or context_size
-                yield context_info()
-                if persistent_session is None:
-                    break
-        elif kind == "message_update":
-            message = payload.get("message") or {}
-            if not isinstance(message, dict):
-                message = {}
-            if message.get("role", "assistant") == "assistant":
-                tokens = positive_tokens(message.get("usage")) or positive_tokens(
-                    payload.get("usage")
-                )
-                if tokens is not None and not session_identity_uncertain:
-                    context_used = tokens
-                    provisional_usage = True
-                    yield context_info()
-            delta_event = payload.get("assistantMessageEvent") or {}
-            delta_type = delta_event.get("type")
-            if delta_type == "text_delta":
-                piece = delta_event.get("delta") or ""
-                if piece:
-                    output_started = True
-                text_parts.append(piece)
-                assistant_message_parts.append(piece)
-                yield events.Chunk(text=piece)
-            elif delta_type == "thinking_delta":
-                piece = delta_event.get("delta") or ""
-                if piece:
-                    output_started = True
-                    yield events.Thinking(text=piece)
-            elif delta_type in {"toolcall_start", "toolcall_delta", "toolcall_end"}:
-                output_started = True
-        elif kind == "tool_execution_start":
-            name = payload.get("toolName") or "tool"
-            args = payload.get("args") or {}
-            tool_id = payload.get("toolCallId") or name
-            prompt_accepted = True
-            tool_ever_started = True
-            active_tools.add(tool_id)
-            phase = "tool_running"
-            yield events.ToolStart(id=tool_id, name=name, title=_tool_title(name, args), args=args)
-        elif kind == "tool_execution_update":
-            yield events.ToolProgress(
-                id=payload.get("toolCallId") or payload.get("toolName") or "tool",
-                name=payload.get("toolName") or "tool",
-                output=_result_text(payload.get("partialResult")),
-            )
-        elif kind == "tool_execution_end":
-            name = payload.get("toolName") or "tool"
-            result = payload.get("result") or {}
-            output = _result_text(result)
-            is_ok = payload.get("isError") is not True
-            tool_id = payload.get("toolCallId") or name
-            active_tools.discard(tool_id)
-            last_model_progress = loop.time()
-            if not active_tools:
-                phase = "model_wait"
-            yield events.ToolEnd(
-                id=tool_id,
-                name=name,
-                ok=is_ok,
-                output=output,
-                diff=ToolDiff.from_result(name, result, is_ok),
-            )
-        elif kind == "message_end":
-            # Pi reports provider failures (usage limits, transport errors) as a
-            # completed assistant message with stopReason "error"/"aborted".
-            # A later successful assistant message means a retry recovered.
-            message = payload.get("message") or {}
-            if message.get("role") == "assistant":
-                content = message.get("content")
-                committed_text = (
-                    "".join(
-                        part["text"]
-                        for part in content
-                        if isinstance(part, dict)
-                        and part.get("type") == "text"
-                        and type(part.get("text")) is str
-                    )
-                    if isinstance(content, list)
-                    else ""
-                )
-                if (
-                    message.get("stopReason") == "toolUse"
-                    and initial_prompt_acknowledged
-                    and initial_input_started
-                    and not input_uncertain
-                    and not session_identity_uncertain
-                    and committed_text
-                    and committed_text == "".join(assistant_message_parts)
-                ):
-                    # A prompt ACK is not a start. Never publish an assistant
-                    # message from a previous turn before this prompt's exact
-                    # user input has started (including its native ID when
-                    # require_input_id is set). This remains progress, not a
-                    # receipt or terminal response.
-                    yield events.CommittedProgress(text=committed_text)
-                assistant_message_parts.clear()
-                usage = message.get("usage")
-                if isinstance(usage, dict) and not session_identity_uncertain:
-                    provider_response_index += 1
-                    yield events.ProviderUsage(
-                        response_id=str(provider_response_index), usage=usage
-                    )
-                stop_reason = message.get("stopReason")
-                final_assistant_stop = (
-                    stop_reason == "stop" and initial_input_started and not input_uncertain
-                )
-                if stop_reason in {"error", "aborted"}:
-                    if provisional_usage:
-                        context_used = confirmed_context_used
-                        provisional_usage = False
-                        yield context_info()
-                    error_message = (
-                        "Image prompt failed; backend diagnostics withheld."
-                        if image_input_sent or inherited_image_sensitive
-                        else str(message.get("errorMessage") or "").strip()
-                        or f"Model request {stop_reason}"
-                    )
-                    if not (explicit_interrupt and stop_reason == "aborted"):
-                        yield events.Error(text=error_message)
-                else:
-                    error_message = None
-                    tokens = positive_tokens(message.get("usage"))
-                    if tokens is not None and not session_identity_uncertain:
-                        context_used = tokens
-                        confirmed_context_used = tokens
-                        yield context_info()
-                    elif provisional_usage:
-                        # An interim update is not a finalized measurement.
-                        context_used = confirmed_context_used
-                        yield context_info()
-                    provisional_usage = False
-        elif kind == "agent_settled":
-            settlement_count += 1
-            # Pi can emit an older run's settlement after a forwarded prompt
-            # has already crossed stdin. Keep the owner's turn alive until
-            # that input receives its own start, final response and settlement.
-            if persistent_session is not None and pending_inputs:
-                continue
-            agent_settled_seen = True
-            if not stats_requested:
-                last_model_progress = loop.time()
-                phase = "settling_stats"
-                if persistent_session is not None:
-                    await request_stats()
-                else:
-                    yield events.StreamSettled()
-                if persistent_session is None and finish_event is None:
-                    await request_stats()
+        if self.payload.accepts_prompt:
+            self.prompt_accepted = True
+            if self.payload.invalidates_stop:
+                self.final_assistant_stop = False
+            self.last_model_progress = self.now
+            if not self.active_tools:
+                self.phase = self.phase.model_progress()
 
-        if persistent_session is not None and (stats_complete or stats_failed):
-            # Publishing the stats above can enqueue a follow-up. Give the
-            # already-woken forwarder its turn before checking the send epoch.
+    async def settle_or_continue(self) -> AsyncIterator[events.AgentEvent]:
+        if self.persistent_session is not None and (self.stats.complete or self.stats.failed):
             await asyncio.sleep(0)
-            queued_commands = steering_queue is not None and not steering_queue.empty()
-            if not stats_failed and (
-                stats_busy
-                or pending_inputs
-                or queued_commands
-                or forwarded_generation != stats_generation
-            ):
-                # These snapshots describe an earlier settlement, not a
-                # barrier against a late prompt. Do not publish owner-idle or
-                # close Pi while its newer run is working.
-                stats_requested = stats_complete = stats_busy = False
-                stats_responses.clear()
-                phase = "model_wait"
-                if (
-                    settlement_count > stats_settlement_count or queued_commands
-                ) and not pending_inputs:
-                    await request_stats()
-                continue
-            yield events.StreamSettled()
-            break
-
-    if steering_task is not None:
-        steering_task.cancel()
-        await asyncio.gather(steering_task, return_exceptions=True)
-    # Unsolicited rebind already cleared usage and stopped projection above.
-    unresolved_inputs = bool(pending_inputs) or (
-        steering_queue is not None and not steering_queue.empty()
-    )
-    restore_pending_inputs()
-    if owner is not None:
-        _ACTIVE_INPUT_RESTORERS.pop(owner, None)
-    revision = _session_revision(active_session_file)
-    retained = bool(
-        persistent_session is not None
-        and require_input_id
-        and proc.returncode is None
-        and ok
-        and not fail_reason
-        and error_message is None
-        and not session_identity_uncertain
-        and not capability_failed
-        and not input_uncertain
-        and not unresolved_inputs
-        and initial_input_started
-        and initial_prompt_acknowledged
-        and final_assistant_stop
-        and agent_settled_seen
-        and stats_complete
-        and isinstance(initial_session_id, str)
-        and isinstance(initial_session_file, str)
-        and initial_session_file == active_session_file
-        and revision is not None
-    )
-    if retained:
-        assert persistent_session is not None
-        persistent_session.proc = proc
-        persistent_session.reader = reader
-        persistent_session.stderr_task = stderr_task
-        persistent_session.launch_key = launch_key
-        persistent_session.session_file = active_session_file
-        persistent_session.session_id = initial_session_id
-        persistent_session.revision = revision
-        persistent_session.sensitive_diagnostics = image_input_sent or inherited_image_sensitive
-        if validated_session_id is not None:
-            persistent_session.reopen_required = None
-            persistent_session.reopen_session_id = None
-    else:
-        _close_child_stdin(proc)
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=5.0)
-        except TimeoutError:
-            proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
-            ok = False
-            fail_reason = "agent backend did not exit"
-    if owner is not None:
-        _ACTIVE_PROCESSES.pop(owner, None)
-    error_text = "" if retained else await stderr_task
-    if (
-        preflight_failure == FailureReason.PREFLIGHT_EXIT
-        and proof_journal_bytes is not None
-        and "Truncated or oversized native input proof journal" in error_text
-    ):
-        # Only classify this exact local Pi startup failure. Never publish raw
-        # stderr, journal content, session paths, or a replay instruction.
-        preflight_failure = FailureReason.PROOF_JOURNAL_REJECTED
-        diagnostic["proof_journal_bytes"] = proof_journal_bytes
-        fail_reason = (
-            "Pi rejected its native input proof journal before this prompt was sent "
-            f"(measured {proof_journal_bytes} bytes; decoded-content limit or incomplete "
-            "final row). Preserve the session and journal; arrange a reviewed recovery. "
-            "Uncertain inputs must not be replayed."
-        )
-    if owner is not None:
-        _ACTIVE_STDERR_TASKS.pop(owner, None)
-    if not retained and reused and persistent_session is not None:
-        await persistent_session.close()
-    transport_successful = ok and not fail_reason and (retained or proc.returncode == 0)
-    otherwise_successful = transport_successful and error_message is None
-    if otherwise_successful and not session_identity_uncertain:
-        if not initial_input_started:
-            fail_reason = "Pi RPC run ended without this prompt's user message start."
-        elif not final_assistant_stop:
-            fail_reason = "Pi RPC run ended without an authoritative final assistant stop."
-        elif unresolved_inputs:
-            fail_reason = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
-    success = (
-        otherwise_successful
-        and initial_input_started
-        and final_assistant_stop
-        and not input_uncertain
-        and not unresolved_inputs
-    )
-    terminal_reason_code: str | None = None
-    if capability_failed:
-        terminal_reason_code = FailureReason.INPUT_ID_UNAVAILABLE
-    elif prestart_compaction_failed:
-        terminal_reason_code = FailureReason.COMPACTION_FAILED
-    elif session_identity_uncertain:
-        terminal_reason_code = FailureReason.IDENTITY_UNCERTAIN
-    elif authority_revoked:
-        terminal_reason_code = FailureReason.AUTHORITY_CHANGED
-    elif followup_start_unrecognized:
-        terminal_reason_code = FailureReason.FOLLOWUP_UNRECOGNIZED
-    elif (transport_successful or input_uncertain or fail_reason) and not initial_input_started:
-        terminal_reason_code = FailureReason.INPUT_MISSING
-    elif transport_successful and not final_assistant_stop:
-        terminal_reason_code = FailureReason.FINAL_STOP_MISSING
-    elif otherwise_successful and unresolved_inputs:
-        terminal_reason_code = FailureReason.QUEUED_INPUT_MISSING
-    yield events.Done(
-        text=(
-            _IDENTITY_FAILURE_TEXT
-            if session_identity_uncertain
-            else (
-                "".join(text_parts).strip()
-                if success
-                else error_message
-                or fail_reason
-                or (
-                    "Image prompt failed; backend diagnostics withheld."
-                    if (image_input_sent or inherited_image_sensitive) and error_text
-                    else error_text
-                )
-                or f"Backend exited with code {proc.returncode}"
+            self.queued_commands = self.steering_queue is not None and (
+                not self.steering_queue.empty()
             )
-        ),
-        ok=success and not session_identity_uncertain,
-        reason_code=terminal_reason_code,
-        diagnostic={
-            **diagnostic,
-            **({"reason": preflight_failure} if preflight_failure else {}),
-            **({"exit_code": proc.returncode} if proc.returncode is not None else {}),
-        },
-    )
+            if not self.stats.failed and (
+                self.stats.busy
+                or self.inputs.pending
+                or self.queued_commands
+                or (self.inputs.generation != self.stats.generation)
+            ):
+                self.stats.requested = self.stats.complete = self.stats.busy = False
+                self.stats.responses.clear()
+                self.phase = phases.ModelWaitPhase()
+                if (
+                    self.settlement_count > self.stats.settlement_count or self.queued_commands
+                ) and (not self.inputs.pending):
+                    await self.stats.request(self)
+                self.skip = True
+                return
+            yield events.StreamSettled()
+            self.finished = True
+            return
+
+    async def prepare_launch(self) -> AsyncIterator[events.AgentEvent]:
+        if shutil.which(self.agent_bin) is None and (not Path(self.agent_bin).is_file()):
+            yield events.Done(text=f"agent backend {self.agent_bin!r} not found", ok=False)
+            self.finished = True
+            return
+        self.rpc_args = rpc_args_for(self.agent_bin, self.agent_args)
+        if self.images and self.rpc_args is None:
+            yield events.Done(text="This backend does not support image prompts.", ok=False)
+            self.finished = True
+            return
+        self.stdin_payload: bytes | None = None
+        self.argv: list[str]
+        self.prompt_id = (
+            f"agent-comms-prompt-{secrets.token_hex(16)}"
+            if self.persistent_session is not None
+            else "agent-comms-prompt"
+        )
+        self.preflight_id = f"agent-comms-preflight-{secrets.token_hex(16)}"
+        self.original_input_id = secrets.token_hex(16)
+        self.prompt_payload = b""
+        if self.rpc_args is not None:
+            self.argv = [self.agent_bin, *self.rpc_args]
+            if self.session_file:
+                self.argv += ["--fork" if self.fork_session else "--session", self.session_file]
+            self.prompt_payload = PiRpcChannel.command_bytes(
+                commands.Prompt(
+                    id=self.prompt_id,
+                    input_id=self.original_input_id,
+                    message=self.task,
+                    images=[image.to_rpc() for image in self.images] if self.images else None,
+                )
+            )
+            self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
+            if not self.require_input_id:
+                self.stdin_payload += self.prompt_payload
+        else:
+            self.argv = [self.agent_bin, *self.agent_args, self.task]
+        self.env = os.environ.copy()
+        if self.env_extra:
+            self.env.update(self.env_extra)
+        if self.rpc_args is not None and self.env.get("AGENT_COMMS_MANAGED") == "1":
+            self.env["PI_WORKTREE"] = str(Path(self.cwd).resolve())
+            self.bootstrap = Path(__file__).with_name("pi_project_bootstrap.mjs").resolve().as_uri()
+            self.flag = f"--import={self.bootstrap}"
+            self.options = self.env.get("NODE_OPTIONS", "")
+            if self.flag not in self.options:
+                self.env["NODE_OPTIONS"] = f"{self.options} {self.flag}".strip()
+        self.launch_key = (
+            self.agent_bin,
+            tuple(self.rpc_args or self.agent_args),
+            str(Path(self.cwd).resolve()),
+            tuple(sorted(self.env.items())),
+            auth_revision(),
+        )
+
+    async def validate_reopen(self) -> AsyncIterator[events.AgentEvent]:
+        self.reused = False
+        if self.persistent_session is not None:
+            self.reused = (
+                self.rpc_args is not None
+                and (not self.fork_session)
+                and self.persistent_session.reusable(self.launch_key, self.session_file)
+            )
+            if not self.reused:
+                await self.persistent_session.close()
+        self.loop = asyncio.get_running_loop()
+        self.validated_session_id: str | None = None
+        if (
+            self.persistent_session is not None
+            and self.persistent_session.reopen_required is not None
+        ):
+            if (
+                self.session_file != self.persistent_session.reopen_required
+                or not self.require_input_id
+            ):
+                yield events.Done(
+                    text="Saved native session requires explicit validated reopen.",
+                    ok=False,
+                    reason_code="compaction_reopen_invalid",
+                )
+                self.finished = True
+                return
+            try:
+                from .native_session_reopen import validate_native_reopen
+
+                self.validated_session_id = await asyncio.to_thread(
+                    validate_native_reopen,
+                    self.agent_bin,
+                    self.session_file,
+                    expected_session_id=self.persistent_session.reopen_session_id,
+                )
+            except ValueError:
+                yield events.Done(
+                    text="Saved native session failed strict reopen validation.",
+                    ok=False,
+                    reason_code="compaction_reopen_invalid",
+                )
+                self.finished = True
+                return
+        if (
+            not self.reused
+            and self.rpc_args is not None
+            and self.require_input_id
+            and (self.startup is not None)
+        ):
+            await self.startup.acquire(self.finish_event)
+
+    async def spawn_child(self) -> AsyncIterator[events.AgentEvent]:
+        self.launch_started_at = self.loop.time()
+        self.session_bytes: int | None = None
+        self.proof_journal_bytes: int | None = None
+        if self.session_file:
+            with suppress(OSError):
+                self.session_bytes = Path(self.session_file).stat().st_size
+            with suppress(OSError):
+                self.proof_journal_bytes = Path(f"{self.session_file}.input-proof").stat().st_size
+        if self.reused:
+            assert self.persistent_session is not None and self.persistent_session.proc is not None
+            self.proc = self.persistent_session.proc
+            self.spawn_ms = 0
+        else:
+            try:
+                self.proc = await asyncio.create_subprocess_exec(
+                    *self.argv,
+                    cwd=self.cwd if Path(self.cwd).is_dir() else None,
+                    env=self.env,
+                    stdin=asyncio.subprocess.PIPE
+                    if self.stdin_payload is not None
+                    else asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    start_new_session=os.name == "posix",
+                )
+            except OSError as exc:
+                yield events.Done(text=f"agent launch failed: {exc}", ok=False)
+                self.finished = True
+                return
+            self.spawn_ms = round((self.loop.time() - self.launch_started_at) * 1000)
+        self.owner = asyncio.current_task()
+        if self.owner is not None:
+            _ACTIVE_PROCESSES[self.owner] = self.proc
+        assert self.proc.stdout is not None
+        assert self.proc.stderr is not None
+        self.stderr_task = (
+            self.persistent_session.stderr_task
+            if self.reused and self.persistent_session is not None
+            else asyncio.create_task(self.stderr_tail())
+        )
+        assert self.stderr_task is not None
+        if self.owner is not None:
+            _ACTIVE_STDERR_TASKS[self.owner] = self.stderr_task
+        self.prompt_dispatched = False
+        if self.stdin_payload is not None and self.proc.stdin is not None:
+            try:
+                self.prompt_dispatched = not self.require_input_id and self.rpc_args is not None
+                self.proc.stdin.write(self.stdin_payload)
+                await self.proc.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    async def initialize_output(self) -> AsyncIterator[events.AgentEvent]:
+        self.text_parts: list[str] = []
+        self.assistant_message_parts: list[str] = []
+        self.ok = True
+        self.failure = None
+        self.diagnostic: dict[str, int] = {}
+        self.preflight_failure: str | None = None
+        self.error_message: str | None = None
+        self.image_input_sent = bool(self.images)
+        self.inherited_image_sensitive = bool(
+            self.reused
+            and self.persistent_session is not None
+            and self.persistent_session.sensitive_diagnostics
+        )
+        assert self.proc.stdout is not None
+        if self.rpc_args is None:
+            while True:
+                self.chunk = await self.proc.stdout.read(4096)
+                if not self.chunk:
+                    break
+                self.piece = self.chunk.decode(errors="replace")
+                self.text_parts.append(self.piece)
+                yield events.Chunk(text=self.piece)
+            self.code = await self.proc.wait()
+            if self.owner is not None:
+                _ACTIVE_PROCESSES.pop(self.owner, None)
+            self.error_text = await self.stderr_task
+            yield events.Done(
+                text="".join(self.text_parts).strip()
+                if self.code == 0
+                else "Image prompt failed; backend diagnostics withheld."
+                if self.images and self.error_text
+                else self.error_text or f"Backend exited with code {self.code}",
+                ok=self.code == 0,
+            )
+            self.finished = True
+            return
+
+    async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
+        self.steering_task: asyncio.Task[None] | None = None
+        self.explicit_interrupt = False
+        self.rejected_commands: list[events.AgentEvent] = []
+        self.rejected_signal = asyncio.Event()
+        self.session_identity_uncertain = False
+        self.final_assistant_stop = False
+        if self.steering_queue is not None and self.proc.stdin is not None:
+            self.stdin = self.proc.stdin
+            if not self.require_input_id:
+                self.steering_task = asyncio.create_task(self.inputs.forward(self))
+                if self.owner is not None:
+                    _ACTIVE_STEERING[self.owner] = self.steering_task
+        self.model_name: str | None = None
+        self.session_name: str | None = None
+        self.active_session_file = self.session_file
+        self.initial_session_id: str | None = None
+        self.initial_session_file: str | None = None
+        self.initial_session_observed = False
+        self.initial_prompt_acknowledged = False
+        self.native_capability_confirmed = not self.require_input_id
+        self.prompt_start_deadline: float | None = None
+        self.initial_input_started = False
+        self.live_status_seen = False
+        self.settlement_count = 0
+        self.agent_settled_seen = False
+        self.reader = (
+            self.persistent_session.reader
+            if self.reused and self.persistent_session is not None
+            else _JsonLineReader(self.proc.stdout)
+        )
+        assert self.reader is not None
+        self.reader.pending.cancel_all()
+        self.reader.pending.add(
+            commands.GetState, self.preflight_id, request=commands.GetState(id=self.preflight_id)
+        )
+        self.reader.pending.add(
+            commands.Prompt,
+            self.prompt_id,
+            request=commands.Prompt(
+                id=self.prompt_id, input_id=self.original_input_id, message=self.task
+            ),
+        )
+        self.preflight_wait_started_at = self.loop.time()
+        self.preflight_budget = NATIVE_STARTUP_POLICY.readiness_timeout(
+            self.session_bytes, base_seconds=CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+        )
+        self.preflight_deadline = self.preflight_wait_started_at + self.preflight_budget
+        if not self.require_input_id:
+            self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
+        self.last_model_progress = self.loop.time()
+        self.phase = phases.PromptAcceptancePhase()
+        self.prompt_accepted = False
+        self.active_tools: set[str] = set()
+        self.tool_ever_started = False
+        self.output_started = False
+        self.compaction_started = False
+        self.retry_recovery_pending = False
+        self.retry_recovery_reason = "provider_auto_retry_progress"
+        self.started_during_abort: list[str | None] = []
+        self.ui_seen: set[str] = set()
+        if self.owner is not None:
+            _ACTIVE_INPUT_RESTORERS[self.owner] = lambda: self.inputs.restore(self)
+        if False:
+            yield
+
+    async def retain_or_close(self) -> AsyncIterator[events.AgentEvent]:
+        if self.steering_task is not None:
+            self.steering_task.cancel()
+            await asyncio.gather(self.steering_task, return_exceptions=True)
+        self.unresolved_inputs = bool(self.inputs.pending) or (
+            self.steering_queue is not None and (not self.steering_queue.empty())
+        )
+        self.inputs.restore(self)
+        self.reader.pending.cancel_all()
+        if self.owner is not None:
+            _ACTIVE_INPUT_RESTORERS.pop(self.owner, None)
+        self.revision = _session_revision(self.active_session_file)
+        self.retained = bool(
+            self.persistent_session is not None
+            and self.require_input_id
+            and (self.proc.returncode is None)
+            and self.ok
+            and (not self.fail_reason)
+            and (self.error_message is None)
+            and (not self.session_identity_uncertain)
+            and (not isinstance(self.failure, failures.InputIdUnavailable))
+            and (not self.inputs.uncertain)
+            and (not self.unresolved_inputs)
+            and self.initial_input_started
+            and self.initial_prompt_acknowledged
+            and self.final_assistant_stop
+            and self.agent_settled_seen
+            and self.stats.complete
+            and isinstance(self.initial_session_id, str)
+            and isinstance(self.initial_session_file, str)
+            and (self.initial_session_file == self.active_session_file)
+            and (self.revision is not None)
+        )
+        if self.retained:
+            assert self.persistent_session is not None
+            self.persistent_session.proc = self.proc
+            self.persistent_session.reader = self.reader
+            self.persistent_session.stderr_task = self.stderr_task
+            self.persistent_session.launch_key = self.launch_key
+            self.persistent_session.session_file = self.active_session_file
+            self.persistent_session.session_id = self.initial_session_id
+            self.persistent_session.revision = self.revision
+            self.persistent_session.sensitive_diagnostics = (
+                self.image_input_sent or self.inherited_image_sensitive
+            )
+            if self.validated_session_id is not None:
+                self.persistent_session.reopen_required = None
+                self.persistent_session.reopen_session_id = None
+        else:
+            _close_child_stdin(self.proc)
+            try:
+                await asyncio.wait_for(self.proc.wait(), timeout=5.0)
+            except TimeoutError:
+                self.proc.terminate()
+                try:
+                    await asyncio.wait_for(self.proc.wait(), timeout=5.0)
+                except TimeoutError:
+                    self.proc.kill()
+                    await self.proc.wait()
+                self.ok = False
+                self.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
+        if False:
+            yield
+
+    async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
+        if self.owner is not None:
+            _ACTIVE_PROCESSES.pop(self.owner, None)
+        self.error_text = "" if self.retained else await self.stderr_task
+        if (
+            self.preflight_failure == FailureReason.PREFLIGHT_EXIT
+            and self.proof_journal_bytes is not None
+            and ("Truncated or oversized native input proof journal" in self.error_text)
+        ):
+            self.preflight_failure = FailureReason.PROOF_JOURNAL_REJECTED
+            self.diagnostic["proof_journal_bytes"] = self.proof_journal_bytes
+            self.record_failure(
+                failures.InputIdUnavailable(
+                    "Pi rejected its native input proof journal before this prompt was sent "
+                    f"(measured {self.proof_journal_bytes} bytes; decoded-content limit or "
+                    "incomplete final row). Preserve the session and journal; arrange a "
+                    "reviewed recovery. Uncertain inputs must not be replayed."
+                )
+            )
+        if self.owner is not None:
+            _ACTIVE_STDERR_TASKS.pop(self.owner, None)
+        if not self.retained and self.reused and (self.persistent_session is not None):
+            await self.persistent_session.close()
+        if False:
+            yield
+
+    async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
+        self.transport_successful = (
+            self.ok and (not self.fail_reason) and (self.retained or self.proc.returncode == 0)
+        )
+        self.otherwise_successful = self.transport_successful and self.error_message is None
+        if self.otherwise_successful and (not self.session_identity_uncertain):
+            if not self.initial_input_started:
+                self.record_failure(
+                    failures.InputMissing(
+                        "Pi RPC run ended without this prompt's user message start."
+                    )
+                )
+            elif not self.final_assistant_stop:
+                self.record_failure(
+                    failures.FinalStopMissing(
+                        "Pi RPC run ended without an authoritative final assistant stop."
+                    )
+                )
+            elif self.unresolved_inputs:
+                self.record_failure(
+                    failures.QueuedInputMissing(
+                        "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
+                    )
+                )
+        self.success = (
+            self.otherwise_successful
+            and self.initial_input_started
+            and self.final_assistant_stop
+            and (not self.inputs.uncertain)
+            and (not self.unresolved_inputs)
+        )
+        self.terminal_reason_code: str | None = None
+        if (self.transport_successful or self.inputs.uncertain or self.fail_reason) and (
+            not self.initial_input_started
+        ):
+            self.record_failure(
+                failures.InputMissing(
+                    self.fail_reason or "Pi RPC run ended without this prompt's user message start."
+                )
+            )
+        if self.transport_successful and (not self.final_assistant_stop):
+            self.record_failure(
+                failures.FinalStopMissing(
+                    self.fail_reason
+                    or self.error_message
+                    or "Pi RPC run ended without an authoritative final assistant stop."
+                )
+            )
+        if self.otherwise_successful and self.unresolved_inputs:
+            self.record_failure(
+                failures.QueuedInputMissing(
+                    self.fail_reason
+                    or "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
+                )
+            )
+        self.terminal_reason_code = self.failure.code if self.failure else None
+        yield events.Done(
+            text=self.failure.text
+            if self.failure is not None
+            else "".join(self.text_parts).strip()
+            if self.success
+            else self.error_message
+            or (
+                "Image prompt failed; backend diagnostics withheld."
+                if (self.image_input_sent or self.inherited_image_sensitive) and self.error_text
+                else self.error_text
+            )
+            or f"Backend exited with code {self.proc.returncode}",
+            ok=self.success and (not self.session_identity_uncertain),
+            reason_code=self.terminal_reason_code,
+            diagnostic={
+                **self.diagnostic,
+                **({"reason": self.preflight_failure} if self.preflight_failure else {}),
+                **({"exit_code": self.proc.returncode} if self.proc.returncode is not None else {}),
+            },
+        )
+
+    async def handle_timeout(self) -> AsyncIterator[events.AgentEvent]:
+        if self.require_input_id and (not self.native_capability_confirmed):
+            self.elapsed_ms = round((self.loop.time() - self.launch_started_at) * 1000)
+            self.wait_ms = round((self.loop.time() - self.preflight_wait_started_at) * 1000)
+            self.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
+            self.diagnostic = {
+                "elapsed_ms": self.elapsed_ms,
+                "wait_ms": self.wait_ms,
+                "spawn_ms": self.spawn_ms,
+                "budget_ms": round(self.preflight_budget * 1000),
+            }
+            if self.session_bytes is not None:
+                self.diagnostic["session_bytes"] = self.session_bytes
+            self.session_size = self.session_bytes if self.session_bytes is not None else "unknown"
+            self.record_failure(
+                failures.InputIdUnavailable(
+                    "Pi native input-ID capability preflight timed out "
+                    f"(phase=await_get_state, elapsed_ms={self.elapsed_ms}, "
+                    f"wait_ms={self.wait_ms}, budget_ms={round(self.preflight_budget * 1000)}, "
+                    f"spawn_ms={self.spawn_ms}, session_bytes={self.session_size})."
+                )
+            )
+            await _terminate_process(self.proc)
+            self.finished = True
+            return
+        if (
+            self.prompt_start_deadline is not None
+            and (not self.initial_input_started)
+            and (not self.phase.pauses_input_clock)
+        ):
+            self.record_failure(
+                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+            )
+            await _terminate_process(self.proc)
+            self.finished = True
+            return
+        if self.stats.requested:
+            self.finished = True
+            return
+        self.elapsed_ms = round((self.loop.time() - self.last_model_progress) * 1000)
+        self.reason_code, self.stalled_phase = self.phase.stalled(self.prompt_accepted)
+        if self.prompt_accepted:
+            yield self.turn_state(
+                "model_stalled", self.reason_code, self.elapsed_ms, event_phase=self.stalled_phase
+            )
+        yield self.turn_state("aborting", self.reason_code, self.elapsed_ms, event_phase="shutdown")
+        await self.abort_stalled_rpc()
+        for input_id in self.started_during_abort:
+            yield events.InputStarted(id=input_id)
+        self.failed_elapsed_ms = round((self.loop.time() - self.last_model_progress) * 1000)
+        yield self.turn_state(
+            "failed", self.reason_code, self.failed_elapsed_ms, event_phase="shutdown"
+        )
+        self.record_failure(
+            failures.ModelStalled(
+                f"Model produced no RPC progress for {self.model_wait_timeout:g} seconds."
+                if self.prompt_accepted
+                else f"Pi did not accept the prompt within {self.model_wait_timeout:g} seconds."
+            )
+        )
+        self.finished = True
+        self.finished = True
+        return

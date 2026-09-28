@@ -21,9 +21,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from . import pi_events as pi
 from .declarations import RelationViolationError, _store_lock
 from .maintenance_barrier import MaintenanceBarrier
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import (
     SelectedToolMode,
     SelectedToolSocket,
@@ -719,19 +721,22 @@ async def run_native_pi_turn(
     stderr_task = asyncio.create_task(stderr.read(_MAX_LINE))
     deadline = asyncio.get_running_loop().time() + timeout
 
-    async def next_event() -> dict[str, Any]:
+    channel = PiRpcChannel(stdout)
+
+    async def next_event() -> pi.PiEvent:
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             raise NativePiUnavailable("Native Pi turn deadline expired")
-        raw = await asyncio.wait_for(stdout.readline(), timeout=remaining)
+        try:
+            raw = await asyncio.wait_for(channel.readline(max_bytes=_MAX_LINE), timeout=remaining)
+        except ValueError as error:
+            raise NativePiUnavailable("Native Pi RPC record is incomplete") from error
         if not raw or len(raw) > _MAX_LINE or not raw.endswith(b"\n"):
             raise NativePiUnavailable("Native Pi RPC record is incomplete")
         try:
-            event = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
-        except (UnicodeError, ValueError) as error:
+            event = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_LINE)
+        except (UnicodeError, ValueError, TypeError) as error:
             raise NativePiUnavailable("Native Pi RPC JSON is invalid") from error
-        if type(event) is not dict:
-            raise NativePiUnavailable("Native Pi RPC record has wrong type")
         return event
 
     async def send(command: dict[str, Any]) -> None:
@@ -827,25 +832,24 @@ async def run_native_pi_turn(
         selected_finished = False
         while True:
             event = await next_event()
-            kind = event.get("type")
-            if kind == "response" and event.get("id") == "native-prompt":
+            if isinstance(event, pi.Response) and event.get("id") == "native-prompt":
                 if accepted or event.get("command") != "prompt" or event.get("success") is not True:
                     raise NativePiUnavailable("Native Pi did not accept the tracked prompt")
                 accepted = True
-            elif kind == "input_committed" and event.get("inputId") == input_id:
+            elif isinstance(event, pi.InputCommitted) and event.get("inputId") == input_id:
                 if input_event is not None:
                     raise NativePiUnavailable("Native Pi repeated the input commitment")
                 input_event = event
-            elif kind == "context_committed" and event.get("inputId") == input_id:
+            elif isinstance(event, pi.ContextCommitted) and event.get("inputId") == input_id:
                 contexts.append(event)
-            elif kind == "message_update":
+            elif isinstance(event, pi.MessageUpdate):
                 delta = event.get("assistantMessageEvent")
                 if isinstance(delta, dict) and delta.get("type") == "text_delta":
                     text = delta.get("delta")
                     if type(text) is not str:
                         raise NativePiUnavailable("Native Pi returned malformed model text")
                     chunks.append(text)
-            elif kind == "message_end":
+            elif isinstance(event, pi.MessageEnd):
                 message = event.get("message")
                 if isinstance(message, dict) and message.get("role") == "assistant":
                     content = message.get("content")
@@ -892,7 +896,7 @@ async def run_native_pi_turn(
                             if message.get("stopReason") == "length"
                             else "Provider returned an unsuccessful terminal"
                         )
-            elif kind == "tool_execution_start":
+            elif isinstance(event, pi.ToolExecutionStart):
                 if (
                     tool_socket is None
                     or selected_started
@@ -913,7 +917,7 @@ async def run_native_pi_turn(
                 if selected_call_id not in tool_socket._approved:
                     raise NativePiUnavailable("Native Pi tool arguments are invalid")
                 selected_started = True
-            elif kind == "tool_execution_end":
+            elif isinstance(event, pi.ToolExecutionEnd):
                 if (
                     tool_socket is None
                     or not selected_started
@@ -931,9 +935,9 @@ async def run_native_pi_turn(
                         "Native Pi tool lacks an owner terminal receipt"
                     ) from error
                 selected_finished = True
-            elif kind == "agent_settled":
+            elif isinstance(event, pi.AgentSettled):
                 break
-            elif kind == "response" and event.get("command") in {
+            elif isinstance(event, pi.Response) and event.get("command") in {
                 "new_session",
                 "switch_session",
                 "fork",

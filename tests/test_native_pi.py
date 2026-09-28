@@ -1081,8 +1081,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             def __init__(self, stream):
                 self.stream = stream
 
-            async def readline(self):
-                raw = await self.stream.readline()
+            async def readuntil(self, separator):
+                raw = await self.stream.readuntil(separator)
                 if raw:
                     event = json.loads(raw)
                     rpc_events.append(event)

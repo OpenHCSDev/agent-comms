@@ -18,6 +18,7 @@ from typing import Any, Literal, TypeVar
 
 from .backend import PersistentPiSession, _session_revision
 from .owner_compaction_settings import PiCompactionDecision
+from .pi_rpc import PiRpcChannel
 
 _COMMAND = "agent_comms_prepare_compaction"
 _REVISION = re.compile(r"^[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+$")
@@ -112,12 +113,11 @@ def _read_response(raw: bytes, request: dict[str, Any]) -> SelectedPiDryRun:
     if not raw or len(raw) > 8192 or not raw.endswith(b"\n"):
         raise SelectedPiProbeUnknownError("Incomplete bounded selected Pi response")
     try:
-        response = json.loads(raw)
+        response = PiRpcChannel.decode_record(raw).wire
     except (UnicodeError, ValueError) as error:
         raise SelectedPiProbeUnknownError("Invalid selected Pi response") from error
     if (
-        type(response) is not dict
-        or set(response) != {"id", "type", "command", "success", "data"}
+        set(response) != {"id", "type", "command", "success", "data"}
         or response["id"] != request["id"]
         or response["type"] != "response"
         or response["command"] != _COMMAND
@@ -240,20 +240,11 @@ async def _exchange_observation(
 
 
 def _read_settings_response(raw: bytes, request: dict[str, Any]) -> PiCompactionDecision:
-    def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("Duplicate selected settings field")
-            result[key] = value
-        return result
-
     if not raw.endswith(b"\n") or len(raw) > 16384:
         raise SelectedPiProbeUnknownError("Incomplete selected settings response")
-    response = json.loads(raw, object_pairs_hook=unique)
+    response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384).wire
     if (
-        type(response) is not dict
-        or set(response) != {"id", "type", "command", "success", "data"}
+        set(response) != {"id", "type", "command", "success", "data"}
         or response["id"] != request["id"]
         or response["type"] != "response"
         or response["command"] != request["type"]
