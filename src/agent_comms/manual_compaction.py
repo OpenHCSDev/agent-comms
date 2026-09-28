@@ -23,8 +23,9 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .backend import compaction_summary, configured_model, rpc_args_for
+from .field_codec import FieldCodec
+from .native_session_reopen import NativeSessionIdentity
 from .pi_commands import Compact, GetState, PiCommand
-from .pi_payloads import StateData
 from .pi_rpc import PiRpcChannel
 
 MAX_LINE = 64 * 1024
@@ -35,10 +36,10 @@ TIMEOUT = 300.0
 GRACE = 1.0
 _POLICY = (
     b'{"retry":{"enabled":false,"maxRetries":0,"provider":{"maxRetries":0}},'
-    b'"compaction":{"enabled":false,"reserveTokens":16384,"keepRecentTokens":20000}}\n'
+    b'"compaction":{"enabled":false}}\n'
 )
 # Installed Pi 0.85.1: session retry, provider retry, session reopen, RPC and CLI
-# project-trust semantics. No stock-Pi fallback on changed bytes.
+# project-trust semantics. Changed bytes cannot select stock Pi.
 _PINNED = {
     "dist/core/compaction/compaction.js": (
         "3d5f1f2a3e801c965214717b6abad1839239b4a030517bffdf0c8eff25df5c2a"
@@ -94,16 +95,7 @@ _FLAGS = (
 # --extension and positional prompts must never override this invocation.
 _VALUE_FLAGS = frozenset({"--provider", "--model", "--api-key", "--thinking"})
 _SWITCH_FLAGS = frozenset({"--print"})
-_PREFLIGHT = r"""
-import { pathToFileURL } from 'node:url';
-const root = process.env.COMPACT_PI_PACKAGE;
-const { SessionManager } = await import(pathToFileURL(root + '/dist/core/session-manager.js'));
-const session = SessionManager.open(
-  process.env.COMPACT_SESSION, undefined, process.env.COMPACT_CWD);
-console.log(JSON.stringify({
-  sessionId: session.getSessionId(), sessionFile: session.getSessionFile(),
-}));
-"""
+_PREFLIGHT_SCRIPT = Path(__file__).with_name("_pi_helpers") / "manual_preflight.mjs"
 
 
 def _pinned_package() -> Path:
@@ -321,7 +313,7 @@ async def _reap_immune(proc: asyncio.subprocess.Process, *, force: bool) -> tupl
 
 async def _preflight(
     package: Path, session: Path, cwd: Path, env: dict[str, str]
-) -> StateData | None:
+) -> NativeSessionIdentity | None:
     child_env = dict(
         env, COMPACT_PI_PACKAGE=str(package), COMPACT_SESSION=str(session), COMPACT_CWD=str(cwd)
     )
@@ -329,7 +321,7 @@ async def _preflight(
         "node",
         "--input-type=module",
         "-e",
-        _PREFLIGHT,
+        _PREFLIGHT_SCRIPT.read_text(),
         cwd=cwd,
         env=child_env,
         stdin=asyncio.subprocess.DEVNULL,
@@ -358,7 +350,7 @@ async def _preflight(
     if not clean or not output.endswith(b"\n"):
         return None
     try:
-        return StateData.from_wire(json.loads(output))
+        return FieldCodec.decode(NativeSessionIdentity, json.loads(output))
     except (ValueError, TypeError, UnicodeError):
         return None
 

@@ -112,7 +112,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
         monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
         monkeypatch.setattr(
             "agent_comms.owner_compaction_adaptive.read_compaction_decision",
-            lambda *a, **kw: PiCompactionDecision(True, 1000, 10, True),
+            lambda *a, **kw: PiCompactionDecision(1000, 10, enabled=True, trigger=True),
         )
         if os.environ.get("PR95_PRIVATE_SESSION") == "1":
             record_fixture_history(inputs, "owner", owner.active_turn.admission_generation)

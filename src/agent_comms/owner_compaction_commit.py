@@ -40,7 +40,7 @@ from .owner_compaction_process import (
     require_deadline_support,
     run_authority_child,
 )
-from .owner_compaction_provider import valid_native_usage
+from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
 from .routing import DeliveryScope
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
@@ -197,11 +197,7 @@ class OwnerCompactionCommit:
     def _settings_source(cls, paths: tuple[str, ...] | None) -> tuple[str, ...] | None:
         if paths is None:
             return None
-        if (
-            type(paths) is not tuple
-            or not paths
-            or any(type(path) is not str or not Path(path).is_absolute() for path in paths)
-        ):
+        if not paths or any(not Path(path).is_absolute() for path in paths):
             raise RelationViolationError("Exact effective settings paths required")
         states = []
         for path in paths:
@@ -365,46 +361,14 @@ class OwnerCompactionCommit:
         tokens_before: int,
         *,
         source: CompactionSource,
-        details: dict[str, list[str]] | None = None,
-        usage: dict | None = None,
+        details: SummaryFiles | None = None,
+        usage: SummaryUsage | None = None,
         selected_attempt: SelectedSummaryAttempt | None = None,
         timeout: float = 5,
     ) -> CompactionOperation:
         """Journal intent under authority, dispatch once, persist observed outcome."""
-        if type(source) is not CompactionSource:
-            raise ValueError("Owner-captured pre-summary source required")
-        if (
-            type(summary) is not str
-            or len(summary.encode()) > 262144
-            or type(tokens_before) is not int
-            or not 0 <= tokens_before <= 2**53 - 1
-        ):
+        if len(summary.encode()) > 262144 or not 0 <= tokens_before <= 2**53 - 1:
             raise ValueError("Bounded native compaction payload required")
-        if details is not None and (
-            type(details) is not dict
-            or set(details) != {"readFiles", "modifiedFiles"}
-            or any(
-                type(paths) is not list
-                or len(paths) > 256
-                or any(type(path) is not str or not path or "\\0" in path for path in paths)
-                for paths in details.values()
-            )
-        ):
-            raise ValueError("Bounded native file operations required")
-        try:
-            encoded_details = (
-                json.dumps(details, ensure_ascii=False, separators=(",", ":")).encode()
-                if details is not None
-                else b""
-            )
-        except UnicodeError as error:
-            raise ValueError("Invalid native file operation encoding") from error
-        if len(encoded_details) > 65536 or any(
-            len(path.encode()) > 4096 for paths in (details or {}).values() for path in paths
-        ):
-            raise ValueError("Bounded native file operations required")
-        if usage is not None and not valid_native_usage(usage):
-            raise ValueError("Bounded native usage required")
         # Preserve the summary/cut digest and bind fileOps/usage separately
         # through the native marker, writer CAS and exact-ID reconciliation.
         # Hex-encoded UTF-8 paths and IEEE-754 big-endian costs avoid divergent
@@ -412,23 +376,30 @@ class OwnerCompactionCommit:
         metadata = [
             (
                 [
-                    [path.encode("utf-8").hex() for path in details["readFiles"]],
-                    [path.encode("utf-8").hex() for path in details["modifiedFiles"]],
+                    [path.encode("utf-8").hex() for path in details.read_files],
+                    [path.encode("utf-8").hex() for path in details.modified_files],
                 ]
                 if details is not None
                 else None
             ),
             (
                 [
+                    usage.input,
+                    usage.output,
+                    usage.cache_read,
+                    usage.cache_write,
+                    usage.total_tokens,
+                    usage.reasoning,
+                    usage.cache_write_1h,
                     *[
-                        usage[key]
-                        for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens")
-                    ],
-                    usage.get("reasoning"),
-                    usage.get("cacheWrite1h"),
-                    *[
-                        struct.pack(">d", float(usage["cost"][key])).hex()
-                        for key in ("input", "output", "cacheRead", "cacheWrite", "total")
+                        struct.pack(">d", float(amount)).hex()
+                        for amount in (
+                            usage.cost.input,
+                            usage.cost.output,
+                            usage.cost.cache_read,
+                            usage.cost.cache_write,
+                            usage.cost.total,
+                        )
                     ],
                 ]
                 if usage is not None
@@ -500,8 +471,8 @@ class OwnerCompactionCommit:
                 commit=dict(
                     commitId=commit_id, payloadDigest=digest, metadataDigest=metadata_digest
                 ),
-                **({"details": details} if details is not None else {}),
-                **({"usage": usage} if usage is not None else {}),
+                **({"details": FieldCodec.encode(details)} if details is not None else {}),
+                **({"usage": FieldCodec.encode(usage)} if usage is not None else {}),
             )
             try:
                 outcome = self._call(fd, request, timeout, retained)

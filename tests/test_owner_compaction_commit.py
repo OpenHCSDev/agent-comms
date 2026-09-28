@@ -4,7 +4,6 @@ Only PI_COMPACTION_TEST_PACKAGE selects a disposable, patched package. No
 provider calls or installed package edits. Normal unit suites skip this file.
 """
 
-
 import copy
 import hashlib
 import json
@@ -31,6 +30,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.owner_compaction_process import CompactionTransportUnknownError
+from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
 from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
 from agent_comms.threads import Thread
@@ -122,8 +122,10 @@ def test_native_file_operations_survive_journaled_commit(native):
         "Synthetic summary with file evidence",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]},
-        usage=usage,
+        details=FieldCodec.decode(
+            SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+        ),
+        usage=FieldCodec.decode(SummaryUsage, usage),
     )
     assert operation.state.declared_name == "committed"
     saved = entries(witness)[-1]
@@ -170,22 +172,25 @@ def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/⚙️-𝄞.py"], "modifiedFiles": []},
-        usage={
-            "input": 12,
-            "output": 9,
-            "cacheRead": 0,
-            "cacheWrite": 0,
-            "totalTokens": 21,
-            "reasoning": 0,
-            "cost": {
-                "input": 0.0000001,
-                "output": 0.02,
-                "cacheRead": 0.0,
-                "cacheWrite": 0.0,
-                "total": 0.0200001,
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/⚙️-𝄞.py"], "modifiedFiles": []}),
+        usage=FieldCodec.decode(
+            SummaryUsage,
+            {
+                "input": 12,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "totalTokens": 21,
+                "reasoning": 0,
+                "cost": {
+                    "input": 0.0000001,
+                    "output": 0.02,
+                    "cacheRead": 0.0,
+                    "cacheWrite": 0.0,
+                    "total": 0.0200001,
+                },
             },
-        },
+        ),
     )
     assert operation.state.declared_name == "committed"
     row = entries(witness)[-1]
@@ -229,8 +234,8 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
-        usage=usage,
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": []}),
+        usage=FieldCodec.decode(SummaryUsage, usage),
     )
     assert operation.state.declared_name == "unknown"
     assert Path(witness.session_file).read_bytes() == before
@@ -265,7 +270,7 @@ def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": []}),
     )
     assert operation.state.declared_name == "unknown"
     assert entries(witness)[-1]["details"]["readFiles"] == ["src/other.py"]
@@ -297,15 +302,18 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
-        usage={
-            "input": 12,
-            "output": 9,
-            "cacheRead": 0,
-            "cacheWrite": 0,
-            "totalTokens": 21,
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
-        },
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": []}),
+        usage=FieldCodec.decode(
+            SummaryUsage,
+            {
+                "input": 12,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "totalTokens": 21,
+                "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
+            },
+        ),
     )
     assert operation.state.declared_name == "unknown"
     bridge._call = original

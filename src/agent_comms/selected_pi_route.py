@@ -15,12 +15,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
 from .backend import PersistentPiSession, _session_revision
+from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
-from .owner_compaction_settings import PiCompactionDecision
+from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
 from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, PiCommand
 from .pi_events import Response
 from .pi_rpc import PiRpcChannel
-from .pi_summary_payloads import ProbeDeclinedData, ProbeReadyData, SelectedModel, SelectedSettings
+from .pi_summary_payloads import ProbeDeclinedData, ProbeReadyData, SelectedModel
 
 
 class SelectedPiProbeUnknownError(RuntimeError):
@@ -46,7 +47,7 @@ def _request(
         id=secrets.token_hex(16),
         witness=witness,
         selected=SelectedModel.from_wire(selected),
-        settings=SelectedSettings.from_wire(settings),
+        settings=FieldCodec.decode(PiCompactionSettings, settings),
     )
 
 

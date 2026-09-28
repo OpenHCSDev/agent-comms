@@ -17,6 +17,7 @@ from pathlib import Path
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
@@ -186,16 +187,13 @@ async def maybe_compact_owner_turn(
                 bridge.journal,
                 prepared.witness,
                 {
-                    "source": identity.source_fields(),
+                    "source": FieldCodec.project(identity, "source"),
                     "selected": {
                         "provider": provider,
                         "modelId": model_id,
                         "contextWindow": context_window,
                     },
-                    "settings": {
-                        "reserveTokens": settings.reserve_tokens,
-                        "keepRecentTokens": settings.keep_recent_tokens,
-                    },
+                    "settings": FieldCodec.project(settings, "settings"),
                 },
                 expected_launcher=launcher,
                 tokens_before=prepared.tokens_before,

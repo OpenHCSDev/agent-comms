@@ -14,59 +14,10 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .field_codec import FieldCodec
 from .native_package import verify_native_package
 
-_READ_SETTINGS = r"""
-import {lstatSync, readFileSync} from 'node:fs';
-import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
-const [root, cwd, contextTokensText, contextWindowText] = process.argv.slice(1);
-const {CONFIG_DIR_NAME, getAgentDir} = await import(pathToFileURL(join(root, 'dist/config.js')));
-const {SettingsManager} = await import(
-  pathToFileURL(join(root, 'dist/core/settings-manager.js')));
-const {shouldCompact} = await import(
-  pathToFileURL(join(root, 'dist/core/compaction/compaction.js')));
-const contextTokens = Number(contextTokensText), contextWindow = Number(contextWindowText);
-if (!Number.isSafeInteger(contextTokens) || contextTokens < 0 ||
-    !Number.isSafeInteger(contextWindow) || contextWindow <= 0)
-  throw new Error('Invalid trigger token/window evidence');
-// Pi's migration, merge and effective defaults are authoritative. Its normal
-// FileSettingsStorage takes and writes lock files even for reads; this custom
-// storage exposes *only* immutable read callbacks, and refuses write attempts.
-const storage = {withLock(scope, callback) {
-  const path = scope === 'global' ? join(getAgentDir(), 'settings.json') :
-    scope === 'project' ? join(cwd, CONFIG_DIR_NAME, 'settings.json') : null;
-  if (!path) throw new Error('Invalid settings scope');
-  let raw;
-  try {
-    const before = lstatSync(path, {bigint:true});
-    if (!before.isFile() || before.nlink !== 1n || before.size > 1048576n)
-      throw new Error('Settings must be a bounded regular file');
-    raw = readFileSync(path, 'utf8');
-    const after = lstatSync(path, {bigint:true});
-    if (before.dev !== after.dev || before.ino !== after.ino ||
-        before.size !== after.size || before.mtimeNs !== after.mtimeNs ||
-        before.ctimeNs !== after.ctimeNs)
-      throw new Error('Settings changed during read');
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-  if (callback(raw) !== undefined) throw new Error('Settings read attempted a write');
-}};
-const manager = SettingsManager.fromStorage(storage, {projectTrusted:true});
-if (manager.globalSettingsLoadError || manager.projectSettingsLoadError)
-  throw new Error('Pi settings cannot be loaded without fallback');
-const settings = manager.getCompactionSettings();
-if (typeof settings.enabled !== 'boolean' ||
-    !Number.isSafeInteger(settings.reserveTokens) || settings.reserveTokens < 0 ||
-    settings.reserveTokens > 10000000 ||
-    !Number.isSafeInteger(settings.keepRecentTokens) ||
-    settings.keepRecentTokens <= 0 || settings.keepRecentTokens > 10000000)
-  throw new Error('Invalid effective Pi compaction settings');
-console.log(JSON.stringify({enabled:settings.enabled,
-  reserveTokens:settings.reserveTokens, keepRecentTokens:settings.keepRecentTokens,
-  trigger:shouldCompact(contextTokens,contextWindow,settings)}));
-"""
+_READ_SETTINGS_SCRIPT = Path(__file__).with_name("_pi_helpers") / "compaction_settings.mjs"
 
 
 class PiSettingsEvidenceError(ValueError):
@@ -74,27 +25,26 @@ class PiSettingsEvidenceError(ValueError):
 
 
 @dataclass(frozen=True)
-class PiCompactionDecision:
-    enabled: bool
+class PiCompactionSettings:
+    """Pi's compaction budget, decoded by A2 once with application bounds."""
+
     reserve_tokens: int = field(metadata={"wire_name": "reserveTokens"})
     keep_recent_tokens: int = field(metadata={"wire_name": "keepRecentTokens"})
-    trigger: bool
 
     def __post_init__(self):
         if (
             not 0 <= self.reserve_tokens <= 10_000_000
             or not 0 < self.keep_recent_tokens <= 10_000_000
         ):
-            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision")
+            raise PiSettingsEvidenceError("Invalid effective Pi compaction settings")
 
-    @classmethod
-    def from_native(cls, data: object) -> PiCompactionDecision:
-        from .field_codec import FieldCodec
 
-        try:
-            return FieldCodec.decode(cls, data)
-        except (ValueError, TypeError) as error:
-            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision") from error
+@dataclass(frozen=True)
+class PiCompactionDecision(PiCompactionSettings):
+    """A settings observation plus Pi's enablement and trigger decision."""
+
+    enabled: bool = field(metadata={"settings_exclude": True})
+    trigger: bool = field(metadata={"settings_exclude": True})
 
 
 def read_compaction_decision(
@@ -134,7 +84,7 @@ def read_compaction_decision(
                 str(package / "dist/agent-comms-import-fence.mjs"),
                 "--input-type=module",
                 "--eval",
-                _READ_SETTINGS,
+                _READ_SETTINGS_SCRIPT.read_text(),
                 str(package),
                 str(cwd),
                 str(context_tokens),
@@ -148,7 +98,7 @@ def read_compaction_decision(
         if result.returncode or len(result.stdout) > 1024:
             raise PiSettingsEvidenceError("Pi settings reader refused")
         data = json.loads(result.stdout)
-        return PiCompactionDecision.from_native(data)
+        return FieldCodec.decode(PiCompactionDecision, data)
     except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as error:
         if isinstance(error, PiSettingsEvidenceError):
             raise

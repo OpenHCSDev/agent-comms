@@ -1,6 +1,6 @@
 """Read-only strict native session validation before a discarded idle Pi reopens.
 
-Never use SessionManager.open for this preflight: it can migrate a legacy file.
+Never use SessionManager.open for this preflight: it can rewrite a saved file.
 The pinned manager's loadEntriesFromFile enforces its actual strict v3 parse.
 """
 
@@ -12,27 +12,29 @@ import os
 import shutil
 import stat
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from .field_codec import FieldCodec
 from .native_package import MANIFEST, verify_native_package
 
-_READ_ONLY_SESSION = r"""
-import {realpathSync} from 'node:fs';
-import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
-const [root, file] = process.argv.slice(1);
-const managerURL = pathToFileURL(join(root, 'dist/core/session-manager.js'));
-const {loadEntriesFromFile} = await import(managerURL);
-const rows = loadEntriesFromFile(file);
-if (!rows.length || rows[0].type !== 'session' || rows[0].version !== 3 ||
-    typeof rows[0].id !== 'string' || !rows[0].id)
-    throw new Error('Exact saved native session identity unavailable');
-console.log(JSON.stringify({sessionId:rows[0].id, sessionFile:realpathSync(file)}));
-"""
+_READ_ONLY_SESSION_SCRIPT = Path(__file__).with_name("_pi_helpers") / "reopen_session.mjs"
 
 
 class NativeReopenError(ValueError):
     """Saved session cannot be safely reloaded; no provider input may start."""
+
+
+@dataclass(frozen=True)
+class NativeSessionIdentity:
+    """SessionManager's observed saved-session identity."""
+
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+    session_file: str = field(metadata={"wire_name": "sessionFile"})
+
+    def __post_init__(self):
+        if not self.session_id or not Path(self.session_file).is_absolute():
+            raise NativeReopenError("Saved native session identity is incomplete")
 
 
 def package_for_launcher(launcher: str) -> Path:
@@ -50,7 +52,7 @@ def package_for_launcher(launcher: str) -> Path:
         if launch is None:
             raise NativeReopenError("Native owner backend requires a configured private route")
         # Use the launcher's route owner, then apply the same complete-tree
-        # commitment as the legacy launcher. A path or seven-file probe alone
+        # commitment as the stack launcher. A path or seven-file probe alone
         # cannot select different preparation/commit helpers after compaction.
         verify_native_package(launch.native_package)
         return launch.native_package
@@ -99,7 +101,7 @@ def validate_native_reopen(
                 str(package / "dist/agent-comms-import-fence.mjs"),
                 "--input-type=module",
                 "--eval",
-                _READ_ONLY_SESSION,
+                _READ_ONLY_SESSION_SCRIPT.read_text(),
                 str(package),
                 str(file),
             ],
@@ -115,17 +117,12 @@ def validate_native_reopen(
 
         if result.returncode or revision(before) != revision(after) or len(result.stdout) > 4096:
             raise NativeReopenError("Saved native session validation failed or changed")
-        data = json.loads(result.stdout)
-        if (
-            not isinstance(data, dict)
-            or set(data) != {"sessionId", "sessionFile"}
-            or type(data["sessionId"]) is not str
-            or not data["sessionId"]
-            or data["sessionFile"] != str(file)
-            or (expected_session_id is not None and data["sessionId"] != expected_session_id)
+        identity = FieldCodec.decode(NativeSessionIdentity, json.loads(result.stdout))
+        if identity.session_file != str(file) or (
+            expected_session_id is not None and identity.session_id != expected_session_id
         ):
             raise NativeReopenError("Saved native session identity changed")
-        return data["sessionId"]
+        return identity.session_id
     except (OSError, subprocess.TimeoutExpired, ValueError, json.JSONDecodeError) as error:
         if isinstance(error, NativeReopenError):
             raise
