@@ -70,8 +70,7 @@ class IndexSlice:
         return (
             not self.cancelled.is_set()
             and monotonic() < self.deadline
-            and self.bytes_left > 0
-            and self.records_left > 0
+            and min(self.bytes_left, self.records_left) > 0
         )
 
     def consumed(self, size: int) -> None:
@@ -281,7 +280,7 @@ def transcript_read_state(path: Path) -> TranscriptReadState:
     key = str(path.expanduser().resolve())
     with _shared_lock:
         state = _shared_states.get(key)
-        if state is None:
+        if state is None or state._cancelled.is_set():
             state = TranscriptReadState(Path(key))
             _shared_states[key] = state
         return state

@@ -272,3 +272,23 @@ def test_busy_index_is_not_discarded(tmp_path):
         blocker.close()
     assert state.counts("viewer", {"worker": str(source)}).counts == {"worker": 2}
     state.close()
+
+
+def test_oversized_native_record_is_counted_without_truncation_or_input_limit(tmp_path):
+    source = tmp_path / "oversized.jsonl"
+    append(source, content="Actual text " * 200000)
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    observed = state.counts("viewer", {"worker": str(source)})
+    assert not observed.pending
+    assert observed.counts == {"worker": 1}
+    state.close()
+
+
+def test_reopen_wire_does_not_reuse_cancelled_index_owner(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
+    comms.views.transcript_reads.close()
+    fresh = wire(comms.root)
+    assert fresh.views.transcript_reads is not comms.views.transcript_reads
+    assert fresh.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
