@@ -1,3 +1,17 @@
+## Shipping and closure update — 2026-09-28 18:15 UTC
+
+- Comms249 merged to main at5f3957c: standalone incremental unread indexing,
+  cancellation, installed archival UI and interpreter shutdown pass. Installation
+  remains pending paired main-Toad pending feedback (Copernicus); no229dependency.
+- Parent229 moves identity uniqueness to RegistrySnapshot publication behavior;
+  Messaging scan removed, actual retained archived identities remain readable.
+  Evidence: evidence/round2-l0/registry-claim-ownership.md. Full suite belongs248.
+- Global L0 checkpoint bootstrap/whole-bus-reader closure remains parent-owned
+  in229; identified source and consumer gap, not claimed complete by lexical checks.
+- Pascal and Lovelace begin independent queued Toad T8/T7 while Darwin completes
+  the native package. Native244 support and232 combined CLI acceptance retain
+  priority when their prerequisite arrives. Toad implementation PRs pending.
+
 ## Integrated source checkpoint — 2026-09-28
 
 - PR229 nowintegratesS12/237 plus245/242 at9b01741. Nominal reservation behavior

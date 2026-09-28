@@ -419,6 +419,11 @@ class RegistrySnapshot:
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
 
+    def require_unambiguous_ownership(self) -> None:
+        """Archived identities remain readable; publication requires unique owners."""
+        if len({thread.created_at for thread in self.threads.values()}) != len(self.threads):
+            raise RelationViolationError("Registry creation identities collide.")
+
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
         return self.threads[canonical].owner_identity(self.owner_generations[canonical])

@@ -64,3 +64,15 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     path.write_text(json.dumps(raw))
     with pytest.raises(RelationViolationError, match="creation identity"):
         Registration(path).require("owner")
+
+
+def test_retained_colliding_creation_dates_remain_readable(tmp_path):
+    path = tmp_path / "registry.json"
+    registry = Registration(path)
+    registry.register(Thread("one", frozenset(), str(tmp_path)))
+    registry.register(Thread("two", frozenset(), str(tmp_path)))
+    raw = json.loads(path.read_text())
+    raw["threads"]["two"]["created_at"] = raw["threads"]["one"]["created_at"]
+    path.write_text(json.dumps(raw))
+    reopened = Registration(path)
+    assert reopened.require("one").created_at == reopened.require("two").created_at
