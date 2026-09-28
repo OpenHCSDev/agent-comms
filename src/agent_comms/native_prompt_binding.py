@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination import WakeClaim
+from .coordination import WakeAssignment
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
@@ -98,7 +98,7 @@ def binding_store_path(store: MutationStore) -> Path:
 class PromptBinding:
     input_id: str
     stage: str
-    claim_id: str
+    assignment_id: str = field(metadata={"wire_name": "claim_id"})
     execution_id: str | None
     attempt_ordinal: int | None
     owner_lookup: str
@@ -126,7 +126,7 @@ def bind_expected_prompt(
     *,
     input_id: str,
     stage: str,
-    claim: WakeClaim,
+    assignment: WakeAssignment,
     owner: Thread,
     generation: int,
     prompt: str,
@@ -151,7 +151,7 @@ def bind_expected_prompt(
         or type(input_id) is not str
         or _INPUT_ID.fullmatch(input_id) is None
         or stage not in {"triage", "full"}
-        or type(claim) is not WakeClaim
+        or type(assignment) is not WakeAssignment
         or type(owner) is not Thread
         or type(generation) is not int
         or generation <= 0
@@ -171,7 +171,7 @@ def bind_expected_prompt(
     with store._transaction() as db:
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
-        _require_owner(store, claim.recipient_lookup, owner, generation)
+        _require_owner(store, assignment.recipient_lookup, owner, generation)
         reserved = db.execute(
             "SELECT stage,claim_id,execution_id,attempt_ordinal,owner_lookup,owner_thread,"
             "owner_generation FROM native_runtime_inputs WHERE input_id=?",
@@ -181,10 +181,10 @@ def bind_expected_prompt(
             raise IdentityConflict("prompt binding requires an already reserved input")
         if (
             reserved["stage"] != stage
-            or reserved["claim_id"] != claim.claim_id
+            or reserved["claim_id"] != assignment.assignment_id
             or reserved["execution_id"] != execution_id
             or reserved["attempt_ordinal"] != attempt_ordinal
-            or reserved["owner_lookup"] != claim.recipient_lookup
+            or reserved["owner_lookup"] != assignment.recipient_lookup
             or reserved["owner_thread"] != owner.name
             or reserved["owner_generation"] != generation
         ):
@@ -194,7 +194,7 @@ def bind_expected_prompt(
             "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
             "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
             "WHERE m.claim_id=? AND m.recipient_lookup=?",
-            (claim.message_id, claim.claim_id, claim.recipient_lookup),
+            (assignment.message_id, assignment.assignment_id, assignment.recipient_lookup),
         ).fetchone()
         if root_row is None:
             raise IdentityConflict("prompt binding requires a sealed claim receipt")
@@ -210,15 +210,15 @@ def bind_expected_prompt(
                 input_id,
                 1,
                 stage,
-                claim.claim_id,
+                assignment.assignment_id,
                 execution_id,
                 attempt_ordinal,
-                claim.recipient_lookup,
+                assignment.recipient_lookup,
                 owner.name,
                 generation,
                 wire_root_id,
-                claim.wire_seq,
-                claim.message_id,
+                assignment.wire_seq,
+                assignment.message_id,
                 digest,
                 store._now(0),
             )
@@ -238,7 +238,7 @@ def bind_expected_prompt(
     return digest
 
 
-def _binding_wire_root(store: MutationStore, claim: WakeClaim) -> str:
+def _binding_wire_root(store: MutationStore, assignment: WakeAssignment) -> str:
     """Resolve the trusted wire root for a sealed claim from the cohort receipt."""
     with store._read_transaction():
         row = store._connection.execute(
@@ -246,7 +246,7 @@ def _binding_wire_root(store: MutationStore, claim: WakeClaim) -> str:
             "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
             "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
             "WHERE m.claim_id=? AND m.recipient_lookup=?",
-            (claim.message_id, claim.claim_id, claim.recipient_lookup),
+            (assignment.message_id, assignment.assignment_id, assignment.recipient_lookup),
         ).fetchone()
     if row is None:
         raise IdentityConflict("prompt binding requires a sealed claim receipt")

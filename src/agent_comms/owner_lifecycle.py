@@ -160,7 +160,7 @@ class OwnerLifecycle:
         The PID receipt is a reservation, not a completed startup handshake.
         """
         original_owner: tuple[str, int, float] | None = None
-        original_epoch: int | None = None
+        original_generation: int | None = None
         for _ in range(3):
             with _store_lock(self._wire_lock_path):
                 self.maintenance.assert_open_unlocked()
@@ -173,8 +173,8 @@ class OwnerLifecycle:
                 if original_owner is not None and identity != original_owner:
                     raise RelationViolationError(f"Owner changed while starting {name!r}.")
                 original_owner = identity
-                epoch = snapshot.admission_generations.get(canonical)
-                if original_epoch is not None and epoch != original_epoch:
+                admission_generation = snapshot.admission_generations.get(canonical)
+                if original_generation is not None and admission_generation != original_generation:
                     raise RelationViolationError(f"Owner epoch changed while starting {name!r}.")
                 if thread.pid <= 0 or not self._process_alive(thread.pid):
                     owner = self._launch_owner_unlocked(
@@ -187,9 +187,9 @@ class OwnerLifecycle:
                     raise RelationViolationError(
                         "Cannot reactivate a stopped incarnation before its owner exits."
                     )
-                if epoch is None:
+                if admission_generation is None:
                     raise RelationViolationError("Cannot start an owner without an incarnation.")
-                original_epoch = epoch
+                original_generation = admission_generation
 
             # A just-forked worker needs the wire lock to create its socket.
             if not self._is_local_participant(thread):
@@ -206,7 +206,7 @@ class OwnerLifecycle:
                     or not current.statuses[canonical].visible
                 ):
                     raise RelationViolationError(f"Owner changed while starting {name!r}.")
-                if current.admission_generations.get(canonical) != original_epoch:
+                if current.admission_generations.get(canonical) != original_generation:
                     raise RelationViolationError(f"Owner epoch changed while starting {name!r}.")
                 if not self._process_alive(fresh.pid) or not self._is_local_participant(
                     fresh, wait=False
@@ -236,7 +236,7 @@ class OwnerLifecycle:
         that uncertainty is reported rather than claiming an atomic restart.
         """
         selection: tuple[tuple[str, int, float], ...] | None = None
-        original_epochs: tuple[int, ...] | None = None
+        original_generations: tuple[int, ...] | None = None
         for _ in range(3):
             with _store_lock(self._wire_lock_path):
                 self.maintenance.assert_open_unlocked()
@@ -272,11 +272,11 @@ class OwnerLifecycle:
                     )
                 captured = []
                 for thread in threads:
-                    epoch = snapshot.admission_generations.get(thread.name)
+                    admission_generation = snapshot.admission_generations.get(thread.name)
                     if expected_incarnations is not None and expected_incarnations[thread.name] != (
                         thread.pid,
                         thread.created_at,
-                        epoch,
+                        admission_generation,
                     ):
                         raise RelationViolationError(
                             "Queued owner incarnation changed before restart."
@@ -294,18 +294,20 @@ class OwnerLifecycle:
                         raise ValueError(
                             f"Thread {thread.name!r} has an active turn; wait until idle."
                         )
-                    if epoch is None:
+                    if admission_generation is None:
                         raise RelationViolationError(
                             "Cannot restart an owner without an incarnation."
                         )
-                    captured.append((thread, epoch))
-                epochs = tuple(epoch for _thread, epoch in captured)
-                if original_epochs is not None and epochs != original_epochs:
+                    captured.append((thread, admission_generation))
+                generations = tuple(
+                    admission_generation for _thread, admission_generation in captured
+                )
+                if original_generations is not None and generations != original_generations:
                     raise RelationViolationError("Owner epochs changed before restart.")
-                original_epochs = epochs
+                original_generations = generations
 
             # A newly forked owner's socket may depend on this same wire lock.
-            for thread, _epoch in captured:
+            for thread, _generation in captured:
                 if not self._is_local_participant(thread):
                     raise RelationViolationError(
                         f"Refusing to restart unverifiable process {thread.pid} "
@@ -325,37 +327,37 @@ class OwnerLifecycle:
                         != (thread.name, thread.pid, thread.created_at)
                         or not fresh.statuses[thread.name].active
                     )
-                    for thread, _epoch in captured
+                    for thread, _generation in captured
                 ):
                     raise RelationViolationError("Owner selection changed before restart.")
                 if any(
-                    fresh.admission_generations.get(thread.name) != epoch
-                    for thread, epoch in captured
+                    fresh.admission_generations.get(thread.name) != admission_generation
+                    for thread, admission_generation in captured
                 ):
                     raise RelationViolationError("Owner epochs changed before restart.")
                 if any(
                     fresh.threads[thread.name].active_turn is not None
-                    for thread, _epoch in captured
+                    for thread, _generation in captured
                 ):
                     raise RelationViolationError("Owner became busy before restart.")
                 if any(
                     not self._process_alive(thread.pid)
                     or not self._is_local_participant(thread, wait=False)
-                    for thread, _epoch in captured
+                    for thread, _generation in captured
                 ):
                     continue
                 if expected_incarnations is not None:
                     # Persist the admission fence BEFORE signaling. An owner
                     # receiving a wake after this lock releases cannot claim
-                    # a turn while SIGTERM is pending: claim_local_turn rejects
+                    # a turn while SIGTERM is pending: lease_local_turn rejects
                     # STOPPED. Never undo this fence on an uncertain signal.
-                    stop_epochs = {
+                    stop_generations = {
                         thread.name: self.registry.fence_idle_owner(
-                            thread, expected_admission_generation=epoch
+                            thread, expected_admission_generation=admission_generation
                         )
-                        for thread, epoch in captured
+                        for thread, admission_generation in captured
                     }
-                for thread, _epoch in captured:
+                for thread, _generation in captured:
                     with suppress(ProcessLookupError):
                         self._signal_local_owner(thread.pid, signal.SIGTERM)
                 break
@@ -363,14 +365,14 @@ class OwnerLifecycle:
             raise RelationViolationError("Owner selection changed or became unverifiable.")
 
         alive = [
-            (thread, epoch)
-            for thread, epoch in captured
+            (thread, admission_generation)
+            for thread, admission_generation in captured
             if not self._wait_for_owner_exit(thread.pid, 3.0)
         ]
         if alive:
             with _store_lock(self._wire_lock_path):
                 signal_targets = []
-                for thread, epoch in alive:
+                for thread, admission_generation in alive:
                     if expected_incarnations is not None:
                         stop_snapshot = self.registry.snapshot()
                         existing = stop_snapshot.threads.get(thread.name)
@@ -380,13 +382,13 @@ class OwnerLifecycle:
                             != (thread.pid, thread.created_at)
                             or not stop_snapshot.statuses[thread.name].stopped
                             or stop_snapshot.admission_generations.get(thread.name)
-                            != stop_epochs[thread.name]
+                            != stop_generations[thread.name]
                         ) and not self._released_same_owner(
-                            stop_snapshot, thread, stop_epochs[thread.name]
+                            stop_snapshot, thread, stop_generations[thread.name]
                         ):
                             raise RelationViolationError("Fenced owner changed after signal.")
                     else:
-                        self._require_same_stop_owner(thread, epoch)
+                        self._require_same_stop_owner(thread, admission_generation)
                     if self._wait_for_owner_exit(thread.pid, 0):
                         continue
                     if not self._is_local_participant(thread, wait=False):
@@ -401,7 +403,7 @@ class OwnerLifecycle:
                         self._signal_local_owner(thread.pid, signal.SIGKILL)
             remaining = [
                 thread.pid
-                for thread, _epoch in alive
+                for thread, _generation in alive
                 if not self._wait_for_owner_exit(thread.pid, 1.0)
             ]
             if remaining:
@@ -410,7 +412,7 @@ class OwnerLifecycle:
 
         with _store_lock(self._wire_lock_path):
             final = self.registry.snapshot()
-            for thread, epoch in captured:
+            for thread, admission_generation in captured:
                 final_owner = final.threads.get(thread.name)
                 if expected_incarnations is not None:
                     if (
@@ -418,23 +420,24 @@ class OwnerLifecycle:
                         or (final_owner.pid, final_owner.created_at)
                         != (thread.pid, thread.created_at)
                         or not final.statuses[thread.name].stopped
-                        or final.admission_generations.get(thread.name) != stop_epochs[thread.name]
+                        or final.admission_generations.get(thread.name)
+                        != stop_generations[thread.name]
                     ) and not self._released_same_owner(
-                        final, thread, stop_epochs[thread.name]
+                        final, thread, stop_generations[thread.name]
                     ):
                         raise RelationViolationError(
                             "Fenced owner changed after signal."
                         )
                     if self._process_alive(thread.pid):
                         raise RelationViolationError("Fenced owner survived after signal.")
-                elif not self._released_same_owner(final, thread, epoch):
-                    self._require_same_stop_owner(thread, epoch)
+                elif not self._released_same_owner(final, thread, admission_generation):
+                    self._require_same_stop_owner(thread, admission_generation)
             if expected_incarnations is None:
-                for thread, _epoch in captured:
+                for thread, _generation in captured:
                     if self.registry.status(thread.name).active:
                         self.registry.unregister(thread.name)
             results = []
-            for thread, _epoch in captured:
+            for thread, _generation in captured:
                 ready_owner = self.registry.require(thread.name)
                 owner = self._launch_owner_unlocked(ready_owner, agent_bin, agent_args)
                 results.append(OwnerRestartResult(thread.name, thread.pid, owner.pid))
@@ -548,7 +551,7 @@ class OwnerLifecycle:
         lock would prevent a newly forked worker from ever proving its PID.
         """
         original_owner: tuple[str, int, float] | None = None
-        original_epoch: int | None = None
+        original_generation: int | None = None
         for attempt in range(3):
             with _store_lock(self._wire_lock_path):
                 snapshot = self.registry.snapshot()
@@ -563,8 +566,8 @@ class OwnerLifecycle:
                         f"Owner changed while stopping {name!r}; refusing a stale signal."
                     )
                 original_owner = identity
-                epoch = snapshot.admission_generations.get(canonical)
-                if original_epoch is not None and epoch != original_epoch:
+                admission_generation = snapshot.admission_generations.get(canonical)
+                if original_generation is not None and admission_generation != original_generation:
                     raise RelationViolationError(f"Owner epoch changed while stopping {name!r}.")
                 if not snapshot.statuses[canonical].active:
                     if attempt == 0:
@@ -580,9 +583,9 @@ class OwnerLifecycle:
                 if thread.pid <= 0 or not self._process_alive(thread.pid):
                     self.registry.unregister(canonical)
                     return
-                if epoch is None:
+                if admission_generation is None:
                     raise RelationViolationError("Cannot stop an owner without an incarnation.")
-                original_epoch = epoch
+                original_generation = admission_generation
 
             # Do not wait while holding the wire lock: startup and graceful
             # shutdown both need it. Recheck the exact incarnation before any
@@ -602,7 +605,7 @@ class OwnerLifecycle:
                     raise RelationViolationError(
                         f"Owner changed while stopping {name!r}; refusing a stale signal."
                     )
-                if current.admission_generations.get(canonical) != original_epoch:
+                if current.admission_generations.get(canonical) != original_generation:
                     raise RelationViolationError(f"Owner epoch changed while stopping {name!r}.")
                 if not self._process_alive(thread.pid):
                     self.registry.unregister(canonical)
@@ -622,10 +625,10 @@ class OwnerLifecycle:
             )
 
         if self._wait_for_owner_exit(thread.pid, 3.0):
-            self._finish_stopped_owner(thread, epoch)
+            self._finish_stopped_owner(thread, admission_generation)
             return
         with _store_lock(self._wire_lock_path):
-            self._require_same_stop_owner(thread, epoch)
+            self._require_same_stop_owner(thread, admission_generation)
             if not self._wait_for_owner_exit(thread.pid, 0):
                 if not self._is_local_participant(thread, wait=False):
                     if not self._wait_for_owner_exit(thread.pid, 0):
@@ -637,7 +640,7 @@ class OwnerLifecycle:
                         self._signal_local_owner(thread.pid, signal.SIGKILL)
         if not self._wait_for_owner_exit(thread.pid, 1.0):
             raise RuntimeError(f"Process did not stop: {self._stop_failure_probe(thread.pid)}")
-        self._finish_stopped_owner(thread, epoch)
+        self._finish_stopped_owner(thread, admission_generation)
 
     @staticmethod
     def _stop_failure_probe(pid: int) -> str:
@@ -671,19 +674,19 @@ class OwnerLifecycle:
         else:
             os.kill(pid, signum)
 
-    def _require_same_stop_owner(self, thread: Thread, epoch: int) -> None:
+    def _require_same_stop_owner(self, thread: Thread, admission_generation: int) -> None:
         snapshot = self.registry.snapshot()
         # Voluntary release advances admission and marks STOPPED before Python
         # finishes shutting down. Its exact receipt preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
-        if self._released_same_owner(snapshot, thread, epoch):
+        if self._released_same_owner(snapshot, thread, admission_generation):
             return
         current = snapshot.threads.get(thread.name)
         if (
             current is None
             or (current.name, current.pid, current.created_at)
             != (thread.name, thread.pid, thread.created_at)
-            or snapshot.admission_generations.get(thread.name) != epoch
+            or snapshot.admission_generations.get(thread.name) != admission_generation
             or not snapshot.statuses[thread.name].active
         ):
             raise RelationViolationError(
@@ -720,7 +723,9 @@ class OwnerLifecycle:
             raise RelationViolationError("Owner release receipt is invalid.")
         return raw
 
-    def _released_same_owner(self, snapshot: RegistrySnapshot, thread: Thread, epoch: int) -> bool:
+    def _released_same_owner(
+        self, snapshot: RegistrySnapshot, thread: Thread, admission_generation: int
+    ) -> bool:
         current = snapshot.threads.get(thread.name)
         if (
             current is None
@@ -732,17 +737,17 @@ class OwnerLifecycle:
             return False
         return self._read_owner_release_receipts().get(thread.name) == {
             "pid": thread.pid,
-            "before": epoch,
+            "before": admission_generation,
             "after": snapshot.admission_generations.get(thread.name),
             "thread": json.dumps(current.to_wire(), sort_keys=True),
         }
 
-    def _finish_stopped_owner(self, thread: Thread, epoch: int) -> None:
+    def _finish_stopped_owner(self, thread: Thread, admission_generation: int) -> None:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            if self._released_same_owner(snapshot, thread, epoch):
+            if self._released_same_owner(snapshot, thread, admission_generation):
                 return  # An exact, durably attested release of the signaled owner.
-            self._require_same_stop_owner(thread, epoch)
+            self._require_same_stop_owner(thread, admission_generation)
             self.registry.unregister(thread.name)
 
     def release(self, name: str) -> None:

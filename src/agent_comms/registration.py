@@ -181,7 +181,7 @@ class Registration:
                 raise RelationViolationError("live owner is stopped or unavailable")
             return owner, generation
 
-    def claim_live_turn_with_admission(
+    def lease_live_turn_with_admission(
         self, expected: Thread, turn_id: str, *, expected_generation: int
     ) -> tuple[Thread, int]:
         """Claim a turn against stable owner authority under the registry lock."""
@@ -218,11 +218,11 @@ class Registration:
             ):
                 raise RelationViolationError("live owner stopped or changed before turn claim")
             self._assert_maintenance_open_unlocked()
-            claimed, _owner_generation = document.claim_turn(current, turn_id, None)
+            claimed, _owner_generation = document.lease_turn(current, turn_id, None)
             edit.commit()
             return claimed, expected_generation
 
-    def claim_live_turn_with_generation(
+    def lease_live_turn_with_generation(
         self,
         expected: Thread,
         turn_id: str,
@@ -260,7 +260,7 @@ class Registration:
             ):
                 raise RelationViolationError("live owner stopped or changed before turn claim")
             self._assert_maintenance_open_unlocked()
-            result = document.claim_turn(current, turn_id, routing)
+            result = document.lease_turn(current, turn_id, routing)
             edit.commit()
             return result
 
@@ -378,7 +378,7 @@ class Registration:
             yield (
                 OwnerCompactionAttestation(
                     thread=owner.name,
-                    owner_epoch=generation,
+                    owner_generation=generation,
                     turn_id=turn_id,
                     goal_id=goal.id if goal is not None else None,
                     goal_revision=goal.revision if goal is not None else None,
@@ -396,7 +396,7 @@ class Registration:
 
         MaintenanceBarrier(self.store.path).assert_open_unlocked()
 
-    def claim_local_turn(
+    def lease_local_turn(
         self, name: str, turn_id: str, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner.
@@ -424,7 +424,7 @@ class Registration:
             if not document.generation_metadata_present:
                 document.generation_metadata_present = True
             self._assert_maintenance_open_unlocked()
-            result = document.claim_turn(current, turn_id, routing)
+            result = document.lease_turn(current, turn_id, routing)
             edit.commit()
             return result
 

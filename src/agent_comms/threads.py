@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Self, get_type_hints
+from typing import Self
 
 from .channel_targets import Tag
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -143,7 +143,7 @@ class Thread:
     @classmethod
     def from_registry(cls, name: str, data: Mapping, root: Path) -> Self:
         """Decode fields from their declaration, preserving old document defaults."""
-        hints = get_type_hints(cls)
+        hints = FieldCodec._types(cls)
         special = {
             "name": name,
             "created_at": cls.registry_created_at(data),

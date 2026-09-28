@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
+
 import agent_comms.coordination_store as store_module
 from agent_comms.attempt_states import (
     AbortingAttempt,
@@ -22,16 +24,16 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     SucceededAttempt,
 )
-from agent_comms.claim_states import (
-    ClaimState,
-    CompletedClaim,
-    DeferredClaim,
-    EngagedClaim,
-    FailedClaim,
-    FullPendingClaim,
-    IgnoredClaim,
-    PassiveClaim,
-    TriagePendingClaim,
+from agent_comms.assignment_states import (
+    AssignmentState,
+    CompletedAssignment,
+    DeferredAssignment,
+    EngagedAssignment,
+    FailedAssignment,
+    FullPendingAssignment,
+    IgnoredAssignment,
+    PassiveAssignment,
+    TriagePendingAssignment,
 )
 from agent_comms.coordination import (
     ACPClientConnectivity,
@@ -40,7 +42,7 @@ from agent_comms.coordination import (
     OwnerConnectivity,
     PublicationIntent,
     ReplayFact,
-    WakeClaim,
+    WakeAssignment,
     canonical_publication_key,
 )
 from agent_comms.coordination_store import (
@@ -87,9 +89,9 @@ def ready(
     db = store(path)
     assert isinstance(db.register_participant("owner", "Owner", "thread", committed=True), Applied)
     if origin is ExecutionOrigin.WIRE:
-        db.accept_claim(
-            WakeClaim(
-                claim_id="claim",
+        db.accept_assignment(
+            WakeAssignment(
+                assignment_id="claim",
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=1,
@@ -97,7 +99,7 @@ def ready(
                 audience=MessageAudience.DIRECT,
                 accepted_at_ms=1_000,
                 updated_at_ms=1_000,
-                lifecycle=FullPendingClaim.load(FullWake(), None, None, None),
+                lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
     db.create_execution(
@@ -106,7 +108,7 @@ def ready(
         "owner",
         "thread",
         max_attempts,
-        claim_ids=("claim",) if origin is ExecutionOrigin.WIRE else (),
+        assignment_ids=("claim",) if origin is ExecutionOrigin.WIRE else (),
         exact_target="owner" if origin is ExecutionOrigin.WIRE else None,
     )
     db.mark_pending("exec", expected_revision=1)
@@ -237,12 +239,12 @@ def test_registration_complete_atomic_reopen_and_rename(db_path: Path) -> None:
         db.advance_owner_generation("owner", "thread", expected_generation=1)
     db.close()
     with store(db_path) as reopened:
-        assert reopened.participant("owner").generation == 2
+        assert reopened.participant("owner").participant_generation == 2
         assert reopened.participant("owner").committed
         assert reopened.participant("owner").aliases == ("owner", "Owner New")
         replay = reopened.register_participant("owner", "Owner", "thread", committed=False)
         assert isinstance(replay, AlreadyApplied)
-        assert replay.value.generation == 2
+        assert replay.value.participant_generation == 2
         assert replay.value.display_name == "Owner New"
 
 
@@ -262,7 +264,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     db = ready(db_path)
     snap = db.snapshot("exec")
     assert type(snap.execution.lifecycle) is PendingExecution
-    assert type(snap.claims[0].lifecycle) is EngagedClaim
+    assert type(snap.assignments[0].lifecycle) is EngagedAssignment
     assert snap.links[0].ordinal == 0
     assert snap.obligation is not None
     replay = db.create_execution(
@@ -271,7 +273,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
         "owner",
         "thread",
         2,
-        claim_ids=("claim",),
+        assignment_ids=("claim",),
         exact_target="owner",
     )
     assert isinstance(replay, AlreadyApplied)
@@ -282,7 +284,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             "owner",
             "thread",
             2,
-            claim_ids=("claim",),
+            assignment_ids=("claim",),
             exact_target="@different",
         )
     db.close()
@@ -297,11 +299,11 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
         def claim(
             index: int,
             mode: WakePolicy,
-            disposition: ClaimState,
+            disposition: AssignmentState,
             verdict: str | None = None,
-        ) -> WakeClaim:
-            return WakeClaim(
-                claim_id=f"claim-{index}",
+        ) -> WakeAssignment:
+            return WakeAssignment(
+                assignment_id=f"claim-{index}",
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=index,
@@ -313,49 +315,49 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             )
 
         for index, mode, disposition, verdict in (
-            (1, BoundedTriageWake(), IgnoredClaim, "ignore"),
-            (2, BoundedTriageWake(), DeferredClaim, None),
-            (3, BoundedTriageWake(), FailedClaim, None),
-            (4, FullWake(), DeferredClaim, None),
-            (5, FullWake(), FailedClaim, None),
+            (1, BoundedTriageWake(), IgnoredAssignment, "ignore"),
+            (2, BoundedTriageWake(), DeferredAssignment, None),
+            (3, BoundedTriageWake(), FailedAssignment, None),
+            (4, FullWake(), DeferredAssignment, None),
+            (5, FullWake(), FailedAssignment, None),
         ):
             with pytest.raises(IdentityConflict):
-                db.accept_claim(claim(index, mode, disposition, verdict))
+                db.accept_assignment(claim(index, mode, disposition, verdict))
             assert db._connection.execute("SELECT count(*) FROM wake_claims").fetchone()[0] == 0
         for index, mode, disposition in (
-            (6, PassiveWake(), PassiveClaim),
-            (7, BoundedTriageWake(), TriagePendingClaim),
-            (8, FullWake(), FullPendingClaim),
-            (9, FullWake(), FullPendingClaim),
+            (6, PassiveWake(), PassiveAssignment),
+            (7, BoundedTriageWake(), TriagePendingAssignment),
+            (8, FullWake(), FullPendingAssignment),
+            (9, FullWake(), FullPendingAssignment),
         ):
             initial = claim(index, mode, disposition)
-            assert isinstance(db.accept_claim(initial), Applied)
-            assert db.claim(initial.claim_id).revision == 1
+            assert isinstance(db.accept_assignment(initial), Applied)
+            assert db.assignment(initial.assignment_id).revision == 1
         ignored = db.transition_preengagement(
             "claim-7",
-            IgnoredClaim,
+            IgnoredAssignment,
             expected_revision=1,
         )
-        deferred = db.transition_preengagement("claim-8", DeferredClaim, expected_revision=1)
-        failed = db.transition_preengagement("claim-9", FailedClaim, expected_revision=1)
+        deferred = db.transition_preengagement("claim-8", DeferredAssignment, expected_revision=1)
+        failed = db.transition_preengagement("claim-9", FailedAssignment, expected_revision=1)
         assert ignored.value.revision == deferred.value.revision == failed.value.revision == 2
         assert isinstance(
-            db.accept_claim(claim(7, BoundedTriageWake(), TriagePendingClaim)),
+            db.accept_assignment(claim(7, BoundedTriageWake(), TriagePendingAssignment)),
             AlreadyApplied,
         )
-        assert type(db.claim("claim-7").lifecycle) is IgnoredClaim
+        assert type(db.assignment("claim-7").lifecycle) is IgnoredAssignment
 
 
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
     with store(db_path) as db:
         db.register_participant("owner", "Owner", "thread", committed=True)
         for index, disposition in (
-            (1, TriagePendingClaim),
-            (2, PassiveClaim),
+            (1, TriagePendingAssignment),
+            (2, PassiveAssignment),
         ):
-            db.accept_claim(
-                WakeClaim(
-                    claim_id=str(index),
+            db.accept_assignment(
+                WakeAssignment(
+                    assignment_id=str(index),
                     recipient="Owner",
                     recipient_lookup="owner",
                     wire_seq=index,
@@ -368,10 +370,10 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                     ),
                 )
             )
-        deferred = db.transition_preengagement("1", DeferredClaim, expected_revision=1)
-        assert type(deferred.value.lifecycle) is DeferredClaim
+        deferred = db.transition_preengagement("1", DeferredAssignment, expected_revision=1)
+        assert type(deferred.value.lifecycle) is DeferredAssignment
         with pytest.raises(StaleRevision):
-            db.transition_preengagement("1", FailedClaim, expected_revision=1)
+            db.transition_preengagement("1", FailedAssignment, expected_revision=1)
         with pytest.raises((IdentityConflict, sqlite3.IntegrityError)):
             db.create_execution(
                 "exec",
@@ -379,10 +381,10 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 "owner",
                 "thread",
                 2,
-                claim_ids=("1", "2"),
+                assignment_ids=("1", "2"),
                 exact_target="owner",
             )
-        assert db.claim("1").lifecycle.execution_id is None
+        assert db.assignment("1").lifecycle.execution_id is None
         assert db._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 0
         assert not db._connection.in_transaction
 
@@ -409,7 +411,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             attempt.lifecycle.lease_expires_at_ms
             == attempt.created_at_ms + INITIAL_LEASE_DURATION_MS
         )
-        assert token not in str(first.value.snapshot.to_primitive())
+        assert token not in str(FieldCodec.project(first.value.snapshot, "snapshot"))
         assert token not in db_path.read_bytes().decode("latin1")
         duplicate = db.start_attempt(
             "exec",
@@ -498,7 +500,7 @@ def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
         assert type(settled.value.attempt.lifecycle) is SucceededAttempt
         assert settled.value.obligation is not None
         assert settled.value.obligation.lifecycle.declared_name == "silent"
-        assert type(settled.value.claims[0].lifecycle) is CompletedClaim
+        assert type(settled.value.assignments[0].lifecycle) is CompletedAssignment
         assert not settled.value.is_current
         assert settled.value.pointer_revision == 2
     with store(db_path) as reopened:
@@ -1114,7 +1116,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         failed = db.fail_unstarted("exec", expected_revision=2, reason_code="unavailable")
         assert type(failed.value.execution.lifecycle) is FailedExecution
         assert failed.value.attempt is None
-        assert type(failed.value.claims[0].lifecycle) is FailedClaim
+        assert type(failed.value.assignments[0].lifecycle) is FailedAssignment
         assert failed.value.obligation is not None
         assert failed.value.obligation.lifecycle.declared_name == "failed"
         with pytest.raises(IdentityConflict):
@@ -1132,9 +1134,9 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
 
     with store(db_path.with_name("claim-only.sqlite3")) as db:
         db.register_participant("owner", "Owner", "thread", committed=True)
-        db.accept_claim(
-            WakeClaim(
-                claim_id="claim",
+        db.accept_assignment(
+            WakeAssignment(
+                assignment_id="claim",
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=1,
@@ -1142,13 +1144,13 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
                 audience=MessageAudience.DIRECT,
                 accepted_at_ms=1_000,
                 updated_at_ms=1_000,
-                lifecycle=FullPendingClaim.load(FullWake(), None, None, None),
+                lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
-        deferred = db.transition_preengagement("claim", DeferredClaim, expected_revision=1)
+        deferred = db.transition_preengagement("claim", DeferredAssignment, expected_revision=1)
         assert deferred.value.lifecycle.execution_id is None
-        requeued = db.transition_preengagement("claim", FullPendingClaim, expected_revision=2)
-        assert type(requeued.value.lifecycle) is FullPendingClaim
+        requeued = db.transition_preengagement("claim", FullPendingAssignment, expected_revision=2)
+        assert type(requeued.value.lifecycle) is FullPendingAssignment
 
 
 def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -> None:
@@ -1377,7 +1379,7 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
         assert process.exitcode == 0
     assert sorted(results) == ["AlreadyApplied", "Applied"]
     with store(db_path) as db:
-        assert db.participant("owner").generation == 1
+        assert db.participant("owner").participant_generation == 1
         assert db._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 1
 
 

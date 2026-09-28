@@ -78,12 +78,16 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
         assert len(sent) == 1 and sent[0].content.text == "Actual sent text"
         assert sent[0].field_meta["agentComms"]["route"]["targets"] == (target,)
         replay = [
-            event for event in comms.transcripts.thread_transcript_page("worker").events if event.kind == "sent"
+            event
+            for event in comms.transcripts.thread_transcript_page("worker").events
+            if event.declared_name == "sent"
         ]
         assert len(replay) == 1 and replay[0].text == "Actual sent text"
         assert replay[0].routing.reply.targets == (target,)
         legacy = json.dumps({"id": receipts[0]["id"]})
-        assert comms.messaging.sent_tool_message("comms_send", legacy, True).body == "Actual sent text"
+        assert (
+            comms.messaging.sent_tool_message("comms_send", legacy, True).body == "Actual sent text"
+        )
         assert comms.messaging.sent_tool_message("comms_send", legacy, False) is None
         assert comms.messaging.sent_tool_message("another_tool", legacy, True) is None
     finally:
@@ -162,7 +166,10 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
                 )
                 + "\n"
             )
-        assert wire(tmp_path / "wire").transcripts.thread_transcript_page("worker").events[-1].routing is None
+        assert (
+            wire(tmp_path / "wire").transcripts.thread_transcript_page("worker").events[-1].routing
+            is None
+        )
     finally:
         await agent.shutdown()
 

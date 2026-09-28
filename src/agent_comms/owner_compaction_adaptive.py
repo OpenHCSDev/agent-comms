@@ -59,7 +59,7 @@ async def maybe_compact_owner_turn(
     original input is durable but provably unbound; the bridge permits only
     that one row and rechecks every ingress revision at native commit.
     """
-    owner, epoch = registry.live_owner_with_generation(thread_name)
+    owner, owner_generation = registry.live_owner_with_generation(thread_name)
     if (
         owner.active_turn is None
         or owner.active_turn.id != turn_id
@@ -224,19 +224,27 @@ async def maybe_compact_owner_turn(
     async def summarize(prepared: NativePreparation) -> OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
-        current, current_epoch = registry.live_owner_with_generation(thread_name)
-        if current != owner or current_epoch != epoch or await decision() != settings:
+        current, current_owner_generation = registry.live_owner_with_generation(thread_name)
+        if (
+            current != owner
+            or current_owner_generation != owner_generation
+            or await decision() != settings
+        ):
             raise RelationViolationError("Adaptive model, owner or settings changed")
         outcome = await summary_strategy(prepared)
-        current, current_epoch = registry.live_owner_with_generation(thread_name)
-        if current != owner or current_epoch != epoch or await decision() != settings:
+        current, current_owner_generation = registry.live_owner_with_generation(thread_name)
+        if (
+            current != owner
+            or current_owner_generation != owner_generation
+            or await decision() != settings
+        ):
             raise RelationViolationError("Adaptive source changed after summary")
         return outcome
 
     operation = await compact_owner_once(
         bridge,
         owner,
-        epoch,
+        owner_generation,
         persistent,
         summarize,
         keep_recent_tokens=settings.keep_recent_tokens,

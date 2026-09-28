@@ -45,7 +45,7 @@ class AgentActivity:
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
     ) -> TurnLeaseFence:
         with _store_lock(self._wire_lock_path):
-            claimed, _ = self.registry.claim_local_turn(name, turn_id, routing=routing)
+            claimed, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
             lease = claimed.turn_lease
             assert lease is not None
             try:

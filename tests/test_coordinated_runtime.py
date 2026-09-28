@@ -19,7 +19,12 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.claim_states import CompletedClaim, FailedClaim, IgnoredClaim, TriagePendingClaim
+from agent_comms.assignment_states import (
+    CompletedAssignment,
+    FailedAssignment,
+    IgnoredAssignment,
+    TriagePendingAssignment,
+)
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import (
@@ -27,12 +32,12 @@ from agent_comms.compaction_journal import (
     CompactionJournalError,
     CompactionJournalUnknownError,
 )
-from agent_comms.coordinated_runtime import run_one_sealed_claim
+from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
 )
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
+from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import (
     IdentityConflict,
@@ -291,10 +296,10 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     first, alpha_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", first)
-    alpha = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-    )
-    assert alpha is not None and alpha.disposition is IgnoredClaim
+    alpha = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+    ).run()
+    assert alpha is not None and alpha.disposition is IgnoredAssignment
     assert len(alpha_calls) == 1
     assert "── comms: 1 selected ──" in alpha_calls[0][1]
     assert f'"source_seq":{initial.message.seq}' in alpha_calls[0][1]
@@ -316,10 +321,10 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert len(comms.views.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", second)
-    beta = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    )
-    assert beta is not None and beta.disposition is CompletedClaim
+    beta = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
+    assert beta is not None and beta.disposition is CompletedAssignment
     assert beta.exact_target == "#team" and beta.response_message_id
     assert len(beta_calls) == 2
     assert "engage only if this concerns your assigned task" in beta_calls[0][1]
@@ -331,9 +336,9 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert response.body == "42" and response.sender == "beta"
     assert "_agent_comms_private_v1" not in response.to_wire()
     assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
         is None
     )
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -365,9 +370,13 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", runner)
     assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
         is None
     )
     assert not calls  # No-wake has no prompt frame or model invocation.
@@ -386,8 +395,8 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         alpha_lookup = stable_thread_lookup(people[1].created_at)
         beta_lookup = stable_thread_lookup(people[2].created_at)
-        assert sealed_cohort_claims(store, alpha_lookup) == ()
-        selected = sealed_cohort_claims(store, beta_lookup)[0]
+        assert sealed_cohort_assignments(store, alpha_lookup) == ()
+        selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
     with pytest.raises(IdentityConflict, match="response obligation"):
         render_selected_wake_frame(initial, selected, people[2], phase="full")
@@ -403,7 +412,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     root, _root_id, comms, initial, people = _root(tmp_path)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
-        claim = sealed_cohort_claims(store, lookup)[0]
+        claim = sealed_cohort_assignments(store, lookup)[0]
     frame = render_selected_wake_frame(initial, claim, people[1], phase="triage")
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
@@ -417,9 +426,9 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", runner)
-    outcome = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    )
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
     assert outcome is not None and outcome.exact_target == "sender"
     assert len(calls) == 1  # direct FULL, no separate triage invocation
     assert "expected: this is yours" in calls[0][1]
@@ -446,14 +455,14 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    result = await run_one_sealed_claim(
-        root,
+    result = await SelectedExecution(
+        root=root,
         wire_root_id=root_id,
         owner_name="beta",
         native_package=tmp_path,
         fresh_private_enrollment=True,
-    )
-    assert result is not None and result.disposition is CompletedClaim
+    ).run()
+    assert result is not None and result.disposition is CompletedAssignment
     fresh = result.fresh_session
     assert fresh is not None and len(calls) == 1
     assert fresh.path.parent == root / "native-sessions" / stable_thread_lookup(
@@ -491,7 +500,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
                 "settings": {"keepRecentTokens": 2000},
             },
             fresh_session=fresh,
-            admission_epoch=coverage[4],
+            admission_generation=coverage[4],
         )
 
 
@@ -512,15 +521,15 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
         return await runner(*args, **kwargs)
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", selected_runner)
-    result = await run_one_sealed_claim(
-        root,
+    result = await SelectedExecution(
+        root=root,
         wire_root_id=root_id,
         owner_name="beta",
         native_package=tmp_path,
         fresh_private_enrollment=True,
         selected_thinking_level="high",
-    )
-    assert result is not None and result.disposition is CompletedClaim
+    ).run()
+    assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 1 and len(witnessed) == 1
     assert witnessed[0][:2] == (result.fresh_session.device, result.fresh_session.inode)
     assert result.fresh_session.selected_thinking_level == "high"
@@ -570,14 +579,14 @@ async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", racing_runner)
     with pytest.raises(NativePiUnavailable, match="startup"):
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             fresh_private_enrollment=True,
             selected_thinking_level="high",
-        )
+        ).run()
     assert len(seen) == 1 and not calls
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     with journal._transaction() as db:
@@ -609,13 +618,13 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
 
     monkeypatch.setattr(fresh_module, "_fsync_directory", unknown_parent)
     with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             fresh_private_enrollment=True,
-        )
+        ).run()
     assert not calls
     visible = list(expected_dir.glob("enrolled-*.jsonl"))
     assert len(visible) == 1
@@ -647,20 +656,20 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    outcome = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-    )
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
     assert outcome is not None and outcome.response_message_id
     assert len(calls) == 1
     assert initial.message.body in calls[0][1]
     assert ("Selected source decisions through " in calls[0][1]) is available
     if available:
-        assert outcome.claim_id in calls[0][1]
+        assert outcome.assignment_id in calls[0][1]
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
-                (outcome.claim_id,),
+                (outcome.assignment_id,),
             ).fetchone()[0]
             == 1
         )
@@ -676,19 +685,19 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     release = threading.Event()
     entered = threading.Event()
 
-    def stalled_builder(_initial, _claim, _owner):
+    def stalled_builder(_initial, _assignment, _owner):
         entered.set()
         release.wait(timeout=5)
         return runtime.OptionalAwarenessSupplement("late context must not appear", True)
 
     try:
-        outcome = await run_one_sealed_claim(
-            root,
+        outcome = await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             optional_awareness_builder=stalled_builder,
-        )
+        ).run()
     finally:
         release.set()
     assert await asyncio.to_thread(runtime._OPTIONAL_BUILD_SLOT.acquire, True, 2)
@@ -701,7 +710,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
         assert (
             store._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
-                (outcome.claim_id,),
+                (outcome.assignment_id,),
             ).fetchone()[0]
             == 1
         )
@@ -714,7 +723,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
     first_base.mkdir()
     first_root, _first_id, first_comms, first_initial, people = _root(first_base, direct=True)
     with MutationStore(str(first_root / "coordination.sqlite3")) as store:
-        claim = sealed_cohort_claims(store, stable_thread_lookup(people[2].created_at))[0]
+        claim = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
     owner = first_comms.registry.require("beta")
     monkeypatch.setattr(runtime, "_SUPPLEMENT_BUILD_SECONDS", 0.02)
     entered, release = threading.Event(), threading.Event()
@@ -750,9 +759,9 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         runner, native_calls = _fake_model()
         monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
         original = await asyncio.wait_for(
-            run_one_sealed_claim(
-                second_root, wire_root_id=second_id, owner_name="beta", native_package=tmp_path
-            ),
+            SelectedExecution(
+                root=second_root, wire_root_id=second_id, owner_name="beta", native_package=tmp_path
+            ).run(),
             timeout=3,
         )
         assert original is not None and original.response_message_id
@@ -771,8 +780,8 @@ async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    outcome = await run_one_sealed_claim(
-        root,
+    outcome = await SelectedExecution(
+        root=root,
         wire_root_id=root_id,
         owner_name="beta",
         native_package=tmp_path,
@@ -781,7 +790,7 @@ async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
             kind != "incomplete",
             omitted_count=2,
         ),
-    )
+    ).run()
     assert outcome is not None and outcome.response_message_id
     assert len(calls) == 1
     assert ("bounded awareness" in calls[0][1]) is (kind == "complete")
@@ -799,9 +808,9 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    outcome = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-    )
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
     assert outcome is not None and outcome.response_message_id
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
     assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
@@ -837,10 +846,10 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
                 recipient_lookup=stable_thread_lookup(people[2].created_at),
                 source_seq=initial.message.seq,
             )
-    result = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    )
-    assert result is not None and result.disposition is CompletedClaim
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
+    assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 2
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         rows = read_historical_native_inputs(
@@ -851,7 +860,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         )
         assert [row.stage for row in rows] == ["triage", "full"]
         assert len({row.input_id for row in rows}) == 2
-        assert rows[0].claim_id == rows[1].claim_id == result.claim_id
+        assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_id
         assert rows[0].execution_id is None and rows[0].attempt_ordinal is None
         assert rows[0].triage_result == "full"
         assert rows[1].execution_id and rows[1].attempt_ordinal == 1
@@ -916,19 +925,19 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
         journal.mark_selected_summary_unknown(operation_id)
     elif status == "declined-prestart":
         assert journal.decline_selected_summary_prestart(operation_id, "unsupported") is None
-    assert journal.selected_summary(operation_id).status == status
+    assert journal.selected_summary(operation_id).state.declared_name == status
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
     with pytest.raises(CompactionJournalError, match="blocks native input"):
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             session_file=session_file,
             opt_in=True,
-        )
+        ).run()
     assert calls == [] and session_file.read_text() == original
     assert not Path(str(session_file) + ".input-proof").exists()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -941,14 +950,14 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
             is None
         )
     assert (
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             session_file=session_file,
             opt_in=True,
-        )
+        ).run()
         is None
     )
     assert calls == []
@@ -979,14 +988,14 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
 
     monkeypatch.setattr(CompactionJournal, "reserve_private_raw_input", uncertain)
     with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             session_file=saved,
             opt_in=True,
-        )
+        ).run()
     assert calls == []
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     with journal._transaction() as db:
@@ -1006,14 +1015,14 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
             },
         )
     assert (
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             session_file=saved,
             opt_in=True,
-        )
+        ).run()
         is None
     )
     assert calls == []
@@ -1041,14 +1050,14 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", renamed)
     with pytest.raises(IdentityConflict, match="exact saved session"):
-        await run_one_sealed_claim(
-            root,
+        await SelectedExecution(
+            root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
             session_file=saved,
             opt_in=True,
-        )
+        ).run()
     assert calls == [] and not saved.exists() and moved.exists()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
@@ -1079,9 +1088,9 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
     failing, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", failing)
     with pytest.raises(NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -1109,13 +1118,21 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     runner, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", runner)
     with pytest.raises(NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
     assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
         is None
     )
     assert len(calls) == 1
@@ -1147,9 +1164,13 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", forged)
     with pytest.raises(NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
     rows = comms.views.channel_history("#team")
     assert len(rows) == 2 and rows[-1].notice
     assert "input is uncertain" in rows[-1].body
@@ -1169,10 +1190,10 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
         return result
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", register_session)
-    outcome = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-    )
-    assert outcome is not None and outcome.disposition is IgnoredClaim
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+    ).run()
+    assert outcome is not None and outcome.disposition is IgnoredAssignment
     assert len(calls) == 1
 
 
@@ -1190,9 +1211,9 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
         return result
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", register_session)
-    outcome = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    )
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
     assert outcome is not None and outcome.response_message_id
     assert len(calls) == 1
     assert len(comms.bus.dm_history("sender", "beta")) == 2
@@ -1217,9 +1238,9 @@ async def test_project_change_during_native_full_turn_denies_response(
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", change_project)
     with pytest.raises(StaleFence, match="owner stopped or changed"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(calls) == 1
     assert len(comms.bus.dm_history("sender", "beta")) == 1
 
@@ -1240,9 +1261,13 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", revoke)
     with pytest.raises(StaleFence):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
     assert len(comms.views.channel_history("#team")) == 1
 
 
@@ -1263,9 +1288,13 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", bad)
     with pytest.raises(IdentityConflict, match="triage response"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
     assert len(calls) == 1 and len(comms.views.channel_history("#team")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -1290,9 +1319,13 @@ async def test_registered_owner_stopped_during_model_cannot_settle(
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", stop_owner)
     with pytest.raises(StaleFence, match="stopped or changed"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=tmp_path,
+            opt_in=True,
+        ).run()
     assert len(comms.views.channel_history("#team")) == 1
     assert not comms.registry.status("alpha").active
     assert comms.registry.require("alpha").active_turn is None
@@ -1305,17 +1338,17 @@ async def test_stop_before_atomic_turn_claim_does_not_revive_or_prompt(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    original_claim = Registration.claim_live_turn_with_admission
+    original_claim = Registration.lease_live_turn_with_admission
 
     def stop_before_claim(self, *args, **kwargs):
         comms.registry.unregister("beta")
         return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(Registration, "claim_live_turn_with_admission", stop_before_claim)
+    monkeypatch.setattr(Registration, "lease_live_turn_with_admission", stop_before_claim)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert not calls
     assert not comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
@@ -1328,14 +1361,14 @@ async def test_stop_before_atomic_turn_claim_does_not_revive_or_prompt(
 
 
 @pytest.mark.parametrize("mutation", ["stop_then_heartbeat", "other_owner_heartbeat"])
-async def test_owner_epoch_denies_revival_without_blocking_another_owner(
+async def test_owner_generation_denies_revival_without_blocking_another_owner(
     tmp_path: Path, monkeypatch, mutation: str
 ) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-    original_claim = Registration.claim_live_turn_with_admission
+    original_claim = Registration.lease_live_turn_with_admission
     expected = comms.registry.require("beta")
 
     def change_registry_before_claim(self, *args, **kwargs):
@@ -1348,20 +1381,24 @@ async def test_owner_epoch_denies_revival_without_blocking_another_owner(
         return original_claim(self, *args, **kwargs)
 
     monkeypatch.setattr(
-        Registration, "claim_live_turn_with_admission", change_registry_before_claim
+        Registration, "lease_live_turn_with_admission", change_registry_before_claim
     )
     if mutation == "stop_then_heartbeat":
         with pytest.raises(StaleFence, match="stopped or busy before native turn"):
-            await run_one_sealed_claim(
-                root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-            )
+            await SelectedExecution(
+                root=root,
+                wire_root_id=root_id,
+                owner_name="beta",
+                native_package=tmp_path,
+                opt_in=True,
+            ).run()
         assert not calls
         assert len(comms.bus.dm_history("sender", "beta")) == 1
     else:
-        result = await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
-        assert result is not None and result.disposition is CompletedClaim
+        result = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
+        assert result is not None and result.disposition is CompletedAssignment
         assert len(calls) == 1
         assert len(comms.bus.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
@@ -1416,16 +1453,20 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     monkeypatch.setattr(runtime, "run_native_pi_turn", maybe_rename)
     if rename_during_turn:
         with pytest.raises(StaleFence):
-            await run_one_sealed_claim(
-                root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-            )
+            await SelectedExecution(
+                root=root,
+                wire_root_id=root_id,
+                owner_name="beta",
+                native_package=tmp_path,
+                opt_in=True,
+            ).run()
         assert comms.registry.require("delta").active_turn is None
         assert len(comms.bus.dm_history("sender", "gamma")) == 1
     else:
-        result = await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
-        assert result is not None and result.disposition is CompletedClaim
+        result = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
+        assert result is not None and result.disposition is CompletedAssignment
         assert comms.registry.require("gamma").active_turn is None
         assert len(comms.bus.dm_history("sender", "gamma")) == 2
     assert len(calls) == 1
@@ -1450,9 +1491,9 @@ async def test_owner_stop_before_response_boundary_never_appends(
 
     monkeypatch.setattr(runtime, method, stopped_before_boundary)
     with pytest.raises(StaleFence, match="stopped or changed"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(comms.bus.dm_history("sender", "beta")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         receipts = store._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()
@@ -1491,14 +1532,14 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
 
     monkeypatch.setattr(Publisher, '_publish_keyed_response_unlocked', blocking_append)
     try:
-        result = await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        result = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     finally:
         for worker in workers:
             worker.join(timeout=4)
     assert workers and all(not worker.is_alive() for worker in workers)
-    assert result is not None and result.disposition is CompletedClaim
+    assert result is not None and result.disposition is CompletedAssignment
     assert stopped.is_set() and not comms.registry.status("beta").active
     assert len(comms.bus.dm_history("sender", "beta")) == 2
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -1537,9 +1578,9 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         revoke,
     )
     with pytest.raises(StaleFence, match="turn"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(calls) == 1
     assert comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
@@ -1588,13 +1629,13 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         comms.agents.begin_turn("beta", "old-authorized-turn")
         revoke_and_restore()
         with pytest.raises(StaleFence, match="stopped or changed"):
-            await run_one_sealed_claim(
-                root,
+            await SelectedExecution(
+                root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
                 native_package=tmp_path,
                 opt_in=True,
-            )
+            ).run()
         assert not calls
     elif boundary == "after_model":
 
@@ -1605,13 +1646,13 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
 
         monkeypatch.setattr(runtime, "run_native_pi_turn", revoke_after_model)
         with pytest.raises(StaleFence, match="stopped or changed"):
-            await run_one_sealed_claim(
-                root,
+            await SelectedExecution(
+                root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
                 native_package=tmp_path,
                 opt_in=True,
-            )
+            ).run()
         assert len(calls) == 1
     else:
         method = (
@@ -1622,28 +1663,28 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         publish = getattr(runtime, method)
 
         def revoke_after_tx1(*args, **kwargs):
-            revoked_epoch = kwargs["owner_witness"].admission_generation
+            revoked_generation = kwargs["owner_witness"].admission_generation
             revoke_and_restore()
             if boundary.endswith("forged"):
                 # A same-UID caller can supply a fresh epoch in a dataclass.
                 # The locked registry snapshot must attest that THIS turn was
                 # created in that epoch, not merely compare caller assertions.
-                new_epoch = comms.registry.snapshot().admission_generations["beta"]
-                assert new_epoch != revoked_epoch
+                new_generation = comms.registry.snapshot().admission_generations["beta"]
+                assert new_generation != revoked_generation
                 kwargs["owner_witness"] = replace(
-                    kwargs["owner_witness"], admission_generation=new_epoch
+                    kwargs["owner_witness"], admission_generation=new_generation
                 )
             return publish(*args, **kwargs)
 
         monkeypatch.setattr(runtime, method, revoke_after_tx1)
         with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
-            await run_one_sealed_claim(
-                root,
+            await SelectedExecution(
+                root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
                 native_package=tmp_path,
                 opt_in=True,
-            )
+            ).run()
         assert len(calls) == 1
     assert len(comms.bus.dm_history("sender", "beta")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -1673,9 +1714,9 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
     with pytest.raises(StaleFence, match="already has a current turn"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert calls == []
     assert comms.registry.require("beta").active_turn == original
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -1690,10 +1731,10 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
             == 0
         )
     comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
-    result = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    )
-    assert result is not None and result.disposition is CompletedClaim
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
+    assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 1
 
 
@@ -1705,13 +1746,13 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     runner, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", runner)
     with pytest.raises(NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
         is None
     )
     assert len(calls) == 1
@@ -1772,23 +1813,23 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
                 "sender", "#team", f"Bounded selected-page item {number}"
             )
             accept_initial_cohort(comms.bus, root_id, message.seq, store)
-        first_page = sealed_cohort_claims(store, lookup, limit=100)
+        first_page = sealed_cohort_assignments(store, lookup, limit=100)
         assert len(first_page) == 100
         for claim in first_page:
             # Schema-legal terminal fixture only; no forged Pi context claim.
             store._connection.execute(
                 "UPDATE wake_claims SET disposition='ignored',triage_verdict='ignore',"
                 "revision=revision+1 WHERE claim_id=? AND disposition='triage_pending'",
-                (claim.claim_id,),
+                (claim.assignment_id,),
             )
-        assert len(sealed_cohort_claims(store, lookup, after_seq=first_page[-1].wire_seq)) == 1
+        assert len(sealed_cohort_assignments(store, lookup, after_seq=first_page[-1].wire_seq)) == 1
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     runner, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", runner)
-    outcome = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-    )
-    assert outcome is not None and outcome.disposition is IgnoredClaim
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+    ).run()
+    assert outcome is not None and outcome.disposition is IgnoredAssignment
     # The earlier selected rows lack native proof. Under xdist pressure the
     # best-effort 250 ms canonical scan may instead be unavailable; neither
     # status may advance a cursor or retry the current original.
@@ -1809,9 +1850,9 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path)
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     with pytest.raises(NativePiUnavailable):
-        await run_one_sealed_claim(
-            root, wire_root_id="0" * 32, owner_name="alpha", native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id="0" * 32, owner_name="alpha", native_package=tmp_path
+        ).run()
     assert not list(root.iterdir())
 
 
@@ -1826,10 +1867,10 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
         return await fake(package, **kwargs)
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", capture)
-    result = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-    )
-    assert result.disposition is CompletedClaim
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
+    assert result.disposition is CompletedAssignment
     assert selections == [("openai-codex", "gpt-6-sol", "high")] * 2
     assert len(calls) == 2
 
@@ -1843,14 +1884,14 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
     fake, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     with pytest.raises(IdentityConflict, match="no configured provider/model"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        ).run()
     assert calls == []
     assert comms.registry.require("beta").active_turn is None
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        pending = sealed_cohort_claims(store, stable_thread_lookup(owner.created_at))
-        assert type(pending[0].lifecycle) is TriagePendingClaim
+        pending = sealed_cohort_assignments(store, stable_thread_lookup(owner.created_at))
+        assert type(pending[0].lifecycle) is TriagePendingAssignment
 
 
 @pytest.mark.parametrize("direct", [True, False])
@@ -1876,9 +1917,9 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
 
     monkeypatch.setattr(runtime, "run_native_pi_turn", failed)
     with pytest.raises(NativePiTerminalFailure, match="usage limit"):
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        ).run()
     notice = comms.views.full_history()[-1]
     assert notice.notice and notice.type.value == "alert"
     assert notice.target == ("sender" if direct else "#team")
@@ -1889,16 +1930,16 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[2].created_at)
         assert store.participant(lookup).pointer.execution_id is None
-        claim = sealed_cohort_claims(store, lookup)[0]
-        assert type(claim.lifecycle) is FailedClaim
+        claim = sealed_cohort_assignments(store, lookup)[0]
+        assert type(claim.lifecycle) is FailedAssignment
     diagnostics = list((root / "diagnostics").glob("*.json"))
     assert len(diagnostics) == 1
     assert json.loads(diagnostics[0].read_text())["sequences"] == [initial.message.seq]
     before = len(calls)
     assert (
-        await run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-        )
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        ).run()
         is None
     )
     assert len(calls) == before  # Failed input never replayed.
@@ -1906,10 +1947,10 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    result = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-    )
-    assert result.disposition is CompletedClaim
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
+    assert result.disposition is CompletedAssignment
     assert len(calls) == before + 1
 
 
@@ -1931,10 +1972,10 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    result = await run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
-    )
-    assert result.disposition is CompletedClaim
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
+    assert result.disposition is CompletedAssignment
     assert len(calls) == 2
     for _input_id, prompt in calls:
         context = json.loads(
@@ -1950,3 +1991,38 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
         assert context["current_goal"]["progress"] == "Routing fixed"
         assert context["original_assignment"].startswith("Bootstrap:")
         assert "an old bootstrap instruction to wait for a task does not exclude" in prompt
+
+
+async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, monkeypatch):
+    root, root_id, comms, initial, people = _root(tmp_path, direct=True)
+    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    fake, calls = _fake_model()
+    entered = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def paused(*args, **kwargs):
+        entered.set()
+        await finish.wait()
+        return await fake(*args, **kwargs)
+
+    monkeypatch.setattr(runtime, "run_native_pi_turn", paused)
+    execution = SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    )
+    task = asyncio.create_task(execution.run())
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        with pytest.raises(IdentityConflict, match="cannot be reused"):
+            await execution.run()
+        finish.set()
+        result = await asyncio.wait_for(task, 10)
+        assert result.response_message_id
+        with pytest.raises(IdentityConflict, match="cannot be reused"):
+            await execution.run()
+        assert len(calls) == 1
+        assert comms.registry.require("beta").active_turn is None
+    finally:
+        finish.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

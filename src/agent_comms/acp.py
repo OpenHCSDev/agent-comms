@@ -17,6 +17,8 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
+from .field_codec import FieldCodec
+
 import asyncio
 import json
 import os
@@ -46,8 +48,8 @@ from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup, unique_wire_object
 from .cohort_foreground import _accept_visible_initials, _preflight
 from .comms import Comms, wire
-from .coordinated_runtime import run_one_sealed_claim
-from .coordination import CoordinationError, WakeClaim
+from .coordinated_runtime import SelectedExecution
+from .coordination import CoordinationError, WakeAssignment
 from .coordination_store import (
     IdentityConflict,
     MutationStore,
@@ -429,7 +431,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if root_id is None:
             return None
         try:
-            owner, epoch = self._comms.registry.live_owner_with_admission(thread_name)
+            owner, admission_generation = self._comms.registry.live_owner_with_admission(
+                thread_name
+            )
         except (OSError, ValueError):
             return None
         if owner.pid != os.getpid():
@@ -440,7 +444,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             "ownerThread": owner.name,
             "ownerCreatedAt": owner.created_at,
             "ownerPid": owner.pid,
-            "ownerEpoch": epoch,
+            "ownerEpoch": admission_generation,
         }
 
     def _private_cursor_metadata(
@@ -507,7 +511,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         else:
             result.update(
                 status="proven" if cursor.injected_seq else "coverage_only",
-                **asdict(cursor),
+                **FieldCodec.encode(cursor),
             )
         return result
 
@@ -644,7 +648,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         plans = SelectedWritePlans(self._comms, wire_root_id)
 
-        def check_plan_controller(claim: WakeClaim, owner: Thread, operation_id: str) -> None:
+        def check_plan_controller(claim: WakeAssignment, owner: Thread, operation_id: str) -> None:
             bound = self._selected_write_controllers.get((owner.name, claim.wire_seq))
             if bound is None or bound[0] != operation_id:
                 raise IdentityConflict("Selected write original controller is no longer bound")
@@ -655,18 +659,20 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             elif controller is not self.sessions.client or controller is None:
                 raise IdentityConflict("Selected write ACP controller changed")
 
-        def load_plan(claim: WakeClaim, owner: Thread, epoch: int) -> PlannedWrite | None:
-            plan = plans.load(claim, owner, epoch)
+        def load_plan(
+            claim: WakeAssignment, owner: Thread, admission_generation: int
+        ) -> PlannedWrite | None:
+            plan = plans.load(claim, owner, admission_generation)
             if plan is not None:
                 check_plan_controller(claim, owner, plan.operation_id)
             return plan
 
-        def applied_plan(claim: WakeClaim, owner: Thread, operation_id: str) -> None:
+        def applied_plan(claim: WakeAssignment, owner: Thread, operation_id: str) -> None:
             plans.applied(claim, owner, operation_id)
             self._selected_write_controllers.pop((owner.name, claim.wire_seq), None)
 
-        result = await run_one_sealed_claim(
-            self._comms.root,
+        result = await SelectedExecution(
+            root=self._comms.root,
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
@@ -678,7 +684,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 if self._private_selected_tool_intent is not None
                 else {}
             ),
-        )
+        ).run()
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current epoch or an all-N prefix;
@@ -686,14 +692,16 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             try:
                 with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
                     person = store.participant(stable_thread_lookup(owner.created_at))
-                    epoch = self._comms.registry.snapshot().admission_generations[thread_name]
+                    admission_generation = self._comms.registry.snapshot().admission_generations[
+                        thread_name
+                    ]
                     cursor = advance_current_native_cursor(
                         bus,
                         store,
                         wire_root_id=wire_root_id,
                         owner=owner,
-                        owner_admission_epoch=epoch,
-                        owner_generation=person.generation,
+                        owner_admission_generation=admission_generation,
+                        owner_generation=person.participant_generation,
                         committed_input_id=None,
                     )
             except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):

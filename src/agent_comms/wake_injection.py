@@ -12,7 +12,7 @@ import json
 from typing import Literal
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
-from .coordination import ResponseObligation, WakeClaim
+from .coordination import ResponseObligation, WakeAssignment
 from .coordination_store import IdentityConflict
 from .threads import Thread
 from .wake import WakeDecision, derive_exact_reply_target
@@ -20,7 +20,7 @@ from .wake import WakeDecision, derive_exact_reply_target
 
 def render_selected_wake_frame(
     initial: CommittedInitial,
-    claim: WakeClaim,
+    assignment: WakeAssignment,
     owner: Thread,
     *,
     phase: Literal["triage", "full"],
@@ -34,44 +34,44 @@ def render_selected_wake_frame(
     """
     if (
         phase not in {"triage", "full"}
-        or claim.wire_seq != initial.message.seq
-        or claim.message_id != initial.message.message_id
-        or claim.recipient != owner.name
-        or claim.recipient_lookup != stable_thread_lookup(owner.created_at)
+        or assignment.wire_seq != initial.message.seq
+        or assignment.message_id != initial.message.message_id
+        or assignment.recipient != owner.name
+        or assignment.recipient_lookup != stable_thread_lookup(owner.created_at)
     ):
         raise IdentityConflict("wake frame does not match a committed recipient")
     selected = [
         decision
         for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True)
-        if recipient.recipient_lookup == claim.recipient_lookup
+        if recipient.recipient_lookup == assignment.recipient_lookup
         and recipient.canonical_thread == owner.name
         and isinstance(decision, WakeDecision)
-        and decision.recipient == claim.recipient_lookup
-        and decision.audience is claim.audience
-        and decision.wake_mode == claim.lifecycle.mode
+        and decision.recipient == assignment.recipient_lookup
+        and decision.audience is assignment.audience
+        and decision.wake_mode == assignment.lifecycle.mode
     ]
     if len(selected) != 1:
         raise IdentityConflict("wake frame requires one selected N/K recipient")
     if phase == "triage":
-        if not claim.lifecycle.triage_pending or obligation is not None:
+        if not assignment.lifecycle.triage_pending or obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
-        expectation = claim.lifecycle.mode.triage_expectation()
+        expectation = assignment.lifecycle.mode.triage_expectation()
         obligation_line = "No response obligation exists until triage engages."
     else:
         target = derive_exact_reply_target(initial.message)
         if (
-            not claim.lifecycle.engaged
+            not assignment.lifecycle.engaged
             or obligation is None
             or not obligation.lifecycle.pending
             or obligation.exact_target != target
-            or claim.lifecycle.execution_id != obligation.execution_id
+            or assignment.lifecycle.execution_id != obligation.execution_id
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
-        expectation = claim.lifecycle.mode.full_expectation()
+        expectation = assignment.lifecycle.mode.full_expectation()
         obligation_line = "you owe a response: " + json.dumps(
             {
                 "target": obligation.exact_target,
-                "source_seq": claim.wire_seq,
+                "source_seq": assignment.wire_seq,
                 "execution_id": obligation.execution_id,
             },
             ensure_ascii=True,
@@ -79,12 +79,12 @@ def render_selected_wake_frame(
         )
     selected_line = json.dumps(
         {
-            "source_seq": claim.wire_seq,
-            "claim_id": claim.claim_id,
+            "source_seq": assignment.wire_seq,
+            "claim_id": assignment.assignment_id,
             "sender": initial.message.sender,
             "target": initial.message.target,
             "audience": selected[0].audience.value,
-            "wake_mode": claim.lifecycle.mode.declared_name,
+            "wake_mode": assignment.lifecycle.mode.declared_name,
         },
         ensure_ascii=True,
         separators=(",", ":"),

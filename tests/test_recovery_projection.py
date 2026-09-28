@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import FieldCodec
 import hashlib
 import json
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.owner_lifecycle import OwnerLifecycle
 from agent_comms.coordination import CoordinationStore, canonical_publication_key
 from agent_comms.messages import Message, MessageType
 from agent_comms.recovery_projection import (
@@ -84,7 +85,7 @@ def active_db(private_db: Path) -> Path:
 def test_owner_scope_and_deterministic_single_execution(private_db: Path):
     first = view(private_db)
     assert isinstance(first, AvailableRecoveryProjection)
-    assert first.to_primitive()["current"] == {
+    assert FieldCodec.encode(first)["current"] == {
         "status": "pending",
         "origin": "acp",
         "isCurrent": False,
@@ -93,7 +94,7 @@ def test_owner_scope_and_deterministic_single_execution(private_db: Path):
         "publication": None,
     }
     assert first.last_recovery is None and first.connectivity is None
-    assert "bob-execution" not in json.dumps(first.to_primitive())
+    assert "bob-execution" not in json.dumps(FieldCodec.encode(first))
     assert isinstance(view(private_db, "b", "Bob"), AvailableRecoveryProjection)
     assert view(private_db, "a", "Bob") == UnavailableRecoveryProjection("unknown_owner")
     assert view(private_db, "alias", "Alice") == UnavailableRecoveryProjection("unknown_owner")
@@ -105,7 +106,7 @@ def test_owner_scope_and_deterministic_single_execution(private_db: Path):
         )
     assert isinstance(view(private_db), AvailableRecoveryProjection)
     # The DTO never carries an execution ID or a row count of unbounded history.
-    assert "alice-later" not in json.dumps(view(private_db).to_primitive())
+    assert "alice-later" not in json.dumps(FieldCodec.encode(view(private_db)))
 
 
 def test_corrupt_missing_schema_busy_and_nonregular_fail_closed(tmp_path: Path, private_db: Path):
@@ -238,13 +239,13 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
     assert result.current.attempt is not None
     assert result.current.attempt.phase.declared_name == "compaction"
     assert result.current.attempt.backend_done and not result.current.attempt.backend_process_exited
-    assert result.to_primitive()["current"]["attempt"]["backendProcessExited"] is False
-    assert "processDead" not in json.dumps(result.to_primitive())
+    assert FieldCodec.encode(result)["current"]["attempt"]["backendProcessExited"] is False
+    assert "processDead" not in json.dumps(FieldCodec.encode(result))
     assert not result.current.can_retry
     assert result.connectivity is not None and result.connectivity.owner.value == "offline"
     assert result.connectivity.acp_client.value == "disconnected"
     assert result.last_recovery is None  # Phase alone is not a recovery audit.
-    wire = json.dumps(result.to_primitive())
+    wire = json.dumps(FieldCodec.encode(result))
     assert "later-pending" not in wire and "private-fence" not in wire
     assert "startedAt" not in wire and "completedAt" not in wire
     assert "contextUsed" not in wire and "compactionStartedAt" not in wire
@@ -442,7 +443,7 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
     result = view(path)
     assert isinstance(result, AvailableRecoveryProjection)
     assert result.current is not None and result.current.publication == "uncertain"
-    rendered = json.dumps(result.to_primitive(), sort_keys=True)
+    rendered = json.dumps(FieldCodec.encode(result), sort_keys=True)
     for secret in (
         "private-target",
         "private-claim",
@@ -489,12 +490,11 @@ def test_wal_mode_refused_before_shared_memory_sidecar(tmp_path: Path):
 
 def test_no_owner_process_start_or_gateway_calls(private_db: Path, monkeypatch):
 
-
     def prohibited(*_args, **_kwargs):
         raise AssertionError("reader must not start an owner or mutate a Comms registry")
 
-    monkeypatch.setattr(Comms, "ensure_owner", prohibited)
-    monkeypatch.setattr(Comms, "start", prohibited)
+    monkeypatch.setattr(OwnerLifecycle, "ensure_owner", prohibited)
+    monkeypatch.setattr(OwnerLifecycle, "start", prohibited)
     before_pid = os.getpid()
     assert isinstance(view(private_db), AvailableRecoveryProjection)
     assert os.getpid() == before_pid

@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms import coordination as c
 from agent_comms.attempt_states import AttemptState, SettlingAttempt, SucceededAttempt
-from agent_comms.claim_states import ClaimState, EngagedClaim, FullPendingClaim
+from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
 from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
@@ -27,7 +27,7 @@ from agent_comms.recovery_projection import AvailableRecoveryProjection, Project
         ("ExecutionStatus", ExecutionState),
         ("ObligationState", ResponseState),
         ("AttemptPhase", AttemptState),
-        ("ClaimDisposition", ClaimState),
+        ("ClaimDisposition", AssignmentState),
     ],
 )
 def test_stored_names_and_edges_match_pre_refactor_capture(tag, family):
@@ -50,9 +50,9 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
     with pytest.raises(TypeError):
         PublishedResponse()
     with pytest.raises(TypeError):
-        FullPendingClaim(execution_id="other")
+        FullPendingAssignment(execution_id="other")
     with pytest.raises(TypeError):
-        EngagedClaim()
+        EngagedAssignment()
     with pytest.raises(TypeError):
         SucceededAttempt(lease_expires_at_ms=100)
     with pytest.raises(c.IntegrityViolationError):
@@ -80,7 +80,7 @@ def test_record_replacement_uses_only_nominal_state():
 
 
 def test_gateway_uses_declared_fields_and_rejects_missing_tags_and_bool_numbers():
-    value = AvailableRecoveryProjection("owner", 0, None, None, None).to_primitive()
+    value = FieldCodec.encode(AvailableRecoveryProjection("owner", 0, None, None, None))
     assert _valid_projection(value, "owner")
     for key in ("schema", "availability", "current"):
         bad = dict(value)
@@ -110,7 +110,8 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
             tag.publication(),
         )
         assert _valid_projection(
-            AvailableRecoveryProjection("owner", 0, projection, None, None).to_primitive(), "owner"
+            FieldCodec.encode(AvailableRecoveryProjection("owner", 0, projection, None, None)),
+            "owner",
         )
     finally:
         ResponseState.__registry__.pop("reviewed")
@@ -150,7 +151,7 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
             )
             assert result["current"]["status"] == "paused"
             assert _valid_projection(
-                AvailableRecoveryProjection("owner", 1, projection, None, None).to_primitive(),
+                FieldCodec.encode(AvailableRecoveryProjection("owner", 1, projection, None, None)),
                 "owner",
             )
     finally:
@@ -219,7 +220,7 @@ async def _through_socket(projection):
 
         async def reply(reader, writer):
             await reader.read()
-            writer.write((json.dumps(projection.to_primitive()) + "\n").encode())
+            writer.write((json.dumps(FieldCodec.encode(projection)) + "\n").encode())
             await writer.drain()
             writer.close()
             await writer.wait_closed()

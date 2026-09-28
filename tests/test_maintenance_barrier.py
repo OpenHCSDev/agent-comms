@@ -63,7 +63,7 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
         result.put(("timeout", ""))
         return
     try:
-        Registration(Path(registry_path)).claim_local_turn("owner", "other-process")
+        Registration(Path(registry_path)).lease_local_turn("owner", "other-process")
     except RelationViolationError as error:
         result.put(("denied", str(error)))
     else:
@@ -84,7 +84,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.agents.begin_turn("owner", "after")
     with pytest.raises(RelationViolationError, match="Maintenance"):
-        comms.registry.claim_live_turn_with_admission(
+        comms.registry.lease_live_turn_with_admission(
             comms.registry.require("owner"),
             "direct",
             expected_generation=comms.registry.snapshot().admission_generations["owner"],
@@ -98,7 +98,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     with pytest.raises(ValueError, match="closed expected"):
         control.advance(second, "ready")
     with pytest.raises(RelationViolationError, match="Maintenance"):
-        Registration(comms.registry.store.path).claim_local_turn("owner", "cold")
+        Registration(comms.registry.store.path).lease_local_turn("owner", "cold")
     assert control.advance(second, "installing").phase == "installing"
 
 
@@ -237,7 +237,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     assert (current.active_turn is not None) == (result == "claimed")
     assert comms.owners.maintenance.read() == receipt
     with pytest.raises(RelationViolationError):
-        comms.registry.claim_local_turn("owner", "never-after-pause")
+        comms.registry.lease_local_turn("owner", "never-after-pause")
 
 
 @pytest.mark.asyncio

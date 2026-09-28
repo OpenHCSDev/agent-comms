@@ -66,7 +66,7 @@ def test_turn_claim_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.messaging.send("alice", viewer, "painted")
     page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
     assert page.display_basis.peer_created_at == page.display_basis.peer_created_at
-    comms.registry.claim_local_turn("alice", "ordinary-turn")
+    comms.registry.lease_local_turn("alice", "ordinary-turn")
     fresh = comms.views.dm_display_page("alice", worktree=str(tmp_path))
     assert fresh.display_basis.peer_created_at == page.display_basis.peer_created_at
     comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path)))

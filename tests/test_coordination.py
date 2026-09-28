@@ -10,6 +10,8 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
+
 from agent_comms.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
@@ -18,14 +20,19 @@ from agent_comms.attempt_states import (
     RetryingAttempt,
     SucceededAttempt,
 )
-from agent_comms.claim_states import ClaimState, CompletedClaim, DeferredClaim, EngagedClaim
+from agent_comms.assignment_states import (
+    AssignmentState,
+    CompletedAssignment,
+    DeferredAssignment,
+    EngagedAssignment,
+)
 from agent_comms.coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
     AttemptRecord,
     CoordinationStore,
     CurrentExecutionPointer,
-    ExecutionClaimLink,
+    ExecutionAssignmentLink,
     ExecutionOrigin,
     ExecutionRecord,
     IntegrityViolationError,
@@ -38,11 +45,11 @@ from agent_comms.coordination import (
     ReplayFact,
     ResponseObligation,
     SchemaVersionError,
-    WakeClaim,
+    WakeAssignment,
     attempt_phase_transition_allowed,
     attempt_retry_identity_allowed,
     canonical_publication_key,
-    claim_transition_allowed,
+    assignment_transition_allowed,
     execution_status_transition_allowed,
     obligation_transition_allowed,
     replay_transition_allowed,
@@ -99,8 +106,8 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
 
 
 def claim():
-    return WakeClaim(
-        claim_id="claim-1",
+    return WakeAssignment(
+        assignment_id="claim-1",
         recipient="worker",
         recipient_lookup="owner-1",
         wire_seq=2,
@@ -109,7 +116,7 @@ def claim():
         accepted_at_ms=100,
         updated_at_ms=100,
         revision=1,
-        lifecycle=EngagedClaim.load(FullWake(), None, "execution-1", "requester"),
+        lifecycle=EngagedAssignment.load(FullWake(), None, "execution-1", "requester"),
     )
 
 
@@ -139,16 +146,16 @@ def snapshot(
         execution=record,
         attempt=attempt_record,
         links=(
-            (ExecutionClaimLink(record.execution_id, "claim-1", 0),)
+            (ExecutionAssignmentLink(record.execution_id, "claim-1", 0),)
             if record.origin is ExecutionOrigin.WIRE
             else ()
         ),
-        claims=(
+        assignments=(
             (
                 (
                     replace(
                         claim(),
-                        lifecycle=ClaimState.decode(record.lifecycle.declared_name).load(
+                        lifecycle=AssignmentState.decode(record.lifecycle.declared_name).load(
                             claim().lifecycle.mode,
                             claim().lifecycle.verdict,
                             claim().lifecycle.execution_id,
@@ -376,7 +383,7 @@ def test_snapshot_projection_retry_and_inert_secrets():
         attempt_record=failed_attempt,
     )
     assert deferred.can_retry
-    projection = deferred.to_primitive()
+    projection = FieldCodec.project(deferred, "snapshot")
     assert projection["execution"]["current_attempt_ordinal"] == 1
     assert projection["attempt"]["owner_generation"] == 1
     assert "owner_token_digest" not in str(projection)
@@ -420,26 +427,26 @@ def test_snapshot_projection_retry_and_inert_secrets():
 def test_wire_claim_obligation_and_publication_contract():
     record = execution(origin=ExecutionOrigin.WIRE)
     valid = snapshot(execution_record=record, response=obligation())
-    assert valid.to_primitive()["claims"][0]["claim_id"] == "claim-1"
-    primitive = valid.to_primitive()
+    assert FieldCodec.project(valid, "snapshot")["claims"][0]["claim_id"] == "claim-1"
+    primitive = FieldCodec.project(valid, "snapshot")
     assert primitive["execution_claims"][0]["ordinal"] == 0
     assert "claim_ids" not in primitive["execution"]
     assert [item["claim_id"] for item in primitive["claims"]] == [
         item["claim_id"] for item in primitive["execution_claims"]
     ]
     with pytest.raises(IntegrityViolationError, match="ordered claims"):
-        replace(valid, links=(ExecutionClaimLink(record.execution_id, "claim-1", 1),))
+        replace(valid, links=(ExecutionAssignmentLink(record.execution_id, "claim-1", 1),))
     with pytest.raises(IntegrityViolationError, match="ordered claims"):
-        replace(valid, links=(ExecutionClaimLink("other", "claim-1", 0),))
+        replace(valid, links=(ExecutionAssignmentLink("other", "claim-1", 0),))
     with pytest.raises(IntegrityViolationError):
-        replace(valid, claims=(replace(claim(), recipient_lookup="other"),))
+        replace(valid, assignments=(replace(claim(), recipient_lookup="other"),))
     with pytest.raises(IntegrityViolationError, match="disposition"):
         replace(
             valid,
-            claims=(
+            assignments=(
                 replace(
                     claim(),
-                    lifecycle=CompletedClaim.load(
+                    lifecycle=CompletedAssignment.load(
                         claim().lifecycle.mode,
                         claim().lifecycle.verdict,
                         claim().lifecycle.execution_id,
@@ -500,12 +507,12 @@ def test_wire_claim_obligation_and_publication_contract():
 
 def test_claim_replay_obligation_relations_remain_authoritative():
     c = claim()
-    assert claim_transition_allowed(
+    assert assignment_transition_allowed(
         c,
         replace(
             c,
             revision=2,
-            lifecycle=DeferredClaim.load(
+            lifecycle=DeferredAssignment.load(
                 c.lifecycle.mode,
                 c.lifecycle.verdict,
                 c.lifecycle.execution_id,
@@ -513,13 +520,13 @@ def test_claim_replay_obligation_relations_remain_authoritative():
             ),
         ),
     )
-    assert not claim_transition_allowed(
+    assert not assignment_transition_allowed(
         c,
         replace(
             c,
             recipient_lookup="other",
             revision=2,
-            lifecycle=DeferredClaim.load(
+            lifecycle=DeferredAssignment.load(
                 c.lifecycle.mode,
                 c.lifecycle.verdict,
                 c.lifecycle.execution_id,
@@ -1028,7 +1035,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
         absent = RecoverySnapshot(
             execution=execution_record,
             attempt=attempt_record,
-            claims=(),
+            assignments=(),
             links=(),
             replay=None,
             obligation=None,
@@ -1041,7 +1048,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             pointer_revision=2,
             is_current=False,
         )
-        assert absent.to_primitive()["replay"] is None
+        assert FieldCodec.project(absent, "snapshot")["replay"] is None
         assert not absent.can_retry
         with pytest.raises(IntegrityViolationError, match="authorized retry"):
             replace(
@@ -1725,10 +1732,10 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
                 execution(origin=ExecutionOrigin.WIRE), execution_id="e", owner_lookup="p"
             ),
             attempt=None,
-            claims=(
+            assignments=(
                 replace(
                     claim(),
-                    claim_id="a",
+                    assignment_id="a",
                     recipient_lookup="p",
                     lifecycle=type(claim().lifecycle).load(
                         claim().lifecycle.mode,
@@ -1738,7 +1745,7 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
                     ),
                 ),
             ),
-            links=(ExecutionClaimLink("e", "a", 0),),
+            links=(ExecutionAssignmentLink("e", "a", 0),),
             replay=None,
             obligation=replace(
                 obligation(),

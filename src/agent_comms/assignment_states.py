@@ -34,7 +34,7 @@ class PendingDecision:
 
 
 @dataclass(frozen=True)
-class ClaimState(DeclaredFamily, LifecycleState, affix="Claim"):
+class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     terminal: ClassVar[bool] = False
     engaged: ClassVar[bool] = False
     deferred: ClassVar[bool] = False
@@ -53,7 +53,7 @@ class ClaimState(DeclaredFamily, LifecycleState, affix="Claim"):
 
     @classmethod
     @abstractmethod
-    def successors(cls) -> tuple[type[ClaimState], ...]: ...
+    def successors(cls) -> tuple[type[AssignmentState], ...]: ...
 
     @property
     @abstractmethod
@@ -88,7 +88,7 @@ class ClaimState(DeclaredFamily, LifecycleState, affix="Claim"):
         return self.execution_id is None and after.preengagement_target and self.may_become(after)
 
 
-class PassiveClaim(ClaimState):
+class PassiveAssignment(AssignmentState):
     terminal = True
 
     @property
@@ -100,7 +100,7 @@ class PassiveClaim(ClaimState):
         return ()
 
 
-class TriagePendingClaim(ClaimState):
+class TriagePendingAssignment(AssignmentState):
     triage_pending = True
     preengagement_target = True
     engageable = True
@@ -111,10 +111,10 @@ class TriagePendingClaim(ClaimState):
 
     @classmethod
     def successors(cls):
-        return IgnoredClaim, EngagedClaim, DeferredClaim, FailedClaim
+        return IgnoredAssignment, EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class FullPendingClaim(ClaimState):
+class FullPendingAssignment(AssignmentState):
     full_pending = True
     preengagement_target = True
     engageable = True
@@ -125,10 +125,10 @@ class FullPendingClaim(ClaimState):
 
     @classmethod
     def successors(cls):
-        return EngagedClaim, DeferredClaim, FailedClaim
+        return EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class IgnoredClaim(ClaimState):
+class IgnoredAssignment(AssignmentState):
     terminal = True
     preengagement_target = True
 
@@ -145,7 +145,7 @@ class IgnoredClaim(ClaimState):
         return ()
 
 
-class ClaimDecision:
+class AssignmentDecision:
     """One projection of a decision's mode, verdict and binding."""
 
     decision: PendingDecision | Engagement
@@ -168,7 +168,7 @@ class ClaimDecision:
 
 
 @dataclass(frozen=True)
-class BoundClaim(ClaimDecision, ClaimState):
+class BoundAssignment(AssignmentDecision, AssignmentState):
     decision: Engagement
 
     @classmethod
@@ -176,15 +176,15 @@ class BoundClaim(ClaimDecision, ClaimState):
         return cls(mode.engage(execution_id, target))
 
 
-class EngagedClaim(BoundClaim):
+class EngagedAssignment(BoundAssignment):
     engaged = True
 
     @classmethod
     def successors(cls):
-        return CompletedClaim, DeferredClaim, FailedClaim
+        return CompletedAssignment, DeferredAssignment, FailedAssignment
 
 
-class CompletedClaim(BoundClaim):
+class CompletedAssignment(BoundAssignment):
     terminal = True
     completed = True
 
@@ -194,7 +194,7 @@ class CompletedClaim(BoundClaim):
 
 
 @dataclass(frozen=True)
-class InterruptedClaim(ClaimDecision, ClaimState):
+class InterruptedAssignment(AssignmentDecision, AssignmentState):
     decision: PendingDecision | Engagement
     preengagement_target = True
 
@@ -205,13 +205,13 @@ class InterruptedClaim(ClaimDecision, ClaimState):
         )
 
 
-class DeferredClaim(InterruptedClaim):
+class DeferredAssignment(InterruptedAssignment):
     deferred = True
     engageable = True
 
     @classmethod
     def successors(cls):
-        return TriagePendingClaim, FullPendingClaim, EngagedClaim, FailedClaim
+        return TriagePendingAssignment, FullPendingAssignment, EngagedAssignment, FailedAssignment
 
     def permits_engagement_change(self, after):
         return super().permits_engagement_change(after) and not (
@@ -219,7 +219,7 @@ class DeferredClaim(InterruptedClaim):
         )
 
 
-class FailedClaim(InterruptedClaim):
+class FailedAssignment(InterruptedAssignment):
     terminal = True
     failed = True
 

@@ -87,19 +87,19 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     before = session.read_bytes()
-    candidate = bridge.prepare_source(owner, epoch, keep_recent_tokens=1)
+    candidate = bridge.prepare_source(owner, owner_generation, keep_recent_tokens=1)
     assert candidate is not None
     prepared, source = candidate
     assert session.read_bytes() == before
     operation = bridge.commit(
         owner,
-        epoch,
+        owner_generation,
         prepared.witness,
         "Provider-free synthetic summary",
         prepared.tokens_before,
@@ -123,12 +123,12 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
-    candidate = bridge.prepare_source(owner, epoch, keep_recent_tokens=1)
+    candidate = bridge.prepare_source(owner, owner_generation, keep_recent_tokens=1)
     assert candidate is not None
     prepared, source = candidate
     before = session.read_bytes()
@@ -138,7 +138,7 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
     with pytest.raises(RelationViolationError, match="source changed"):
         bridge.commit(
             owner,
-            epoch,
+            owner_generation,
             prepared.witness,
             "Stale summary",
             prepared.tokens_before,
@@ -164,9 +164,9 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
@@ -190,7 +190,7 @@ async def test_owner_summary_discards_idle_manager_before_external_native_write(
         return NativeSummary("Synthetic provider-free summary", None, None)
 
     result = await compact_owner_once(
-        bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
+        bridge, owner, owner_generation, persistent, synthetic_summary, keep_recent_tokens=1
     )
     assert result is not None and result.state.declared_name == "committed"
     assert persistent.reopen_required == str(session)
@@ -211,9 +211,9 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
@@ -228,7 +228,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
 
     with pytest.raises(RelationViolationError, match="source changed"):
         await compact_owner_once(
-            bridge, owner, epoch, persistent, corrected_summary, keep_recent_tokens=1
+            bridge, owner, owner_generation, persistent, corrected_summary, keep_recent_tokens=1
         )
     assert persistent.reopen_required == str(session)
     assert session.read_bytes() == original
@@ -252,9 +252,9 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
             goal=Goal("task", "goal"),
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
@@ -286,7 +286,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     async def owned_turn():
         async with turn_lock:
             return await compact_owner_once(
-                bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
+                bridge, owner, owner_generation, persistent, synthetic_summary, keep_recent_tokens=1
             )
 
     task = asyncio.create_task(owned_turn())
@@ -383,9 +383,9 @@ def test_three_sequential_native_commits_keep_exact_ids_and_prior_history(sessio
             goal=Goal("continuing task", "goal-unchanged"),
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     commit_ids = []
@@ -418,12 +418,12 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 check=True,
                 timeout=5,
             )
-        candidate = bridge.prepare_source(owner, epoch, keep_recent_tokens=1)
+        candidate = bridge.prepare_source(owner, owner_generation, keep_recent_tokens=1)
         assert candidate is not None
         prepared, source = candidate
         operation = bridge.commit(
             owner,
-            epoch,
+            owner_generation,
             prepared.witness,
             f"Synthetic provider-free round {round_index}; retain goal-unchanged",
             prepared.tokens_before,
@@ -457,9 +457,9 @@ async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(sess
     comms.threads.attach_session("project", str(session), pid=os.getpid())
     current = comms.registry.require("project")
     comms.registry.register(replace(current, goal=Goal("retain exact history", "goal-e2e")))
-    owner, epoch = comms.registry.live_owner_with_generation("project")
-    owner, epoch = comms.registry.claim_live_turn_with_generation(
-        owner, "rounds", expected_owner_generation=epoch
+    owner, owner_generation = comms.registry.live_owner_with_generation("project")
+    owner, owner_generation = comms.registry.lease_live_turn_with_generation(
+        owner, "rounds", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = agent.turns.persistent_backends.setdefault("project", PersistentPiSession())
@@ -509,7 +509,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 )
 
             operation = await compact_owner_once(
-                bridge, owner, epoch, persistent, synthetic_summary, keep_recent_tokens=1
+                bridge, owner, owner_generation, persistent, synthetic_summary, keep_recent_tokens=1
             )
             assert operation is not None and operation.state.declared_name == "committed"
             commit_ids.append(operation.commit_id)

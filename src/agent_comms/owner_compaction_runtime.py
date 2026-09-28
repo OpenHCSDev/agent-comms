@@ -33,12 +33,14 @@ class SelectedNativeSummary(NativeSummary):
         self,
         bridge: OwnerCompactionCommit,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         operation: CompactionOperation | None,
         source: CompactionSource,
     ) -> SelectedSummaryAdmission:
         assert operation is not None
-        return bridge.admit_selected_original(owner, epoch, operation, source, self.identity)
+        return bridge.admit_selected_original(
+            owner, owner_generation, operation, source, self.identity
+        )
 
 
 @dataclass(frozen=True)
@@ -58,19 +60,19 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
         self,
         bridge: OwnerCompactionCommit,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         operation: CompactionOperation | None,
         source: CompactionSource,
     ) -> SelectedSummaryAdmission:
         return bridge.admit_selected_decline(
-            owner, epoch, self.attempt, source, self.identity, self.reason
+            owner, owner_generation, self.attempt, source, self.identity, self.reason
         )
 
 
 async def compact_owner_once(
     bridge: OwnerCompactionCommit,
     owner: Thread,
-    epoch: int,
+    owner_generation: int,
     persistent: PersistentPiSession,
     summarize: Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]],
     *,
@@ -90,7 +92,7 @@ async def compact_owner_once(
     prepared_source = await asyncio.to_thread(
         bridge.prepare_source,
         owner,
-        epoch,
+        owner_generation,
         keep_recent_tokens=keep_recent_tokens,
         pending_input_key=pending_input_key,
         settings_paths=settings_paths,
@@ -106,11 +108,11 @@ async def compact_owner_once(
 
     async def write(summary: NativeSummary) -> CompactionOperation:
         return await _commit_native_summary(
-            bridge, owner, epoch, persistent, prepared, source, summary
+            bridge, owner, owner_generation, persistent, prepared, source, summary
         )
 
     operation = await result.commit_with(write)
-    admission = result.admit_original(bridge, owner, epoch, operation, source)
+    admission = result.admit_original(bridge, owner, owner_generation, operation, source)
     if admission is not None:
         if on_admission is None:
             admission.invalidate()
@@ -122,7 +124,7 @@ async def compact_owner_once(
 async def _commit_native_summary(
     bridge: OwnerCompactionCommit,
     owner: Thread,
-    epoch: int,
+    owner_generation: int,
     persistent: PersistentPiSession,
     prepared: NativePreparation,
     source: CompactionSource,
@@ -142,7 +144,7 @@ async def _commit_native_summary(
         committing = executor.submit(
             bridge.commit,
             owner,
-            epoch,
+            owner_generation,
             prepared.witness,
             result.text,
             prepared.tokens_before,

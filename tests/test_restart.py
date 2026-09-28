@@ -112,7 +112,7 @@ def test_guarded_restart_fences_post_signal_wake_before_exit(tmp_path, monkeypat
         with monkeypatch.context() as patch:
             patch.setattr("agent_comms.store_files.os.getpid", lambda: original.pid)
             with pytest.raises(RelationViolationError, match="stopped or unavailable"):
-                comms.registry.claim_local_turn("one", "post-signal-wake")
+                comms.registry.lease_local_turn("one", "post-signal-wake")
         observed.append(comms.registry.require("one").active_turn)
         return True
 

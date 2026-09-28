@@ -336,22 +336,22 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
         owner_created_at="0x1.0000000000000p+0",
         owner_lookup="alice-lookup",
         owner_generation=2,
-        admission_epoch=3,
+        admission_generation=3,
     )
     with pytest.raises(CompactionJournalError, match="coverage differs"):
         journal.reserve_selected_summary(
-            str(fresh.path), _private_source(), fresh_session=fresh, admission_epoch=4
+            str(fresh.path), _private_source(), fresh_session=fresh, admission_generation=4
         )
     changed_owner = _private_source()
     changed_owner["source"]["ownerCreatedAt"] = "0x1.8000000000000p+0"
     with pytest.raises(CompactionJournalError, match="coverage differs"):
         journal.reserve_selected_summary(
-            str(fresh.path), changed_owner, fresh_session=fresh, admission_epoch=3
+            str(fresh.path), changed_owner, fresh_session=fresh, admission_generation=3
         )
     next_turn = _private_source()
     next_turn["source"]["admissionGeneration"] = 9  # same incarnation, later owner turn
     attempt = journal.reserve_selected_summary(
-        str(fresh.path), next_turn, fresh_session=fresh, admission_epoch=3
+        str(fresh.path), next_turn, fresh_session=fresh, admission_generation=3
     )
     assert journal.selected_summary(attempt).state.declared_name == "reserved"
     with pytest.raises(CompactionJournalError, match="blocks native input"):
@@ -382,12 +382,12 @@ def test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker(
         owner_created_at="0x1.0000000000000p+0",
         owner_lookup="alice-lookup",
         owner_generation=2,
-        admission_epoch=3,
+        admission_generation=3,
     )
     journal.reserve_private_raw_input(fresh.path, "b" * 32)
     with pytest.raises(CompactionJournalError, match="never replay"):
         journal.reserve_selected_summary(
-            str(fresh.path), _private_source(), fresh_session=fresh, admission_epoch=3
+            str(fresh.path), _private_source(), fresh_session=fresh, admission_generation=3
         )
 
 
@@ -418,12 +418,12 @@ def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_select
             owner_created_at="0x1.0000000000000p+0",
             owner_lookup="alice-lookup",
             owner_generation=2,
-            admission_epoch=3,
+            admission_generation=3,
         )
     # The SQL row is visible on reopen, but no returned enrollment ACK exists.
     monkeypatch.setattr(module.os, "fsync", original_fsync)
     assert CompactionJournal(journal.path).path.exists()
     with pytest.raises(CompactionJournalError, match="coverage differs"):
         journal.reserve_selected_summary(
-            str(fresh.path), _private_source(), fresh_session=fresh, admission_epoch=3
+            str(fresh.path), _private_source(), fresh_session=fresh, admission_generation=3
         )

@@ -16,7 +16,7 @@ from agent_comms.bus_publication import CommittedInitial, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination import ExecutionOrigin, WakeClaim
+from agent_comms.coordination import ExecutionOrigin, WakeAssignment
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
@@ -53,7 +53,7 @@ def _root(
 
 def _accepted(
     comms: Comms, store: MutationStore, root_id: str, target: str, body: str
-) -> tuple[CommittedInitial, WakeClaim]:
+) -> tuple[CommittedInitial, WakeAssignment]:
     message = comms.messaging.send_initial_cohort("sender", target, body)
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     for recipient in initial.audience.recipients:
@@ -64,14 +64,14 @@ def _accepted(
             committed=True,
         )
     receipt = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
-    assert len(receipt.claims) == 1
-    return initial, receipt.claims[0]
+    assert len(receipt.assignments) == 1
+    return initial, receipt.assignments[0]
 
 
 def _owner(comms: Comms, name: str) -> Thread:
-    original, epoch = comms.registry.live_owner_with_admission(name)
-    owner, _ = comms.registry.claim_live_turn_with_admission(
-        original, f"selected-{name}", expected_generation=epoch
+    original, admission_generation = comms.registry.live_owner_with_admission(name)
+    owner, _ = comms.registry.lease_live_turn_with_admission(
+        original, f"selected-{name}", expected_generation=admission_generation
     )
     return owner
 
@@ -86,16 +86,16 @@ def _projection(
     max_rows: int = 100,
 ) -> OptionalAwarenessProjection:
     assert owner.active_turn is not None
-    epoch = owner.active_turn.admission_generation
-    assert epoch is not None
+    admission_generation = owner.active_turn.admission_generation
+    assert admission_generation is not None
     return OptionalAwarenessProjection(
         index,
         after_seq,
         through_seq,
         expected_participant_generation=store.participant(
             stable_thread_lookup(owner.created_at)
-        ).generation,
-        expected_admission_epoch=epoch,
+        ).participant_generation,
+        expected_admission_generation=admission_generation,
         max_rows=max_rows,
     )
 
@@ -129,7 +129,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
             cohort, "assert_optional_awareness_schema", inject_second_insert_failure
         )
         accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
-        assert len(accepted.claims) == 2
+        assert len(accepted.assignments) == 2
         assert (
             store._connection.execute(
                 "SELECT sealed FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
@@ -236,14 +236,14 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
         monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
         runner, calls = _fake_model()
         monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-        outcome = await runtime.run_one_sealed_claim(
-            comms.root,
+        outcome = await runtime.SelectedExecution(
+            root=comms.root,
             wire_root_id=root_id,
             owner_name="member000",
             native_package=root,
-        )
+        ).run()
         assert outcome is not None and outcome.response_message_id
-        assert outcome.claim_id == claim.claim_id and len(calls) == 1
+        assert outcome.assignment_id == claim.assignment_id and len(calls) == 1
         assert initial.message.body in calls[0][1]
         assert "Selected source decisions through " not in calls[0][1]
 
@@ -260,16 +260,16 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
             claim.recipient_lookup,
             owner.name,
             1,
-            claim_ids=(claim.claim_id,),
+            assignment_ids=(claim.assignment_id,),
             exact_target="sender",
         )
-        current = store.claim(claim.claim_id)
+        current = store.assignment(claim.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
         assert result.mandatory_complete and result.omission_reason is None
         context = json.loads(result.text)
         assert context["selected"] == [
             {
-                "claim_id": claim.claim_id,
+                "claim_id": claim.assignment_id,
                 "disposition": "engaged",
                 "message_id": initial.message.message_id,
                 "source_seq": initial.message.seq,
@@ -323,11 +323,11 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
                 claim.recipient_lookup,
                 owner.name,
                 1,
-                claim_ids=(claim.claim_id,),
+                assignment_ids=(claim.assignment_id,),
                 exact_target="sender",
             )
         index.maintain(rebuild=True)
-        current = store.claim(new_claim.claim_id)
+        current = store.assignment(new_claim.assignment_id)
         # Only the newer selected row lies after the cursor, but both exact
         # response obligations are still open and must be represented.
         assert older.message.seq == 1
@@ -381,7 +381,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
             old_claim.recipient_lookup,
             "member000",
             1,
-            claim_ids=(old_claim.claim_id,),
+            assignment_ids=(old_claim.assignment_id,),
             exact_target="sender",
         )
         store.advance_owner_generation(
@@ -393,9 +393,9 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
         result = _projection(index, store, owner, 0, current.message.seq)(current, claim, owner)
         assert result.mandatory_complete and result.omitted_count == 2
         context = json.loads(result.text)
-        assert [row["claim_id"] for row in context["selected"]] == [claim.claim_id]
+        assert [row["claim_id"] for row in context["selected"]] == [claim.assignment_id]
         assert context["open_obligations"] == []
-        assert old_claim.claim_id not in result.text and "old-reply" not in result.text
+        assert old_claim.assignment_id not in result.text and "old-reply" not in result.text
         assert old.message.seq < current.message.seq
     finally:
         store.close()
@@ -412,7 +412,9 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
         owner = _owner(comms, "member000")
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, claim, owner)
         assert result.mandatory_complete and result.omitted_count == 0
-        assert [row["claim_id"] for row in json.loads(result.text)["selected"]] == [claim.claim_id]
+        assert [row["claim_id"] for row in json.loads(result.text)["selected"]] == [
+            claim.assignment_id
+        ]
     finally:
         store.close()
 
@@ -487,15 +489,15 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
         monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
         runner, calls = _fake_model()
         monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
-        outcome = await runtime.run_one_sealed_claim(
-            comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
-        )
+        outcome = await runtime.SelectedExecution(
+            root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
+        ).run()
         assert outcome is not None and outcome.response_message_id
-        assert outcome.claim_id == claim.claim_id and len(calls) == 1
+        assert outcome.assignment_id == claim.assignment_id and len(calls) == 1
         assert current.message.body in calls[0][1]
         assert "Selected source decisions through " in calls[0][1]
-        assert claim.claim_id in calls[0][1]
-        assert old_claim.claim_id not in calls[0][1]
+        assert claim.assignment_id in calls[0][1]
+        assert old_claim.assignment_id not in calls[0][1]
         assert "Nonbinding rows omitted: 1" in calls[0][1]
 
 
@@ -509,8 +511,8 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
         current = comms.bus.log.read_initial_cohort(root_id, current_message.seq)
         receipt = accept_initial_cohort(comms.bus, root_id, current_message.seq, store).value
-        assert len(receipt.claims) == 1
-        current_claim = receipt.claims[0]
+        assert len(receipt.assignments) == 1
+        current_claim = receipt.assignments[0]
         index.maintain(rebuild=True)
         owner = _owner(comms, "gamma")
         result = _projection(index, store, owner, 0, current.message.seq)(
@@ -520,8 +522,8 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         assert old.message.seq < current.message.seq
         assert result.mandatory_complete and result.omitted_count == 1
         selected = json.loads(result.text)["selected"]
-        assert [row["claim_id"] for row in selected] == [current_claim.claim_id]
-        assert old_claim.claim_id not in result.text
+        assert [row["claim_id"] for row in selected] == [current_claim.assignment_id]
+        assert old_claim.assignment_id not in result.text
     finally:
         store.close()
 

@@ -14,13 +14,12 @@ from agent_comms.config_options import ConfigOption
 from agent_comms.routing import MessageRoute
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from agent_comms.transcript_updates import (
-    AssistantTranscriptUpdate,
-    NoticeTranscriptUpdate,
+    AgentTextTranscriptUpdate,
     StartedTranscriptUpdate,
     TranscriptUpdate,
     UserTranscriptUpdate,
 )
-from agent_comms.transcripts import TranscriptEvent
+from agent_comms.transcript_events import TranscriptEvent, TextTranscript, ToolStartTranscript
 
 
 @pytest.fixture
@@ -50,16 +49,14 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
     other = CommsClient(wire(tmp_path / "other"), agent_bin="/bin/echo")
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
-    await owner.initialize(
-        1, {"_meta": {"agentComms": {"transcriptSnapshots": True, "transcriptDiffs": True}}}
-    )
+    await owner.initialize(1, {"_meta": {"agentComms": {"transcriptSnapshots": True}}})
     await other.initialize(1, {})
     session = await owner.new_session(str(tmp_path / "project"))
     assert (
         owner.sessions.config.session_catalog_generation[session.session_id]
         == owner.sessions.config.catalog_generation
     )
-    assert owner.sessions.transcript.snapshots is True and owner.sessions.transcript.diffs is True
+    assert owner.sessions.transcript.snapshots is True
     assert not other.sessions.transcript.snapshots and not other.sessions.bindings
     assert not {
         "_sessions",
@@ -140,6 +137,7 @@ async def test_a_new_saved_update_is_decoded_and_published_without_consumer_edit
     owner, monkeypatch
 ):
     monkeypatch.setattr(TranscriptUpdate, "__registry__", dict(TranscriptUpdate.__registry__))
+    monkeypatch.setattr(TranscriptEvent, "__registry__", dict(TranscriptEvent.__registry__))
     updates = []
 
     @dataclass(frozen=True, kw_only=True)
@@ -155,19 +153,23 @@ async def test_a_new_saved_update_is_decoded_and_published_without_consumer_edit
                 ),
             )
 
+    class HighlightTranscript(TextTranscript):
+        def replay_update(self):
+            return HighlightTranscriptUpdate(text=self.text)
+
     class Client:
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
     await owner._emit_event(
         "alias",
-        TranscriptUpdate.from_transcript(TranscriptEvent(kind="highlight", text="saved text")),
+        HighlightTranscript("saved text").replay_update(),
         client=Client(),
     )
     assert len(updates) == 1 and updates[0].content.text == "Highlight: saved text"
 
 
-async def test_typed_updates_preserve_protocol_json_and_unknown_saved_kind(owner):
+async def test_typed_updates_preserve_protocol_json_and_silent_tool_replay(owner):
     rows = []
 
     class Client:
@@ -177,12 +179,12 @@ async def test_typed_updates_preserve_protocol_json_and_unknown_saved_kind(owner
     client = Client()
     for event in [
         UserTranscriptUpdate(text="hello"),
-        AssistantTranscriptUpdate(text="answer", route=MessageRoute("a", ("b",))),
-        NoticeTranscriptUpdate(text="saved notice"),
+        AgentTextTranscriptUpdate(text="answer", route=MessageRoute("a", ("b",))),
+        AgentTextTranscriptUpdate(text="saved notice"),
         StartedTranscriptUpdate(
             turn_id="turn", started_at=12.0, activity="working", activity_detail="read"
         ),
-        TranscriptUpdate.from_transcript(TranscriptEvent(kind="tool_start", text="unrendered")),
+        ToolStartTranscript(tool_call_id="one", tool_name="read").replay_update(),
     ]:
         await owner._emit_event("session", event, client=client)
     assert rows == [

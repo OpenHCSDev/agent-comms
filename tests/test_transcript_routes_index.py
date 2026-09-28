@@ -1,9 +1,11 @@
 """Transcript routing lookups stay bounded as saved history grows."""
 
 import json
+import sqlite3
 from pathlib import Path
 
 from agent_comms.comms import wire
+from agent_comms.transcript_events import TranscriptCodec
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
 
@@ -34,14 +36,14 @@ def test_tail_page_decodes_only_its_routing_entries(tmp_path, monkeypatch) -> No
     )
 
     decoded = 0
-    real_decode = TurnRouting.from_wire
+    real_decode = TranscriptCodec.decode
 
-    def counted_decode(payload):
+    def counted_decode(target, payload):
         nonlocal decoded
-        decoded += 1
-        return real_decode(payload)
+        decoded += int(target is TurnRouting)
+        return real_decode(target, payload)
 
-    monkeypatch.setattr(TurnRouting, "from_wire", staticmethod(counted_decode))
+    monkeypatch.setattr(TranscriptCodec, "decode", staticmethod(counted_decode))
     page = wire(tmp_path / "wire").transcripts.thread_transcript_page("worker")
     assert [event.text for event in page.events] == [
         f"answer {index}" for index in range(9980, 10_000)
@@ -66,7 +68,7 @@ def test_legacy_json_routes_migrate_without_losing_new_records(tmp_path) -> None
     assert [event.routing for event in page.events] == [old, new]
 
 
-def test_running_legacy_writer_is_imported_without_overwriting_new_routes(tmp_path) -> None:
+def test_one_way_import_preserves_indexed_routes_and_retires_source_column(tmp_path):
     session = tmp_path / "session.jsonl"
     _session(session, 3)
     comms = wire(tmp_path / "wire")
@@ -74,23 +76,59 @@ def test_running_legacy_writer_is_imported_without_overwriting_new_routes(tmp_pa
     old = TurnRouting(reply=MessageRoute("worker", ("#old",)))
     modern = TurnRouting(reply=MessageRoute("worker", ("#modern",)))
     late = TurnRouting(reply=MessageRoute("worker", ("#late",)))
-    legacy = comms.root / "transcript_routes.json"
-    legacy.write_text(json.dumps({str(session): {"entry-0": old.to_wire()}}))
-    assert comms.transcripts.thread_transcript_page("worker").events[0].routing == old
-    comms.transcripts.routes.record(str(session), ("entry-1",), modern)
-
-    # An older process can still publish its atomic JSON snapshot while this
-    # process is running. Its newly annotated entry must enter the index.
-    legacy.write_text(
+    saved = comms.root / "transcript_routes.json"
+    saved.write_text(
         json.dumps(
             {
                 str(session): {
-                    "entry-0": late.to_wire(),  # legacy-owned route was updated
-                    "entry-1": old.to_wire(),  # stale view of the new writer's entry
+                    "entry-0": late.to_wire(),
+                    "entry-1": old.to_wire(),
                     "entry-2": late.to_wire(),
                 }
             }
         )
     )
+    path = comms.root / "transcript_routes.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE routes (session_file TEXT, entry_id TEXT, route TEXT, source TEXT, PRIMARY KEY(session_file, entry_id))"
+        )
+        db.executemany(
+            "INSERT INTO routes VALUES (?, ?, ?, ?)",
+            [
+                (str(session), "entry-0", json.dumps(old.to_wire()), "legacy"),
+                (str(session), "entry-1", json.dumps(modern.to_wire()), "indexed"),
+            ],
+        )
     page = comms.transcripts.thread_transcript_page("worker")
     assert [event.routing for event in page.events] == [late, modern, late]
+    with sqlite3.connect(path) as db:
+        assert [row[1] for row in db.execute("PRAGMA table_info(routes)")] == [
+            "session_file",
+            "entry_id",
+            "route",
+        ]
+    saved.write_text("not read again")
+    assert [
+        event.routing
+        for event in wire(comms.root).transcripts.thread_transcript_page("worker").events
+    ] == [late, modern, late]
+
+
+def test_invalid_saved_route_rolls_back_migration_without_losing_original(tmp_path):
+    from agent_comms.transcript_routes import TranscriptRoutes
+    import pytest
+
+    saved = tmp_path / "transcript_routes.json"
+    original = json.dumps({"session": {"entry": {"requests": "not a list", "reply": None}}})
+    saved.write_text(original)
+    owner = TranscriptRoutes(tmp_path)
+    with pytest.raises(ValueError):
+        owner.for_session("session")
+    assert saved.read_text() == original
+    with sqlite3.connect(owner.database_path) as db:
+        assert db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == []
+    routing = TurnRouting(reply=MessageRoute("worker", ("#team",)))
+    saved.write_text(json.dumps({"session": {"entry": routing.to_wire()}}))
+    with owner.for_session("session") as routes:
+        assert routes.get("entry") == routing

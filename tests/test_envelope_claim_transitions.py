@@ -19,6 +19,7 @@ from agent_comms.envelope_claim_transitions import (
     parse_complete_transition_line,
     project_verified_transitions,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
 
 G1 = "a" * 32
@@ -31,7 +32,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         wire_root_id="c" * 32,
         source_seq=7,
         source_message_id="source-7",
-        wake_claim_id="cohort-v1:" + "d" * 64,
+        wake_assignment_id="cohort-v1:" + "d" * 64,
         wake_revision=3,
         recipient_lookup="e" * 32,
         execution_id="execution-7",
@@ -42,7 +43,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         attempt_ordinal=1,
     )
     claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
-    raw = (json.dumps(asdict(claimed), separators=(",", ":")) + "\n").encode()
+    raw = (json.dumps(FieldCodec.encode(claimed), separators=(",", ":")) + "\n").encode()
     decoded = parse_complete_transition_line(raw)
     assert decoded == claimed
     assert apply_transition(ClaimProjection(), decoded)[resource].admission == admission

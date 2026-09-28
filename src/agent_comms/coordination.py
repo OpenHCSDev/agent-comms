@@ -23,11 +23,11 @@ from pathlib import Path
 from typing import Final, Self
 
 from .attempt_states import AttemptState
-from .claim_states import ClaimState
+from .assignment_states import AssignmentState
 from .coordination_errors import CoordinationError as CoordinationError
 from .coordination_errors import IntegrityViolationError, SchemaVersionError
 from .execution_states import ExecutionState
-from .field_codec import FieldCodec, projected
+from .field_codec import projected
 from .messages import Message, MessageType
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition
@@ -118,14 +118,14 @@ def canonical_publication_key(execution_id: str, exact_target: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class WakeClaim:
-    claim_id: str
+class WakeAssignment:
+    assignment_id: str = dataclass_field(metadata={"wire_name": "claim_id"})
     recipient: str
     recipient_lookup: str
     wire_seq: int
     message_id: str
     audience: MessageAudience
-    lifecycle: ClaimState = dataclass_field(metadata={"snapshot_exclude": True})
+    lifecycle: AssignmentState = dataclass_field(metadata={"snapshot_exclude": True})
     accepted_at_ms: int
     updated_at_ms: int
     revision: int = 1
@@ -155,7 +155,7 @@ class WakeClaim:
 
     def __post_init__(self) -> None:
         for field, value in (
-            ("claim_id", self.claim_id),
+            ("claim_id", self.assignment_id),
             ("recipient", self.recipient),
             ("recipient_lookup", self.recipient_lookup),
             ("message_id", self.message_id),
@@ -178,10 +178,10 @@ class WakeClaim:
         return (self.recipient_lookup, self.wire_seq)
 
 
-def claim_transition_allowed(before: WakeClaim, after: WakeClaim) -> bool:
+def assignment_transition_allowed(before: WakeAssignment, after: WakeAssignment) -> bool:
     """Check an edge without rewriting accepted wake, verdict, or execution facts."""
     frozen = (
-        "claim_id",
+        "assignment_id",
         "recipient_lookup",
         "wire_seq",
         "message_id",
@@ -331,15 +331,15 @@ class OwnerFence:
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionClaimLink:
+class ExecutionAssignmentLink:
     execution_id: str
-    claim_id: str
+    assignment_id: str = dataclass_field(metadata={"wire_name": "claim_id"})
     ordinal: int
 
     def __post_init__(self) -> None:
         _validate_execution_id(self.execution_id)
-        _nonempty(self.claim_id, "claim_id")
-        _bounded(self.claim_id, "claim_id", MAX_IDENTIFIER_CHARS)
+        _nonempty(self.assignment_id, "claim_id")
+        _bounded(self.assignment_id, "claim_id", MAX_IDENTIFIER_CHARS)
         if self.ordinal < 0:
             raise ValueError("execution claim ordinal cannot be negative")
 
@@ -757,8 +757,8 @@ class RecoverySnapshot:
 
     execution: ExecutionRecord
     attempt: AttemptRecord | None
-    claims: tuple[WakeClaim, ...]
-    links: tuple[ExecutionClaimLink, ...] = dataclass_field(
+    assignments: tuple[WakeAssignment, ...] = dataclass_field(metadata={"wire_name": "claims"})
+    links: tuple[ExecutionAssignmentLink, ...] = dataclass_field(
         metadata={"snapshot_name": "execution_claims"}
     )
     replay: ReplayAssessment | None
@@ -800,23 +800,27 @@ class RecoverySnapshot:
         )
         if any(
             record is not None and record.execution_id != execution_id for record in related
-        ) or any(claim.lifecycle.execution_id != execution_id for claim in self.claims):
+        ) or any(
+            assignment.lifecycle.execution_id != execution_id for assignment in self.assignments
+        ):
             raise IntegrityViolationError("snapshot records belong to another execution")
-        claim_ids = tuple(claim.claim_id for claim in self.claims)
+        assignment_ids = tuple(assignment.assignment_id for assignment in self.assignments)
         if (
-            tuple(link.claim_id for link in self.links) != claim_ids
-            or tuple(link.ordinal for link in self.links) != tuple(range(len(self.claims)))
+            tuple(link.assignment_id for link in self.links) != assignment_ids
+            or tuple(link.ordinal for link in self.links) != tuple(range(len(self.assignments)))
             or any(link.execution_id != execution_id for link in self.links)
         ):
             raise IntegrityViolationError(
                 "snapshot execution-claim links disagree with ordered claims"
             )
-        if len(claim_ids) != len(set(claim_ids)) or any(
-            claim.recipient_lookup != execution.owner_lookup for claim in self.claims
+        if len(assignment_ids) != len(set(assignment_ids)) or any(
+            assignment.recipient_lookup != execution.owner_lookup for assignment in self.assignments
         ):
             raise IntegrityViolationError("snapshot claims have duplicate IDs or wrong owner")
-        claim_kind = execution.lifecycle.claim_state()
-        if any(type(claim.lifecycle) is not claim_kind for claim in self.claims):
+        assignment_kind = execution.lifecycle.assignment_state()
+        if any(
+            type(assignment.lifecycle) is not assignment_kind for assignment in self.assignments
+        ):
             raise IntegrityViolationError("snapshot claims disagree with execution disposition")
 
     def validate_attempt_identity(self) -> None:
@@ -851,13 +855,13 @@ class RecoverySnapshot:
     def validate_response_route(self) -> None:
         execution = self.execution
         if execution.origin is ExecutionOrigin.WIRE:
-            if not self.claims or self.obligation is None:
+            if not self.assignments or self.obligation is None:
                 raise IntegrityViolationError("wire snapshots require an obligation")
-        elif self.obligation is not None or self.claims:
+        elif self.obligation is not None or self.assignments:
             raise IntegrityViolationError("claimless snapshots cannot have claims or obligation")
         expected_target = execution.exact_target
         target_records = (
-            *(claim.lifecycle for claim in self.claims),
+            *(assignment.lifecycle for assignment in self.assignments),
             self.obligation,
             self.publication_intent,
             self.publication_receipt,
@@ -921,10 +925,6 @@ class RecoverySnapshot:
             and attempt.lifecycle.lease_expires_at_ms is None
             and not self.is_current
         )
-
-    def to_primitive(self) -> dict[str, object]:
-        """Return the declaration-derived, redacted snapshot view."""
-        return FieldCodec.project(self, "snapshot")
 
 
 _SCHEMA = """
@@ -1223,7 +1223,7 @@ CREATE TABLE wake_claims (
     audience TEXT NOT NULL CHECK (audience IN ('direct', 'mentioned', 'collective')),
     wake_mode TEXT NOT NULL CHECK (wake_mode IN ({wake_names})),
     triage_verdict TEXT CHECK (triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')),
-    disposition TEXT NOT NULL CHECK (disposition IN ({claim_names})),
+    disposition TEXT NOT NULL CHECK (disposition IN ({assignment_names})),
     resolver_version TEXT NOT NULL CHECK (length(resolver_version) BETWEEN 1 AND 256),
     policy_version TEXT NOT NULL CHECK (length(policy_version) BETWEEN 1 AND 256),
     accepted_at_ms INTEGER NOT NULL CHECK (accepted_at_ms >= 0),
@@ -1302,7 +1302,7 @@ BEGIN
        OR (OLD.execution_id IS NULL AND NEW.execution_id IS NOT NULL
            AND NEW.disposition != 'engaged');
     SELECT RAISE(ABORT, 'claim disposition edge is not realizable')
-    WHERE OLD.disposition != NEW.disposition AND NOT ({claim_edges}
+    WHERE OLD.disposition != NEW.disposition AND NOT ({assignment_edges}
     );
     SELECT RAISE(ABORT, 'pre-engagement failure cannot invent execution')
     WHERE NEW.disposition = 'failed' AND OLD.execution_id IS NULL
@@ -1715,17 +1715,17 @@ def _schema():
     return _SCHEMA.format(
         execution_names=_sql_members(ExecutionState),
         attempt_names=_sql_members(AttemptState),
-        claim_names=_sql_members(ClaimState),
+        assignment_names=_sql_members(AssignmentState),
         wake_names=_sql_members(WakePolicy),
         response_names=_sql_members(ResponseState),
         recovery_names=_sql_members(RecoveryCondition),
         execution_edges=_sql_edges(ExecutionState, "status"),
         attempt_edges=_sql_edges(AttemptState, "phase"),
-        claim_edges=_sql_edges(ClaimState, "disposition"),
+        assignment_edges=_sql_edges(AssignmentState, "disposition"),
         obligation_edges=_sql_edges(ResponseState, "state"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
         engaged_execution_names=_sql_members(
-            ExecutionState, lambda member: member.claim_state().engaged
+            ExecutionState, lambda member: member.assignment_state().engaged
         ),
         unstarted_execution_names=_sql_members(ExecutionState, lambda member: member.unstarted),
         required_attempt_execution_names=_sql_members(

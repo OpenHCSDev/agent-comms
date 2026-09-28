@@ -26,20 +26,14 @@ from .coordination import (
     OwnerConnectivity,
 )
 from .execution_states import ExecutionState
-from .field_codec import FieldCodec
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition
 
 # All fields returned to a caller are enumerated below. In particular, never
-# serialize RecoverySnapshot.to_primitive(): it includes a publication key.
+# serialize FieldCodec.project(snapshot, "snapshot"): it includes a publication key.
 ProjectionFailure = Literal[
     "missing", "invalid_store", "unsupported_schema", "busy", "unknown_owner", "gateway_unavailable"
 ]
-
-
-class ProjectionRecord:
-    def to_primitive(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
 
 
 def _nonnegative(value: int, *, minimum: int = 0) -> None:
@@ -59,7 +53,7 @@ class RecoveryRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedAttempt(ProjectionRecord):
+class ProjectedAttempt:
     ordinal: int
     phase: type[AttemptState]
     backend_done: bool = field(metadata={"wire_name": "backendDone"})
@@ -71,7 +65,7 @@ class ProjectedAttempt(ProjectionRecord):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedExecution(ProjectionRecord):
+class ProjectedExecution:
     # A single owner-scoped selected execution, not an unbounded history list.
     status: type[ExecutionState]
     origin: ExecutionOrigin
@@ -88,7 +82,7 @@ class ProjectedExecution(ProjectionRecord):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedRecovery(ProjectionRecord):
+class ProjectedRecovery:
     kind: type[RecoveryCondition]
     attempt: int
     elapsed_ms: int = field(metadata={"wire_name": "elapsedMs"})
@@ -101,7 +95,7 @@ class ProjectedRecovery(ProjectionRecord):
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedConnectivity(ProjectionRecord):
+class ProjectedConnectivity:
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity = field(metadata={"wire_name": "acpClient"})
     observed_at_ms: int = field(metadata={"wire_name": "observedAtMs"})
@@ -111,7 +105,7 @@ class ProjectedConnectivity(ProjectionRecord):
 
 
 @dataclass(frozen=True, slots=True)
-class AvailableRecoveryProjection(ProjectionRecord):
+class AvailableRecoveryProjection:
     owner: str
     sampled_at_ms: int = field(metadata={"wire_name": "sampledAtMs"})
     current: ProjectedExecution | None
@@ -128,7 +122,7 @@ class AvailableRecoveryProjection(ProjectionRecord):
 
 
 @dataclass(frozen=True, slots=True)
-class UnavailableRecoveryProjection(ProjectionRecord):
+class UnavailableRecoveryProjection:
     reason: ProjectionFailure
     schema: Literal[1] = field(default=1, metadata={"wire_required": True, "wire_order": -2})
     availability: Literal["unavailable"] = field(

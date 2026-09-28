@@ -64,9 +64,9 @@ class PassiveWake(WakePolicy):
 
     @classmethod
     def initial_state(cls):
-        from .claim_states import PassiveClaim
+        from .assignment_states import PassiveAssignment
 
-        return PassiveClaim
+        return PassiveAssignment
 
     def engage(self, execution_id, target):
         raise IntegrityViolationError("passive claim cannot engage")
@@ -80,14 +80,14 @@ class BoundedTriageWake(WakePolicy):
 
     @classmethod
     def initial_state(cls):
-        from .claim_states import TriagePendingClaim
+        from .assignment_states import TriagePendingAssignment
 
-        return TriagePendingClaim
+        return TriagePendingAssignment
 
 
 class FullWake(WakePolicy):
     @classmethod
     def initial_state(cls):
-        from .claim_states import FullPendingClaim
+        from .assignment_states import FullPendingAssignment
 
-        return FullPendingClaim
+        return FullPendingAssignment

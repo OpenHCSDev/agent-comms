@@ -58,7 +58,7 @@ def _receipt(
     )
 
 
-def _claim(db: sqlite3.Connection) -> None:
+def _assignment(db: sqlite3.Connection) -> None:
     db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
     db.execute("INSERT INTO participants VALUES ('b','Bob',1)")
     db.execute(
@@ -95,7 +95,7 @@ def _seal(db: sqlite3.Connection) -> None:
 
 
 def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: bool) -> None:
-    _claim(db)
+    _assignment(db)
     db.execute("INSERT INTO participants VALUES ('c','Cara',1)")
     db.execute(
         "INSERT INTO wake_claims SELECT 'claim-b','Bob','b',wire_seq,message_id,"
@@ -109,10 +109,10 @@ def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: 
         if reverse_claims
         else (("claim-a", "a"), ("claim-b", "b"))
     )
-    for ordinal, (claim_id, lookup) in enumerate(ordered):
+    for ordinal, (assignment_id, lookup) in enumerate(ordered):
         db.execute(
             "INSERT INTO claim_batch_members VALUES (?,?,?,?,?)",
-            (ROOT, SEQ, ordinal, claim_id, lookup),
+            (ROOT, SEQ, ordinal, assignment_id, lookup),
         )
     _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
     _delivery(db, ordinal=1, lookup="c", name="Cara", kind="unmentioned_observer", claim=None)
@@ -188,7 +188,7 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
     with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with store._transaction() as db:
-            _claim(db)
+            _assignment(db)
             db.execute(
                 "INSERT INTO wake_claims SELECT 'legacy-b','Bob','b',wire_seq,message_id,"
                 "exact_target,audience,wake_mode,triage_verdict,disposition,resolver_version,"
@@ -216,7 +216,7 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Pa
     with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with store._transaction() as db:
-            _claim(db)
+            _assignment(db)
             _receipt(db, n=2, k=1)
             _member(db)
             _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
@@ -249,7 +249,7 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
         install_private_cohort_schema(store)
         with pytest.raises(sqlite3.IntegrityError, match="incomplete"):  # noqa: SIM117
             with store._transaction() as db:
-                _claim(db)
+                _assignment(db)
                 _receipt(db, n=2, k=1)
                 _member(db)
                 _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
@@ -292,7 +292,7 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(tmp_path: Path) ->
     with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with store._transaction() as db:
-            _claim(db)
+            _assignment(db)
             _receipt(db, n=2, k=1)
             for claim, lookup in (("missing", "a"), ("claim-a", "b")):
                 with pytest.raises(
@@ -340,7 +340,7 @@ def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
             pytest.raises(sqlite3.IntegrityError, match="does not match cohort acceptance"),
             store._transaction() as db,
         ):
-            _claim(db)
+            _assignment(db)
             _receipt(db, n=1, k=1, **{field: override})
             _member(db)
             _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")
@@ -356,7 +356,7 @@ def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
     with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with store._transaction() as db:
-            _claim(db)
+            _assignment(db)
             _receipt(db, n=1, k=1)
             _member(db)
             _delivery(db, ordinal=0, lookup="a", name="Alice", kind="selected", claim="claim-a")

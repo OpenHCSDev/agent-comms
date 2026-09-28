@@ -9,6 +9,8 @@ fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 
 from __future__ import annotations
 
+from .field_codec import FieldCodec
+
 import json
 import stat
 from abc import ABC, abstractmethod
@@ -133,7 +135,7 @@ class WakeAdmission:
     wire_root_id: str
     source_seq: int
     source_message_id: str
-    wake_claim_id: str
+    wake_assignment_id: str = field(metadata={"wire_name": "wake_claim_id"})
     wake_revision: int
     recipient_lookup: str
     execution_id: str
@@ -142,7 +144,7 @@ class WakeAdmission:
     turn_id: str
     participant_generation: int
     attempt_ordinal: int
-    version: int = 1
+    version: int = field(default=1, metadata={"wire_required": True})
 
     def __post_init__(self) -> None:
         for label, value, size in (
@@ -178,10 +180,12 @@ class WakeAdmission:
         if ":" in self.execution_id:
             raise ClaimTransitionError("Execution ID cannot contain a colon.")
         if (
-            type(self.wake_claim_id) is not str
-            or not self.wake_claim_id.startswith("cohort-v1:")
-            or len(self.wake_claim_id) != len("cohort-v1:") + 64
-            or any(character not in "0123456789abcdef" for character in self.wake_claim_id[10:])
+            type(self.wake_assignment_id) is not str
+            or not self.wake_assignment_id.startswith("cohort-v1:")
+            or len(self.wake_assignment_id) != len("cohort-v1:") + 64
+            or any(
+                character not in "0123456789abcdef" for character in self.wake_assignment_id[10:]
+            )
         ):
             raise ClaimTransitionError("Wake claim ID is invalid.")
 
@@ -369,24 +373,11 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
     admission = None
     if "admission" in data:
         value = data["admission"]
-        fields = {
-            "wire_root_id",
-            "source_seq",
-            "source_message_id",
-            "wake_claim_id",
-            "wake_revision",
-            "recipient_lookup",
-            "execution_id",
-            "operation_id",
-            "owner_admission_generation",
-            "turn_id",
-            "participant_generation",
-            "attempt_ordinal",
-            "version",
-        }
-        if type(value) is not dict or set(value) != fields:
-            raise ClaimTransitionError("Wake admission has missing or unknown fields.")
-        admission = WakeAdmission(**value)
+        try:
+            admission = FieldCodec.decode(WakeAdmission, value)
+        except (TypeError, ValueError) as error:
+            raise ClaimTransitionError("Wake admission has invalid fields.") from error
+
     return ClaimTransition(
         data["owner"],
         data["incarnation"],
@@ -410,7 +401,7 @@ def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
         "generation": transition.generation,
     }
     if transition.admission is not None:
-        value["admission"] = asdict(transition.admission)
+        value["admission"] = FieldCodec.encode(transition.admission)
     return value
 
 

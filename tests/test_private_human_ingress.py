@@ -54,7 +54,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     receipt = accept_initial_cohort(comms.bus, root_id, channel.seq, store)
     assert isinstance(receipt, Applied)
     assert receipt.value.member_count == 2
-    assert receipt.value.claim_count == 1  # Bob is a frozen unmentioned observer.
+    assert receipt.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert comms.views.dm_history(channel.sender, "bob")[-1] == dm
@@ -65,7 +65,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     ] == [("bob", lookups["bob"])]
     accepted = accept_initial_cohort(comms.bus, root_id, dm.seq, store)
     assert isinstance(accepted, Applied)
-    assert accepted.value.member_count == accepted.value.claim_count == 1
+    assert accepted.value.member_count == accepted.value.assignment_count == 1
 
 
 def test_legacy_user_append_stays_public_without_private_marker(

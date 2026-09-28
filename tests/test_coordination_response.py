@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
-from agent_comms.claim_states import CompletedClaim
+from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import ExecutionOrigin
@@ -56,7 +56,7 @@ class Fixture:
     origin_seq: int
     reply_target: str
     owner_lookup: str
-    claim_id: str
+    assignment_id: str
     fence: object
 
     def close(self) -> None:
@@ -84,8 +84,8 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         committed=True,
     )
     accepted = accept_initial_cohort(comms.bus, root_id, original.seq, store)
-    assert accepted.value.member_count == accepted.value.claim_count == 1
-    claim = accepted.value.claims[0]
+    assert accepted.value.member_count == accepted.value.assignment_count == 1
+    claim = accepted.value.assignments[0]
     reply_target = derive_exact_reply_target(original)
     assert reply_target is not None
     store.create_execution(
@@ -94,7 +94,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         recipient.recipient_lookup,
         "owner",
         1,
-        claim_ids=(claim.claim_id,),
+        assignment_ids=(claim.assignment_id,),
         exact_target=reply_target,
     )
     store.mark_pending("exec", expected_revision=1)
@@ -129,7 +129,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         original.seq,
         reply_target,
         recipient.recipient_lookup,
-        claim.claim_id,
+        claim.assignment_id,
         final,
     )
 
@@ -158,7 +158,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         assert type(published.execution.lifecycle) is CompletedExecution
         assert type(published.obligation.lifecycle) is PublishedResponse
         assert published.publication_receipt is not None
-        assert type(published.claims[0].lifecycle) is CompletedClaim
+        assert type(published.assignments[0].lifecycle) is CompletedAssignment
         assert published.publication_receipt.seq == case.origin_seq + 1
         response = case.bus.log.read_keyed_response(intent)
         assert response is not None and response.target == case.reply_target
@@ -334,7 +334,7 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
         assert not worker.is_alive() and outcomes == ["advanced"]
         assert not wire_worker.is_alive() and wire_done.is_set()
         assert type(settled.value.execution.lifecycle) is CompletedExecution
-        assert case.store.participant(case.owner_lookup).generation == 2
+        assert case.store.participant(case.owner_lookup).participant_generation == 2
     finally:
         case.close()
 

@@ -35,21 +35,23 @@ def make_registry(tmp_path) -> tuple[Registration, Thread, int]:
         goal=Goal("original task", "goal-1", revision=4),
     )
     registry.register(owner)
-    live, epoch = registry.live_owner_with_generation("owner")
-    return registry, live, epoch
+    live, owner_generation = registry.live_owner_with_generation("owner")
+    return registry, live, owner_generation
 
 
-def claim(registry: Registration, owner: Thread, epoch: int, turn: str) -> tuple[Thread, int]:
-    claimed, claimed_epoch = registry.claim_live_turn_with_generation(
-        owner, turn, expected_owner_generation=epoch
+def claim(
+    registry: Registration, owner: Thread, owner_generation: int, turn: str
+) -> tuple[Thread, int]:
+    claimed, claimed_generation = registry.lease_live_turn_with_generation(
+        owner, turn, expected_owner_generation=owner_generation
     )
-    return claimed, claimed_epoch
+    return claimed, claimed_generation
 
 
 def attest(
     registry: Registration,
     owner: Thread,
-    epoch: int,
+    owner_generation: int,
     turn: str = "turn-1",
     goal: Goal | None = None,
     correction_revision: int = 7,
@@ -57,7 +59,7 @@ def attest(
     goal = goal or owner.goal
     return registry.attest_owner_compaction(
         owner,
-        epoch,
+        owner_generation,
         turn,
         expected_goal_id=goal.id,
         expected_goal_revision=goal.revision,
@@ -67,11 +69,11 @@ def attest(
 
 
 def test_positive_attestation_echoes_owner_and_fence(tmp_path) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
-    receipt = attest(registry, claimed, claimed_epoch)
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
+    receipt = attest(registry, claimed, claimed_generation)
     assert receipt.thread == "owner"
-    assert receipt.owner_epoch == claimed_epoch
+    assert receipt.owner_generation == claimed_generation
     assert receipt.turn_id == "turn-1"
     assert receipt.goal_id == "goal-1"
     assert receipt.goal_revision == 4
@@ -83,10 +85,10 @@ def test_positive_attestation_echoes_owner_and_fence(tmp_path) -> None:
 
 
 def test_recheck_binds_same_store_revision(tmp_path) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
-    first = attest(registry, claimed, claimed_epoch)
-    second = attest(registry, claimed, claimed_epoch)
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
+    first = attest(registry, claimed, claimed_generation)
+    second = attest(registry, claimed, claimed_generation)
     assert first.registry_revision == second.registry_revision
 
 
@@ -108,51 +110,51 @@ def test_recheck_binds_same_store_revision(tmp_path) -> None:
     ids=["stopped", "goal-replaced", "goal-progress", "goal-paused"],
 )
 def test_attestation_fails_closed_after_owner_or_goal_change(tmp_path, mutate) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
     mutate(registry, claimed)
     with pytest.raises((RelationViolationError, ValueError)):
-        attest(registry, claimed, claimed_epoch)
+        attest(registry, claimed, claimed_generation)
 
 
-def test_stale_epoch_after_second_turn_claim_fails(tmp_path) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
+def test_stale_generation_after_second_turn_claim_fails(tmp_path) -> None:
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
     registry.unregister("owner")
     revived = replace(claimed, active_turn=None)
     registry.register(revived)
-    _, second_epoch = claim(
+    _, second_generation = claim(
         registry, revived, registry.snapshot().owner_generations["owner"], "turn-2"
     )
-    assert second_epoch != claimed_epoch
+    assert second_generation != claimed_generation
     with pytest.raises(RelationViolationError):
-        attest(registry, claimed, claimed_epoch)  # pre-restart epoch is stale
+        attest(registry, claimed, claimed_generation)  # pre-restart epoch is stale
     # Even the current epoch fails: the turn id no longer matches the claim.
     with pytest.raises(RelationViolationError):
-        attest(registry, revived, second_epoch, turn="turn-1")
+        attest(registry, revived, second_generation, turn="turn-1")
 
 
 def test_unclaimed_turn_cannot_attest(tmp_path) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
+    registry, owner, owner_generation = make_registry(tmp_path)
     with pytest.raises(RelationViolationError):
-        attest(registry, owner, epoch)
+        attest(registry, owner, owner_generation)
 
 
 def test_stale_goal_expectation_fails(tmp_path) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
     stale_goal = claimed.goal
     registry.register(replace(claimed, goal=replace(claimed.goal, revision=99)))
     with pytest.raises(RelationViolationError):
-        attest(registry, claimed, claimed_epoch, goal=stale_goal)
+        attest(registry, claimed, claimed_generation, goal=stale_goal)
 
 
 def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
     monkeypatch.setattr("agent_comms.store_files.os.getpid", lambda: owner.pid + 1)
     with pytest.raises(RelationViolationError):
-        attest(registry, claimed, claimed_epoch)
+        attest(registry, claimed, claimed_generation)
 
 
 @pytest.mark.parametrize(
@@ -170,10 +172,10 @@ def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
     ],
 )
 def test_malformed_expectations_rejected(tmp_path, kwargs) -> None:
-    registry, owner, epoch = make_registry(tmp_path)
-    claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
+    registry, owner, owner_generation = make_registry(tmp_path)
+    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
     request = {
-        "expected_owner_generation": claimed_epoch,
+        "expected_owner_generation": claimed_generation,
         "turn_id": "turn-1",
         "expected_goal_id": "goal-1",
         "expected_goal_revision": 4,

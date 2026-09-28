@@ -7,6 +7,8 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.pi_payloads import PiMessage
+from agent_comms.native_entries import TranscriptProjection
 from agent_comms.threads import Thread
 
 GOAL_PROMPT = (
@@ -32,10 +34,12 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     comms = wire(tmp_path / "wire")
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
-    comms.transcripts.record_input_display("a" * 32, None)
-    comms.transcripts.record_input_display("b" * 32, "Please inspect this image\nthen continue.")
+    comms.transcripts.routes.record_input_display("a" * 32, None)
+    comms.transcripts.routes.record_input_display(
+        "b" * 32, "Please inspect this image\nthen continue."
+    )
     # Send now checks the same already-bound ID again; it cannot change its display.
-    comms.transcripts.record_input_display("b" * 32, "User follow-up: private wrapper")
+    comms.transcripts.routes.record_input_display("b" * 32, "User follow-up: private wrapper")
     session = tmp_path / "session.jsonl"
     rows = [
         saved_row("a" * 32, GOAL_PROMPT),
@@ -54,11 +58,13 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
         if paged
         else reopened.transcripts.thread_transcript("worker")
     )
-    assert [event.text for event in events if event.kind == "context"] == [
+    assert [event.text for event in events if event.declared_name == "context"] == [
         GOAL_PROMPT,
         "User follow-up:\nPlease inspect this image\nthen continue.",
     ]
-    assert [(event.kind, event.text) for event in events if event.kind != "context"] == [
+    assert [
+        (event.declared_name, event.text) for event in events if event.declared_name != "context"
+    ] == [
         ("user", "Please inspect this image\nthen continue."),
         ("user", "[Image attachment: image/png]"),
         ("user", GOAL_PROMPT),
@@ -68,12 +74,12 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 
 def test_existing_route_database_accepts_new_input_annotations_on_reopen(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.transcripts.record_input_display("a" * 32, "first input")
+    comms.transcripts.routes.record_input_display("a" * 32, "first input")
     # This is exactly the schema present before input display was introduced.
     with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
         connection.execute("DROP TABLE input_display")
     reopened = wire(comms.root)
-    reopened.transcripts.record_input_display("b" * 32, None)
+    reopened.transcripts.routes.record_input_display("b" * 32, None)
     with reopened.transcripts.routes.for_session("new-session.jsonl") as routes:
         assert routes.input_display("a" * 32) is None
         assert routes.input_display("b" * 32).text is None
@@ -94,8 +100,8 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
         )
     )
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
-    comms.transcripts.record_input_display("a" * 32, None)
-    comms.transcripts.record_input_display("b" * 32, "test2")
+    comms.transcripts.routes.record_input_display("a" * 32, None)
+    comms.transcripts.routes.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))
     updates = []
 
@@ -124,7 +130,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
 
 def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
     comms = wire(tmp_path / "wire")
-    events = comms.transcripts._transcript_message_events(
+    events = PiMessage.from_wire(
         {
             "role": "assistant",
             "content": [
@@ -134,8 +140,8 @@ def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
                 {"type": "text", "text": "After reasoning."},
             ],
         }
-    )
-    assert [(event.kind, event.text) for event in events] == [
+    ).transcript_events(TranscriptProjection())
+    assert [(event.declared_name, event.text) for event in events] == [
         ("assistant", "## Summary\n\n**Bold text**\n\n- First\n- Second\n"),
         ("thinking", "separate reasoning"),
         ("assistant", "After reasoning."),

@@ -24,7 +24,7 @@ Design invariants (blocker 1 of the PR48 merge plan):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 __all__ = ["OwnerCompactionAttestation"]
 
@@ -39,7 +39,7 @@ class OwnerCompactionAttestation:
     """
 
     thread: str
-    owner_epoch: int
+    owner_generation: int = field(metadata={"wire_name": "owner_epoch"})
     turn_id: str
     goal_id: str | None
     goal_revision: int | None

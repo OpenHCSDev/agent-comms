@@ -31,7 +31,7 @@ from .comms import Comms
 from .coordinated_runtime import (
     CoordinatedTurn,
     SelectedExistingFileWrite,
-    run_one_sealed_claim,
+    SelectedExecution,
 )
 from .coordinated_runtime_schema import install_native_runtime_schema
 from .coordination_cohort import accept_initial_cohort
@@ -180,14 +180,14 @@ async def run_foreground_once(
                 )
                 # Even an empty scan checks this PID against the live registry.
                 # A terminal claim cannot be replayed by this foreground owner.
-                result = await run_one_sealed_claim(
-                    root,
+                result = await SelectedExecution(
+                    root=root,
                     wire_root_id=wire_root_id,
                     owner_name=name,
                     native_package=native_package,
                     opt_in=True,
                     selected_existing_file_write=selected_existing_file_write,
-                )
+                ).run()
                 if result is not None:
                     return result
                 remaining = deadline - time.monotonic()
@@ -309,7 +309,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else (
                 {
                     "disposition": result.disposition.declared_name,
-                    "claim_id": result.claim_id,
+                    "claim_id": result.assignment_id,
                     "response_message_id": result.response_message_id,
                 }
                 if result is not None

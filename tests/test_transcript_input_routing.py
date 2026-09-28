@@ -85,7 +85,7 @@ async def test_original_and_busy_input_keep_distinct_routes(
             reopened.transcripts.thread_transcript("worker"),
             reopened.transcripts.thread_transcript_page("worker").events,
         ):
-            inputs = [event for event in events if event.kind == "user"]
+            inputs = [event for event in events if event.declared_name == "user"]
             assert [event.text for event in inputs] == [message.body for message in received]
             assert [
                 (
@@ -95,9 +95,9 @@ async def test_original_and_busy_input_keep_distinct_routes(
                 )
                 for event in inputs
             ] == [message.message_id for message in received]
-        assert not agent.inputs.pending_turns.get("worker"), (
-            "Attributed inputs must not be replayed"
-        )
+        assert not agent.inputs.pending_turns.get(
+            "worker"
+        ), "Attributed inputs must not be replayed"
     finally:
         await agent.shutdown()
 
@@ -112,23 +112,25 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     raw_second = ScheduledTurn.incoming(second).prompt
     quote = "[agent-comms from peer to worker]\nA genuine user's quoted example"
     # Bind before the session file exists, as on first-turn/fork startup.
-    comms.transcripts.record_input_display(
+    comms.transcripts.routes.record_input_display(
         "b" * 32, raw_second, sent_text=raw_second, routing=TurnRouting((second,), None)
     )
-    comms.transcripts.record_input_display("c" * 32, quote, sent_text=quote)
+    comms.transcripts.routes.record_input_display("c" * 32, quote, sent_text=quote)
     path = tmp_path / "new-session.jsonl"
     append_input(path, "b" * 32, raw_second)
     append_input(path, "c" * 32, quote)
     comms.threads.attach_session("worker", str(path))
     # Older settlement code labels all records with the initial origin.
-    comms.transcripts.routes.record(str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None))
+    comms.transcripts.routes.record(
+        str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None)
+    )
     reopened = wire(comms.root)
     events = (
         reopened.transcripts.thread_transcript_page("worker").events
         if paged
         else reopened.transcripts.thread_transcript("worker")
     )
-    inputs = [event for event in events if event.kind == "user"]
+    inputs = [event for event in events if event.declared_name == "user"]
     assert inputs[0].text == second.body and inputs[0].routing.requests == (second,)
     assert inputs[1].text == quote and inputs[1].routing is None
 
@@ -140,10 +142,12 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     incoming = comms.messaging.send_message("peer", "worker", "Verified input")
     route = TurnRouting((incoming,), None)
     text = ScheduledTurn.incoming(incoming).prompt
-    comms.transcripts.record_input_display("a" * 32, text, sent_text=text, routing=route)
-    comms.transcripts.record_input_display("a" * 32, text, sent_text=text, routing=route)
+    comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)
+    comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)
     with pytest.raises(ValueError):
-        comms.transcripts.record_input_display("a" * 32, text, sent_text="different", routing=route)
+        comms.transcripts.routes.record_input_display(
+            "a" * 32, text, sent_text="different", routing=route
+        )
     path = tmp_path / "changed.jsonl"
     append_input(path, "a" * 32, "unrelated input")
     comms.threads.attach_session("worker", str(path))

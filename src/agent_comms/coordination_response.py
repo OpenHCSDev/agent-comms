@@ -223,7 +223,7 @@ def _require_bound_stores(bus: MessageBus, store: MutationStore) -> None:
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 
 
-def _require_cohort_claims(
+def _require_cohort_assignments(
     store: MutationStore,
     bus: MessageBus,
     snapshot: RecoverySnapshot,
@@ -239,7 +239,7 @@ def _require_cohort_claims(
     db = store._connection
     _assert_response_schema(db)
     _assert_cohort_schema(db)
-    if not snapshot.claims or snapshot.obligation is None:
+    if not snapshot.assignments or snapshot.obligation is None:
         raise IdentityConflict("wire response requires selected claims and obligation")
     metadata = bus.log._private_marker_unlocked()
     if metadata["wire_root_id"] != wire_root_id:
@@ -249,8 +249,8 @@ def _require_cohort_claims(
         for message, _receipt, initial in bus.log._verified_private_rows_unlocked(metadata)
         if initial is not None
     }
-    for claim in snapshot.claims:
-        initial = originals.get(claim.wire_seq)
+    for assignment in snapshot.assignments:
+        initial = originals.get(assignment.wire_seq)
         receipt = db.execute(
             "SELECT r.message_id,r.exact_target,r.envelope_digest,r.audience_digest,"
             "r.decisions_digest,r.resolver_version,r.policy_version,m.recipient_lookup,"
@@ -260,7 +260,7 @@ def _require_cohort_claims(
             "ON d.wire_root_id=m.wire_root_id AND d.wire_seq=m.wire_seq "
             "AND d.claim_id=m.claim_id AND d.kind='selected' "
             "WHERE m.claim_id=? AND m.wire_root_id=? AND r.sealed=1",
-            (claim.claim_id, wire_root_id),
+            (assignment.assignment_id, wire_root_id),
         ).fetchone()
         if initial is None or receipt is None:
             raise IdentityConflict("response claim lacks original bus/cohort authority")
@@ -273,7 +273,7 @@ def _require_cohort_claims(
         }
         if (
             initial.wire_root_id != wire_root_id
-            or claim.message_id != initial.message.message_id
+            or assignment.message_id != initial.message.message_id
             or tuple(receipt)
             != (
                 initial.message.message_id,
@@ -281,15 +281,15 @@ def _require_cohort_claims(
                 initial.audience.wire_envelope_digest,
                 initial.audience.digest,
                 initial.decisions_digest,
-                claim.resolver_version,
-                claim.policy_version,
-                claim.recipient_lookup,
-                claim.recipient,
+                assignment.resolver_version,
+                assignment.policy_version,
+                assignment.recipient_lookup,
+                assignment.recipient,
             )
-            or claim.recipient_lookup not in selected
+            or assignment.recipient_lookup not in selected
             or derive_exact_reply_target(initial.message) != snapshot.execution.exact_target
-            or claim.lifecycle.exact_target != snapshot.execution.exact_target
-            or not (claim.lifecycle.completed if terminal else claim.lifecycle.engaged)
+            or assignment.lifecycle.exact_target != snapshot.execution.exact_target
+            or not (assignment.lifecycle.completed if terminal else assignment.lifecycle.engaged)
         ):
             raise IdentityConflict("response claim conflicts with original selected bus route")
 
@@ -314,7 +314,7 @@ def _require_final_owner(
         or execution.exact_target is None
     ):
         raise RecoveryBlocked("response requires final model/death evidence and exact wire route")
-    _require_cohort_claims(store, bus, snapshot, wire_root_id)
+    _require_cohort_assignments(store, bus, snapshot, wire_root_id)
     return snapshot
 
 
@@ -477,7 +477,7 @@ def _terminal_replay(
         or snapshot.publication_receipt is None
     ):
         raise StaleFence("finished response is not this owner's original attempt")
-    _require_cohort_claims(store, bus, snapshot, wire_root_id, terminal=True)
+    _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=True)
     matched, _, _ = bus.log._keyed_receipt_unlocked(snapshot.publication_intent)
     if matched is None or (
         matched.message_id != snapshot.publication_receipt.message_id
@@ -625,11 +625,15 @@ def _settle_fenced_response(
                     snapshot.execution.revision,
                 ),
             )
-            for claim in snapshot.claims:
+            for assignment in snapshot.assignments:
                 db.execute(
                     "UPDATE wake_claims SET disposition='completed',revision=revision+1,"
                     "updated_at_ms=? WHERE claim_id=? AND revision=?",
-                    (store._now(claim.updated_at_ms), claim.claim_id, claim.revision),
+                    (
+                        store._now(assignment.updated_at_ms),
+                        assignment.assignment_id,
+                        assignment.revision,
+                    ),
                 )
             db.execute(
                 "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"

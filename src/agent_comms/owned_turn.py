@@ -540,7 +540,7 @@ class OwnedTurn:
                         public_id
                     )
                     input_origins = (origin,) if origin is not None else ()
-                self.runner.comms.transcripts.record_input_display(
+                self.runner.comms.transcripts.routes.record_input_display(
                     native_id,
                     display,
                     sent_text=sent_text,

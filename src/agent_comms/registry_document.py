@@ -405,7 +405,7 @@ class RegistryDocument:
         self.statuses[name] = resumed
         self.last_seen[name] = time.time()
 
-    def claim_turn(
+    def lease_turn(
         self, current: Thread, turn_id: str, routing: TurnRouting | None
     ) -> tuple[Thread, int]:
         """Caller holds the registry lock and has checked live turn ownership."""

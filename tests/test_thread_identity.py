@@ -29,7 +29,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     identity = before.owner_identity("owner")
     registry.register(replace(owner, title="new metadata"))
     registry.heartbeat("owner")
-    claimed, generation = registry.claim_local_turn("owner", "turn")
+    claimed, generation = registry.lease_local_turn("owner", "turn")
     assert generation == identity.generation
     assert claimed.turn_identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
@@ -46,7 +46,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
 
 def test_owner_replacement_preserves_turn_counter_and_historical_incarnation(tmp_path):
     registry = registry_with_owner(tmp_path)
-    registry.claim_local_turn("owner", "turn")
+    registry.lease_local_turn("owner", "turn")
     registry.release_turn(registry.require("owner").turn_lease)[0]
     before = registry.snapshot()
     registry.register(before.threads["owner"], new_owner=True)
@@ -61,7 +61,7 @@ def test_registry_cannot_forge_turn_counter(tmp_path):
     registry = registry_with_owner(tmp_path)
     registry.register(replace(registry.require("owner"), turn_generation=300))
     assert registry.require("owner").turn_generation == 0
-    registry.claim_local_turn("owner", "turn")
+    registry.lease_local_turn("owner", "turn")
     registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(replace(registry.require("owner"), turn_generation=500))
     assert registry.require("owner").turn_generation == 1
@@ -104,7 +104,7 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
 @pytest.mark.parametrize("revocation", ["finish", "stop"])
 def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
     registry = registry_with_owner(tmp_path)
-    saved, _ = registry.claim_local_turn("owner", "old")
+    saved, _ = registry.lease_local_turn("owner", "old")
     if revocation == "stop":
         registry.unregister("owner")
     else:
@@ -117,7 +117,7 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
 
 def test_saved_registry_roundtrip_preserves_identity_and_removes_dead_turn_roster(tmp_path):
     registry = registry_with_owner(tmp_path)
-    claimed, generation = registry.claim_local_turn("owner", "old")
+    claimed, generation = registry.lease_local_turn("owner", "old")
     raw = json.loads(registry.store.path.read_text())
     raw["turn_epochs"] = {"owner": generation}
     registry.store.path.write_text(json.dumps(raw))
@@ -139,7 +139,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     conversation = Conversation.from_wire(old)
     assert conversation.participants == (owner.incarnation,)
     assert Conversation.from_wire(conversation.to_wire()) == conversation
-    registry.claim_local_turn("owner", "new")
+    registry.lease_local_turn("owner", "new")
     assert conversation.current(registry.snapshot())
     registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(registry.require("owner"), new_owner=True)

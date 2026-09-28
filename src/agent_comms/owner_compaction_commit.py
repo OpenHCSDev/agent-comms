@@ -15,7 +15,7 @@ import stat
 import struct
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .backend import _session_revision
@@ -56,7 +56,7 @@ class CompactionSource:
     native: NativeWitness = field(metadata={"journal_exclude": True})
     wire_root: str
     thread: str
-    owner_epoch: int
+    owner_generation: int = field(metadata={"wire_name": "owner_epoch"})
     turn_id: str
     goal_id: str | None
     goal_revision: int | None
@@ -134,7 +134,7 @@ class OwnerCompactionCommit:
     def _boundary(
         self,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         witness: NativeWitness,
         *,
         settled: bool = True,
@@ -147,7 +147,10 @@ class OwnerCompactionCommit:
             idle_session_writer_fence(arguments["session_file"]) as executor_fd,
             _store_lock(self.root / "wire") as wire_fd,
             _store_lock(self.root / "bus.jsonl") as bus_fd,
-            self.registry.guard_owner_compaction(owner, epoch, **arguments) as (receipt, fd),
+            self.registry.guard_owner_compaction(owner, owner_generation, **arguments) as (
+                receipt,
+                fd,
+            ),
             self.inputs.locked() as input_fd,
         ):
             if settled:
@@ -235,7 +238,7 @@ class OwnerCompactionCommit:
             witness,
             f"{self.root}:{root.st_dev}:{root.st_ino}",
             receipt.thread,
-            receipt.owner_epoch,
+            receipt.owner_generation,
             receipt.turn_id,
             receipt.goal_id,
             receipt.goal_revision,
@@ -251,7 +254,7 @@ class OwnerCompactionCommit:
     def capture_source(
         self,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         witness: NativeWitness,
         *,
         pending_input_key: str | None = None,
@@ -262,7 +265,9 @@ class OwnerCompactionCommit:
         Owner-relevant ingress remains fenced. Exact live future queue receipts
         may wait through the summary; no UNKNOWN input is replayed or resolved.
         """
-        with self._boundary(owner, epoch, witness, pending_input_key=pending_input_key) as (
+        with self._boundary(
+            owner, owner_generation, witness, pending_input_key=pending_input_key
+        ) as (
             receipt,
             _,
             _retained,
@@ -276,7 +281,7 @@ class OwnerCompactionCommit:
     def prepare_source(
         self,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         *,
         keep_recent_tokens: int | None = None,
         pending_input_key: str | None = None,
@@ -297,7 +302,7 @@ class OwnerCompactionCommit:
             return None
         source = self.capture_source(
             owner,
-            epoch,
+            owner_generation,
             prepared.witness,
             pending_input_key=pending_input_key,
             settings_paths=settings_paths,
@@ -354,7 +359,7 @@ class OwnerCompactionCommit:
     def commit(
         self,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         witness: NativeWitness,
         summary: str,
         tokens_before: int,
@@ -440,7 +445,9 @@ class OwnerCompactionCommit:
             separators=(",", ":"),
         )
         digest = hashlib.sha256(payload.encode()).hexdigest()
-        with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
+        with self._boundary(
+            owner, owner_generation, witness, pending_input_key=source.pending_input_key
+        ) as (
             receipt,
             fd,
             retained,
@@ -453,7 +460,7 @@ class OwnerCompactionCommit:
                 witness=FieldCodec.encode(witness),
                 payloadDigest=digest,
                 metadataDigest=metadata_digest,
-                owner=asdict(receipt),
+                owner=FieldCodec.encode(receipt),
                 source=FieldCodec.project(source, "journal"),
             )
             if selected_attempt is not None:
@@ -511,7 +518,7 @@ class OwnerCompactionCommit:
     def admit_selected_decline(
         self,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         attempt: SelectedSummaryAttempt,
         source: CompactionSource,
         identity: SelectedAdmissionIdentity,
@@ -519,7 +526,9 @@ class OwnerCompactionCommit:
     ) -> SelectedSummaryAdmission:
         """Continue one original after a correlated, unchanged prestart decline."""
         witness = source.native
-        with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
+        with self._boundary(
+            owner, owner_generation, witness, pending_input_key=source.pending_input_key
+        ) as (
             receipt,
             _fd,
             _retained,
@@ -543,7 +552,7 @@ class OwnerCompactionCommit:
     def admit_selected_original(
         self,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         operation: CompactionOperation,
         source: CompactionSource,
         identity: SelectedAdmissionIdentity,
@@ -553,7 +562,9 @@ class OwnerCompactionCommit:
             raise CompactionJournalError("Selected native commit is not complete")
         intent = json.loads(operation.intent_json)
         witness = FieldCodec.decode(NativeWitness, intent["witness"])
-        with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
+        with self._boundary(
+            owner, owner_generation, witness, pending_input_key=source.pending_input_key
+        ) as (
             receipt,
             _fd,
             _retained,
@@ -583,7 +594,7 @@ class OwnerCompactionCommit:
             return admission
 
     def reconcile(
-        self, owner: Thread, epoch: int, commit_id: str, *, timeout: float = 5
+        self, owner: Thread, owner_generation: int, commit_id: str, *, timeout: float = 5
     ) -> CompactionOperation:
         """Explicit exact-ID observation. NEVER sends summary or a commit action."""
         operation = self.journal.get(commit_id)
@@ -591,7 +602,7 @@ class OwnerCompactionCommit:
             return operation
         intent = json.loads(operation.intent_json)
         witness = FieldCodec.decode(NativeWitness, intent["witness"])
-        with self._boundary(owner, epoch, witness, settled=False) as (_, fd, retained):
+        with self._boundary(owner, owner_generation, witness, settled=False) as (_, fd, retained):
             # Re-read after acquiring authority; a prior resolver may have won.
             current = self.journal.get(commit_id)
             if current.state.terminal:

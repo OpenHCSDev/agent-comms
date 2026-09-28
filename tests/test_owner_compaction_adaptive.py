@@ -71,9 +71,9 @@ console.log(manager.getSessionFile());
             model="openrouter/fixture",
         )
     )
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     assert owner.active_turn is not None
     InputDispositions(tmp_path / InputDispositions.filename).record(

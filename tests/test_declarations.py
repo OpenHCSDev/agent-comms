@@ -1,4 +1,3 @@
-
 import hashlib
 import json
 import os
@@ -264,18 +263,18 @@ class TestRegistration:
         with pytest.raises(UnregisteredThreadError):
             registry.unregister("ghost")
 
-    def test_stop_then_heartbeat_cannot_reclaim_initial_owner_epoch(self, tmp_path: Path):
+    def test_stop_then_heartbeat_cannot_reclaim_initial_owner_generation(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        expected, epoch = registry.live_owner_with_generation("a")
+        expected, admission_generation = registry.live_owner_with_generation("a")
         registry.unregister("a")
         registry.heartbeat("a")  # legacy lifecycle allows this; a turn CAS must not.
         assert registry.require("a") == expected
         assert registry.status("a") == RunningThreadStatus()
-        assert registry.live_owner_with_generation("a")[1] > epoch
+        assert registry.live_owner_with_generation("a")[1] > admission_generation
         with pytest.raises(RelationViolationError, match="stopped or changed"):
-            registry.claim_live_turn_with_generation(
-                expected, "new-turn", expected_owner_generation=epoch
+            registry.lease_live_turn_with_generation(
+                expected, "new-turn", expected_owner_generation=admission_generation
             )
         assert registry.require("a").active_turn is None
 
@@ -319,7 +318,7 @@ class TestRegistration:
         original = registry.require("agent-comms-ux")
         registry.rename("agent-comms-ux", "pr17")
         admission = registry.snapshot().admission_generations["pr17"]
-        registry.claim_local_turn("pr17", "goal-turn")
+        registry.lease_local_turn("pr17", "goal-turn")
 
         assert registry.rename("pr17", "agent-comms-ux") == ("pr17", "agent-comms-ux")
 
@@ -335,19 +334,19 @@ class TestRegistration:
         assert snapshot.admission_generations["agent-comms-ux"] == admission
         assert reopened.release_turn(reopened.require("pr17").turn_lease)[0]
 
-    def test_other_owner_writes_do_not_invalidate_private_epoch(self, tmp_path: Path):
+    def test_other_owner_writes_do_not_invalidate_private_generation(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b"):
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, epoch = registry.live_owner_with_generation("a")
+        owner, admission_generation = registry.live_owner_with_generation("a")
         registry.heartbeat("b")
-        other, other_epoch = registry.live_owner_with_generation("b")
-        registry.claim_live_turn_with_generation(
-            other, "other", expected_owner_generation=other_epoch
+        other, other_generation = registry.live_owner_with_generation("b")
+        registry.lease_live_turn_with_generation(
+            other, "other", expected_owner_generation=other_generation
         )
-        assert registry.live_owner_with_generation("a") == (owner, epoch)
-        turn, _ = registry.claim_live_turn_with_generation(
-            owner, "mine", expected_owner_generation=epoch
+        assert registry.live_owner_with_generation("a") == (owner, admission_generation)
+        turn, _ = registry.lease_live_turn_with_generation(
+            owner, "mine", expected_owner_generation=admission_generation
         )
         assert turn.active_turn is not None and turn.active_turn.id == "mine"
         assert registry.release_turn(turn.turn_lease)[0]
@@ -360,11 +359,11 @@ class TestRegistration:
     ) -> None:
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, epoch = registry.live_owner_with_generation("a")
-        claimed, claimed_epoch = registry.claim_live_turn_with_generation(
-            owner, "claimed", expected_owner_generation=epoch
+        owner, admission_generation = registry.live_owner_with_generation("a")
+        claimed, claimed_generation = registry.lease_live_turn_with_generation(
+            owner, "claimed", expected_owner_generation=admission_generation
         )
-        assert registry.live_owner_with_generation("a") == (claimed, claimed_epoch)
+        assert registry.live_owner_with_generation("a") == (claimed, claimed_generation)
         if revocation == "stop":
             registry.unregister("a")
         else:
@@ -374,9 +373,9 @@ class TestRegistration:
         with pytest.raises(RelationViolationError, match="unavailable"):
             registry.live_owner_with_generation("a")
         if revocation == "stop":
-            assert registry.snapshot().owner_generations["a"] > claimed_epoch
+            assert registry.snapshot().owner_generations["a"] > claimed_generation
         else:
-            assert registry.snapshot().owner_generations["a"] == claimed_epoch
+            assert registry.snapshot().owner_generations["a"] == claimed_generation
         assert "turn_epochs" not in claimed.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
@@ -415,7 +414,9 @@ class TestRegistration:
         assert reopened.registry.live_owner_with_generation("a")[1] > 0
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
-    def test_private_marker_does_not_bootstrap_stripped_owner_epoch(self, tmp_path: Path) -> None:
+    def test_private_marker_does_not_bootstrap_stripped_owner_generation(
+        self, tmp_path: Path
+    ) -> None:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True)
@@ -597,10 +598,10 @@ class TestRegistration:
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         registry.rename("a", "b")
-        owner, epoch = registry.live_owner_with_generation("a")
+        owner, admission_generation = registry.live_owner_with_generation("a")
         assert owner.name == "b"
-        claimed, _ = registry.claim_live_turn_with_generation(
-            owner, "claimed", expected_owner_generation=epoch
+        claimed, _ = registry.lease_live_turn_with_generation(
+            owner, "claimed", expected_owner_generation=admission_generation
         )
         registry.rename("b", "c")
         assert not registry.release_turn(replace(claimed.turn_lease, turn_id="other"))[0]
@@ -608,23 +609,23 @@ class TestRegistration:
         assert registry.release_turn(claimed.turn_lease)[0]
         assert registry.require("c").active_turn is None
 
-    def test_missing_or_malformed_private_epoch_metadata_refuses_turn(self, tmp_path: Path):
+    def test_missing_or_malformed_private_generation_metadata_refuses_turn(self, tmp_path: Path):
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
-        owner, epoch = registry.live_owner_with_generation("a")
+        owner, admission_generation = registry.live_owner_with_generation("a")
         data = json.loads(path.read_text())
         data.pop("owner_epochs")
         data.pop("owner_epoch_counter")
         path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="stopped or changed"):
-            registry.claim_live_turn_with_generation(
-                owner, "claimed", expected_owner_generation=epoch
+            registry.lease_live_turn_with_generation(
+                owner, "claimed", expected_owner_generation=admission_generation
             )
         with pytest.raises(RelationViolationError, match="unavailable"):
             registry.live_owner_with_generation("a")
         data["owner_epochs"] = {"a": True}
-        data["owner_epoch_counter"] = epoch
+        data["owner_epoch_counter"] = admission_generation
         path.write_text(json.dumps(data))
         with pytest.raises(
             RelationViolationError, match="invalid private registry owner generations"

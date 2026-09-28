@@ -1,11 +1,11 @@
-"""Class-owned asynchronous handlers, composed along the value's C3 MRO."""
+"""Class-owned handlers, composed along the value's C3 MRO."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Any, TypeVar
 
-Handler = TypeVar("Handler", bound=Callable[..., Awaitable[Any]])
+Handler = TypeVar("Handler", bound=Callable[..., Any])
 
 
 def handles(*classes: type) -> Callable[[Handler], Handler]:
@@ -26,7 +26,7 @@ class MroDispatch:
     visited once by Python's MRO. A returned replacement flows to later handlers.
     """
 
-    async def dispatch(self, value: Any) -> Any:
+    def handlers_for(self, value: Any):
         methods: dict[str, Any] = {}
         for owner in type(self).__mro__:
             for name, method in vars(owner).items():
@@ -34,9 +34,23 @@ class MroDispatch:
         for capability in type(value).__mro__:
             for name, method in methods.items():
                 if capability in getattr(method, "__handled_classes__", ()):
-                    replacement = await getattr(self, name)(value)
-                    if replacement is not None:
-                        if type(replacement) is not type(value):
-                            raise TypeError("A dispatch replacement must preserve event identity")
-                        value = replacement
+                    yield getattr(self, name)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+            replacement = await handler(value)
+            if replacement is not None:
+                if type(replacement) is not type(value):
+                    raise TypeError("A dispatch replacement must preserve event identity")
+                value = replacement
+        return value
+
+    def dispatch_sync(self, value: Any) -> Any:
+        """Consume saved presentation facts without introducing an event loop."""
+        for handler in self.handlers_for(value):
+            replacement = handler(value)
+            if replacement is not None:
+                if type(replacement) is not type(value):
+                    raise TypeError("A dispatch replacement must preserve event identity")
+                value = replacement
         return value
