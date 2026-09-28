@@ -400,7 +400,15 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
@@ -446,7 +454,15 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
@@ -476,7 +492,15 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
 async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
@@ -527,7 +551,15 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)

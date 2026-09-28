@@ -30,3 +30,16 @@ Known integration dependencies retained:
 - Owner interruption/followup acceptance still needs the current native steering API from S10. Reproducer source is retained as canonical_followup_probe.py with explicit model-fake boundary. Original behavior assertions were not removed.
 
 Cursor/certificate/checkpoint broad shard reached the60s bound (exit124, no final pytest summary), so remains unverified. Owned .artifacts/integration and test artifacts were removed after a /proc environment scan found no process using that snapshot. Failed/partial logs remain as evidence; no worktree source or live roots were deleted.
+
+## Current-parent continuation (26ec262)
+
+Merged current parent229 into own PR232 as fb1a53b. Eight test merge conflicts were equivalent parent literal SQL names versus S13 declaration-derived names; retained declaration ownership. Parent alias/read changes are present and were not reimplemented.
+
+- Rechecked the requested canonical-marker goal fixture:8 passed,35 deselected (current-parent-goal-fixtures.log). ffbc212 already contains that fix after parent's earlier8908647 merge.
+- Four further ACP standby fixtures now enroll the canonical marker/package/root. Same-ID resume asserts decoded Goal state through FieldCodec instead of retired status projection. Standby/resume/input-drain batch:57 passed (current-parent-standby-fixed.log).
+- Current-parent required guard command:22 passed,2978 deselected (current-parent-guards.log).
+- Native owner_fixture no longer assigns a raw asyncio.Process to PersistentPiSession.proc: it launches AttachedChild and asserts reap plus exact identity death on cleanup. test_input_drain_native also enrolls the canonical marker/root/package.
+- Real Node selected summary -> native commit -> exactly-once original admission:1 passed (current-parent-native-summary-fixture.log). Read-only prepared S9 bundle /home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e477b6db64167e/node_modules/@earendil-works/pi-coding-agent; AC_NATIVE_STACK_BIN points at that worktree's stack/bin/pi-native. Native processes/files/protocol/commit are real; model stream is synthetic and outbound fetch forbidden.
+- Real ACP queue/compaction test remains RED on current parent: current_prompt_input_missing, exit_code0; owner followup remains UNKNOWN. Cleanup assertions pass. Receipt current-parent-native-queue-current-bundle.log, routed to Pascal234 comment5874224892. Do not infer failure on Pascal's newer unintegrated native route; recheck after adoption. No acceptance assertion removed or native proof invented.
+
+Ownership coordination: Nietzsche239 comments5874100662/5874149117 carry current canonical fixture changes and exact remaining goal-input-review driver obligation. That test still references deleted pending/direct_interrupt APIs; policy/projection must be coordinated with Nietzsche/Pascal before migration. Copernicus238 comment5874134611 names the remaining excluded Thread(pid=...) files. Own source and own fixture batch have no remaining Thread(pid=...) constructor calls. External NativeWitness.pid and attach_session OS-boundary PID inputs are distinct and retained.

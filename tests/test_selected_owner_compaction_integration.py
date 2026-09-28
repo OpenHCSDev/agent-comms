@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.backend import PersistentPiSession, _session_revision
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.goals import Goal
@@ -45,15 +45,17 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
     package = Path(PACKAGE)
     launcher = os.environ.get("AC_NATIVE_STACK_BIN", str(package.parents[3] / "bin/pi-native"))
     repo = Path(__file__).resolve().parents[1]
-    child = await asyncio.create_subprocess_exec(
-        "node",
-        str(
-            repo
-            / (
-                "stack/test-native-selected-owner-host.mjs"
-                if real_host
-                else "stack/test-native-selected-compaction-summary.mjs"
-            )
+    child = await AttachedChild.start(
+        (
+            "node",
+            str(
+                repo
+                / (
+                    "stack/test-native-selected-owner-host.mjs"
+                    if real_host
+                    else "stack/test-native-selected-compaction-summary.mjs"
+                )
+            ),
         ),
         env=dict(
             os.environ,
@@ -63,10 +65,6 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
             PR95_KEEP_SOURCE="1",
             TMPDIR=str(tmp_path),
         ),
-        start_new_session=True,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
     )
     persistent = PersistentPiSession()
     persistent.proc = child
@@ -126,6 +124,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
         yield persistent, registry, inputs, file, launcher, info
     finally:
         await persistent.close_idle()
+        assert child.returncode is not None and not child.identity.alive()
 
 
 async def test_selected_native_summary_commits_and_admits_original_exactly_once(
