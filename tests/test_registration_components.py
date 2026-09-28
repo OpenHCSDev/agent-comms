@@ -15,11 +15,12 @@ from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
 def owner(path):
-    return Thread("owner", frozenset(), str(path), pid=os.getpid(), created_at=10.0)
+    return Thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
 
 
 def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
@@ -97,11 +98,11 @@ def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
 import json, os, sys
 from dataclasses import replace
 from pathlib import Path
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.registration import Registration
 import time
 time.time = lambda: 1000.0
-os.getpid = lambda: 54321
 root=Path(sys.argv[1]);root.mkdir()
 r=Registration(root/'registry.json')
 steps=[]
@@ -111,7 +112,7 @@ def capture():
         if thread.get('active_turn'): thread['active_turn']['started_at'] = '<clock>'
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
-r.register(Thread('owner', frozenset({'team'}), str(root), pid=54321, created_at=10.0));capture()
+r.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
 r.register(Thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
 r.register(replace(r.require('owner'), title='metadata'));capture()
 r.lease_local_turn('owner','first');capture()

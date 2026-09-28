@@ -1,0 +1,211 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-l0a-incarnation-delivery-20260928
+configfile: pyproject.toml
+plugins: platformdirs-4.12.0, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 25 items
+
+tests/test_registration_process_identity.py ...                          [ 12%]
+tests/test_registration_components.py ......                             [ 36%]
+tests/test_thread_identity.py .............                              [ 88%]
+tests/test_registry_current_format.py ..                                 [ 96%]
+tests/test_detached_owner.py F                                           [100%]
+
+=================================== FAILURES ===================================
+____ test_new_thread_survives_client_loss_and_reattaches_without_duplicate _____
+
+cls = <class 'agent_comms.registry_document.RegistryDocument'>
+raw = {'threads': {'project': {'name': 'project', 'tags': ['acp'], 'worktree': '/home/ts/wt/comms-l0a-incarnation-delivery-2...s_clien0/project', 'parent': None, ...}}, 'aliases': {}, 'owner_epoch_counter': 2, 'owner_epochs': {'project': 2}, ...}
+
+    @classmethod
+    def from_wire(cls, raw: dict) -> RegistryDocument:
+        try:
+>           document = FieldCodec.decode(cls, raw)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/agent_comms/registry_document.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.registry_document.RegistryDocument'>
+data = {'threads': {'project': {'name': 'project', 'tags': ['acp'], 'worktree': '/home/ts/wt/comms-l0a-incarnation-delivery-2...s_clien0/project', 'parent': None, ...}}, 'aliases': {}, 'owner_epoch_counter': 2, 'owner_epochs': {'project': 2}, ...}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            unknown = set(data) - {key for _, key in declared}
+            if unknown:
+>               raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+E               ValueError: Unknown fields for RegistryDocument: ['admission_generation_counter', 'admission_generations', 'owner_epoch_counter', 'owner_epochs', 'turn_epochs']
+
+src/agent_comms/field_codec.py:222: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-l0a-incarnation-delivery-20260928/.artifacts/process-tests/test_new_thread_survives_clien0')
+
+    @pytest.mark.skipif(os.name == "nt", reason="Named FIFO fixture requires POSIX")
+    async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        gate = tmp_path / "gate"
+        os.mkfifo(gate)
+        program = tmp_path / "slow backend.py"
+        program.write_text(
+            "print('TURN_STARTED', flush=True)\n"
+            f"with open({str(gate)!r}, 'rb') as gate: gate.read(1)\n"
+            "print('TURN_FINISHED', flush=True)\n"
+        )
+        comms = wire(tmp_path / "wire")
+        first = CommsClient(comms, agent_bin=sys.executable, agent_args=[str(program)])
+        second, third = CommsClient(comms), CommsClient(comms)
+        started, settled = asyncio.Event(), asyncio.Event()
+    
+        class Client:
+            async def session_update(self, session_id, update):
+                if "TURN_STARTED" in update.get("content", {}).get("text", ""):
+                    started.set()
+                if update.get("_meta", {}).get("agentComms", {}).get("turnSettled"):
+                    settled.set()
+    
+        first.on_connect(Client())
+        second.on_connect(Client())
+>       response = await first.new_session(str(project))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_detached_owner.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:179: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:314: in new_session
+    loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:332: in load_session
+    return await self.attach_owner(owner, session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:205: in attach_owner
+    metadata = await proxy.subscribe()
+               ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/runtime.py:348: in subscribe
+    reader, metadata = await self._subscribe_once()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/runtime.py:353: in _subscribe_once
+    reader, writer = await self._connect_current()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/runtime.py:328: in _connect_current
+    path = self._owner_path()
+           ^^^^^^^^^^^^^^^^^^
+src/agent_comms/runtime.py:308: in _owner_path
+    snapshot = self._comms.registry.snapshot()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/registration.py:482: in snapshot
+    with self.store.reading() as document:
+         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/locked_store.py:78: in reading
+    yield self._read_unlocked()
+          ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/registry_store.py:58: in _read_unlocked
+    self._decode(json.loads(self.path.read_text()))
+src/agent_comms/registry_store.py:70: in _decode
+    return self.record_type.from_wire(data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.registry_document.RegistryDocument'>
+raw = {'threads': {'project': {'name': 'project', 'tags': ['acp'], 'worktree': '/home/ts/wt/comms-l0a-incarnation-delivery-2...s_clien0/project', 'parent': None, ...}}, 'aliases': {}, 'owner_epoch_counter': 2, 'owner_epochs': {'project': 2}, ...}
+
+    @classmethod
+    def from_wire(cls, raw: dict) -> RegistryDocument:
+        try:
+            document = FieldCodec.decode(cls, raw)
+            # Creation identity is supplied by storage, never synthesized from
+            # the clock or a session file during a read.
+            if any("created_at" not in record for record in raw["threads"].values()):
+                raise ValueError("missing stored creation identity")
+            names = set(document.threads)
+            if names != set(document.statuses) or names != set(document.last_seen):
+                raise ValueError("thread presence does not match declarations")
+            if not names <= document.owners.generations.keys():
+                raise ValueError("missing owner generation")
+            if not names <= document.admissions.generations.keys():
+                raise ValueError("missing admission generation")
+            if any(name != thread.name for name, thread in document.threads.items()):
+                raise ValueError("thread name differs from its declaration")
+            if any(
+                target not in names or alias in names for alias, target in document.aliases.items()
+            ):
+                raise ValueError("alias has no exclusive retained owner")
+            return document
+        except (ValueError, TypeError, KeyError) as error:
+>           raise RelationViolationError(f"Invalid registry document: {error}") from error
+E           agent_comms.errors.RelationViolationError: Invalid registry document: Unknown fields for RegistryDocument: ['admission_generation_counter', 'admission_generations', 'owner_epoch_counter', 'owner_epochs', 'turn_epochs']
+
+src/agent_comms/registry_document.py:116: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_detached_owner.py::test_new_thread_survives_client_loss_and_reattaches_without_duplicate
+========================= 1 failed, 24 passed in 2.72s =========================

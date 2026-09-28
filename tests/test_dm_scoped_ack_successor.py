@@ -10,11 +10,12 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.thread_identity import ThreadRole
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
 def _peer(root: Path, name: str) -> Thread:
-    return Thread(name, frozenset({"talk"}), str(root), pid=os.getpid())
+    return Thread(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def _mark(comms, peer, root, page):

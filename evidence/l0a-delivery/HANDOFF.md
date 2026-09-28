@@ -24,3 +24,14 @@ bus_route_counts.sqlite3 is disposable derived state, rebuilt from canonical bus
 ## Pending validation / handoff
 
 Finalize cold/reopened/idle cost evidence and marked guards; confirm two wider failures on parent base. Parent owns ReadLedger/ThreadIncarnation rename-read closure and all live activation. Initial immutable sender proof is reused; non-initial records retain their existing Message timestamp boundary. No assertion changes in the three specified failures or Toad DM rebind.
+
+## ProcessIdentity caller adoption (requested after initial publication)
+
+Integrated S13 #232 dependency 5d2935f in own branch, retaining parent d0380c6. Input-drain merge resolved using S13 Message import and parent's removed cursor import; no hand edits to its implementation.
+
+- ThreadManagement captures actual ProcessIdentity once when numeric OS PID enters claim/attach/rename; persisted constructors and replacements use only process_identity. Active executor replacement compares whole identity, preserving it during metadata updates. Detached fork declarations have no process binding.
+- RegistryDocument compares whole ProcessIdentity for owner/admission changes and strips process bindings when restoring durable identities into stopped state.
+- Registration live-owner/turn/compaction checks compare the captured calling process identity and expected saved identity, not PID alone.
+- Direct registry tests migrated to actual process capture; removed test's mocked os.getpid and empty fixture PID field.
+- 24 registry/process tests pass, including real OS identity capture, same-PID different-birth refusal, generation rotation, active-owner protection, saved reload and stopped restoration. Seven pending/rebind checks still pass after S13 integration.
+- Actual detached-client new_session now passes former claim_thread TypeError, launches a real worker and reaches prompt. Full prompt/reattach check then times out before its plain backend fixture emits TURN_STARTED; S10 dependency not yet integrated here. No passing end-to-end prompt claim.
