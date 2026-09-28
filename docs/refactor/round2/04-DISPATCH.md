@@ -49,11 +49,18 @@ Audit: evidence/round2-l0/L0B-AUDIT.md (actual production both native workers;
 | Native-only execution and headless entrypoint | Pascal,234 (dependent draft if required) | Delete raw argv/stdout engine and rpc_args_for plus all seven production callers; reuse current native launch and owner lifecycle. Owns InputDrain.run_owned_input only, not parent queue/history regions. Darwin owns paired manual-compaction caller. |
 | Typed-table old transcript import | Cicero,237 | Delete TranscriptRoutes initializer converters and obsolete schema migration; inventory durable annotations and give parent one-shot preservation contract. |
 | Queue projection | Parent229 + CopernicusToad107 | Sole queueBinding/queueState metadata; delete old queue/top-level restored arrays and oldToad reader.12core contract checks pass; paired cancellation/UI acceptance remains. |
-| Goal states, retry grant and wait identities | Nietzsche, new Comms draft pending | Own goal_states/actions/waits/relationships and direct tests, new ~/wt tree fromparent229. Inventory historical unknown facts; parent owns one-shot data conversion. No implicit retry grant recreation. |
+| Goal states, retry grant and wait identities | Nietzsche, new Comms draft pending | Own goal_states/actions/waits/relationships plus input_disposition/input_attempt/goal_management and direct tests, new ~/wt tree fromparent229. Inventory historical unknown facts; parent owns one-shot data conversion. No implicit retry grant recreation. |
 | Remaining process-identity test consumers | Lovelace,232 | Delete stale helper imports and migrate real identity fixtures; preserve process/ACP behavior, no pid adapter. Parent owns native_prompt_binding/coordinated_runtime/private_nk_entrypoint/acp_queue_contract/prompt_queue tests. Copernicus owns DM/registry tests. |
-| Delivery-cursor retirement, UNKNOWN preservation, current history and final activation | Parent229 | Finish input_disposition/input_attempt/goal_management callers and data boundaries; retain evidence without replay. Coordinate goal_actions region withNietzsche. |
+| UNKNOWN preservation, current history and final activation | Parent229 | Integrate Nietzsche delivery-cursor retirement and one-shot data boundaries; retain evidence without replay. Parent owns InputDrain projection and runtime callers. |
 
 Parent229 integrated232+234+235 throughb4cb42a; newer worker commits still need
 integration. Required local guard collection found a stale removed-test import
 in test_acp_owner_interrupt_followup; Lovelace owns the fix. Debt ratchet passes
 (-14type identity,-31long boolean chains,-23string subscripts). No CI wait.
+
+Integrated published2379463a44,234947ab28,2361e46842 into229 at9ff1161.
+14combined checks pass (actual postfloor native4tools, admission reset/rebuild,
+A13/A14 families and S9/S10 guards). Production diff againstmain at this head:
+5,837added/7,504deleted across87files. Not fullsuiteorinstalled acceptance.
+S9's actualsaved-session parentUUID decoder failure remainsPascal's fix;
+ThreadManagement ProcessIdentity/DMincarnation bug remainsCopernicus's fix.

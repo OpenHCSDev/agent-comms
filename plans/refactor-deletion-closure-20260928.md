@@ -209,3 +209,10 @@ Complete newly uncovered L0 ownership is recorded in round2/04-DISPATCH.md;
 Nietzsche's new goal-state batch needs a code-bearing PR before assignment is
 considered published. Full required guard collection is not yet green: one stale
 helper import is assigned toLovelace. The independent debt ratchet passes.
+
+Further integration at9ff1161:2379463a44 +234947ab28 +2361e46842 merged
+into229.14focused combined cases pass, including actualpostfloor4tools.
+Production source+5837/-7504; fullsuite andinstalledacceptance remainopen.
+Nietzsche now owns complete goal/input/cursor retirement, including the three
+input_disposition/input_attempt/goal_management files formerly parent-owned.
+Parent retains final data conversion, runtime/queue integration andactivation.
