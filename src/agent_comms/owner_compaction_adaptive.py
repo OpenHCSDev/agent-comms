@@ -59,7 +59,7 @@ async def maybe_compact_owner_turn(
     original input is durable but provably unbound; the bridge permits only
     that one row and rechecks every ingress revision at native commit.
     """
-    owner, epoch = registry.live_owner_with_epoch(thread_name)
+    owner, epoch = registry.live_owner_with_generation(thread_name)
     if (
         owner.active_turn is None
         or owner.active_turn.id != turn_id
@@ -224,11 +224,11 @@ async def maybe_compact_owner_turn(
     async def summarize(prepared: PreparedOwnerSummary) -> str | OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
-        current, current_epoch = registry.live_owner_with_epoch(thread_name)
+        current, current_epoch = registry.live_owner_with_generation(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive model, owner or settings changed")
         text = await summary_strategy(prepared)
-        current, current_epoch = registry.live_owner_with_epoch(thread_name)
+        current, current_epoch = registry.live_owner_with_generation(thread_name)
         if current != owner or current_epoch != epoch or await decision() != settings:
             raise RelationViolationError("Adaptive source changed after summary")
         return text

@@ -2,14 +2,17 @@
 
 This is a value contract, not an assertion that fetching a page paints it. A
 client acknowledges it only after paint. DM participant identity deliberately
-uses (name, created_at), not ownership or turn counters; S5 owns richer identity.
+uses ThreadIncarnation; process and turn generations do not alter provenance.
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from typing import TYPE_CHECKING
+
+from .field_codec import FieldCodec
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .declarations import RegistrySnapshot
@@ -18,17 +21,26 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True)
 class Conversation:
     target: str = ""
-    participants: tuple[tuple[str, float], ...] = ()
+    participants: tuple[ThreadIncarnation, ...] = ()
 
     def current(self, snapshot: RegistrySnapshot) -> bool:
-        return all(
-            (
-                name not in snapshot.threads
-                if created == -1.0
-                else name in snapshot.threads and snapshot.threads[name].created_at == created
-            )
-            for name, created in self.participants
-        )
+        return all(participant.current(snapshot) for participant in self.participants)
+
+    def to_wire(self) -> dict:
+        """Retain the positional persisted encoding for an already-open UI."""
+        data = FieldCodec.encode(self)
+        data["participants"] = [list(astuple(participant)) for participant in self.participants]
+        return data
+
+    @classmethod
+    def from_wire(cls, raw: dict) -> Conversation:
+        """Read the old S4 pair format once, at the persisted-key boundary."""
+        data = dict(raw)
+        data["participants"] = [
+            {"name": item[0], "created_at": item[1]} if isinstance(item, list) else item
+            for item in data.get("participants", [])
+        ]
+        return FieldCodec.decode(cls, data)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +55,10 @@ class DisplayBasis:
     viewer_created_at: float
     conversations: tuple[DisplayedConversation, ...]
     bus_identity: tuple[int, int] | None
+
+    @property
+    def viewer_identity(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.viewer, self.viewer_created_at)
 
     def select(self, sequences: Collection[int]) -> DisplayBasis:
         """Retain painted members of this proof; never introduce new sequences."""
@@ -81,7 +97,7 @@ class DisplayBasis:
         if (
             viewer != self.viewer
             or thread is None
-            or thread.created_at != self.viewer_created_at
+            or thread.incarnation != self.viewer_identity
             or bus_identity != self.bus_identity
             or any(not item.conversation.current(snapshot) for item in self.conversations)
         ):
