@@ -97,6 +97,7 @@ class SummaryResult(PiPayload):
     def __post_init__(self):
         if not self.summary.strip():
             raise ValueError("Invalid selected native summary")
+        self.summary.encode("utf-8")  # Validate text, without a second output-size policy.
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -302,6 +302,7 @@ class OwnerCompactionCommit:
                 inode=str(held.st_ino),
             ),
         )
+        payload = json.dumps(request, ensure_ascii=False, allow_nan=False).encode("utf-8")
         result = run_authority_child(
             [
                 self.environment_launcher,
@@ -319,8 +320,9 @@ class OwnerCompactionCommit:
                 str(self.helper),
                 str(self.package_dir),
                 str(fd),
+                str(len(payload)),
             ],
-            json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
+            payload,
             authority_fd=fd,
             timeout=timeout,
             retained_fds=retained_fds,
@@ -438,9 +440,9 @@ class OwnerCompactionCommit:
                 source=FieldCodec.project(source, "journal"),
             )
             if selected_attempt is not None:
+                selected_attempt.state.require_commit_reservation()
                 if (
                     self.journal.selected_summary(selected_attempt.operation_id) != selected_attempt
-                    or not selected_attempt.state.reservable_commit
                     or selected_attempt.session_file != witness.session_file
                 ):
                     raise CompactionJournalError(

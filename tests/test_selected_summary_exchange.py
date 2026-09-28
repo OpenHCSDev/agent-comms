@@ -50,6 +50,8 @@ usage=dict.fromkeys(['input','output','cacheRead','cacheWrite','totalTokens'],0)
 usage['cost']=cost
 result=dict(summary='native summary',firstKeptEntryId=r['witness']['firstKeptEntryId'],
             tokensBefore=1200,details=dict(readFiles=['foo.py'],modifiedFiles=[]),usage=usage)
+if mode=='many-files':
+    result['details']['readFiles']=[f'{n}/'+'x'*3990 for n in range(3800)]
 if mode=='tokens': result['tokensBefore']=True
 if mode=='file': result['details']['readFiles']=['bad\0path']
 if mode=='surrogate': result['summary']='\ud800'
@@ -371,3 +373,19 @@ async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(t
     async with selected(other, "decline") as (run, _, journal, file, received):
         await run()
         assert "customInstructions" not in json.loads(received.read_text())
+
+
+async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
+    async with selected(tmp_path, "foreign-progress") as (run, persistent, journal, file, _):
+        with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
+            await run(idle_timeout_seconds=.06)
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert persistent.proc is None
+
+
+async def test_selected_frame_uses_transport_without_retired_file_count_budget(tmp_path):
+    async with selected(tmp_path, "many-files") as (run, persistent, journal, file, _):
+        result = await run()
+        assert len(result.summary.details["readFiles"]) == 3800
+        assert persistent.proc.returncode is None
+        assert journal.blocking_selected_summary(str(file))
