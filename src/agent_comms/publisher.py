@@ -32,6 +32,7 @@ from .envelope_claim_transitions import (
 from .errors import (
     ClaimEnvelopeUnknownError,
     HumanInitialUnknownError,
+    HumanAdmissionBlockedError,
     RelationViolationError,
     UnregisteredThreadError,
 )
@@ -404,7 +405,7 @@ class Publisher:
                 duplicate = False
                 for previous, _, _ in self.log._verified_private_rows_unlocked(metadata):
                     if previous.seq != expected_sequence:
-                        raise RelationViolationError(
+                        raise HumanAdmissionBlockedError(
                             "Private bus sequence gap has UNKNOWN outcome; "
                             "human send blocked, do not retry."
                         )
@@ -413,7 +414,7 @@ class Publisher:
                         previous.sender == sender and previous.message_id == stored.message_id
                     )
                 if metadata.last_seq != expected_sequence - 1:
-                    raise RelationViolationError(
+                    raise HumanAdmissionBlockedError(
                         "Private bus sequence reservation has UNKNOWN outcome; "
                         "human send blocked, do not retry."
                     )
