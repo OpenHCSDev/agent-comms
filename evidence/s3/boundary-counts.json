@@ -1,0 +1,36 @@
+{
+  "paths": [
+    "src/agent_comms/attempt_states.py",
+    "src/agent_comms/claim_states.py",
+    "src/agent_comms/coordinated_runtime.py",
+    "src/agent_comms/coordination.py",
+    "src/agent_comms/coordination_cohort.py",
+    "src/agent_comms/coordination_errors.py",
+    "src/agent_comms/coordination_response.py",
+    "src/agent_comms/coordination_store.py",
+    "src/agent_comms/durable_turn.py",
+    "src/agent_comms/execution_states.py",
+    "src/agent_comms/field_codec.py",
+    "src/agent_comms/native_pi.py",
+    "src/agent_comms/obligation_states.py",
+    "src/agent_comms/recovery_gateway.py",
+    "src/agent_comms/recovery_gateway_client.py",
+    "src/agent_comms/recovery_projection.py",
+    "src/agent_comms/recovery_states.py",
+    "src/agent_comms/state_tags.py",
+    "src/agent_comms/wake_injection.py",
+    "src/agent_comms/wake_policy.py"
+  ],
+  "before": {
+    "string_key_reads": 207,
+    "get_calls": 101,
+    "type_calls": 172,
+    "boolean_chains_4plus": 64
+  },
+  "after": {
+    "string_key_reads": 174,
+    "get_calls": 101,
+    "type_calls": 169,
+    "boolean_chains_4plus": 60
+  }
+}

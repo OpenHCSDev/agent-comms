@@ -1,0 +1,1 @@
+68 snapshot projections and 324 legality cases identical; legacy database reopened without schema rewrite

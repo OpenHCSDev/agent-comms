@@ -13,12 +13,8 @@ from typing import Literal
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .coordination import (
-    ClaimDisposition,
-    ObligationState,
     ResponseObligation,
-    TriageVerdict,
     WakeClaim,
-    WakeMode,
 )
 from .coordination_store import IdentityConflict
 from .declarations import Thread
@@ -40,11 +36,7 @@ def render_selected_wake_frame(
     A bounded triage has no response obligation until it engages FULL work.
     """
     if (
-        type(initial) is not CommittedInitial
-        or type(claim) is not WakeClaim
-        or type(owner) is not Thread
-        or type(phase) is not str
-        or phase not in {"triage", "full"}
+        phase not in {"triage", "full"}
         or claim.wire_seq != initial.message.seq
         or claim.message_id != initial.message.message_id
         or claim.recipient != owner.name
@@ -56,7 +48,7 @@ def render_selected_wake_frame(
         for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True)
         if recipient.recipient_lookup == claim.recipient_lookup
         and recipient.canonical_thread == owner.name
-        and type(decision) is WakeDecision
+        and isinstance(decision, WakeDecision)
         and decision.recipient == claim.recipient_lookup
         and decision.audience is claim.audience
         and decision.wake_mode is claim.wake_mode
@@ -64,30 +56,21 @@ def render_selected_wake_frame(
     if len(selected) != 1:
         raise IdentityConflict("wake frame requires one selected N/K recipient")
     if phase == "triage":
-        if (
-            claim.wake_mode is not WakeMode.BOUNDED_TRIAGE
-            or claim.disposition is not ClaimDisposition.TRIAGE_PENDING
-            or obligation is not None
-        ):
+        if not claim.lifecycle.triage_pending or obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
-        expectation = "engage only if this concerns your assigned task; otherwise IGNORE"
+        expectation = claim.lifecycle.mode.triage_expectation()
         obligation_line = "No response obligation exists until triage engages."
     else:
         target = derive_exact_reply_target(initial.message)
         if (
-            claim.wake_mode not in {WakeMode.FULL, WakeMode.BOUNDED_TRIAGE}
-            or claim.disposition is not ClaimDisposition.ENGAGED
-            or (
-                claim.wake_mode is WakeMode.BOUNDED_TRIAGE
-                and claim.triage_verdict is not TriageVerdict.ENGAGE
-            )
-            or type(obligation) is not ResponseObligation
-            or obligation.state is not ObligationState.PENDING
+            not claim.lifecycle.engaged
+            or obligation is None
+            or not obligation.lifecycle.pending
             or obligation.exact_target != target
             or claim.execution_id != obligation.execution_id
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
-        expectation = "this is yours; answer the original committed message"
+        expectation = claim.lifecycle.mode.full_expectation()
         obligation_line = "you owe a response: " + json.dumps(
             {
                 "target": obligation.exact_target,

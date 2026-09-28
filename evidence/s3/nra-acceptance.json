@@ -1,0 +1,38 @@
+{
+  "exit_code": 0,
+  "paths": [
+    "src/agent_comms/attempt_states.py",
+    "src/agent_comms/claim_states.py",
+    "src/agent_comms/coordinated_runtime.py",
+    "src/agent_comms/coordination.py",
+    "src/agent_comms/coordination_cohort.py",
+    "src/agent_comms/coordination_errors.py",
+    "src/agent_comms/coordination_response.py",
+    "src/agent_comms/coordination_store.py",
+    "src/agent_comms/durable_turn.py",
+    "src/agent_comms/execution_states.py",
+    "src/agent_comms/field_codec.py",
+    "src/agent_comms/native_pi.py",
+    "src/agent_comms/obligation_states.py",
+    "src/agent_comms/recovery_gateway.py",
+    "src/agent_comms/recovery_gateway_client.py",
+    "src/agent_comms/recovery_projection.py",
+    "src/agent_comms/recovery_states.py",
+    "src/agent_comms/state_tags.py",
+    "src/agent_comms/wake_injection.py",
+    "src/agent_comms/wake_policy.py"
+  ],
+  "context_root": "src/agent_comms",
+  "finding_count": 0,
+  "finding_payload_mode": "full",
+  "scan_status_emitted": false,
+  "timing": {
+    "parse_seconds": 0.707,
+    "analysis_seconds": 4.816,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.311,
+    "analysis_cache_status": "partial",
+    "total_seconds": 5.834
+  },
+  "proof_limit": "Authored behavioral changes verified by local execution and replay; not an NRA native equivalence proof."
+}
