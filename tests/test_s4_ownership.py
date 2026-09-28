@@ -32,8 +32,8 @@ def test_alias_declaration_drives_lookup_delivery_history_and_audience(monkeypat
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
         comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
-    assert "everyone" in comms.channels.catalog.targets_for(frozenset())
-    assert "everyone" in comms.channels.catalog.history_targets("everyone")
+    assert "everyone" in comms.channels.catalog.read().targets_for(frozenset())
+    assert "everyone" in comms.channels.catalog.read().history_targets("everyone")
     message = Message("alice", "everyone", "hello", MessageType.INFO, sender_role=ThreadRole.USER)
     assert message.response_policy.starts_turn
     comms.bus.publisher.publish(message).message_id
@@ -102,7 +102,13 @@ def test_legacy_markers_without_shown_membership_reset_with_visible_notice(tmp_p
 
 def test_authorities_do_not_import_presentation_or_recover_policy_cases():
     root = Path(__file__).resolve().parents[1] / "src" / "agent_comms"
-    for name in ("messages.py", "message_bus.py", "read_basis.py", "read_ledger.py", "response_policy.py"):
+    for name in (
+        "messages.py",
+        "message_bus.py",
+        "read_basis.py",
+        "read_ledger.py",
+        "response_policy.py",
+    ):
         tree = ast.parse((root / name).read_text())
         assert not any(
             isinstance(node, ast.ImportFrom) and node.module == "presentation"

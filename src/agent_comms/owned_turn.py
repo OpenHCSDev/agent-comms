@@ -274,7 +274,9 @@ class OwnedTurn:
             canonical = snapshot.aliases.get(self.thread_name, self.thread_name)
             current = snapshot.threads.get(canonical)
             current_goal = current.goal if current is not None else None
-            current_wait = self.runner.comms.goals.goal_wait(canonical) if current is not None else None
+            current_wait = (
+                self.runner.comms.goals.goal_wait(canonical) if current is not None else None
+            )
             if self.goal is not None and self.goal.state.active:
                 goal_ok = (
                     current_goal is not None
@@ -361,7 +363,7 @@ class OwnedTurn:
                     owner_ok = self.runner.inputs.passive_awareness.still_current(
                         current,
                         snapshot,
-                        self.runner.comms.channels.catalog.targets_for(current.tags),
+                        self.runner.comms.channels.catalog.read().targets_for(current.tags),
                         self.passive_sources,
                     )
                 except (OSError, TypeError, ValueError):
@@ -682,7 +684,9 @@ class OwnedTurn:
                         self.passive_frame = self.runner.inputs.passive_awareness.frame(
                             self.current_thread,
                             self.snapshot,
-                            self.runner.comms.channels.catalog.targets_for(self.current_thread.tags),
+                            self.runner.comms.channels.catalog.read().targets_for(
+                                self.current_thread.tags
+                            ),
                         )
                         if self.passive_frame:
                             self.passive_sources = self.runner.inputs.passive_awareness.sources(

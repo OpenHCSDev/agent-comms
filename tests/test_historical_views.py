@@ -138,7 +138,9 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0
     assert live.registry.require("alice").created_at == 20.0
-    page = live.transcripts.thread_transcript_page("alice", historical_source=source.key, max_messages=1)
+    page = live.transcripts.thread_transcript_page(
+        "alice", historical_source=source.key, max_messages=1
+    )
     assert [e.text for e in page.events] == ["old answer"]
     earlier = live.transcripts.thread_transcript_page(
         "alice", historical_source=source.key, before=page.before, max_messages=1
@@ -149,7 +151,9 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
 
 def test_byte_boundaries_and_stale_cursor(migrated):
     _, _, live, source = migrated
-    page = live.views.channel_display_page("#team", before=HistoryCursor(source.key, 100), max_bytes=1)
+    page = live.views.channel_display_page(
+        "#team", before=HistoryCursor(source.key, 100), max_bytes=1
+    )
     assert len(page.messages) == 1
     assert page.has_older
     with pytest.raises(ValueError):
@@ -166,7 +170,7 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
         if isinstance(message, HistoricalMessage):
             assert not message.starts_turn
             assert not message.starts_turn_for("bob")
-            assert message.to_display_wire()["history"]["source"] == message.source.original_root
+            assert message.display_metadata["history"]["source"] == message.source.original_root
     assert len(live.bus.log.full_history()) == 4
 
 

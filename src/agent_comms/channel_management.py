@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .active_route import guard_legacy_root_write
-from .channels import ChannelCatalog
+from .catalog_store import ChannelCatalog
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ class TagAction(Enum):
                 channels.rename_tag(name, new_name)
             case self.DELETE:
                 channels.delete_tag(name)
-        return channels.catalog.tags()
+        return channels.catalog.read().all_tags(channels.registry.all_threads())
 
 
 class ChannelManagement:
@@ -53,26 +53,23 @@ class ChannelManagement:
         self.registry = registry
         self.bus = bus
         self._wire_lock_path = root / "wire"
-        self.catalog = ChannelCatalog(root / "channels.json", registry)
+        self.catalog = ChannelCatalog(root / ChannelCatalog.filename)
 
     def channels(self) -> Sequence[str]:
-        return list(self.catalog.views())
+        return list(self.catalog.read().views(self.registry.all_threads()))
 
     def _require_available_new_tags(self, proposed: frozenset[str]) -> None:
-        """Validate every tag identity before any enclosing state mutation."""
-        known = self.catalog.tags()
-        for tag in proposed - known:
-            self.catalog.require_available_tag_name(tag)
+        document = self.catalog.read()
+        threads = self.registry.all_threads()
+        for tag in proposed - document.all_tags(threads):
+            document.require_available_tag_name(tag, threads)
 
     def create_tag(self, name: str) -> Tag:
         tag = Tag(name)
         with _store_lock(self._wire_lock_path):
-            self.catalog.require_available_name(tag.name)
-            if tag.name in self.catalog.tags():
-                return tag
-            self.catalog.require_available_tag_name(tag.name)
-            tags, channels = self.catalog.read()
-            self.catalog.write(tags | {tag.name}, channels)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                document.create_tag(tag.name, threads)
         return tag
 
     def _rebase_passive_channel_scope(self, name: str) -> None:
@@ -96,7 +93,7 @@ class ChannelManagement:
                 owner,
                 admission=snapshot.admission_generations[owner.name],
                 high_water=self.bus.log.latest_sequence(),
-                channels=self.catalog.targets_for(owner.tags),
+                channels=self.catalog.read().targets_for(owner.tags),
             )
 
     def update_tags(
@@ -107,13 +104,17 @@ class ChannelManagement:
         with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
             self._require_available_new_tags(add)
             thread = self.registry.require(name)
-            previous_channels = self.catalog.views()
+            previous_channels = self.catalog.read().views(self.registry.all_threads())
             updated = replace(thread, tags=(thread.tags | add) - remove)
             self.registry.register(updated, self.registry.status(thread.name))
             updated = self.registry.require(thread.name)
-            self.catalog.remember_tags(add, time.time())
+            with self.catalog.editing() as document:
+                document.remember_tags(add, time.time())
             if thread.role.executable and thread.tags != updated.tags:
-                channels = {**previous_channels, **self.catalog.views()}
+                channels = {
+                    **previous_channels,
+                    **self.catalog.read().views(self.registry.all_threads()),
+                }
                 for channel in channels.values():
                     before, after = channel.matches(thread.tags), channel.matches(updated.tags)
                     if before != after:
@@ -132,86 +133,81 @@ class ChannelManagement:
             return updated
 
     def set_channel(self, name: str, tags: frozenset[str]) -> Channel:
+        channel = Channel(name, tags)
         with _store_lock(self._wire_lock_path):
-            self.catalog.require_available_name(name)
-            previous = self.catalog.resolve(name if name.startswith("#") else f"#{name}")
-            channel = Channel(name, tags, previous.order)
-            if channel.builtin is not None:
-                raise ValueError("Built-in channels cannot be changed.")
-            name_tag = channel.name.removeprefix("#")
-            if name_tag in self.catalog.tags() and channel.tags != frozenset({name_tag}):
-                raise ValueError(
-                    "A named compatibility audience cannot replace an exact tag channel."
-                )
-            self._require_available_new_tags(channel.tags)
-            known, channels = self.catalog.read()
-            channels[channel.name] = channel
-            self.catalog.write(known | channel.tags, channels)
-            return self.catalog.resolve(channel.name)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                document.set_channel(channel, threads)
+                return document.resolve(channel.name)
 
     def set_saved_view(self, view: SavedView) -> SavedView:
         with _store_lock(self._wire_lock_path):
-            return self.catalog.set_view(view)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                document.set_view(view, threads)
+        return view
 
     def delete_saved_view(self, name: str) -> None:
-        with _store_lock(self._wire_lock_path):
-            self.catalog.delete_view(name)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            document.delete_view(name)
 
     def set_channel_metadata(self, name: str, *, parent: str | None, archived: bool) -> Channel:
         with _store_lock(self._wire_lock_path):
-            return self.catalog.set_metadata(name, parent=parent, archived=archived)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                return document.set_metadata(name, threads, parent=parent, archived=archived)
 
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
-        """Local UI preference, not same-user authentication or a routing decision."""
         with _store_lock(self._wire_lock_path):
-            return self.catalog.set_any_mode(name, enabled)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                return document.set_any_mode(name, enabled, threads)
 
     def set_channel_sort(self, name: str, order: ThreadSort) -> Channel:
         with _store_lock(self._wire_lock_path):
-            return self.catalog.set_order(name, order)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                return document.set_preferences(name, threads, order=order)
 
     def set_channel_order(self, order: ChannelSort) -> ChannelSort:
-        """Persist channel-list ordering independently of each channel's members."""
-        with _store_lock(self._wire_lock_path):
-            return self.catalog.set_list_order(order)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            document.list_order = order
+        return order
 
     def set_channel_pinned(self, name: str, pinned: bool) -> Channel:
         with _store_lock(self._wire_lock_path):
-            return self.catalog.set_pinned(name, pinned)
+            threads = self.registry.all_threads()
+            with self.catalog.editing() as document:
+                return document.set_preferences(name, threads, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
         canonical_channel = channel if channel.startswith("#") else f"#{channel}"
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            view = self.catalog.views().get(canonical_channel)
-            if view is None:
-                raise ValueError(f"Unknown channel: {canonical_channel!r}")
-            if pinned and (
-                not view.matches(thread.tags)
-                or not thread.role.executable
-                or not self.registry.status(thread.name).visible
-            ):
-                raise ValueError(f"Thread {thread.name!r} is not a member of {canonical_channel}.")
-            self.catalog.set_thread_pinned(canonical_channel, thread.name, pinned)
+            snapshot = self.registry.snapshot()
+            with self.catalog.editing() as document:
+                view = document.views(snapshot.threads).get(canonical_channel)
+                if view is None:
+                    raise ValueError(f"Unknown channel: {canonical_channel!r}")
+                if pinned and (
+                    not view.matches(thread.tags)
+                    or not thread.role.executable
+                    or not snapshot.statuses[thread.name].visible
+                ):
+                    raise ValueError(
+                        f"Thread {thread.name!r} is not a member of {canonical_channel}."
+                    )
+                document.set_thread_pinned(canonical_channel, thread.name, pinned)
 
     def delete_channel(self, name: str) -> None:
         canonical = name if name.startswith("#") else f"#{name}"
-        if BuiltinChannel.lookup(canonical):
-            raise ValueError("Built-in channels cannot be deleted.")
-        with _store_lock(self._wire_lock_path):
-            tags, channels = self.catalog.read()
-            if canonical not in channels:
-                raise ValueError("This is an automatic tag view; manage its tag instead.")
-            del channels[canonical]
-            self.catalog.remove_channel(
-                canonical, remove_metadata=canonical.removeprefix("#") not in tags
-            )
-            self.catalog.write(tags, channels)
+        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            document.delete_channel(canonical)
 
     def rename_tag(self, name: str, new_name: str) -> None:
         Tag(new_name)
         if name == new_name:
-            if name not in self.catalog.tags():
+            if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")
             return
         self._change_tag(name, new_name)
@@ -222,12 +218,14 @@ class ChannelManagement:
     def _change_tag(self, name: str, replacement: str | None) -> None:
         Tag(name)
         with _store_lock(self._wire_lock_path):
-            if name not in self.catalog.tags():
+            if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")
             if replacement is None:
-                self.catalog.require_unreferenced_tag(name)
+                self.catalog.read().require_unreferenced_tag(name)
             else:
-                self.catalog.require_available_tag_name(replacement, previous=name)
+                self.catalog.read().require_available_tag_name(
+                    replacement, self.registry.all_threads(), previous=name
+                )
 
             def changed(tags: frozenset[str]) -> frozenset[str]:
                 return (tags - {name}) | ({replacement} if name in tags and replacement else set())
@@ -238,23 +236,5 @@ class ChannelManagement:
                         replace(thread, tags=changed(thread.tags)),
                         self.registry.status(thread.name),
                     )
-            tags, channels = self.catalog.read()
-            updated_channels: dict[str, Channel] = {}
-            previous_target = f"#{name}"
-            replacement_target = f"#{replacement}" if replacement else None
-            for key, channel in channels.items():
-                if selected := changed(channel.tags):
-                    target = (
-                        replacement_target
-                        if replacement_target and key == previous_target and channel.exact
-                        else key
-                    )
-                    updated_channels[target] = replace(channel, name=target, tags=selected)
-                else:
-                    self.catalog.remove_channel(key)
-            if replacement_target:
-                self.catalog.rename_tag_channel(previous_target, replacement_target)
-            else:
-                self.catalog.remove_channel(previous_target)
-            self.catalog.change_tag_metadata(name, replacement)
-            self.catalog.write(changed(tags), updated_channels)
+            with self.catalog.editing() as document:
+                document.change_tag(name, replacement)
