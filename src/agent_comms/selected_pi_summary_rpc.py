@@ -14,13 +14,13 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .backend import PersistentPiSession, _session_revision
+from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournal
 from .fresh_private_session import FreshPrivateSession
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_provider import NativeSummary
 from .pi_commands import AgentCommsSummarizeCompaction
-from .pi_events import Response
+from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
 from .pi_summary_payloads import SummaryDeclinedData, SummarySummarizedData, SummaryUnknownData
 from .selected_pi_child_deadline import SelectedChildUnknown, arm_selected_child
@@ -103,7 +103,7 @@ class SelectedSummarySlot:
         tokens_before: int,
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
-        timeout_seconds: float = 90.0,
+        idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
     ) -> SelectedSummaryResult:
         """Reserve durably, exchange once, and leave settlement to the owner.
 
@@ -129,7 +129,7 @@ class SelectedSummarySlot:
             or type(tokens_before) is not int
             or not 0 <= tokens_before <= 2**53 - 1
             or not expected_launcher
-            or not 0 < timeout_seconds <= 90
+            or not 0 < idle_timeout_seconds < float("inf")
         ):
             raise ValueError("Exact selected owner, session and bounded deadline required")
         async with self.lock, persistent.lock:
@@ -162,9 +162,22 @@ class SelectedSummarySlot:
             # death; retain it for exact commit linkage on a complete result.
             try:
                 proc.stdin.write(PiRpcChannel.command_bytes(request))
-                async with asyncio.timeout(timeout_seconds):
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + idle_timeout_seconds
+                sequence = 0
+                async with asyncio.timeout_at(deadline):
                     await proc.stdin.drain()
-                    raw = await reader.readline(max_bytes=_MAX_RESPONSE)
+                while True:
+                    async with asyncio.timeout_at(deadline):
+                        raw = await reader.readline(max_bytes=_MAX_RESPONSE)
+                    event = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE)
+                    if not isinstance(event, AgentCommsCompactionProgress):
+                        break
+                    if event.id != request.id or event.operation_id != operation:
+                        raise SelectedChildUnknown("Foreign selected compaction progress")
+                    if event.sequence > sequence:
+                        sequence = event.sequence
+                        deadline = loop.time() + idle_timeout_seconds
                 result = _summary_response(raw, request, tokens_before)
                 if proc.returncode is not None or _session_revision(session_file) != revision:
                     raise SelectedChildUnknown("Selected source changed during summary")
@@ -188,7 +201,7 @@ class SelectedSummarySlot:
                     raise
                 if isinstance(error, TimeoutError):
                     raise SelectedChildUnknown(
-                        f"Selected summary timed out after {timeout_seconds:g} seconds; "
+                        f"Selected summary made no progress for {idle_timeout_seconds:g} seconds; "
                         "outcome uncertain, input not retried"
                     ) from error
                 raise SelectedChildUnknown(
