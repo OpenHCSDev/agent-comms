@@ -11,7 +11,7 @@ import json
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .native_package import verify_native_package
@@ -76,27 +76,25 @@ class PiSettingsEvidenceError(ValueError):
 @dataclass(frozen=True)
 class PiCompactionDecision:
     enabled: bool
-    reserve_tokens: int
-    keep_recent_tokens: int
+    reserve_tokens: int = field(metadata={"wire_name": "reserveTokens"})
+    keep_recent_tokens: int = field(metadata={"wire_name": "keepRecentTokens"})
     trigger: bool
+
+    def __post_init__(self):
+        if (
+            not 0 <= self.reserve_tokens <= 10_000_000
+            or not 0 < self.keep_recent_tokens <= 10_000_000
+        ):
+            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision")
 
     @classmethod
     def from_native(cls, data: object) -> PiCompactionDecision:
-        """Decode the native decision at its external boundary."""
-        if (
-            not isinstance(data, dict)
-            or set(data) != {"enabled", "reserveTokens", "keepRecentTokens", "trigger"}
-            or type(data["enabled"]) is not bool
-            or type(data["trigger"]) is not bool
-            or type(data["reserveTokens"]) is not int
-            or not 0 <= data["reserveTokens"] <= 10_000_000
-            or type(data["keepRecentTokens"]) is not int
-            or not 0 < data["keepRecentTokens"] <= 10_000_000
-        ):
-            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision")
-        return cls(
-            data["enabled"], data["reserveTokens"], data["keepRecentTokens"], data["trigger"]
-        )
+        from .field_codec import FieldCodec
+
+        try:
+            return FieldCodec.decode(cls, data)
+        except (ValueError, TypeError) as error:
+            raise PiSettingsEvidenceError("Invalid effective Pi compaction decision") from error
 
 
 def read_compaction_decision(

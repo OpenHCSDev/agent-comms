@@ -1,0 +1,62 @@
+............................................F
+=================================== FAILURES ===================================
+_ TestRpcParsing.test_invalid_successful_final_rolls_back_provisional[0-True-None] _
+
+self = <test_backend.TestRpcParsing object at 0x7f9a55a37ca0>
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-137/test_invalid_successful_final_6')
+prior = None, invalid = True, stats = 0
+
+    @pytest.mark.parametrize("prior", [None, 150])
+    @pytest.mark.parametrize("invalid", ["missing", 0, -1, True, "200", None, 12.5])
+    @pytest.mark.parametrize("stats", [0, None, 55])
+    async def test_invalid_successful_final_rolls_back_provisional(
+        self, tmp_path, prior, invalid, stats
+    ):
+        final = {"role": "assistant", "stopReason": "stop"}
+        if invalid != "missing":
+            final["usage"] = {"totalTokens": invalid}
+        records = []
+        if prior is not None:
+            records.append(
+                {
+                    "type": "message_end",
+                    "message": {
+                        "role": "assistant",
+                        "stopReason": "toolUse",
+                        "usage": {"totalTokens": prior},
+                    },
+                }
+            )
+        records.extend(
+            [
+                {
+                    "type": "message_update",
+                    "message": {"role": "assistant"},
+                    "usage": {"totalTokens": 300},
+                    "assistantMessageEvent": {"type": "thinking_delta", "delta": "A"},
+                },
+                {"type": "message_end", "message": final},
+                {"type": "agent_settled"},
+                {
+                    "type": "response",
+                    "command": "get_session_stats",
+                    "success": True,
+                    "data": {"contextUsage": {"tokens": stats}},
+                },
+            ]
+        )
+        events = await _rpc_events(tmp_path, records)
+        used = [e.context_used for e in events if isinstance(e, ae.AgentInfo)]
+>       assert used == (
+            ([prior] if prior is not None else []) + [300, prior, 55 if stats == 55 else prior]
+        )
+E       assert [300] == [300, None, None]
+E         
+E         Right contains 2 more items, first extra item: None
+E         Use -v to get more diff
+
+tests/test_backend.py:679: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_backend.py::TestRpcParsing::test_invalid_successful_final_rolls_back_provisional[0-True-None]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 44 passed in 0.84s

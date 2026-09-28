@@ -1,0 +1,1700 @@
+{
+  "source_candidate_bounded_parser": true,
+  "sessions": 88,
+  "read_ok": 88,
+  "results": [
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "agent-comms-ux"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "agent-comms-ux"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+          "name": "agent-comms-ux"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 143190819,
+      "after": 143224441,
+      "older_events": 35,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T19-51-51-833Z_01a0df46-2719-75de-a6cc-69e67e0d2907.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr108-admission-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr108-admission-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+          "name": "pr108-admission-owner"
+        }
+      ],
+      "events": 22,
+      "has_older": true,
+      "before": 134566631,
+      "after": 134630028,
+      "older_events": 19,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-27-22-936Z_01a0d1e1-fa37-75a4-a458-88403bfec9eb.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr48-adaptive-compaction-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr48-adaptive-compaction-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+          "name": "pr48-adaptive-compaction-owner"
+        }
+      ],
+      "events": 9,
+      "has_older": true,
+      "before": 117299772,
+      "after": 117321405,
+      "older_events": 1,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T06-50-29-357Z_01a0e1a1-246c-71df-b675-cbf2733c4d35.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-incumbent-effect-successor"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-incumbent-effect-successor"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+          "name": "pr94-incumbent-effect-successor"
+        }
+      ],
+      "events": 32,
+      "has_older": true,
+      "before": 143514721,
+      "after": 143577143,
+      "older_events": 10,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T20-05-37-482Z_01a0df52-c049-764c-adc0-e1b8e606553b.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-selected-pi-summary-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-selected-pi-summary-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+          "name": "pr95-selected-pi-summary-owner"
+        }
+      ],
+      "events": 33,
+      "has_older": true,
+      "before": 141094718,
+      "after": 141158193,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T16-00-34-142Z_01a0de72-655d-7780-b180-f1d0f103662f.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "acp-send-reliability-triage"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "acp-send-reliability-triage"
+        }
+      ],
+      "events": 33,
+      "has_older": true,
+      "before": 1350203,
+      "after": 1406660,
+      "older_events": 34,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T22-26-19-595Z_01a0dfd3-914b-75b7-9451-81381f8dbb0d.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "comms-maintenance-barrier-acceptance"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "comms-maintenance-barrier-acceptance"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 134849109,
+      "after": 134900624,
+      "older_events": 29,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T21-40-52-280Z_01a0dfa9-f3b7-7261-80b2-827b75dd26c4.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "comms-maintenance-gate-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "comms-maintenance-gate-owner"
+        }
+      ],
+      "events": 23,
+      "has_older": true,
+      "before": 135987198,
+      "after": 136051414,
+      "older_events": 29,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T19-13-56-241Z_01a0df23-6e10-72ea-a008-f68e637989a0.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "comms-prompt-restart-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "comms-prompt-restart-independent"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 127155746,
+      "after": 127201770,
+      "older_events": 27,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T16-58-12-737Z_01a0dea7-2b80-70f8-b433-64874e232e56.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "comms-steering"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "comms-steering"
+        }
+      ],
+      "events": 2,
+      "has_older": true,
+      "before": 132701282,
+      "after": 132703629,
+      "older_events": 1,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-23T14-31-31-642Z_01a0cead-cc39-72c3-ab68-c877f0abf6fc.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "goal-autopause-correction"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "goal-autopause-correction"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 37775347,
+      "after": 37839096,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-toad-message-formatting--/2026-09-25T22-15-42-172Z_01a0daa3-7b5b-739b-9e72-73e34084c5c5.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "import-private-pr88-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "import-private-pr88-review"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 638339,
+      "after": 695398,
+      "older_events": 31,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T19-02-36-567Z_01a0d9f2-b316-7431-9ac2-5ff4264016a5.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "mcp-goal-scope-consultant"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "mcp-goal-scope-consultant"
+        }
+      ],
+      "events": 22,
+      "has_older": true,
+      "before": 104605235,
+      "after": 104670126,
+      "older_events": 20,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T17-23-54-192Z_01a0ca25-40cf-7182-ad45-1d7803851772.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "mcp-pr77"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "mcp-pr77"
+        }
+      ],
+      "events": 22,
+      "has_older": true,
+      "before": 35185108,
+      "after": 35238611,
+      "older_events": 12,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T19-30-39-583Z_01a0da0c-615e-7401-a59b-357b16e3e7e7.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "mcp-pr77-trust-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "mcp-pr77-trust-review"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 28609264,
+      "after": 28646472,
+      "older_events": 6,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-23T16-56-43-899Z_01a0cf32-bc7b-7576-8058-6a8076e499a8.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "native-pi-launch-isolation"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "native-pi-launch-isolation"
+        }
+      ],
+      "events": 33,
+      "has_older": true,
+      "before": 45264260,
+      "after": 45326125,
+      "older_events": 24,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "nra-architecture"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "nra-architecture"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 39053536,
+      "after": 39117006,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T05-56-25-895Z_01a0d1fc-92a7-73f8-bb18-c7b0ea66b194.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "nra-class-first-name-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "nra-class-first-name-review"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 33807426,
+      "after": 33871654,
+      "older_events": 23,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-22T22-37-11-574Z_01a0cb44-1415-76ac-b5a0-26d3eb905f55.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "nra-domain-mapping"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "nra-domain-mapping"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 13140002,
+      "after": 13204397,
+      "older_events": 25,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T06-41-01-603Z_01a0d225-66a2-7297-99ec-8ea7702f4404.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "nra-ordered-branch-call-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "nra-ordered-branch-call-review"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 34759749,
+      "after": 34823262,
+      "older_events": 18,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T02-54-37-390Z_01a0d156-1f4d-7042-a6bd-b9a7a8f962cf.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "nra-roster-heuristic-map"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "nra-roster-heuristic-map"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 31582433,
+      "after": 31647797,
+      "older_events": 17,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T03-54-24-180Z_01a0d18c-da33-7699-9c5e-715c92daabb9.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "nra-toad-decision-probe-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "nra-toad-decision-probe-review"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 30395611,
+      "after": 30452417,
+      "older_events": 29,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T01-19-59-931Z_01a0d0ff-7dba-7669-aac4-80a64d2d1507.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-acp-steer-disposition-fix"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-acp-steer-disposition-fix"
+        }
+      ],
+      "events": 14,
+      "has_older": true,
+      "before": 78652878,
+      "after": 78691753,
+      "older_events": 2,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T01-50-08-803Z_01a0d11b-17a2-72ef-b16f-6ff2f128986b.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-channel-scope-epoch-design"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-channel-scope-epoch-design"
+        }
+      ],
+      "events": 26,
+      "has_older": true,
+      "before": 76038546,
+      "after": 76099311,
+      "older_events": 19,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-40-35-632Z_01a0d1ee-12af-740b-8bc8-71e5542e9191.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-comms-threads-scaling-fix"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-comms-threads-scaling-fix"
+        }
+      ],
+      "events": 3,
+      "has_older": true,
+      "before": 83415529,
+      "after": 83467253,
+      "older_events": 2,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-32-49-295Z_01a0d1e6-f50e-74e4-bdd1-68d430b2e3ce.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-dm-scoped-ack-api-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-dm-scoped-ack-api-owner"
+        }
+      ],
+      "events": 18,
+      "has_older": true,
+      "before": 83298906,
+      "after": 83341241,
+      "older_events": 5,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T01-05-38-494Z_01a0d0f2-58be-72e9-b07c-cf1f1a0571b7.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-goal-capability-preflight"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-goal-capability-preflight"
+        }
+      ],
+      "events": 3,
+      "has_older": true,
+      "before": 75387308,
+      "after": 75397146,
+      "older_events": 1,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T04-07-49-695Z_01a0d199-24bf-7281-8ae7-5580d5718346.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-goal-coherent-integration-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-goal-coherent-integration-owner"
+        }
+      ],
+      "events": 15,
+      "has_older": true,
+      "before": 88508372,
+      "after": 88567812,
+      "older_events": 14,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T01-28-59-711Z_01a0d107-ba3e-72fc-8d7b-15a3a9894f49.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-goal-human-recovery-api"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-goal-human-recovery-api"
+        }
+      ],
+      "events": 22,
+      "has_older": true,
+      "before": 76891282,
+      "after": 76954851,
+      "older_events": 33,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T07-32-26-433Z_01a0d254-78c0-7345-94b2-49913f4005af.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-goal-p15-recovery-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-goal-p15-recovery-independent-review"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 88209102,
+      "after": 88266048,
+      "older_events": 25,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T07-31-56-045Z_01a0d254-020c-721a-af45-08ccd03cfd7d.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-goal-p15-sink-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-goal-p15-sink-independent-review"
+        }
+      ],
+      "events": 35,
+      "has_older": true,
+      "before": 88736987,
+      "after": 88800688,
+      "older_events": 27,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T09-12-02-209Z_01a0d2af-a7a0-7382-baa5-928b22372fef.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-ingress-disposition-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-ingress-disposition-independent-review"
+        }
+      ],
+      "events": 8,
+      "has_older": true,
+      "before": 79055547,
+      "after": 79120015,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T04-07-02-702Z_01a0d198-6d2d-73d6-bb1a-dfcc11e445ad.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-macos313-backend-ci-fix"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-macos313-backend-ci-fix"
+        }
+      ],
+      "events": 23,
+      "has_older": true,
+      "before": 87318121,
+      "after": 87374162,
+      "older_events": 24,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T04-07-20-064Z_01a0d198-b100-76f7-ba2c-443344b96acf.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-ancestor-fsync-fix"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-ancestor-fsync-fix"
+        }
+      ],
+      "events": 6,
+      "has_older": true,
+      "before": 81519474,
+      "after": 81582583,
+      "older_events": 23,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-08-14-864Z_01a0d1d0-7590-71b3-b8ac-428ad076b541.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-goal-preflight-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-goal-preflight-independent-review"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 79306369,
+      "after": 79371796,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T06-35-53-777Z_01a0d220-b431-72ad-8225-4ce9d593bba8.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-goal-selection-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-goal-selection-review"
+        }
+      ],
+      "events": 25,
+      "has_older": true,
+      "before": 79746839,
+      "after": 79801769,
+      "older_events": 1,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T06-45-48-973Z_01a0d229-c92d-759c-b90b-ecb3e5bf2fe7.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-goal-selection-v3-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-goal-selection-v3-review"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 78782884,
+      "after": 78829807,
+      "older_events": 25,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T06-58-19-689Z_01a0d235-3da8-748c-b1b3-658ddfdcea49.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-goal-selection-v4-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-goal-selection-v4-review"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 80494962,
+      "after": 80546492,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T08-16-06-913Z_01a0d27c-7501-7286-a58f-c825042025db.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-goal-sink-v9-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-goal-sink-v9-independent-review"
+        }
+      ],
+      "events": 26,
+      "has_older": true,
+      "before": 83519734,
+      "after": 83582539,
+      "older_events": 24,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T01-02-27-461Z_01a0d0ef-6e84-7295-825b-f5d19b250119.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-native-goal-tool-profile"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-native-goal-tool-profile"
+        }
+      ],
+      "events": 19,
+      "has_older": true,
+      "before": 81058385,
+      "after": 81106858,
+      "older_events": 1,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-30-17-085Z_01a0d1e4-a27c-741c-81c9-e861c3092d39.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-v3-adjacent-test-merge-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-v3-adjacent-test-merge-owner"
+        }
+      ],
+      "events": 30,
+      "has_older": true,
+      "before": 82579774,
+      "after": 82642519,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-27-33-484Z_01a0d1e2-236b-77e5-9a62-a973260bfff4.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-v3-backend-semantic-merge-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-v3-backend-semantic-merge-owner"
+        }
+      ],
+      "events": 18,
+      "has_older": true,
+      "before": 83843740,
+      "after": 83900123,
+      "older_events": 12,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T05-27-48-929Z_01a0d1e2-5fc1-75a5-9d8f-966351802b85.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr1-v3-coordination-schema-merge-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr1-v3-coordination-schema-merge-owner"
+        }
+      ],
+      "events": 16,
+      "has_older": true,
+      "before": 83220482,
+      "after": 83251093,
+      "older_events": 1,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T06-31-35-984Z_01a0e18f-d92f-728c-abd4-d6cb94415e85.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr108-broker-309-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr108-broker-309-independent-review"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 142736484,
+      "after": 142797010,
+      "older_events": 14,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T00-46-09-005Z_01a0e053-946c-73f2-9018-fad95ad3db50.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr111-pin-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr111-pin-review"
+        }
+      ],
+      "events": 32,
+      "has_older": true,
+      "before": 137893203,
+      "after": 137945618,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T01-09-03-836Z_01a0e068-8edc-765f-b88b-de88aa65bb5d.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr112-ci-baseline-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr112-ci-baseline-owner"
+        }
+      ],
+      "events": 25,
+      "has_older": true,
+      "before": 138482065,
+      "after": 138541734,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T01-14-09-000Z_01a0e06d-36e8-7156-b160-7f29c9d30363.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr112-ci-baseline-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr112-ci-baseline-review"
+        }
+      ],
+      "events": 30,
+      "has_older": true,
+      "before": 138354481,
+      "after": 138415034,
+      "older_events": 17,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T01-18-31-571Z_01a0e071-3893-7436-940f-f97bfab8f8ce.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr114-macos-ci-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr114-macos-ci-owner"
+        }
+      ],
+      "events": 30,
+      "has_older": true,
+      "before": 138451455,
+      "after": 138502914,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T01-22-08-743Z_01a0e074-88e7-70cf-a6e6-b004cb02b868.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr114-macos-ci-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr114-macos-ci-review"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 138406454,
+      "after": 138458464,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T03-04-33-469Z_01a0e0d2-4bbc-75c2-bc4c-e5d2a1f02280.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr116-infra-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr116-infra-independent-review"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 141009308,
+      "after": 141060034,
+      "older_events": 27,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T06-41-50-265Z_01a0e199-38b8-7362-9c10-69bdfaa89b86.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr116-pr69-paired-package-acceptance"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr116-pr69-paired-package-acceptance"
+        }
+      ],
+      "events": 32,
+      "has_older": true,
+      "before": 142918745,
+      "after": 142974173,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T20-11-07-439Z_01a0df57-c92f-70e8-adfe-42f23169e874.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr17-995-observation-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr17-995-observation-independent"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 130842433,
+      "after": 130898704,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-pr17-injected-harness--/2026-09-25T22-38-10-193Z_01a0dab8-0d11-7522-a632-2f4b5bdf4174.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr17-direct-dm-wake-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr17-direct-dm-wake-review"
+        }
+      ],
+      "events": 26,
+      "has_older": true,
+      "before": 100098153,
+      "after": 100139190,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T19-32-10-856Z_01a0da0d-c5e7-7512-8a83-d2cd1e6b6ed7.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr17-standby-liveness-correction"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr17-standby-liveness-correction"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 102404707,
+      "after": 102468248,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T23-24-37-264Z_01a0dae2-940f-767f-b365-cc9412f9260c.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr48-blocker1-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr48-blocker1-independent-review"
+        }
+      ],
+      "events": 23,
+      "has_older": true,
+      "before": 109284164,
+      "after": 109327423,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T15-19-33-362Z_01a0d926-7cf1-7508-b93d-3bed8b49740a.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 131465463,
+      "after": 131524528,
+      "older_events": 13,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T18-20-56-422Z_01a0def2-e8e6-72ea-9b22-fd177e1ea9b9.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-6308-rename-race-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-6308-rename-race-review"
+        }
+      ],
+      "events": 25,
+      "has_older": true,
+      "before": 128100349,
+      "after": 128161906,
+      "older_events": 23,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T20-06-01-835Z_01a0df53-1f6a-72fb-b555-51ff4a04ba21.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-718-awareness-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-718-awareness-independent"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 131009933,
+      "after": 131049550,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T18-52-08-764Z_01a0df0f-7aa8-73e2-a3a5-c1f0aabd76a2.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-index-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-index-independent-review"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 128274600,
+      "after": 128311661,
+      "older_events": 22,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T02-18-06-727Z_01a0e0a7-c606-7453-bba9-4bbad1b3b58c.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-persistent-transport-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-persistent-transport-review"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 139133483,
+      "after": 139188096,
+      "older_events": 29,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T20-25-20-227Z_01a0df64-cc62-7019-b40f-72ce5b6b1ebd.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-private-source-checkpoint-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-private-source-checkpoint-owner"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 132490068,
+      "after": 132551556,
+      "older_events": 32,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T18-11-09-650Z_01a0dee9-f4d1-7333-8556-1e59ae8578fa.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-scale-deadline-readonly"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-scale-deadline-readonly"
+        }
+      ],
+      "events": 31,
+      "has_older": true,
+      "before": 128496513,
+      "after": 128559622,
+      "older_events": 25,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-native-retirement-proof--/2026-09-27T02-50-49-199Z_01a0e0c5-b7ee-710c-a3c3-29340aaa3502.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr94-selected-adoption-design-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr94-selected-adoption-design-review"
+        }
+      ],
+      "events": 30,
+      "has_older": true,
+      "before": 126802952,
+      "after": 126862477,
+      "older_events": 31,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T21-35-08-276Z_01a0dfa4-b3f3-708d-8cae-e0542e70864f.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-749-admission-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-749-admission-independent"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 133375651,
+      "after": 133438540,
+      "older_events": 20,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T19-53-27-023Z_01a0df47-9aee-7437-9217-0152469c9d4d.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-77d3-broad-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-77d3-broad-independent"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 132453248,
+      "after": 132517119,
+      "older_events": 22,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T22-47-19-847Z_01a0dfe6-cc26-73e6-a2f9-c6d982676578.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-8d-crossroute-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-8d-crossroute-independent"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 135077177,
+      "after": 135121213,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T22-21-23-935Z_01a0dfcf-0e5e-76b0-9c18-8ab4b0eb464e.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-a6b-guardian-combined-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-a6b-guardian-combined-independent"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 134020181,
+      "after": 134081954,
+      "older_events": 33,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T18-28-50-129Z_01a0defa-2350-7462-a281-2ef64340fb9e.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-adaptive-trigger-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-adaptive-trigger-independent"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 127942374,
+      "after": 127997165,
+      "older_events": 29,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T20-19-18-177Z_01a0df5f-461f-7235-bbd0-a3bb765d38bc.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-pi-readiness-phase1-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-pi-readiness-phase1-review"
+        }
+      ],
+      "events": 30,
+      "has_older": true,
+      "before": 132832167,
+      "after": 132890508,
+      "older_events": 22,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T03-51-07-934Z_01a0e0fc-ef9d-762e-9c10-790991d1c4f5.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-pr112-semantic-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-pr112-semantic-independent-review"
+        }
+      ],
+      "events": 36,
+      "has_older": true,
+      "before": 140720054,
+      "after": 140780511,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-pr95-selected-pi-summary-20260926--/2026-09-26T20-18-10-306Z_01a0df5e-3d01-74cf-a72c-2f0a44ea2c4a.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-readiness-057-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-readiness-057-independent-review"
+        }
+      ],
+      "events": 20,
+      "has_older": true,
+      "before": 132275855,
+      "after": 132340719,
+      "older_events": 21,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T22-21-43-398Z_01a0dfcf-5a66-76f4-a3f8-4dfde24fe160.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-route-proposal-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-route-proposal-independent"
+        }
+      ],
+      "events": 31,
+      "has_older": true,
+      "before": 135649095,
+      "after": 135714485,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T23-47-36-068Z_01a0e01d-fa04-77be-8be0-45d0bdf47afd.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-selected-transport-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-selected-transport-review"
+        }
+      ],
+      "events": 27,
+      "has_older": true,
+      "before": 138271777,
+      "after": 138333508,
+      "older_events": 36,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-pr48-production-20260926--/2026-09-27T00-16-39-223Z_01a0e038-9336-744f-b305-a35d1669ec78.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "pr95-source-triple-bootstrap-independent"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "pr95-source-triple-bootstrap-independent"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 113159074,
+      "after": 113218428,
+      "older_events": 22,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T03-43-40-641Z_01a0e0f6-1c60-77a1-a625-6068e1564ad1.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "private-human-ingress-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "private-human-ingress-independent-review"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 140946002,
+      "after": 140997933,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T03-16-35-090Z_01a0e0dd-4e91-706b-9b2b-f9de0b32c488.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "private-human-ingress-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "private-human-ingress-owner"
+        }
+      ],
+      "events": 31,
+      "has_older": true,
+      "before": 141065140,
+      "after": 141122890,
+      "older_events": 28,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T04-17-32-675Z_01a0e115-1e02-751f-a290-6d3bccd94b7f.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-acp-stop-proof-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-acp-stop-proof-independent-review"
+        }
+      ],
+      "events": 25,
+      "has_older": true,
+      "before": 141189824,
+      "after": 141247661,
+      "older_events": 22,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T03-57-56-910Z_01a0e103-2d2d-765b-8907-31a77eab491e.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-acp-stop-proof-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-acp-stop-proof-owner"
+        }
+      ],
+      "events": 25,
+      "has_older": true,
+      "before": 142164649,
+      "after": 142227857,
+      "older_events": 34,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T02-09-48-257Z_01a0d12d-16e0-72c2-936c-6bf5b070db9f.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-anymode-negative-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-anymode-negative-independent-review"
+        }
+      ],
+      "events": 30,
+      "has_older": true,
+      "before": 76572342,
+      "after": 76629546,
+      "older_events": 8,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.agent-comms/imported_sessions/b3d65d5d9b594b178bcc2e724998ec61.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-comms-ux"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-comms-ux"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 1149907,
+      "after": 1207754,
+      "older_events": 17,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T03-21-02-624Z_01a0e0e1-639f-7158-af3f-06ebd5e33a48.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-default-route-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-default-route-independent-review"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 141125017,
+      "after": 141167568,
+      "older_events": 31,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-27T02-50-12-868Z_01a0e0c5-2a03-71fa-90e5-d4e623462652.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-default-route-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-default-route-owner"
+        }
+      ],
+      "events": 22,
+      "has_older": true,
+      "before": 144002046,
+      "after": 144065404,
+      "older_events": 27,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-toad-queue-view-identity-20260926--/2026-09-26T17-58-06-491Z_01a0dede-019a-71bf-8800-4a965a3be859.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-exact-queue-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-exact-queue-independent-review"
+        }
+      ],
+      "events": 26,
+      "has_older": true,
+      "before": 114492943,
+      "after": 114545198,
+      "older_events": 27,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T21-59-45-395Z_01a0dfbb-3df3-755a-a667-9488ec6881ad.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-maintenance-ingress-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-maintenance-ingress-owner"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 135876907,
+      "after": 135938210,
+      "older_events": 30,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T21-09-13-595Z_01a0da66-9efb-7700-a887-3f2a6c51ad89.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-mcp-companion-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-mcp-companion-owner"
+        }
+      ],
+      "events": 24,
+      "has_older": true,
+      "before": 116834901,
+      "after": 116872869,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-wt-toad-private-native-cursor-view-20260926--/2026-09-26T16-15-14-144Z_01a0de7f-d2df-76c2-93b8-10b4a3f14891.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-native-cursor-independent-review"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-native-cursor-independent-review"
+        }
+      ],
+      "events": 28,
+      "has_older": true,
+      "before": 113319312,
+      "after": 113371460,
+      "older_events": 22,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-24T01-44-47-210Z_01a0d116-2f69-753d-8416-c3d0b7570cc3.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-pr1-anymode-painted-display-fix"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-pr1-anymode-painted-display-fix"
+        }
+      ],
+      "events": 25,
+      "has_older": true,
+      "before": 76324274,
+      "after": 76377734,
+      "older_events": 26,
+      "read_ok": true
+    },
+    {
+      "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-25T19-30-35-905Z_01a0da0c-5300-7026-aa8b-32e4341a1678.jsonl",
+      "references": [
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "name": "toad-pr50-browser-security-owner"
+        },
+        {
+          "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+          "name": "toad-pr50-browser-security-owner"
+        }
+      ],
+      "events": 29,
+      "has_older": true,
+      "before": 103964888,
+      "after": 104023212,
+      "older_events": 30,
+      "read_ok": true
+    }
+  ],
+  "no_inputs_sent": true
+}

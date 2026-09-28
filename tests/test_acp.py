@@ -26,6 +26,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -1246,7 +1247,9 @@ class TestAgentTurn:
             yield ae.ToolEnd(id="goal", name="comms_goal", ok=True)
             yield ae.ProviderUsage(
                 response_id="1",
-                usage={"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}},
+                usage=PiUsage.from_wire(
+                    {"input": 5, "output": 2, "totalTokens": 7, "cost": {"total": 0.01}}
+                ),
             )
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="done")
@@ -1280,13 +1283,17 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             yield ae.ProviderUsage(
                 response_id="1",
-                usage={"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}},
+                usage=PiUsage.from_wire(
+                    {"input": 3, "output": 1, "totalTokens": 4, "cost": {"total": 0.01}}
+                ),
             )
             wired.goals.update_goal("proj", SetGoalAction(text="Finish the release"))
             yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
             yield ae.ProviderUsage(
                 response_id="2",
-                usage={"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}},
+                usage=PiUsage.from_wire(
+                    {"input": 2, "output": 2, "totalTokens": 4, "cost": {"total": 0.02}}
+                ),
             )
             if owner_paused:
                 wired.goals.update_goal("proj", PausedGoalAction(), actor=OwnerInvocable)
@@ -1649,7 +1656,7 @@ class TestAgentTurn:
         terminated = []
 
         async def events(*args, **kwargs):
-            yield ae.ProviderUsage(response_id="1", usage={"totalTokens": 5})
+            yield ae.ProviderUsage(response_id="1", usage=PiUsage.from_wire({"totalTokens": 5}))
             await asyncio.Event().wait()
 
         async def terminate(task):
@@ -2056,7 +2063,10 @@ class TestAgentTurnForwarding:
         # Turn finished -> idle again.
         assert wired.agents.activity_of("proj").state.value == "idle"
         # The full trail was recorded: thinking -> working -> thinking -> idle.
-        states = [e.state.value for e in wired.agents.activity._load() if e.thread == "proj"]
+        rows = [
+            json.loads(line) for line in (wired.root / "activity.jsonl").read_text().splitlines()
+        ]
+        states = [row["state"] for row in rows if row["thread"] == "proj"]
         assert states == ["thinking", "working", "thinking", "idle"]
 
 

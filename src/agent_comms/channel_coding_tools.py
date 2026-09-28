@@ -31,6 +31,7 @@ from .envelope_claim_transitions import (
     WritableFileClaim,
 )
 from .field_codec import FieldCodec
+from .pi_payloads import PiContent, ToolCallContent
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,
@@ -175,18 +176,18 @@ class CodingToolSocket(OwnerToolSocket):
         self.denied: set[str] = set()
         self.changed = asyncio.Event()
 
-    def announce(self, content: list[dict[str, Any]]) -> None:
+    def announce(self, content: tuple[PiContent, ...]) -> None:
         for item in content:
-            if item.get("type") == "toolCall":
-                call = CodingCall.decode(item.get("id"), item.get("name"), item.get("arguments"))
+            if isinstance(item, ToolCallContent):
+                call = CodingCall.decode(item.id, item.name, item.arguments)
                 if call.call_id in self.announced:
                     raise SelectedToolDenied("Native coding call ID was repeated")
                 self.announced[call.call_id] = call
-            elif item.get("type") not in {"text", "thinking"}:
+            elif not item.tool_round_allowed:
                 raise SelectedToolDenied("Invalid native coding content")
 
     def tool_started(self, event) -> None:
-        call = CodingCall.decode(event.get("toolCallId"), event.get("toolName"), event.get("args"))
+        call = CodingCall.decode(event.tool_call_id, event.tool_name, event.args)
         if self.announced.get(call.call_id) != call or call.call_id in self.started:
             raise SelectedToolDenied("Coding start differs from the native declaration")
         self.started.add(call.call_id)
@@ -224,17 +225,13 @@ class CodingToolSocket(OwnerToolSocket):
         return {"ok": True}
 
     def tool_finished(self, event, input_id: str) -> None:
-        call_id = event.get("toolCallId")
-        if (
-            call_id not in self.started
-            or call_id in self.finished
-            or type(event.get("isError")) is not bool
-        ):
+        call_id = event.tool_call_id
+        if call_id not in self.started or call_id in self.finished or event.is_error is None:
             raise SelectedToolDenied("Coding tool terminal is missing or repeated")
         call = self.announced[call_id]
-        if event.get("toolName") != call.tool.declared_name:
+        if event.tool_name != call.tool.declared_name:
             raise SelectedToolDenied("Coding tool terminal identity changed")
-        if call_id not in self.admitted and (call_id not in self.denied or not event["isError"]):
+        if call_id not in self.admitted and (call_id not in self.denied or not event.is_error):
             raise SelectedToolDenied("Coding tool ran without owner admission")
         if call_id in self.admitted:
             record_selected_terminal(self.path.parent, call.slot(input_id), call.slot(input_id))

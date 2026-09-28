@@ -164,12 +164,15 @@ class FieldCodec:
                 return data
             raise ValueError(f"Value does not match {target}")
         if origin in (Union, types.UnionType):
+            errors = []
             for alternative in args:
                 try:
                     return cls.decode(alternative, data)
-                except (TypeError, ValueError):
-                    pass
-            raise ValueError(f"Value does not match {target}")
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
         if origin is frozenset:
             if not isinstance(data, list):
                 raise ValueError("Expected a JSON array.")

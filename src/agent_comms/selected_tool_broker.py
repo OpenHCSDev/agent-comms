@@ -27,6 +27,7 @@ from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_store import MutationStore
 from .envelope_claim_transitions import WakeAdmission
+from .pi_payloads import PiContent, ToolCallContent
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
@@ -349,7 +350,7 @@ class OwnerToolSocket(ABC):
         self._created = False
 
     @abstractmethod
-    def announce(self, content: list[dict[str, Any]]) -> None: ...
+    def announce(self, content: tuple[PiContent, ...]) -> None: ...
 
     @abstractmethod
     def tool_started(self, event) -> None: ...
@@ -470,30 +471,29 @@ class SelectedToolSocket(OwnerToolSocket):
         self.completed_call_id = request.call_id
         return {"ok": True}
 
-    def announce(self, content: list[dict[str, Any]]) -> None:
-        calls = [item for item in content if item.get("type") == "toolCall"]
+    def announce(self, content: tuple[PiContent, ...]) -> None:
+        calls = [item for item in content if isinstance(item, ToolCallContent)]
         if (
             self._announced_id is not None
             or len(calls) != 1
-            or calls[0].get("name") != "selected_claimed_write"
-            or type(calls[0].get("id")) is not str
+            or calls[0].name != "selected_claimed_write"
         ):
             raise SelectedToolDenied("Native Pi returned an unapproved tool call")
-        if any(item.get("type") not in {"toolCall", "text", "thinking"} for item in content):
+        if any(not item.tool_round_allowed for item in content):
             raise SelectedToolDenied("Native Pi returned invalid tool content")
-        self._announced_id = calls[0]["id"]
-        self._announced_args = calls[0].get("arguments")
+        self._announced_id = calls[0].id
+        self._announced_args = calls[0].arguments
 
     def tool_started(self, event) -> None:
         if (
             self._started
             or self._announced_id is None
-            or event.get("toolName") != "selected_claimed_write"
-            or event.get("toolCallId") != self._announced_id
-            or event.get("args") != self._announced_args
+            or event.tool_name != "selected_claimed_write"
+            or event.tool_call_id != self._announced_id
+            or event.args != self._announced_args
         ):
             raise SelectedToolDenied("Native Pi began an unapproved tool execution")
-        self.approve_tool_start(self._announced_id, event.get("args"))
+        self.approve_tool_start(self._announced_id, event.args)
         if self._announced_id not in self._approved:
             raise SelectedToolDenied("Native Pi tool arguments are invalid")
         self._started = True
@@ -502,9 +502,9 @@ class SelectedToolSocket(OwnerToolSocket):
         if (
             not self._started
             or self._finished
-            or event.get("toolName") != "selected_claimed_write"
-            or event.get("toolCallId") != self._announced_id
-            or event.get("isError") is not False
+            or event.tool_name != "selected_claimed_write"
+            or event.tool_call_id != self._announced_id
+            or event.is_error is not False
             or self.completed_call_id != self._announced_id
         ):
             raise SelectedToolDenied("Native Pi selected tool did not finish successfully")

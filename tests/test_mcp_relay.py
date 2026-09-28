@@ -212,7 +212,11 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
     }
 
     def wire_claim(claim):
-        return {"method": "setStatus", "statusKey": "pi-mcp/live-v1", "statusText": claim}
+        from agent_comms.pi_events import ExtensionUiRequest
+
+        return ExtensionUiRequest(
+            method="setStatus", status_key="pi-mcp/live-v1", status_text=claim
+        )
 
     assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) == valid
     assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), "b" * 32) is None
