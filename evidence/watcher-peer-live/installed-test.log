@@ -1,0 +1,1 @@
+PASS: 512 real native events queued; peer close cancels child, no thread error, exit0
