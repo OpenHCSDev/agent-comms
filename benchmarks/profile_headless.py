@@ -31,7 +31,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 
-from lock_observation import CurrentSharedReads, ForcedExclusiveReads, LockObservation, distribution
+from lock_observation import ReadPolicy, LockObservation, distribution
 
 
 @dataclass(frozen=True)
@@ -227,7 +227,7 @@ def main():
             "cpu_count": os.cpu_count(), "load_average": os.getloadavg()}}) + "\n")
         output.flush()
         for index, count in enumerate(args.threads):
-            policies = [CurrentSharedReads(), ForcedExclusiveReads()]
+            policies = [policy() for policy in ReadPolicy.__subclasses__()]
             if index % 2:
                 policies.reverse()  # Counterbalance run order; not statistical randomization.
             for policy in policies:
