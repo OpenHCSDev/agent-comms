@@ -263,7 +263,9 @@ def native_memory_budget(root: Path, monkeypatch, *, rss_mib=240, heap_mib=128):
         "start_time,phase:process.env.AC_CAPACITY_PHASE})+'\\n');"
         "process.on('exit',()=>{"
         f"appendFileSync({json.dumps(str(exits))},JSON.stringify({{pid:process.pid,"
-        "phase:process.env.AC_CAPACITY_PHASE,peak_rss_kib:process.resourceUsage().maxRSS,"
+        "phase:process.env.AC_CAPACITY_PHASE,peak_rss_kib:"
+        "Number(readFileSync('/proc/self/status','utf8').match(/^VmHWM:\\s+(\\d+)/m)[1]),"
+        "rusage_peak_rss_kib:process.resourceUsage().maxRSS,"
         "memory:process.memoryUsage()})+'\\n')});"
     )
     binary = root / "bin"
@@ -288,10 +290,19 @@ def native_memory_budget(root: Path, monkeypatch, *, rss_mib=240, heap_mib=128):
     monitor_errors = []
     parent_identity = ProcessIdentity.capture(os.getpid())
 
+    def parent_peak():
+        # Linux rusage can retain a high water from before exec. VmHWM
+        # measures this test executable, not its tool-launcher's old image.
+        return next(
+            int(line.split()[1])
+            for line in Path("/proc/self/status").read_text().splitlines()
+            if line.startswith("VmHWM:")
+        )
+
     def sample():
-        parent_peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        if parent_peak > rss_mib * 1024 and not exceeded:
-            exceeded.append({"phase": "python-owner", "peak_rss_kib": parent_peak})
+        peak = parent_peak()
+        if peak > rss_mib * 1024 and not exceeded:
+            exceeded.append({"phase": "python-owner", "peak_rss_kib": peak})
             # Interrupt the owned test runner so its finally blocks retire
             # children and remove generated data instead of allowing an OOM.
             Platform.current().send(parent_identity, signal.SIGINT)
@@ -347,7 +358,7 @@ def native_memory_budget(root: Path, monkeypatch, *, rss_mib=240, heap_mib=128):
         receipt.update(
             processes=observations,
             sampled_peak_rss_kib=peaks,
-            python_peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            python_peak_rss_kib=parent_peak(),
             exceeded=exceeded,
             monitor_errors=monitor_errors,
         )

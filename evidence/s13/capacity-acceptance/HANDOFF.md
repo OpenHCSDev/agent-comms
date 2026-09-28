@@ -1,4 +1,4 @@
-# S13 native history acceptance — active, not passed yet
+# S13 native history acceptance — manager layer passes; full chain still open
 
 Source: existing tests/test_owner_compaction_prepare.py and stack/test-native-writer-coverage.mjs. Parent assigned production changes to Darwin/S9 and Pascal/S10; no production mechanism added here.
 
@@ -28,3 +28,19 @@ Use PYTHONPATH=src, TMPDIR under this worktree, PI_COMPACTION_TEST_PACKAGE and A
 `python -m pytest -o addopts='' -n0 -q -s tests/test_owner_compaction_prepare.py -k large_history --basetemp=<owned worktree artifact directory>`
 
 Current committed source still rejects at the native256MiB guard. Next: adopt Darwin's actual public EntryStore callers as they land, run both sizes through full chain, retain RSS/disk receipts and review old loader/caller deletion. The baseline did not yet reach prepare/commit/reopen or the large-history branch/replay probe.
+
+
+## Indexed native manager checkpoint
+
+Actual current SessionManager artifact from Darwin PR243 checkpoint e95775a (its private generated package, not a deployed/manifest-approved build):
+
+| Actual history bytes | Native VmHWM | Python VmHWM | Result |
+| --- | --- | --- | --- |
+|302,041,814|149,996KiB (146.5MiB)|72,936KiB|PASS|
+|604,009,725|186,416KiB (182.0MiB)|72,892KiB|PASS|
+
+Both use128MiB V8 old-space/240MiB RSS test envelope and the real native SessionManager. Both validate two branches/retained summaries/settings, historical payload access, old commit-ID replay refusal and four malformed late records, with exact source fingerprint preserved. All generated session/index data removed after children exit. This is manager-level acceptance; **actual integrated CLI/prepare/journal commit/reopen on >256MiB is still pending SDK/helper/proof caller composition**.
+
+Race probe migrated to actual readSync observation boundaries, eliminating deleted loadEntriesFromFile/_loadEntries/preloaded-array dependence. Current indexed snapshot-race and set-session-race PASS. Empty-file initializer race FAILS: the returned manager has a different session ID from the file another real process initialized. The probe accepts either typed refusal or a coherent reload; it is not pinned to a particular refusal message. Darwin received the actual mismatch evidence on PR243. Review also flagged dead _rewriteFile, source fork fencing, direct store file validation and abnormal-exit index cleanup. Source0d900f3 now uses initialized SQLite EXCLUSIVE+unlink; end-to-end/abnormal-exit verification of that revision remains to be done.
+
+Observer correction: Linux RUSAGE_SELF can retain a high water from the tool launcher before exec (607,604KiB with actual VmHWM15,400KiB observed). Tests now use /proc/self/status VmHWM for the current executable; Node resourceUsage is recorded separately. The false observer failure is retained as observer-inherited-rusage-failure.log and is not a production failure. Node/kernel readings above are current VmHWM.
