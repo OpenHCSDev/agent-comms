@@ -957,9 +957,31 @@ def test_missing_native_model_fails_before_any_session_side_effect(
     assert not (tmp_path / "sessions").exists()
 
 
+@pytest.fixture
+def durable_attempt(tmp_path):
+    from agent_comms.coordination import ExecutionOrigin
+    from agent_comms.coordination_store import MutationStore, prepare_fence_token
+    from agent_comms.durable_turn import DurableTurn
+
+    with MutationStore(tmp_path / "attempt.sqlite3") as store:
+        store.register_participant("owner", "owner", "owner", committed=True)
+        created = store.create_execution("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
+        pending = store.mark_pending("e", expected_revision=created.execution.revision).value
+        started = store.start_attempt(
+            "e",
+            1,
+            "owner",
+            1,
+            prepare_fence_token(),
+            expected_execution_revision=pending.execution.revision,
+            expected_pointer_revision=pending.pointer_revision,
+        ).value
+        yield DurableTurn(store, started.fence, started.snapshot.pointer_revision, INPUT_ID)
+
+
 @pytest.mark.parametrize("outcome", ["429", "length", "stop", "configured"])
 async def test_copied_cli_private_policy_allows_one_local_http_attempt(
-    tmp_path: Path, monkeypatch, outcome: str
+    tmp_path: Path, monkeypatch, outcome: str, durable_attempt
 ) -> None:
     """Explicit opt-in: real pinned CLI, loopback-only fake provider, no paid key."""
     selected = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
@@ -1111,7 +1133,16 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             return Process(await real_launch(*argv, **kwargs))
 
         monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+        durable_phases = []
+
+        async def observe(event):
+            await durable_attempt.dispatch(event)
+            attempt = durable_attempt.store.snapshot("e").attempt
+            durable_phases.append(attempt.phase.value)
+            assert not attempt.backend_done and not attempt.process_dead
+
         request = dict(
+            observe_event=observe,
             input_id=INPUT_ID,
             prompt="Respond with X, fixture only",
             worktree=worktree,
@@ -1122,6 +1153,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         )
         if outcome in {"stop", "configured"}:
             result = await run_native_pi_turn(package, **request)
+            assert "prompt_accepted" in durable_phases
+            assert "model_running" in durable_phases
+            durable_attempt.finish()
+            assert durable_attempt.store.snapshot("e").attempt.backend_done
             assert result.text == "X"
             assert result.context.input_id == INPUT_ID
             assert result.context.request_generation == 1
