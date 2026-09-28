@@ -15,6 +15,8 @@ from agent_comms.envelope_claim_transitions import (
     WritableFileClaim,
     normalize_existing_file,
 )
+from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.threads import Thread
 
 
@@ -36,7 +38,9 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         assert projection[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
             c.messaging.send_message("b", "#team", "Competing create", claims=[resource])
-        c.messaging.send_message("a", "#team", "Release unused creation", releases=["new/nested/file.py"])
+        c.messaging.send_message(
+            "a", "#team", "Release unused creation", releases=["new/nested/file.py"]
+        )
         c.messaging.send_message("b", "#team", "New owner", claims=[resource])
         assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
@@ -90,14 +94,9 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
         ("call_one|provider-part", "read", {"path": "a"}),
         ("two", "write", {"path": "b", "content": "c"}),
     ]
-    socket.announce(
-        [
-            {"type": "toolCall", "id": id, "name": name, "arguments": args}
-            for id, name, args in calls
-        ]
-    )
+    socket.announce([ToolCallContent(id=id, name=name, arguments=args) for id, name, args in calls])
     for id, name, args in calls:
-        socket.tool_started({"toolCallId": id, "toolName": name, "args": args})
+        socket.tool_started(ToolExecutionStart(tool_call_id=id, tool_name=name, args=args))
         raw = (
             json.dumps({"token": socket.token, "call_id": id, "name": name, "arguments": args})
             + "\n"
@@ -110,6 +109,8 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
 
         call = socket.announced[id]
         consume_selected_slot(tmp_path, call.slot(owner.input_id), call.slot(owner.input_id))
-        socket.tool_finished({"toolCallId": id, "toolName": name, "isError": False}, owner.input_id)
+        socket.tool_finished(
+            ToolExecutionEnd(tool_call_id=id, tool_name=name, is_error=False), owner.input_id
+        )
     socket.assert_complete()
     assert len(owner.calls) == 2

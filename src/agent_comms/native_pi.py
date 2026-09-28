@@ -21,10 +21,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from . import pi_commands as commands
 from . import pi_events as pi
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket, SelectedToolDenied
 from .store_files import _store_lock
@@ -462,28 +464,28 @@ def _verify_context(
     session_file: Path,
     input_id: str,
     session_id: str,
-    input_event: dict[str, Any],
-    context_event: dict[str, Any],
+    input_event: pi.InputCommitted,
+    context_event: pi.ContextCommitted,
 ) -> NativeContextProof:
     if (
-        input_event.get("sessionId") != session_id
-        or input_event.get("inputId") != input_id
-        or context_event.get("sessionId") != session_id
-        or context_event.get("inputId") != input_id
-        or type(input_event.get("sessionEntryId")) is not str
-        or context_event.get("sessionEntryId") != input_event["sessionEntryId"]
-        or type(context_event.get("requestGeneration")) is not int
-        or context_event["requestGeneration"] <= 0
-        or type(context_event.get("llmContextDigest")) is not str
-        or _DIGEST.fullmatch(context_event["llmContextDigest"]) is None
+        input_event.session_id != session_id
+        or input_event.input_id != input_id
+        or context_event.session_id != session_id
+        or context_event.input_id != input_id
+        or input_event.session_entry_id is None
+        or context_event.session_entry_id != input_event.session_entry_id
+        or context_event.request_generation is None
+        or context_event.request_generation <= 0
+        or context_event.llm_context_digest is None
+        or _DIGEST.fullmatch(context_event.llm_context_digest) is None
     ):
         raise NativePiUnavailable("Native Pi input/context events disagree")
     proof = _read_native_context_evidence(session_file, input_id)
     if (
         proof.session_id != session_id
-        or proof.session_entry_id != input_event["sessionEntryId"]
-        or proof.request_generation != context_event["requestGeneration"]
-        or proof.llm_context_digest != context_event["llmContextDigest"]
+        or proof.session_entry_id != input_event.session_entry_id
+        or proof.request_generation != context_event.request_generation
+        or proof.llm_context_digest != context_event.llm_context_digest
     ):
         raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
     return proof
@@ -736,11 +738,11 @@ async def run_native_pi_turn(
             raise NativePiUnavailable("Native Pi RPC JSON is invalid") from error
         return event
 
-    async def send(command: dict[str, Any]) -> None:
+    async def send(command: commands.PiCommand) -> None:
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             raise NativePiUnavailable("Native Pi send deadline expired")
-        payload = (json.dumps(command, separators=(",", ":")) + "\n").encode()
+        payload = channel.encode(command)
         if maintenance_root is not None:
             # Only the non-provider capability preflight uses this buffered
             # writer. The tracked prompt has a separate one-use raw writer
@@ -758,41 +760,39 @@ async def run_native_pi_turn(
         await asyncio.wait_for(stdin.drain(), timeout=remaining)
 
     try:
-        await send({"type": "get_state", "id": "native-capability"})
+        await send(commands.GetState(id="native-capability"))
         while True:
             event = await next_event()
-            if event.get("type") != "response" or event.get("id") != "native-capability":
+            if not isinstance(event, pi.Response) or event.id != "native-capability":
                 raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
-            data = event.get("data")
+            data = event.data
             if (
-                event.get("success") is not True
-                or event.get("command") != "get_state"
-                or type(data) is not dict
-                or data.get("nativeInputProofCapability") != CAPABILITY
-                or type(data.get("sessionId")) is not str
-                or not data["sessionId"]
+                event.success is not True
+                or event.command is not commands.GetState
+                or data is None
+                or data.native_input_proof_capability != CAPABILITY
+                or data.session_id is None
+                or not data.session_id
             ):
                 raise NativePiUnavailable("Patched persisted Pi capability is unavailable")
-            if type(data.get("sessionFile")) is not str:
+            if data.session_file is None:
                 raise NativePiUnavailable("Native Pi omitted its private session file")
-            actual_file = _session_location(session_dir, data["sessionFile"])
+            actual_file = _session_location(session_dir, data.session_file)
             if session_file is not None and actual_file != session_file:
                 raise NativePiUnavailable("Native Pi rebound its session")
-            session_id = data["sessionId"]
+            session_id = data.session_id
             if fresh_selected is not None:
-                actual_model = data.get("model")
+                actual_model = data.model
                 if (
                     session_id != fresh_selected.session_id
-                    or type(actual_model) is not dict
-                    or actual_model.get("provider") != "openrouter"
-                    or actual_model.get("id") != "z-ai/glm-5.3-flash"
-                    or data.get("thinkingLevel") != fresh_selected.selected_thinking_level
-                    or type(data.get("messageCount")) is not int
-                    or data["messageCount"] != 0
-                    or type(data.get("pendingMessageCount")) is not int
-                    or data["pendingMessageCount"] != 0
-                    or data.get("isStreaming") is not False
-                    or data.get("isCompacting") is not False
+                    or actual_model is None
+                    or actual_model.provider != "openrouter"
+                    or actual_model.id != "z-ai/glm-5.3-flash"
+                    or data.thinking_level != fresh_selected.selected_thinking_level
+                    or data.message_count != 0
+                    or data.pending_message_count != 0
+                    or data.is_streaming is not False
+                    or data.is_compacting is not False
                 ):
                     raise NativePiUnavailable("Selected first source runtime or inode differs")
                 startup_revision = _fresh_selected_revision(fresh_selected, started=True)
@@ -800,7 +800,7 @@ async def run_native_pi_turn(
                     raise NativePiUnavailable("Selected startup changed enrolled inode")
                 selected_revision = startup_revision
             break
-        command = {"type": "prompt", "id": "native-prompt", "inputId": input_id, "message": prompt}
+        command = commands.Prompt(id="native-prompt", input_id=input_id, message=prompt)
         if prompt_send_boundary is None:
             await send(command)
         else:
@@ -809,7 +809,7 @@ async def run_native_pi_turn(
             # There is no buffered prompt remainder to flush after revocation.
             await send_fenced_prompt(
                 stdin,
-                (json.dumps(command, separators=(",", ":")) + "\n").encode(),
+                channel.encode(command),
                 (
                     (lambda: prompt_send_boundary(actual_file, selected_revision))
                     if fresh_selected is not None
@@ -818,53 +818,49 @@ async def run_native_pi_turn(
                 timeout=deadline - asyncio.get_running_loop().time(),
             )
         accepted = False
-        input_event: dict[str, Any] | None = None
-        contexts: list[dict[str, Any]] = []
+        input_event: pi.InputCommitted | None = None
+        contexts: list[pi.ContextCommitted] = []
         chunks: list[str] = []
         final_messages: list[str] = []
         terminal_error: str | None = None
         while True:
             event = await next_event()
-            if isinstance(event, pi.Response) and event.get("id") == "native-prompt":
-                if accepted or event.get("command") != "prompt" or event.get("success") is not True:
+            if isinstance(event, pi.Response) and event.id == "native-prompt":
+                if accepted or event.command is not commands.Prompt or event.success is not True:
                     raise NativePiUnavailable("Native Pi did not accept the tracked prompt")
                 accepted = True
-            elif isinstance(event, pi.InputCommitted) and event.get("inputId") == input_id:
+            elif isinstance(event, pi.InputCommitted) and event.input_id == input_id:
                 if input_event is not None:
                     raise NativePiUnavailable("Native Pi repeated the input commitment")
                 input_event = event
-            elif isinstance(event, pi.ContextCommitted) and event.get("inputId") == input_id:
+            elif isinstance(event, pi.ContextCommitted) and event.input_id == input_id:
                 contexts.append(event)
             elif isinstance(event, pi.MessageUpdate):
-                delta = event.get("assistantMessageEvent")
-                if isinstance(delta, dict) and delta.get("type") == "text_delta":
-                    text = delta.get("delta")
-                    if type(text) is not str:
-                        raise NativePiUnavailable("Native Pi returned malformed model text")
+                delta = event.assistant_message_event
+                if isinstance(delta, TextDelta):
+                    text = delta.delta
                     chunks.append(text)
             elif isinstance(event, pi.MessageEnd):
-                message = event.get("message")
-                if isinstance(message, dict) and message.get("role") == "assistant":
-                    content = message.get("content")
-                    if message.get("errorMessage"):
-                        terminal_error = str(message["errorMessage"])
+                message = event.message
+                if message is not None and message.assistant:
+                    content = message.content
+                    if message.error_message:
+                        terminal_error = str(message.error_message)
                         continue
-                    if not isinstance(content, list) or any(
-                        not isinstance(item, dict) for item in content
-                    ):
+                    if content is None or isinstance(content, str):
                         raise NativePiUnavailable("Native Pi assistant content is malformed")
-                    if message.get("stopReason") == "toolUse" and tool_socket is not None:
+                    if message.stop_reason == "toolUse" and tool_socket is not None:
                         tool_socket.announce(content)
                         chunks.clear()  # Tool-round text is not the final response.
                         final_messages.clear()
-                    elif message.get("stopReason") == "stop":
+                    elif message.stop_reason == "stop":
                         if tool_socket is not None:
                             tool_socket.assert_complete()
                         parts: list[str] = []
                         for item in content:
-                            if item.get("type") == "text" and type(item.get("text")) is str:
-                                parts.append(item["text"])
-                            elif item.get("type") != "thinking":
+                            if item.final_text_allowed:
+                                parts.append(item.text)
+                            else:
                                 raise NativePiUnavailable(
                                     "Native Pi assistant returned non-text content"
                                 )
@@ -872,7 +868,7 @@ async def run_native_pi_turn(
                     else:
                         terminal_error = (
                             "Model output limit reached"
-                            if message.get("stopReason") == "length"
+                            if message.stop_reason == "length"
                             else "Provider returned an unsuccessful terminal"
                         )
             elif isinstance(event, pi.ToolExecutionStart):
@@ -886,11 +882,9 @@ async def run_native_pi_turn(
                 tool_socket.tool_finished(event, input_id)
             elif isinstance(event, pi.AgentSettled):
                 break
-            elif isinstance(event, pi.Response) and event.get("command") in {
-                "new_session",
-                "switch_session",
-                "fork",
-            }:
+            elif isinstance(event, pi.Response) and issubclass(
+                event.command, commands.MutatesSession
+            ):
                 raise NativePiUnavailable("Native Pi session identity changed during a turn")
             if observe_event is not None:
                 await observe_event(event)

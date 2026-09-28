@@ -10,7 +10,7 @@ import asyncio
 import json
 import time
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +18,13 @@ from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournal
 from .fresh_private_session import FreshPrivateSession
 from .owner_compaction_prepare import NativeWitness
-from .owner_compaction_provider import NativeSummary, valid_native_usage
+from .owner_compaction_provider import NativeSummary
+from .pi_commands import AgentCommsSummarizeCompaction
+from .pi_events import Response
 from .pi_rpc import PiRpcChannel
+from .pi_summary_payloads import SummaryDeclinedData, SummarySummarizedData, SummaryUnknownData
 from .selected_pi_child_deadline import SelectedChildUnknown, arm_selected_child
-from .selected_pi_route import _request, _strict_echo
+from .selected_pi_route import _request
 
 # Native v1 text/file limits, allowing JSON's six-byte control escaping.
 _MAX_RESPONSE = 6 * (262144 + 2 * 256 * 4096) + 65536
@@ -35,91 +38,48 @@ class SelectedSummaryResult:
 
 
 def _summary_response(
-    raw: bytes, request: dict[str, Any], tokens_before: int
+    raw: bytes, request: AgentCommsSummarizeCompaction, tokens_before: int
 ) -> SelectedSummaryResult:
     """Decode the existing native v1 protocol once at the RPC boundary."""
 
     try:
         if not raw or len(raw) > _MAX_RESPONSE or not raw.endswith(b"\n"):
             raise ValueError("Incomplete bounded selected summary")
-        response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE).wire
+        response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE)
         if (
-            set(response) != {"id", "type", "command", "success", "data"}
-            or response["id"] != request["id"]
-            or response["type"] != "response"
-            or response["command"] != request["type"]
-            or response["success"] is not True
+            not isinstance(response, Response)
+            or response.id != request.id
+            or response.command is not AgentCommsSummarizeCompaction
+            or response.success is not True
         ):
             raise ValueError("Unmatched selected summary response")
-        data = response["data"]
-        if (
-            type(data) is not dict
-            or type(data.get("version")) is not int
-            or data["version"] != 1
-            or data.get("operationId") != request["operationId"]
-        ):
+        data = response.data
+        if data is None or data.operation_id != request.operation_id:
             raise ValueError("Unmatched selected summary operation")
-        if (
-            set(data) == {"version", "status", "operationId", "reason"}
-            and data["status"] == "declined"
-            and type(data["reason"]) is str
-            and 0 < len(data["reason"]) <= 256
-        ):
-            # Observation only: do not issue an original-input admission or
-            # clear the reservation from an RPC response alone.
-            return SelectedSummaryResult(request["operationId"], None, data["reason"])
-        if data["status"] == "unknown":
-            if set(data) == {"version", "status", "operationId"}:
-                raise SelectedChildUnknown(
-                    "Selected summary outcome is uncertain; native child supplied no failure detail"
-                )
-            if (
-                set(data) != {"version", "status", "operationId", "reason"}
-                or type(data["reason"]) is not str
-                or not 0 < len(data["reason"]) <= 1024
-                or any(ord(char) < 32 or ord(char) == 127 for char in data["reason"])
-            ):
-                raise ValueError("Invalid selected summary failure detail")
-            raise SelectedChildUnknown(
-                f"Selected summary failed: {data['reason']} (outcome uncertain; input not retried)"
+        if isinstance(data, SummaryDeclinedData):
+            return SelectedSummaryResult(data.operation_id, None, data.reason)
+        if isinstance(data, SummaryUnknownData):
+            detail = (
+                f"Selected summary failed: {data.reason} (outcome uncertain; input not retried)"
+                if data.reason is not None
+                else "Selected summary outcome is uncertain; native child supplied no failure detail"
             )
-        if (
-            set(data)
-            != {"version", "status", "operationId", "witness", "selected", "settings", "result"}
-            or data["status"] != "summarized"
-            or not _strict_echo(data, request)
+            raise SelectedChildUnknown(detail)
+        if not isinstance(data, SummarySummarizedData) or (
+            data.witness != request.witness
+            or data.selected != request.selected
+            or data.settings != request.settings
+            or data.result.first_kept_entry_id != request.witness.first_kept_entry_id
+            or data.result.tokens_before != tokens_before
         ):
             raise ValueError("Selected summary outcome unknown")
-        result = data["result"]
-        if (
-            type(result) is not dict
-            or set(result) != {"summary", "firstKeptEntryId", "tokensBefore", "details", "usage"}
-            or result["firstKeptEntryId"] != request["witness"]["firstKeptEntryId"]
-            or type(result["tokensBefore"]) is not int
-            or result["tokensBefore"] != tokens_before
-            or type(result["summary"]) is not str
-            or not result["summary"].strip()
-            or len(result["summary"].encode()) > 262144
-            or not valid_native_usage(result["usage"])
-        ):
-            raise ValueError("Invalid selected native summary")
-        details = result["details"]
-        if (
-            type(details) is not dict
-            or set(details) != {"readFiles", "modifiedFiles"}
-            or any(
-                type(paths) is not list
-                or len(paths) > 256
-                or any(
-                    type(path) is not str or not path or "\0" in path or len(path.encode()) > 4096
-                    for path in paths
-                )
-                for paths in details.values()
-            )
-        ):
-            raise ValueError("Invalid selected native file operations")
         return SelectedSummaryResult(
-            request["operationId"], NativeSummary(result["summary"], details, result["usage"])
+            data.operation_id,
+            NativeSummary(
+                data.result.summary,
+                data.result.details.to_wire(),
+                data.result.usage.to_wire(),
+            ),
         )
     except (ValueError, TypeError, KeyError) as error:
         raise SelectedChildUnknown(f"Selected summary response is uncertain: {error}") from error
@@ -154,9 +114,15 @@ class SelectedSummarySlot:
         protocol settles it. No automatic fallback follows any failure.
         """
         source = json.loads(json.dumps(source, allow_nan=False))
-        request = _request(witness, source["selected"], source["settings"])
-        request.pop("dryRun")
-        request["type"] = "agent_comms_summarize_compaction"
+        preparation = _request(witness, source["selected"], source["settings"])
+        request = AgentCommsSummarizeCompaction(
+            id=preparation.id,
+            version=1,
+            operation_id="",
+            witness=witness,
+            selected=preparation.selected,
+            settings=preparation.settings,
+        )
         if (
             witness.session_id != self.session
             or source["source"].get("ownerName") != self.owner
@@ -188,11 +154,11 @@ class SelectedSummarySlot:
             operation = journal.reserve_selected_summary(
                 session_file, source, fresh_session=fresh_session, admission_epoch=admission_epoch
             )
-            request["operationId"] = operation
+            request = replace(request, operation_id=operation)
             # The durable reservation blocks new inputs even after process
             # death; retain it for exact commit linkage on a complete result.
             try:
-                proc.stdin.write((json.dumps(request, separators=(",", ":")) + "\n").encode())
+                proc.stdin.write(PiRpcChannel.command_bytes(request))
                 async with asyncio.timeout(timeout_seconds):
                     await proc.stdin.drain()
                     raw = await reader.readline(max_bytes=_MAX_RESPONSE)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -15,7 +15,7 @@ MAX_PROMPT_IMAGES = 8
 @dataclass(frozen=True, slots=True)
 class ImageInput:
     data: str
-    mime_type: str
+    mime_type: str = field(metadata={"wire_name": "mimeType"})
 
     def __post_init__(self) -> None:
         if self.mime_type not in IMAGE_MIME_TYPES:

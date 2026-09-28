@@ -19,6 +19,7 @@ from . import turn_failure as failures
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .pi_events import MessageStart
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,16 @@ class InputForwarding:
             forwarded = ForwardedInput(
                 original, wire.pop("_input_id", None), wire.pop("_input_ids", [])
             )
-            command = commands.PiCommand.from_wire(wire)
+            try:
+                command = commands.PiCommand.from_wire(wire)
+            except (ValueError, TypeError) as error:
+                from .backend import _terminate_process
+
+                session.record_failure(
+                    failures.PromptSendFailed(f"Invalid queued Pi command: {error}")
+                )
+                await _terminate_process(session.proc)
+                return
             if not await command.steer(session, forwarded):
                 return
 
@@ -134,19 +144,12 @@ class InputForwarding:
         session.rejected_signal.set()
         return True
 
-    def mark_started(
-        self, session: TurnSession, payload: dict[str, Any]
-    ) -> tuple[bool, str | None]:
-        message = payload.get("message") or {}
-        if message.get("role") != "user":
-            return (False, None)
-        content = message.get("content", "")
-        text = (
-            content
-            if isinstance(content, str)
-            else "\n".join(part.get("text", "") for part in content if part.get("type") == "text")
-        )
-        native_id = message.get("inputId")
+    def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
+        message = payload.message
+        if message is None or not message.user:
+            return False, None
+        text = message.text
+        native_id = message.input_id
         for index, (input_id, queued_text, _, expected_native_id) in enumerate(self.pending):
             if (
                 (session.require_input_id or input_id in self.accepted)

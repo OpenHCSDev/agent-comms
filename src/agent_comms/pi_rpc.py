@@ -86,7 +86,7 @@ class PiRpcChannel:
         return (json.dumps(command.to_rpc()) + "\n").encode()
 
     def correlate(self, response) -> PiCommand | None:
-        owner = response.command_type
+        owner = response.command
         return (
             self.pending.take(owner, response.id, response)
             if response.id

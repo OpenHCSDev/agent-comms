@@ -3,46 +3,40 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
+from .pi_payloads import (
+    CompactionData,
+    PiDelta,
+    PiMessage,
+    PiPayload,
+    PiResponseData,
+    PiToolResult,
+    PiUsage,
+)
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
 @dataclass(frozen=True)
-class PiEvent(DeclaredFamily, Mapping[str, Any]):
-    wire: dict[str, Any]
+class PiEvent(PiPayload, DeclaredFamily):
+    wire_tag = "type"
+    opaque = False
 
     @classmethod
-    def from_wire(cls, wire: dict[str, Any]) -> PiEvent:
+    def wire_member(cls, wire):
         try:
-            member = cls.decode(wire.get("type"))
+            return cls.decode(wire.get("type"))
         except ValueError:
-            member = UnknownPiEvent
-        data = {"kind": member.declared_name, "wire": wire}
-        for declared in fields(member):
-            key = declared.metadata.get("wire_name", declared.name)
-            if declared.name != "wire" and key in wire:
-                data[key] = wire[key]
-        return FieldCodec.decode(cls, data)
-
-    def __getitem__(self, key: str) -> Any:
-        return self.wire[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.wire)
-
-    def __len__(self) -> int:
-        return len(self.wire)
+            return UnknownPiEvent
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
@@ -64,13 +58,17 @@ class PiEvent(DeclaredFamily, Mapping[str, Any]):
         pass
 
 
+@dataclass(frozen=True)
 class UnknownPiEvent(PiEvent):
     """Unrecognized events remain ignorable, never admission evidence."""
+
+    payload: dict[str, Any]
+    opaque = True
 
 
 @dataclass(frozen=True, kw_only=True)
 class AgentEnd(PiEvent):
-    will_retry: Any = field(default=None, metadata={"wire_name": "willRetry"})
+    will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
     pass
     accepts_prompt = True
 
@@ -114,7 +112,7 @@ class AgentStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class AutoRetryEnd(PiEvent):
-    success: Any = field(default=None, metadata={"wire_name": "success"})
+    success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.last_model_progress = session.now
@@ -130,8 +128,8 @@ class AutoRetryEnd(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class AutoRetryStart(PiEvent):
-    attempt: Any = field(default=None, metadata={"wire_name": "attempt"})
-    max_attempts: Any = field(default=None, metadata={"wire_name": "maxAttempts"})
+    attempt: int | None = field(default=None, metadata={"wire_name": "attempt"})
+    max_attempts: int | None = field(default=None, metadata={"wire_name": "maxAttempts"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.final_assistant_stop = False
@@ -140,8 +138,8 @@ class AutoRetryStart(PiEvent):
         session.retry_recovery_reason = "provider_auto_retry_progress"
         session.elapsed_ms = round((session.now - session.last_model_progress) * 1000)
         session.last_model_progress = session.now
-        session.current = self.attempt if isinstance(self.attempt, int) else None
-        session.maximum = self.max_attempts if isinstance(self.max_attempts, int) else None
+        session.current = self.attempt
+        session.maximum = self.max_attempts
         yield session.turn_state(
             "retrying",
             "provider_auto_retry",
@@ -153,23 +151,23 @@ class AutoRetryStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionEnd(PiEvent):
-    aborted: Any = field(default=None, metadata={"wire_name": "aborted"})
-    reason: Any = field(default=None, metadata={"wire_name": "reason"})
-    result: Any = field(default=None, metadata={"wire_name": "result"})
-    will_retry: Any = field(default=None, metadata={"wire_name": "willRetry"})
+    aborted: bool | None = field(default=None, metadata={"wire_name": "aborted"})
+    reason: str | None = field(default=None, metadata={"wire_name": "reason"})
+    result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
+    will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         from .backend import PROMPT_START_TIMEOUT_SECONDS, _terminate_process, compaction_summary
 
         session.last_model_progress = session.now
         session.result = self.result
-        session.completed = self.aborted is False and isinstance(session.result, dict)
+        session.completed = self.aborted is False and session.result is not None
         if (
             session.completed
             and (not session.usage.compaction_recorded)
-            and isinstance(session.result.get("usage"), dict)
+            and session.result.usage is not None
         ):
-            yield session.usage.charge(session.result["usage"])
+            yield session.usage.charge(session.result.usage)
         if (
             session.completed
             and (not session.initial_input_started)
@@ -179,15 +177,15 @@ class CompactionEnd(PiEvent):
         session.usage.invalidate()
         yield session.context_info()
         session.reason = self.reason
-        session.summary = session.result.get("summary") if session.completed else None
+        session.summary = session.result.summary if session.completed else None
         yield events.CompactionEnd(
-            reason=session.reason
-            if session.reason in {"manual", "threshold", "overflow"}
-            else "unknown",
+            reason=(
+                session.reason
+                if session.reason in {"manual", "threshold", "overflow"}
+                else "unknown"
+            ),
             aborted=not session.completed,
-            summary=compaction_summary(session.summary)
-            if isinstance(session.summary, str)
-            else None,
+            summary=compaction_summary(session.summary) if session.summary is not None else None,
             context_used=None,
             will_retry=self.will_retry is True,
         )
@@ -214,17 +212,17 @@ class CompactionEnd(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionProgress(PiEvent):
-    chunk_index: Any = field(default=None, metadata={"wire_name": "chunkIndex"})
-    source_bytes_done: Any = field(default=None, metadata={"wire_name": "sourceBytesDone"})
-    source_bytes_total: Any = field(default=None, metadata={"wire_name": "sourceBytesTotal"})
-    summary_phase: Any = field(default=None, metadata={"wire_name": "summaryPhase"})
-    usage: Any = field(default=None, metadata={"wire_name": "usage"})
+    chunk_index: int | None = field(default=None, metadata={"wire_name": "chunkIndex"})
+    source_bytes_done: int | None = field(default=None, metadata={"wire_name": "sourceBytesDone"})
+    source_bytes_total: int | None = field(default=None, metadata={"wire_name": "sourceBytesTotal"})
+    summary_phase: str | None = field(default=None, metadata={"wire_name": "summaryPhase"})
+    usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.last_model_progress = session.now
         session.chunk_index = self.chunk_index
         session.provider_usage = self.usage
-        if isinstance(session.provider_usage, dict):
+        if session.provider_usage is not None:
             session.usage.response_index += 1
             session.usage.compaction_recorded = True
             yield events.ProviderUsage(
@@ -233,27 +231,25 @@ class CompactionProgress(PiEvent):
         session.done = self.source_bytes_done
         session.total = self.source_bytes_total
         session.measured = (
-            type(session.done) is int
-            and type(session.total) is int
+            session.done is not None
+            and session.total is not None
             and (0 <= session.done <= session.total)
             and (session.total > 0)
         )
-        if type(session.chunk_index) is int and (
+        if session.chunk_index is not None and (
             session.chunk_index > 0 or (session.chunk_index == 0 and session.measured)
         ):
             yield events.CompactionProgress(
                 chunk_index=session.chunk_index,
                 source_bytes_done=session.done if session.measured else None,
                 source_bytes_total=session.total if session.measured else None,
-                summary_phase=self.summary_phase
-                if isinstance(self.summary_phase, str) and self.summary_phase
-                else None,
+                summary_phase=self.summary_phase if self.summary_phase else None,
             )
 
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionStart(PiEvent):
-    reason: Any = field(default=None, metadata={"wire_name": "reason"})
+    reason: str | None = field(default=None, metadata={"wire_name": "reason"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.compaction_started = True
@@ -263,9 +259,11 @@ class CompactionStart(PiEvent):
         yield session.context_info()
         session.reason = self.reason
         yield events.CompactionStart(
-            reason=session.reason
-            if session.reason in {"manual", "threshold", "overflow"}
-            else "unknown"
+            reason=(
+                session.reason
+                if session.reason in {"manual", "threshold", "overflow"}
+                else "unknown"
+            )
         )
 
     def observe_abort(self, session: TurnSession) -> None:
@@ -274,15 +272,32 @@ class CompactionStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextCommitted(PiEvent):
-    input_id: Any = field(default=None, metadata={"wire_name": "inputId"})
+    input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
     pass
+    session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
+    session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+    request_generation: int | None = field(
+        default=None, metadata={"wire_name": "requestGeneration"}
+    )
+    llm_context_digest: str | None = field(default=None, metadata={"wire_name": "llmContextDigest"})
 
 
+@dataclass(frozen=True, kw_only=True)
 class ExtensionUiRequest(PiEvent):
+    method: str | None = None
+    id: str | None = None
+    status_key: str | None = field(default=None, metadata={"wire_name": "statusKey"})
+    status_text: str | None = field(default=None, metadata={"wire_name": "statusText"})
+    title: str | None = None
+    message: str | None = None
+    options: tuple[str, ...] | None = None
+    placeholder: str | None = None
+    default_value: str | None = field(default=None, metadata={"wire_name": "defaultValue"})
+
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         from .backend import _pi_mcp_live_receipt, _terminate_process
 
-        if self.get("method") == "setStatus":
+        if self.method == "setStatus":
             if (
                 not session.live_status_seen
                 and (not session.agent_settled_seen)
@@ -303,13 +318,9 @@ class ExtensionUiRequest(PiEvent):
                     yield events.McpLiveStatus(receipt=session.receipt)
             session.skip = True
             return
-        session.request_id = self.get("id")
-        session.method = self.get("method")
-        if (
-            type(session.request_id) is not str
-            or not session.request_id
-            or len(session.request_id) > 128
-        ):
+        session.request_id = self.id
+        session.method = self.method
+        if session.request_id is None or not session.request_id or len(session.request_id) > 128:
             session.record_failure(
                 failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
             )
@@ -334,34 +345,28 @@ class ExtensionUiRequest(PiEvent):
         ):
             session.ui_seen.add(session.request_id)
             with suppress(Exception):
-                session.choice = await asyncio.wait_for(session.ui_request(self.wire), timeout=15)
-        session.response: dict[str, Any] = {
-            "type": "extension_ui_response",
-            "id": session.request_id,
-            "cancelled": True,
-        }
+                session.choice = await asyncio.wait_for(
+                    session.ui_request(self.to_wire()), timeout=15
+                )
+        session.response = ExtensionUiResponse(id=session.request_id, cancelled=True)
         if session.method == "confirm" and isinstance(session.choice, dict):
-            session.response = {
-                "type": "extension_ui_response",
-                "id": session.request_id,
-                "confirmed": session.choice.get("confirmed") is True,
-            }
+            session.response = ExtensionUiResponse(
+                id=session.request_id, confirmed=session.choice.get("confirmed") is True
+            )
         elif session.method == "select" and isinstance(session.choice, dict):
-            session.options = self.get("options")
+            session.options = self.options
             if (
-                isinstance(session.options, list)
+                session.options is not None
                 and type(session.choice.get("value")) is str
                 and (session.choice["value"] in session.options)
             ):
-                session.response = {
-                    "type": "extension_ui_response",
-                    "id": session.request_id,
-                    "value": session.choice["value"],
-                }
+                session.response = ExtensionUiResponse(
+                    id=session.request_id, value=session.choice["value"]
+                )
         try:
             if session.proc.stdin is None or session.proc.returncode is not None:
                 raise BrokenPipeError
-            session.proc.stdin.write((json.dumps(session.response) + "\n").encode())
+            session.proc.stdin.write(session.reader.encode(session.response))
             await asyncio.wait_for(session.proc.stdin.drain(), timeout=2)
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             session.record_failure(
@@ -378,31 +383,22 @@ class ExtensionUiRequest(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class InputCommitted(PiEvent):
-    input_id: Any = field(default=None, metadata={"wire_name": "inputId"})
+    input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
     pass
+    session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
+    session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
 
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEnd(PiEvent):
-    message: Any = field(default=None, metadata={"wire_name": "message"})
+    message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.message = self.message or {}
-        if session.message.get("role") == "assistant":
-            session.content = session.message.get("content")
-            session.committed_text = (
-                "".join(
-                    part["text"]
-                    for part in session.content
-                    if isinstance(part, dict)
-                    and part.get("type") == "text"
-                    and (type(part.get("text")) is str)
-                )
-                if isinstance(session.content, list)
-                else ""
-            )
+        session.message = self.message
+        if session.message is not None and session.message.assistant:
+            session.committed_text = session.message.text
             if (
-                session.message.get("stopReason") == "toolUse"
+                session.message.stop_reason == "toolUse"
                 and session.initial_prompt_acknowledged
                 and session.initial_input_started
                 and (not session.inputs.uncertain)
@@ -412,12 +408,10 @@ class MessageEnd(PiEvent):
             ):
                 yield events.CommittedProgress(text=session.committed_text)
             session.assistant_message_parts.clear()
-            session.provider_usage = session.message.get("usage")
-            if isinstance(session.provider_usage, dict) and (
-                not session.session_identity_uncertain
-            ):
+            session.provider_usage = session.message.usage
+            if session.provider_usage is not None and (not session.session_identity_uncertain):
                 yield session.usage.charge(session.provider_usage)
-            session.stop_reason = session.message.get("stopReason")
+            session.stop_reason = session.message.stop_reason
             session.final_assistant_stop = (
                 session.stop_reason == "stop"
                 and session.initial_input_started
@@ -431,14 +425,18 @@ class MessageEnd(PiEvent):
                 session.error_message = (
                     "Image prompt failed; backend diagnostics withheld."
                     if session.image_input_sent or session.inherited_image_sensitive
-                    else str(session.message.get("errorMessage") or "").strip()
+                    else str(session.message.error_message or "").strip()
                     or f"Model request {session.stop_reason}"
                 )
                 if not (session.explicit_interrupt and session.stop_reason == "aborted"):
                     yield events.Error(text=session.error_message)
             else:
                 session.error_message = None
-                session.tokens = session.usage.positive_tokens(session.message.get("usage"))
+                session.tokens = (
+                    session.message.usage.positive_tokens
+                    if session.message.usage is not None
+                    else None
+                )
                 if session.tokens is not None and (not session.session_identity_uncertain):
                     session.usage.used = session.tokens
                     session.usage.confirmed = session.tokens
@@ -453,34 +451,26 @@ class MessageEnd(PiEvent):
 
     @property
     def retry_progress(self) -> bool:
-        return (self.message or {}).get("role") == "assistant" and (self.message or {}).get(
-            "stopReason"
-        ) not in {"error", "aborted"}
+        return (
+            self.message is not None
+            and self.message.assistant
+            and self.message.stop_reason not in {"error", "aborted"}
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
 class MessageStart(PiEvent):
-    message: Any = field(default=None, metadata={"wire_name": "message"})
+    message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         from .backend import _ACTIVE_STEERING
 
-        if (self.message or {}).get("role") == "assistant":
+        if self.message is not None and self.message.assistant:
             session.assistant_message_parts.clear()
-        elif (self.message or {}).get("role") == "user":
+        elif self.message is not None and self.message.user:
             session.message = self.message
-            session.content = session.message.get("content")
-            if isinstance(session.content, str):
-                session.user_text = session.content
-            elif isinstance(session.content, list):
-                session.user_text = "\n".join(
-                    part.get("text", "")
-                    for part in session.content
-                    if isinstance(part, dict) and part.get("type") == "text"
-                )
-            else:
-                session.user_text = None
-            session.native_id = session.message.get("inputId")
+            session.user_text = session.message.text
+            session.native_id = session.message.input_id
             if (
                 session.initial_prompt_acknowledged
                 and (not session.initial_input_started)
@@ -541,11 +531,11 @@ class MessageStart(PiEvent):
 
     @property
     def invalidates_stop(self) -> bool:
-        return (self.message or {}).get("role") in {"user", "assistant"}
+        return self.message is not None and (self.message.user or self.message.assistant)
 
     @property
     def retry_progress(self) -> bool:
-        return (self.message or {}).get("role") == "assistant"
+        return self.message is not None and self.message.assistant
 
     def observe_abort(self, session: TurnSession) -> None:
         if not session.session_identity_uncertain:
@@ -556,40 +546,26 @@ class MessageStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageUpdate(PiEvent):
-    assistant_message_event: Any = field(
+    assistant_message_event: PiDelta | None = field(
         default=None, metadata={"wire_name": "assistantMessageEvent"}
     )
-    message: Any = field(default=None, metadata={"wire_name": "message"})
-    usage: Any = field(default=None, metadata={"wire_name": "usage"})
+    message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
+    usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.message = self.message or {}
-        if not isinstance(session.message, dict):
-            session.message = {}
-        if session.message.get("role", "assistant") == "assistant":
-            session.tokens = session.usage.positive_tokens(
-                session.message.get("usage")
-            ) or session.usage.positive_tokens(self.usage)
+        session.message = self.message
+        if session.message is None or session.message.assistant:
+            message_usage = session.message.usage if session.message is not None else None
+            session.tokens = (
+                message_usage.positive_tokens if message_usage is not None else None
+            ) or (self.usage.positive_tokens if self.usage is not None else None)
             if session.tokens is not None and (not session.session_identity_uncertain):
                 session.usage.used = session.tokens
                 session.usage.provisional = True
                 yield session.context_info()
-        session.delta_event = self.assistant_message_event or {}
-        session.delta_type = session.delta_event.get("type")
-        if session.delta_type == "text_delta":
-            session.piece = session.delta_event.get("delta") or ""
-            if session.piece:
-                session.output_started = True
-            session.text_parts.append(session.piece)
-            session.assistant_message_parts.append(session.piece)
-            yield events.Chunk(text=session.piece)
-        elif session.delta_type == "thinking_delta":
-            session.piece = session.delta_event.get("delta") or ""
-            if session.piece:
-                session.output_started = True
-                yield events.Thinking(text=session.piece)
-        elif session.delta_type in {"toolcall_start", "toolcall_delta", "toolcall_end"}:
-            session.output_started = True
+        if self.assistant_message_event is not None:
+            for event in self.assistant_message_event.emit(session):
+                yield event
 
     accepts_prompt = True
     output_progress = True
@@ -600,14 +576,7 @@ class MessageUpdate(PiEvent):
 
     @property
     def delta_progress(self) -> bool:
-        delta = self.assistant_message_event or {}
-        return delta.get("type") in {
-            "text_delta",
-            "thinking_delta",
-            "toolcall_start",
-            "toolcall_delta",
-            "toolcall_end",
-        } and bool(delta.get("delta") or delta.get("type", "").startswith("toolcall"))
+        return self.assistant_message_event is not None and self.assistant_message_event.progress
 
     def observe_abort(self, session: TurnSession) -> None:
         if self.delta_progress:
@@ -616,20 +585,25 @@ class MessageUpdate(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class Response(PiEvent):
-    command: Any = field(default=None, metadata={"wire_name": "command"})
-    data: Any = field(default=None, metadata={"wire_name": "data"})
-    error: Any = field(default=None, metadata={"wire_name": "error"})
-    id: Any = field(default=None, metadata={"wire_name": "id"})
-    success: Any = field(default=None, metadata={"wire_name": "success"})
+    command: type[PiCommand] = UnknownCommand
+    data: PiResponseData | None = None
+    error: str | None = field(default=None, metadata={"wire_name": "error"})
+    id: str | None = field(default=None, metadata={"wire_name": "id"})
+    success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
-    @property
-    def command_type(self):
-        from .pi_commands import PiCommand
-
-        return PiCommand.response_owner(self.command)
+    @classmethod
+    def normalize_field(cls, target, key, value, record):
+        owner = PiCommand.response_owner(record.get("command"))
+        if owner.strict_response and set(record) != {"id", "type", "command", "success", "data"}:
+            raise ValueError("Unexpected selected response envelope")
+        if key == "command":
+            return owner.declared_name
+        if key == "data" and value is not None:
+            return owner.response_payload.normalize_wire(value)
+        return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        owner = session.response_command or self.command_type
+        owner = session.response_command or self.command
         async for event in owner.on_response(self, session):
             yield event
 
@@ -644,15 +618,15 @@ class SteeringInterruptStarted(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class SummarizationRetryAttemptStart(PiEvent):
-    attempt: Any = field(default=None, metadata={"wire_name": "attempt"})
-    max_attempts: Any = field(default=None, metadata={"wire_name": "maxAttempts"})
+    attempt: int | None = field(default=None, metadata={"wire_name": "attempt"})
+    max_attempts: int | None = field(default=None, metadata={"wire_name": "maxAttempts"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.compaction_started = True
         session.elapsed_ms = round((session.now - session.last_model_progress) * 1000)
         session.last_model_progress = session.now
-        session.current = self.attempt if isinstance(self.attempt, int) else None
-        session.maximum = self.max_attempts if isinstance(self.max_attempts, int) else None
+        session.current = self.attempt
+        session.maximum = self.max_attempts
         yield session.turn_state(
             "retrying",
             "summarization_retry",
@@ -667,8 +641,8 @@ class SummarizationRetryAttemptStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class SummarizationRetryFinished(PiEvent):
-    result: Any = field(default=None, metadata={"wire_name": "result"})
-    success: Any = field(default=None, metadata={"wire_name": "success"})
+    result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
+    success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.last_model_progress = session.now
@@ -680,15 +654,15 @@ class SummarizationRetryFinished(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class SummarizationRetryScheduled(PiEvent):
-    attempt: Any = field(default=None, metadata={"wire_name": "attempt"})
-    max_attempts: Any = field(default=None, metadata={"wire_name": "maxAttempts"})
+    attempt: int | None = field(default=None, metadata={"wire_name": "attempt"})
+    max_attempts: int | None = field(default=None, metadata={"wire_name": "maxAttempts"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.compaction_started = True
         session.elapsed_ms = round((session.now - session.last_model_progress) * 1000)
         session.last_model_progress = session.now
-        session.current = self.attempt if isinstance(self.attempt, int) else None
-        session.maximum = self.max_attempts if isinstance(self.max_attempts, int) else None
+        session.current = self.attempt
+        session.maximum = self.max_attempts
         yield session.turn_state(
             "retrying",
             "summarization_retry",
@@ -703,24 +677,21 @@ class SummarizationRetryScheduled(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(PiEvent):
-    is_error: Any = field(default=None, metadata={"wire_name": "isError"})
-    result: Any = field(default=None, metadata={"wire_name": "result"})
-    tool_call_id: Any = field(default=None, metadata={"wire_name": "toolCallId"})
-    tool_name: Any = field(default=None, metadata={"wire_name": "toolName"})
+    is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
+    result: PiToolResult | None = field(default=None, metadata={"wire_name": "result"})
+    tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
+    tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _result_text
         from .tool_results import ToolDiff
 
         session.name = self.tool_name or "tool"
-        session.result = self.result or {}
-        session.output = _result_text(session.result)
+        session.result = self.result
+        session.output = session.result.text() if session.result is not None else ""
         session.is_ok = self.is_error is not True
         session.tool_id = self.tool_call_id or session.name
         session.active_tools.discard(session.tool_id)
         session.last_model_progress = session.loop.time()
-        if not session.active_tools:
-            pass
         yield events.ToolEnd(
             id=session.tool_id,
             name=session.name,
@@ -732,9 +703,9 @@ class ToolExecutionEnd(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(PiEvent):
-    args: Any = field(default=None, metadata={"wire_name": "args"})
-    tool_call_id: Any = field(default=None, metadata={"wire_name": "toolCallId"})
-    tool_name: Any = field(default=None, metadata={"wire_name": "toolName"})
+    args: dict[str, Any] | None = field(default=None, metadata={"wire_name": "args"})
+    tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
+    tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         from .backend import _tool_title
@@ -764,17 +735,18 @@ class ToolExecutionStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionUpdate(PiEvent):
-    partial_result: Any = field(default=None, metadata={"wire_name": "partialResult"})
-    tool_call_id: Any = field(default=None, metadata={"wire_name": "toolCallId"})
-    tool_name: Any = field(default=None, metadata={"wire_name": "toolName"})
+    partial_result: PiToolResult | None = field(
+        default=None, metadata={"wire_name": "partialResult"}
+    )
+    tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
+    tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _result_text
 
         yield events.ToolProgress(
             id=self.tool_call_id or self.tool_name or "tool",
             name=self.tool_name or "tool",
-            output=_result_text(self.partial_result),
+            output=self.partial_result.text() if self.partial_result is not None else "",
         )
 
     def observe_abort(self, session: TurnSession) -> None:

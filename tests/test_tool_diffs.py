@@ -9,6 +9,7 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.pi_payloads import PiToolResult
 from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
 from agent_comms.transcripts import TranscriptEvent
@@ -39,10 +40,16 @@ def result(patch=PATCH):
         ("bash", result(), True, None),
         ("edit", {"details": {"patch": 123}}, True, None),
         ("edit", None, True, None),
+        ("edit", {"details": ["extension-defined", 3]}, True, None),
     ],
 )
 def test_native_edit_evidence(name, native, ok, expected):
-    assert ToolDiff.from_result(name, native, ok) == expected
+    assert (
+        ToolDiff.from_result(
+            name, PiToolResult.from_wire(native) if native is not None else None, ok
+        )
+        == expected
+    )
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Executable POSIX test stub")

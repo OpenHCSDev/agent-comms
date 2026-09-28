@@ -23,6 +23,7 @@ from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .messages import MessageType
 from .mro_dispatch import MroDispatch, handles
+from .pi_payloads import PiUsage
 from .routing import MessageRoute
 from .transcript_updates import SentTranscriptUpdate
 from .turn_lease import FinishedTurnFence
@@ -69,7 +70,7 @@ class TurnProgress(events.AgentEventConsumer):
         self.goal_attempt_resolved = False
         self.originated_goal_ids: set[str] = set()
         self.originated_attempts: dict[str, LaunchPermit] = {}
-        self.unattributed_usage: list[tuple[str, dict[str, Any]]] = []
+        self.unattributed_usage: list[tuple[str, PiUsage]] = []
         self.settled = False
         self.terminal_fence: FinishedTurnFence | None = None
         self.cancelled = False
@@ -134,7 +135,7 @@ class TurnProgress(events.AgentEventConsumer):
             permit = execution.goal_permit
         if permit is not None:
             assert execution.runner.goal_store is not None
-            execution.runner.goal_store.record_provider_usage(permit, response_id, usage)
+            execution.runner.goal_store.record_provider_usage(permit, response_id, usage.to_wire())
         else:
             self.unattributed_usage.append((response_id, usage))
 
@@ -305,7 +306,7 @@ class TurnProgress(events.AgentEventConsumer):
                     origin_permit = store.claim_launch(reservation)
                     self.originated_attempts[current_goal.id] = origin_permit
                     for response_id, usage in self.unattributed_usage:
-                        store.record_provider_usage(origin_permit, response_id, usage)
+                        store.record_provider_usage(origin_permit, response_id, usage.to_wire())
                     self.unattributed_usage.clear()
                     execution.runner.pending_goal_origins[execution.thread_name] = current_goal.id
         self.update_activity(ActivityState.THINKING, execution.task[:80])
@@ -495,7 +496,9 @@ class TurnProgress(events.AgentEventConsumer):
                     "agentComms": {
                         "transcriptChanged": True,
                         "transcriptCursor": asdict(
-                            execution.runner.comms.transcripts.transcript_checkpoint(execution.thread_name)
+                            execution.runner.comms.transcripts.transcript_checkpoint(
+                                execution.thread_name
+                            )
                         ),
                     }
                 },

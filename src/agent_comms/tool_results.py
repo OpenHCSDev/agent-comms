@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from .pi_payloads import PiToolResult
 from urllib.parse import quote
 
 
@@ -16,11 +18,11 @@ class ToolDiff:
     format: Literal["unified", "numbered"] = "unified"
 
     @classmethod
-    def from_result(cls, name: str, result: object, ok: bool) -> ToolDiff | None:
-        if name != "edit" or not ok or not isinstance(result, Mapping):
+    def from_result(cls, name: str, result: PiToolResult | None, ok: bool) -> ToolDiff | None:
+        if name != "edit" or not ok or result is None:
             return None
-        details = result.get("details")
-        if not isinstance(details, Mapping):
+        details = result.details
+        if not isinstance(details, dict):
             return None
         patch = details.get("patch")
         if isinstance(patch, str) and patch.strip():

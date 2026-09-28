@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
 from .mro_dispatch import MroDispatch, handles
+from .pi_payloads import PiUsage
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
@@ -244,7 +245,7 @@ class AgentInfo(AgentEvent):
 @dataclass(frozen=True)
 class ProviderUsage(AgentEvent):
     response_id: str
-    usage: dict[str, Any]
+    usage: PiUsage
 
 
 @dataclass(frozen=True)
