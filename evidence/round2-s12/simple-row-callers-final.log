@@ -1,0 +1,45 @@
+........................................................................ [ 36%]
+.........s.............................................................. [ 73%]
+..................................................F..                    [100%]
+=================================== FAILURES ===================================
+_________________ test_new_row_declaration_needs_no_other_edit _________________
+
+    def test_new_row_declaration_needs_no_other_edit():
+        @dataclass(frozen=True)
+        class AddedTableRow(TypedTable):
+            label: str = field(metadata={"sql": Column(unique=True, index=True)})
+            child: TableChildRow
+            event: MessageType = MessageType.INFO
+            representation: type[SqlStorage] = IntegerStorage
+            exact: int = field(default=7, metadata={"sql": Column(storage=ExactStorage)})
+            ordinal: int | None = field(
+                default=None,
+                compare=False,
+                metadata={"sql": Column(primary_key=True, auto_increment=True)},
+            )
+            label_size: int | None = field(
+                default=None,
+                init=False,
+                compare=False,
+                metadata={"sql": Column(generated="length(label)")},
+            )
+    
+        @dataclass(frozen=True)
+        class Projection(TypedRow):
+            label: str
+            enabled: bool
+    
+        with sqlite3.connect(":memory:") as db:
+            AddedTableRow.create(db)
+            value = AddedTableRow("new", TableChildRow("a", "b", True, (), 1.25))
+            value.insert(db)
+>           assert AddedTableRow.select(db) == [value]
+E           AssertionError: assert [test_new_row...label_size=3)] == [test_new_row...el_size=None)]
+E             
+E             At index 0 diff: test_new_row_declaration_needs_no_other_edit.<locals>.AddedTableRow(label='new', child=TableChildRow(key='a', parent='b', enabled=True, detail=(), weight=1.25, parent_count=3), event=<MessageType.INFO: 'info'>, representation='integer', exact=7, ordinal=1, label_size=3) != test_new_row_declaration_needs_no_other_edit.<locals>.AddedTableRow(label='new', child=TableChildRow(key='a', parent='b', enabled=True, detail=(), weight=1.25, parent_count=3), event=<MessageType.INFO: 'info'>, representation=<class 'agent_comms.typed_table.IntegerStorage'>, exact=7, ordinal=None, label_size=None)
+E             Use -v to get more diff
+
+tests/round2/test_typed_table.py:108: AssertionError
+=========================== short test summary info ============================
+FAILED tests/round2/test_typed_table.py::test_new_row_declaration_needs_no_other_edit
+1 failed, 195 passed, 1 skipped in 12.37s

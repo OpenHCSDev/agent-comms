@@ -19,7 +19,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import (
     MessageAudience,
-    PublicationIntent,
+    PublicationIntents,
     WakeAssignment,
     canonical_publication_key,
 )
@@ -67,8 +67,8 @@ def _root(tmp_path: Path) -> tuple[Comms, MutationStore, str, dict[str, str]]:
     return comms, coordinator, root_id, lookups
 
 
-def _intent(message: Message, execution_id: str = "execution-1") -> PublicationIntent:
-    return PublicationIntent(
+def _intent(message: Message, execution_id: str = "execution-1") -> PublicationIntents:
+    return PublicationIntents(
         execution_id=execution_id,
         sender=message.sender,
         exact_target=message.target,

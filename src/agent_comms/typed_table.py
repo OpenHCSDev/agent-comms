@@ -12,6 +12,7 @@ import sqlite3
 import types
 from abc import abstractmethod
 from dataclasses import dataclass, fields
+from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from typing import ClassVar, Literal, Self, Union, get_args, get_origin, get_type_hints
 
@@ -45,7 +46,13 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     @classmethod
     def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
         declared, _ = _base_type(annotation)
-        if get_origin(declared) is not Literal:
+        if get_origin(declared) is Literal:
+            values = get_args(declared)
+        elif isinstance(declared, type) and issubclass(declared, Enum):
+            if issubclass(declared, IntFlag):
+                return ()  # Combinations belong to the flag declaration's mask constraint.
+            values = tuple(member.value for member in declared)
+        else:
             return ()
         choices = ", ".join(
             (
@@ -55,16 +62,16 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
                 if isinstance(value, bool)
                 else str(value)
             )
-            for value in get_args(declared)
+            for value in values
         )
         return (f"{_identifier(column)} IN ({choices})",)
 
     @classmethod
-    def encode(cls, value: object) -> object:
+    def to_sql(cls, value: object) -> object:
         return FieldCodec.encode(value)
 
     @classmethod
-    def decode(cls, value: object) -> object:
+    def from_sql(cls, value: object) -> object:
         return value
 
     @classmethod
@@ -116,14 +123,34 @@ class BooleanStorage(SqlStorage):
         return (*super().constraints(column, annotation), f"{_identifier(column)} IN (0, 1)")
 
     @classmethod
-    def encode(cls, value: object) -> int:
+    def to_sql(cls, value: object) -> int:
         return int(value)
 
     @classmethod
-    def decode(cls, value: object) -> bool:
+    def from_sql(cls, value: object) -> bool:
         if type(value) is not int or value not in (0, 1):
             raise ValueError("SQLite boolean must be 0 or 1")
         return bool(value)
+
+
+class StringEnumStorage(SqlStorage):
+    sql_type = "TEXT"
+
+    @classmethod
+    def accepts(cls, annotation: object) -> bool:
+        return (
+            isinstance(annotation, type)
+            and issubclass(annotation, Enum)
+            and all(isinstance(member.value, str) for member in annotation)
+        )
+
+
+class IntegerEnumStorage(SqlStorage):
+    sql_type = "INTEGER"
+
+    @classmethod
+    def accepts(cls, annotation: object) -> bool:
+        return isinstance(annotation, type) and issubclass(annotation, (IntEnum, IntFlag))
 
 
 class FamilyClassStorage(SqlStorage):
@@ -162,11 +189,11 @@ class JsonStorage(SqlStorage):
         )
 
     @classmethod
-    def encode(cls, value: object) -> str:
+    def to_sql(cls, value: object) -> str:
         return json.dumps(FieldCodec.encode(value), separators=(",", ":"), allow_nan=False)
 
     @classmethod
-    def decode(cls, value: object) -> object:
+    def from_sql(cls, value: object) -> object:
         if type(value) is not str:
             raise ValueError("SQLite JSON must be text")
         return json.loads(value)
@@ -227,11 +254,11 @@ class _Field:
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
         FieldCodec.decode(self.annotation, FieldCodec.encode(value))
-        return None if value is None else self.storage.encode(value)
+        return None if value is None else self.storage.to_sql(value)
 
     def decode(self, value: object) -> object:
         return FieldCodec.decode(
-            self.annotation, None if value is None else self.storage.decode(value)
+            self.annotation, None if value is None else self.storage.from_sql(value)
         )
 
 

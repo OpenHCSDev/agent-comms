@@ -29,17 +29,17 @@ from agent_comms.coordination import (
     COORDINATION_SNAPSHOT_VERSION,
     AttemptRecord,
     CoordinationStore,
-    CurrentExecutionPointer,
+    CurrentExecutions,
     ExecutionAssignmentLink,
     ExecutionOrigin,
     ExecutionRecord,
     IntegrityViolationError,
     MessageAudience,
     OwnerFence,
-    PublicationIntent,
+    PublicationIntents,
     PublicationReceipt,
     RecoverySnapshot,
-    ReplayAssessment,
+    ReplayAssessments,
     ReplayFact,
     ResponseObligation,
     SchemaVersionError,
@@ -169,7 +169,7 @@ def snapshot(
             if record.origin is ExecutionOrigin.WIRE
             else ()
         ),
-        replay=replay or ReplayAssessment(record.execution_id, ReplayFact.NONE, True, False, 1),
+        replay=replay or ReplayAssessments(record.execution_id, ReplayFact.NONE, True, False, 1),
         obligation=response if record.origin is ExecutionOrigin.WIRE else None,
         publication_intent=None,
         publication_receipt=None,
@@ -360,7 +360,7 @@ def test_typed_execution_and_attempt_authority_are_separate():
 
 def test_pointer_requires_exact_composite_attempt_and_owner():
     record = execution(status=ActiveExecution, ordinal=1)
-    current = CurrentExecutionPointer("owner-1", "execution-1", 1, 1)
+    current = CurrentExecutions("owner-1", "execution-1", 1, 1)
     current.assert_matches(record, attempt())
     with pytest.raises(IntegrityViolationError):
         current.assert_matches(record, attempt(ordinal=2))
@@ -389,7 +389,7 @@ def test_snapshot_projection_retry_and_inert_secrets():
     assert "digest-1" not in str(projection)
     with pytest.raises(IntegrityViolationError, match="budget"):
         replace(deferred.execution, max_attempts=1)
-    unsafe = ReplayAssessment("execution-1", ReplayFact.TOOL_EXECUTED, False, True, 2)
+    unsafe = ReplayAssessments("execution-1", ReplayFact.TOOL_EXECUTED, False, True, 2)
     with pytest.raises(IntegrityViolationError, match="authorized retry"):
         snapshot(execution_record=deferred.execution, attempt_record=failed_attempt, replay=unsafe)
     with pytest.raises(IntegrityViolationError, match="authorized retry"):
@@ -487,7 +487,7 @@ def test_wire_claim_obligation_and_publication_contract():
         timestamp=1.0,
         notice=False,
     )
-    intent = PublicationIntent(
+    intent = PublicationIntents(
         execution_id="execution-1",
         sender="worker",
         exact_target="requester",
@@ -533,7 +533,7 @@ def test_claim_replay_obligation_relations_remain_authoritative():
             ),
         ),
     )
-    r = ReplayAssessment("execution-1", ReplayFact.NONE, True, False, 1)
+    r = ReplayAssessments("execution-1", ReplayFact.NONE, True, False, 1)
     assert replay_transition_allowed(r, replace(r, replay_safe=False, revision=2))
     with pytest.raises(IntegrityViolationError):
         replace(r, revision=2, facts=ReplayFact.TOOL_EXECUTED, replay_safe=True)
@@ -1651,7 +1651,7 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
     )
     digest = hashlib.sha256(b"hello").hexdigest()
     key = canonical_publication_key("e", "requester")
-    intent = PublicationIntent(
+    intent = PublicationIntents(
         execution_id="e",
         sender="worker",
         exact_target="requester",
@@ -1705,7 +1705,7 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
     with CoordinationStore(path) as reopened:
         row = reopened._connection.execute("SELECT * FROM publication_intents").fetchone()
         assert row[4] == int(expected_notice) and type(row[4]) is int
-        recovered_intent = PublicationIntent(
+        recovered_intent = PublicationIntents(
             execution_id=row[0],
             sender=row[1],
             exact_target=row[2],
@@ -1776,7 +1776,7 @@ def test_integer_timestamps_canonicalize_through_message_authority(db):
         timestamp=1.0,
         notice=False,
     )
-    typed = PublicationIntent(
+    typed = PublicationIntents(
         execution_id="e",
         sender="worker",
         exact_target="requester",
@@ -1829,7 +1829,7 @@ def test_signed_zero_timestamps_canonicalize_through_message_authority(db):
     )
     digest = hashlib.sha256(b"hello").hexdigest()
     key = canonical_publication_key("e", "requester")
-    intent = PublicationIntent(
+    intent = PublicationIntents(
         execution_id="e",
         sender="worker",
         exact_target="requester",

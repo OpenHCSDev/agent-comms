@@ -3,6 +3,33 @@
 Foundation #230 merged at reviewed cca3b282. Caller closure draft #237. Current branch:
 `refactor/round2-s12-caller-closure`.
 
+## Latest caller/table closure
+
+- `CurrentExecutions`, `ReplayAssessments`, `PublicationIntents` are now sole
+  behavior and table owners. Deleted CurrentExecutionPointer, ReplayAssessment,
+  PublicationIntent classes; no aliases. Updated imports/calls in
+  coordination_response.py, publisher.py and wire_log.py. Parent #229 should
+  use PublicationIntents if any newly added wire code still names the old type.
+- Participants/aliases/generations/pointers and recovery/replay callers use
+  typed reads/writes. PublicationReceipt reads its join without a hand mapper.
+- `Todo` owns todos.sqlite3 schema and all typed access; no _todo mapper,
+  _assignment_token serializer or raw positional inserts remain.
+- `tools/cutover/todos.py` stages durable tasks exactly once. It never replaces
+  the source or an existing stage. Actual previous main TodoStore -> current
+  reopened stage preserved 3 tasks, insertion order, revisions, goal reference,
+  current owner, release/transfer retry evidence and done state. Source unchanged.
+  Parent runs it at the quiet cutover and deletes it after installation.
+- Local receipts: row-owner-closure.log 189 passed/1 skipped;
+  declaration-constraints.log 85 passed; todo-durable-cutover.log actual staged
+  conversion passed. These are local behavior checks, no installed activation.
+- SqlStorage SQLite conversion methods are to_sql/from_sql, leaving the
+  DeclaredFamily.decode name lookup intact. The shared new-case SQLite test
+  caught and now covers that collision, enum constraints, generated columns,
+  autoincrement and ANY's refusal to coerce a stored string into a typed integer.
+- Copernicus owns BusRouteCounts and pending/inbox regions; parent owns history,
+  required WireAccess/admission_after_seq and #229/0330ad9. Those features are
+  preserved on integration; this work adds no metadata owner or fabricated proof.
+
 ## Stable NativeRuntimeInput API for Pascal
 
 ```python
@@ -39,8 +66,8 @@ behavior now compares the owner constant. Six fast marked guards passed locally
 - `native_prompt_bindings.sqlite3`: snapshot_meta, prompt_binding. Parent owns
   reset of the private snapshot and pending intent protocol, preserving UNKNOWN
   as history; this code never repairs/replays uncertain prompts.
-- Durable todos/history are not reset by this work. Further tables will be
-  classified as their callers migrate.
+- Durable todos are rewritten once with the tool above, never reset. Other
+  durable history tables remain to classify and migrate as their callers close.
 
 Parent #229/6fd9857 owns floor/D22. Preserve required admission_after_seq;
 acceptance/selection strictly >H, empty native proof 0. Canonical plain history

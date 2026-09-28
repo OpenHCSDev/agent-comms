@@ -14,7 +14,7 @@ from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, public_envelope_dige
 from agent_comms.comms import Comms
 from agent_comms.coordination import (
     MAX_PUBLICATION_PAYLOAD_BYTES,
-    PublicationIntent,
+    PublicationIntents,
     canonical_publication_key,
 )
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -106,8 +106,8 @@ def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     assert len(safe.messaging.initialize_private_initial_protocol()) == 32
 
 
-def response_intent(message: Message, execution_id: str = "execution-1") -> PublicationIntent:
-    return PublicationIntent(
+def response_intent(message: Message, execution_id: str = "execution-1") -> PublicationIntents:
+    return PublicationIntents(
         execution_id=execution_id,
         sender=message.sender,
         exact_target=message.target,
@@ -1074,7 +1074,7 @@ class TestMessageBus:
         with pytest.raises(RelationViolationError, match="disabled"):
             legacy.publisher.publish_keyed_response(intent)
         keyed = MessageBus(legacy.log.path, legacy._registry, private_response_writes=True)
-        with pytest.raises(TypeError, match="validated PublicationIntent"):
+        with pytest.raises(TypeError, match="validated PublicationIntents"):
             keyed.publisher.publish_keyed_response(intended)  # type: ignore[arg-type]
         with pytest.raises(RelationViolationError, match="protocol marker"):
             keyed.publisher.publish_keyed_response(intent)

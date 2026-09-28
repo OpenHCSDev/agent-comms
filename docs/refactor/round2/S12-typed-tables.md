@@ -101,8 +101,24 @@ callers and deletion guards before S12 is complete.
   current_native_cursor); `native_prompt_bindings.sqlite3` (snapshot_meta and
   prompt_binding, including its pending intent/lock protocol). Parent must
   quiesce owners before resetting any of these; no reset was performed here.
-- **Durable stores:** todos and other durable stores remain unconverted in
-  this draft. Their data must be carried across once; never reset as runtime.
+- **Durable stores:** `todos.sqlite3` now derives its schema and all reads/writes
+  from the existing `Todo` declaration. `tools/cutover/todos.py` stages every
+  task, goal, revision, assignment and uncertain-retry identity once. A real
+  prior-store -> current-store reopen check passed. Parent must install the
+  stage at quiet cutover and delete the tool afterward; no live todo file was
+  changed. Other durable stores remain to migrate, never reset as runtime.
+- **Current caller closure:** participants, aliases, owner generations, pointers,
+  recovery audits and replay observations now use typed writes/reads. Deleted
+  the duplicate CurrentExecutionPointer, ReplayAssessment and PublicationIntent
+  declarations: CurrentExecutions, ReplayAssessments and PublicationIntents
+  are their sole row/behavior owners; all current references are updated.
+  PublicationReceipt is a typed join projection. Remaining lifecycle mappers
+  and coordinator writes are still open.
+- **Delegated crossing:** Copernicus owns bus_route_counts.py and its A13
+  conversion, routing.DeliveryScope and MessageBus pending_counts,
+  pending_counts_all, inbox and _pending_route_fields. S12 does not duplicate
+  these. Parent owns MessageBus history, WireMetadata access/floor and D22.
+  Parent 0330ad9 must survive later integration unchanged in meaning.
 - **Floor and D22:** parent #229 owns the required durable
   WireMetadata.admission_after_seq. Preserve parent 6fd9857 on integration.
   Selection and acceptance require seq > H. Current native proof stays 0
