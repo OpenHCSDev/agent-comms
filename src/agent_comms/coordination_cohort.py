@@ -22,7 +22,6 @@ from .cohort_schema import (
 from .coordination import (
     POLICY_VERSION,
     RESOLVER_VERSION,
-    ClaimDisposition,
     IntegrityViolationError,
     SchemaVersionError,
     WakeClaim,
@@ -86,23 +85,20 @@ def _expected_claims(initial: CommittedInitial, accepted_at_ms: int) -> tuple[Wa
                 recipient_lookup=decision.recipient,
                 wire_seq=initial.message.seq,
                 message_id=initial.message.message_id,
-                exact_target=None,
                 audience=decision.audience,
-                wake_mode=decision.wake_mode,
-                triage_verdict=None,
-                disposition=ClaimDisposition(decision.wake_mode.declaration.initial_disposition()),
                 accepted_at_ms=accepted_at_ms,
                 updated_at_ms=accepted_at_ms,
                 revision=1,
                 resolver_version=RESOLVER_VERSION,
                 policy_version=POLICY_VERSION,
+                lifecycle=decision.wake_mode.initial_state()(),
             )
         )
     return tuple(result)
 
 
 def _immutable_claim_matches(current: WakeClaim, expected: WakeClaim) -> bool:
-    return all(
+    return current.lifecycle.mode == expected.lifecycle.mode and all(
         getattr(current, field) == getattr(expected, field)
         for field in (
             "claim_id",
@@ -111,7 +107,6 @@ def _immutable_claim_matches(current: WakeClaim, expected: WakeClaim) -> bool:
             "wire_seq",
             "message_id",
             "audience",
-            "wake_mode",
             "resolver_version",
             "policy_version",
             "accepted_at_ms",
@@ -326,9 +321,9 @@ def accept_initial_cohort(
                     claim.message_id,
                     None,
                     claim.audience.value,
-                    claim.wake_mode.value,
+                    claim.lifecycle.mode.declared_name,
                     None,
-                    claim.disposition.value,
+                    claim.lifecycle.declared_name,
                     claim.resolver_version,
                     claim.policy_version,
                     claim.accepted_at_ms,

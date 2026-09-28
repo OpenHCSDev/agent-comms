@@ -24,11 +24,17 @@ from agent_comms.coordination_store import MutationStore, PublicationActivationB
 from agent_comms.declarations import RelationViolationError, Thread
 from agent_comms.nk_foreground import reserve_foreground_owner
 from agent_comms.operations import Comms
+from test_cohort_foreground import _configured_thread, _fake_package
 from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private foreground N/K requires Linux /var/tmp and fork"
 )
+
+
+@pytest.fixture(autouse=True)
+def configured_foreground(monkeypatch):
+    monkeypatch.setattr(foreground, "Thread", _configured_thread)
 
 
 @pytest.fixture
@@ -55,8 +61,8 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
 
     model, calls = _fake_model(decision=decision)
     with (
-        patch.object(foreground, "_trusted_package", return_value=None),
-        patch.object(runtime, "_trusted_package", return_value=None),
+        patch.object(foreground, "_trusted_package", side_effect=_fake_package),
+        patch.object(runtime, "_trusted_package", side_effect=_fake_package),
         patch.object(runtime, "run_native_pi_turn", model),
     ):
         try:
@@ -75,7 +81,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
             pipe.send(
                 (
                     "terminal",
-                    result.disposition.value if result else None,
+                    result.disposition.declared_name if result else None,
                     result.exact_target if result else None,
                     result.response_message_id if result else None,
                     len(calls),
@@ -179,8 +185,8 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
 def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_path: Path) -> None:
     root, comms, root_id = _private_root(tmp_path)
     with (
-        patch("agent_comms.nk_foreground._trusted_package", return_value=None),
-        patch("agent_comms.coordinated_runtime._trusted_package", return_value=None),
+        patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package),
+        patch("agent_comms.coordinated_runtime._trusted_package", side_effect=_fake_package),
     ):
         owner = reserve_foreground_owner(
             root,
@@ -230,8 +236,8 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     root, comms, root_id = _private_root(tmp_path)
     comms.register(Thread("alpha", frozenset({"team"}), str(root / "work"), pid=os.getpid()))
     fake, calls = _fake_model()
-    monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
     commands: list[int] = []
 
@@ -279,7 +285,7 @@ def test_explicit_stop_is_not_falsely_reported_as_registry_stopped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, comms, root_id = _private_root(tmp_path)
-    monkeypatch.setattr(foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr(foreground, "_read_go_command", lambda _timeout: "STOP")
     events: list[dict[str, object]] = []
     monkeypatch.setattr(foreground, "_emit", events.append)
@@ -325,7 +331,7 @@ def test_partial_go_frame_times_out_without_provider(monkeypatch: pytest.MonkeyP
 
 def test_private_root_marker_and_no_owner_replacement(tmp_path: Path) -> None:
     root, comms, root_id = _private_root(tmp_path)
-    with patch("agent_comms.nk_foreground._trusted_package", return_value=None):
+    with patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package):
         with pytest.raises(PublicationActivationBlocked):
             reserve_foreground_owner(
                 root,

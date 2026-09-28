@@ -13,8 +13,8 @@ import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
+from agent_comms.claim_states import CompletedClaim, IgnoredClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.coordination import ClaimDisposition
 from agent_comms.coordination_store import MutationStore
 from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -29,10 +29,10 @@ tmp_path = private_root_fixture
 @pytest.mark.parametrize(
     ("target", "body", "decision", "expected_calls", "expected_k", "disposition"),
     [
-        ("beta", "Compute 17+25", "FULL", 1, 1, ClaimDisposition.COMPLETED),
-        ("#team", "@beta Compute 17+25", "FULL", 1, 1, ClaimDisposition.COMPLETED),
-        ("#team", "Compute 17+25", "IGNORE", 1, 2, ClaimDisposition.IGNORED),
-        ("#team", "Compute 17+25", "FULL", 2, 2, ClaimDisposition.COMPLETED),
+        ("beta", "Compute 17+25", "FULL", 1, 1, CompletedClaim),
+        ("#team", "@beta Compute 17+25", "FULL", 1, 1, CompletedClaim),
+        ("#team", "Compute 17+25", "IGNORE", 1, 2, IgnoredClaim),
+        ("#team", "Compute 17+25", "FULL", 2, 2, CompletedClaim),
         ("#team", "@alpha Compute 17+25", "FULL", 0, 1, None),
     ],
 )

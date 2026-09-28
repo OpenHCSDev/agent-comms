@@ -310,7 +310,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if isinstance(result, NoWakeReceipt)
             else (
                 {
-                    "disposition": result.disposition.value,
+                    "disposition": result.disposition.declared_name,
                     "claim_id": result.claim_id,
                     "response_message_id": result.response_message_id,
                 }
