@@ -1,0 +1,18 @@
+{
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "created_tables": [
+    "awareness_claim_generations",
+    "awareness_schema_meta",
+    "claim_batch_members",
+    "claim_batch_receipts",
+    "cohort_delivery_receipts",
+    "cohort_schema_meta",
+    "current_native_cursor",
+    "native_runtime_input",
+    "native_runtime_schema_meta",
+    "publication_append_dispatches",
+    "response_schema_meta"
+  ],
+  "existing_tables_removed": [],
+  "message_resends": 0
+}
