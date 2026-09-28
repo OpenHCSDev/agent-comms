@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 19 items
+
+tests/test_l0a_guards.py .                                               [  5%]
+tests/test_l0b_guards.py .                                               [ 10%]
+tests/test_child_process_guards.py ...                                   [ 26%]
+tests/test_s10_boundary_guards.py ...                                    [ 42%]
+tests/round2/test_s9_guards.py ...                                       [ 57%]
+tests/round2/test_typed_table_guards.py ..                               [ 68%]
+tests/test_channel_catalog_deletion_guard.py .                           [ 73%]
+tests/test_pf_deletion_guards.py ...                                     [ 89%]
+tests/test_t2_boundary_guards.py ..                                      [100%]
+
+============================== 19 passed in 3.91s ==============================

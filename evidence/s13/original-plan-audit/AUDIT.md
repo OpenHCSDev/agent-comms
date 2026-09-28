@@ -1,5 +1,9 @@
 # Original refactor completion audit — 2026-09-28
 
+Current merged-source followthrough at core46b729cf is recorded in
+[the current original + round-two audit](../../current-plan-deletion-audit/AUDIT.md).
+The parent229 snapshot and pending assignments below are historical evidence.
+
 **Audited parent229: `e6d7fe085b318e672c1b97f08df53ea382b92d1c`.**
 Production inspection is at its unchanged source predecessor `c3e7252a`;
 latest parent adds255 caller fixes and final-deletion/data receipts.
