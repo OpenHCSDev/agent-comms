@@ -415,13 +415,8 @@ class ThreadManagement:
         private = False
         if private_meta.exists():
             with self.bus.log.locked():
-                try:
-                    metadata = json.loads(private_meta.read_text())
-                except (OSError, ValueError, UnicodeError) as error:
-                    raise RelationViolationError("Invalid bus protocol metadata.") from error
-                if type(metadata) is not dict:
-                    raise RelationViolationError("Invalid bus protocol metadata.")
-                if "writer_protocol_version" in metadata:
+                metadata = self.bus.log.read_metadata_unlocked(required=True)
+                if metadata.private:
                     self.bus.log._private_marker_unlocked()
                     private = True
         if private:
@@ -470,7 +465,7 @@ class ThreadManagement:
                                 "old": before.name,
                                 "new": new_name,
                                 "generation": person.participant_generation,
-                                "wireRootId": metadata["wire_root_id"],
+                                "wireRootId": metadata.root_id,
                             },
                             sort_keys=True,
                         ),

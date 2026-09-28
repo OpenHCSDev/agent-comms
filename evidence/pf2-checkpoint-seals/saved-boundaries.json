@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "roots": [
+    {
+      "source": "/home/ts/.agent-comms",
+      "bus_rows": 8400,
+      "bus_bytes": 7531950,
+      "marker_lossless": true,
+      "private": false,
+      "claims": false,
+      "source_revisions_unchanged": true,
+      "bus_sha256": "c5ea278164e56d83e0bc337b285b57efc6313490b135afd419904558f42e2fbf"
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+      "bus_rows": 20,
+      "bus_bytes": 31633,
+      "marker_lossless": true,
+      "private": true,
+      "claims": false,
+      "source_revisions_unchanged": true,
+      "bus_sha256": "b9fbb465bb8245fc0812c5e93b103830b4155fa8c65724ccba83cbfd3bbd3250"
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "bus_rows": 75,
+      "bus_bytes": 427357,
+      "marker_lossless": true,
+      "private": true,
+      "claims": true,
+      "copied_seal_rejected": true,
+      "certificate_lossless": true,
+      "recertified_clone_lossless": true,
+      "through_seq": 75,
+      "audience_lookups": 46,
+      "addressed_rows": 1613,
+      "source_revisions_unchanged": true,
+      "bus_sha256": "5802571ebd9ac06c7990a6f682ff999a311684c2785bf4ffe3f774a61da66540"
+    }
+  ],
+  "provider_calls": 0,
+  "live_writes": 0,
+  "copies_cleaned": true
+}

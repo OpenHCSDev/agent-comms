@@ -26,6 +26,7 @@ from .envelope_claim_transitions import (
 from .errors import (
     RelationViolationError,
 )
+from .field_codec import FieldCodec
 from .messages import Message
 from .store_files import (
     _append_jsonl,
@@ -36,6 +37,7 @@ from .store_files import (
     _store_lock,
     file_revision,
 )
+from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
     from .coordination import PublicationIntent
@@ -78,9 +80,7 @@ class WireLog:
                 break
             path = path.parent
 
-    def _claim_projection_unlocked(
-        self, metadata: Mapping[str, int | str]
-    ) -> tuple[ClaimProjection, int]:
+    def _claim_projection_unlocked(self, metadata: WireMetadata) -> tuple[ClaimProjection, int]:
         """Project claims and return the verified bus high-water in one scan."""
         projection = ClaimProjection()
         verified_sequence = 0
@@ -94,18 +94,16 @@ class WireLog:
         """Derive ownership exclusively from guarded, verified bus envelopes."""
         with _store_lock(self.path):
             metadata = self._private_marker_unlocked()
-            if metadata.get("claim_envelopes_version") != 1:
+            if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
             projection, _verified_sequence = self._claim_projection_unlocked(metadata)
             return projection
 
-    def _private_marker_unlocked(self) -> dict[str, int | str]:
-        from .audience_manifest import MAX_WIRE_SEQ
-
+    def _private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()
         if self.path.parent.lstat().st_uid != os.geteuid():
             raise RelationViolationError("Private bus directory is not owner-controlled.")
-        sequence_path = self.path.parent / "bus_meta.json"
+        sequence_path = self.metadata_path
         repair_path = self.path.with_name(self.path.name + ".corrupt")
         for path in (sequence_path, self.path, repair_path):
             if not path.exists() and not path.is_symlink():
@@ -119,57 +117,14 @@ class WireLog:
                 raise RelationViolationError("Private bus files require regular owner-only mode.")
         if not sequence_path.exists():
             raise RelationViolationError("Private bus writer has no durable protocol marker.")
-        try:
-            metadata = json.loads(sequence_path.read_text(), object_pairs_hook=unique_wire_object)
-        except (ValueError, UnicodeError) as error:
-            raise RelationViolationError("Private bus protocol marker is invalid.") from error
-        if (
-            not isinstance(metadata, dict)
-            or set(metadata)
-            not in (
-                {"last_seq", "writer_protocol_version", "wire_root_id"},
-                {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
-                {
-                    "last_seq",
-                    "writer_protocol_version",
-                    "wire_root_id",
-                    "claim_envelopes_version",
-                    "checkpoint_version",
-                    "checkpoint_seal",
-                },
-            )
-            or (
-                "checkpoint_version" in metadata
-                and (type(metadata.get("checkpoint_seal")) is not dict)
-            )
-            or (
-                "checkpoint_version" in metadata
-                and (
-                    type(metadata["checkpoint_version"]) is not int
-                    or metadata["checkpoint_version"] != 1
-                )
-            )
-            or (
-                "claim_envelopes_version" in metadata
-                and (
-                    type(metadata["claim_envelopes_version"]) is not int
-                    or metadata["claim_envelopes_version"] != 1
-                )
-            )
-            or type(metadata.get("last_seq")) is not int
-            or not 0 <= metadata["last_seq"] <= MAX_WIRE_SEQ
-            or type(metadata.get("writer_protocol_version")) is not int
-            or metadata["writer_protocol_version"] != 1
-            or not isinstance(metadata.get("wire_root_id"), str)
-            or len(metadata["wire_root_id"]) != 32
-            or any(character not in "0123456789abcdef" for character in metadata["wire_root_id"])
-        ):
-            raise RelationViolationError("Private bus protocol marker is invalid.")
+        metadata = self.read_metadata_unlocked(required=True)
+        if not metadata.private:
+            raise RelationViolationError("Private bus writer has no durable protocol marker.")
         return metadata
 
     def _verified_private_rows_unlocked(
         self,
-        metadata: Mapping[str, int | str],
+        metadata: WireMetadata,
         *,
         on_row: (
             Callable[
@@ -241,7 +196,7 @@ class WireLog:
                         raise ValueError("Unsupported private bus record.")
                     if set(private) == {"version", "initial"}:
                         try:
-                            initial = validate_initial_record(record, str(metadata["wire_root_id"]))
+                            initial = validate_initial_record(record, metadata.root_id)
                         except (KeyError, TypeError, ValueError, OverflowError) as error:
                             raise RelationViolationError(
                                 "Malformed private initial bus sideband."
@@ -266,7 +221,7 @@ class WireLog:
                         )
                     if (
                         public_envelope_digest(public) != receipt["envelope_digest"]
-                        or receipt["wire_root_id"] != metadata["wire_root_id"]
+                        or receipt["wire_root_id"] != metadata.root_id
                         or not isinstance(receipt["execution_id"], str)
                         or not isinstance(receipt["publication_key"], str)
                         or receipt["publication_key"]
@@ -289,9 +244,7 @@ class WireLog:
                         "Malformed public bus row blocks publication."
                     ) from error
 
-    def _append_private_unlocked(
-        self, metadata: dict[str, int | str], row: Mapping[str, object]
-    ) -> None:
+    def _append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
         """Durably reserve a sequence, append one row, then sync its parent.
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
@@ -299,9 +252,8 @@ class WireLog:
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
             raise RelationViolationError("Private bus row exceeds the byte limit.")
-        sequence_path = self.path.parent / "bus_meta.json"
-        metadata["last_seq"] = row["seq"]  # type: ignore[assignment]
-        _atomic_write_text(sequence_path, json.dumps(metadata, indent=2), fsync_parent=True)
+        metadata.last_seq = row["seq"]  # type: ignore[assignment]
+        self.write_metadata_unlocked(metadata)
         descriptor = os.open(
             self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600
         )
@@ -332,7 +284,7 @@ class WireLog:
         if certificate_enabled(self.path):
             private = row.get(PRIVATE_WIRE_FIELD)
             initial = (
-                validate_initial_record(row, str(metadata["wire_root_id"]))
+                validate_initial_record(row, metadata.root_id)
                 if isinstance(private, dict) and "initial" in private
                 else None
             )
@@ -357,7 +309,7 @@ class WireLog:
             raise ValueError("wire_seq must be a positive SQLite-range integer.")
         with _store_lock(self.path):
             metadata = self._private_marker_unlocked()
-            if wire_root_id != metadata["wire_root_id"]:
+            if wire_root_id != metadata.root_id:
                 raise RelationViolationError("Initial wire root does not match the bus marker.")
             matched: CommittedInitial | None = None
             for _message, _receipt, initial in self._verified_private_rows_unlocked(metadata):
@@ -371,7 +323,7 @@ class WireLog:
 
     def _keyed_receipt_unlocked(
         self, intent: PublicationIntent
-    ) -> tuple[Message | None, int, dict[str, int | str]]:
+    ) -> tuple[Message | None, int, WireMetadata]:
         """Read the whole owner-only bus before trusting an exact keyed receipt.
 
         Caller holds the bus file lock. Absence is NOT authorization to append.
@@ -429,14 +381,13 @@ class WireLog:
         cross-store wire lock is held; ``through=0`` then means unrequested.
         Export/history retain the default authoritative watermark behavior.
         """
-        sequence_path = self.path.parent / "bus_meta.json"
         with _store_lock(self.path):
             if need_sequence and self.claim_gate_enabled():
                 # Metadata reserves a sequence BEFORE the append. A failed
                 # append must never surface as a committed message watermark.
                 through = self._max_sequence_unlocked()
             else:
-                through = self._read_last_sequence(sequence_path) if need_sequence else 0
+                through = self.read_metadata_unlocked().last_seq if need_sequence else 0
                 if need_sequence and not through and self.path.exists():
                     through = self._max_sequence_unlocked()
             try:
@@ -508,11 +459,10 @@ class WireLog:
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
-        sequence_path = self.path.parent / "bus_meta.json"
         with _store_lock(self.path):
             if self.claim_gate_enabled():
                 return self._max_sequence_unlocked()
-            sequence = self._read_last_sequence(sequence_path)
+            sequence = self.read_metadata_unlocked().last_seq
             return sequence if sequence else self._max_sequence_unlocked()
 
     def _iter_log_unlocked(self) -> Iterator[Message]:
@@ -559,26 +509,14 @@ class WireLog:
         except (ValueError, UnicodeError) as error:
             raise RelationViolationError("Malformed last bus row blocks publication.") from error
 
-    @staticmethod
-    def _read_last_sequence(sequence_path: Path) -> int:
-        if not sequence_path.exists():
-            return 0
-        data = json.loads(sequence_path.read_text())
-        return int(data.get("last_seq", 0))
-
     def assert_legacy_rewrite_allowed(self) -> None:
         """Reject a deletion before registry state changes if private proof may exist."""
         with _store_lock(self.path):
             self._assert_no_private_authority_unlocked()
 
     def _assert_no_private_authority_unlocked(self) -> None:
-        sequence_path = self.path.parent / "bus_meta.json"
-        if sequence_path.exists():
-            metadata = json.loads(sequence_path.read_text())
-            if not isinstance(metadata, Mapping):
-                raise RelationViolationError("Bus sequence metadata is not an object.")
-            if "writer_protocol_version" in metadata:
-                raise RelationViolationError("Private bus protocol blocks legacy deletion.")
+        if self.read_metadata_unlocked().private:
+            raise RelationViolationError("Private bus protocol blocks legacy deletion.")
         if not self.path.exists():
             return
         with self.path.open("rb") as records:
@@ -599,14 +537,11 @@ class WireLog:
                 for message in messages
                 if message.sender not in names and message.target not in names
             ]
-            sequence_path = self.path.parent / "bus_meta.json"
             high_water = max(
-                self._read_last_sequence(sequence_path),
+                self.read_metadata_unlocked().last_seq,
                 max((message.seq for message in messages), default=0),
             )
-            _atomic_write_text(
-                sequence_path, json.dumps({"last_seq": high_water}, indent=2), fsync_parent=True
-            )
+            self.write_metadata_unlocked(WireMetadata(last_seq=high_water))
             _atomic_write_text(
                 self.path,
                 "".join(f"{json.dumps(message.to_wire())}\n" for message in retained),
@@ -619,33 +554,12 @@ class WireLog:
         # Only the canonical bus may enter this read/durability barrier.
         if self.path.name != "bus.jsonl":
             return False
-        marker = self.metadata_path
-        checkpoint_path = self.path.with_name("private_bus_checkpoint.sqlite3")
-        checkpoint_present = checkpoint_path.exists() or checkpoint_path.is_symlink()
-        try:
-            metadata = json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
-        except FileNotFoundError as error:
-            if checkpoint_present:
-                raise RelationViolationError(
-                    "Private checkpoint has no durable protocol marker."
-                ) from error
-            return False
-        except (ValueError, UnicodeError) as error:
-            raise RelationViolationError("Bus protocol marker is malformed.") from error
-        if type(metadata) is not dict:
-            raise RelationViolationError("Bus protocol marker is not an object.")
-        version = metadata.get("claim_envelopes_version")
-        if version is None:
-            if (
-                checkpoint_present
-                or "checkpoint_version" in metadata
-                or "checkpoint_seal" in metadata
-            ):
-                raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
-            return False
-        if type(version) is not int or version != 1:
-            raise RelationViolationError("Unsupported claim-envelope protocol marker.")
-        return True
+        metadata = self.read_metadata_unlocked()
+        from .private_bus_checkpoint import certificate_enabled
+
+        if certificate_enabled(self.path) and not metadata.claims:
+            raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
+        return metadata.claims
 
     def verify_before_read_unlocked(self) -> None:
         """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
@@ -658,6 +572,7 @@ class WireLog:
         """
         if not self.claim_gate_enabled():
             return
+        private_marker = self.read_metadata_unlocked()
         marker = self.metadata_path
         marker_info = marker.lstat()
         if (
@@ -676,13 +591,10 @@ class WireLog:
                 descriptor = os.open(self.path, flags)
             except FileNotFoundError:
                 descriptor = None
+            from .private_bus_checkpoint import certificate_enabled
+
             if descriptor is None and (
-                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
-                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
-                or any(
-                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
-                    for key in ("checkpoint_version", "checkpoint_seal")
-                )
+                certificate_enabled(self.path) or private_marker.checkpoint_seal is not None
             ):
                 raise RelationViolationError("Private checkpoint bus inode is missing.")
             if descriptor is not None:
@@ -695,15 +607,9 @@ class WireLog:
                         verify_private_bus_checkpoint_unlocked,
                     )
 
-                    if certificate_enabled(self.path) or any(
-                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
-                        for key in ("checkpoint_version", "checkpoint_seal")
-                    ):
+                    if certificate_enabled(self.path) or private_marker.checkpoint_seal is not None:
                         private_marker = self._private_marker_unlocked()
-                        if (
-                            private_marker.get("checkpoint_version") != 1
-                            or "checkpoint_seal" not in private_marker
-                        ):
+                        if private_marker.checkpoint_seal is None:
                             raise RelationViolationError(
                                 "Private checkpoint lacks durable marker binding."
                             )
@@ -748,26 +654,42 @@ class WireLog:
     def metadata_path(self) -> Path:
         return self.path.with_name("bus_meta.json")
 
-    def write_metadata_unlocked(self, metadata: Mapping[str, object]) -> None:
-        _atomic_write_text(self.metadata_path, json.dumps(metadata, indent=2), fsync_parent=True)
+    def read_metadata_unlocked(self, *, required: bool = False) -> WireMetadata:
+        try:
+            data = json.loads(self.metadata_path.read_text(), object_pairs_hook=unique_wire_object)
+        except FileNotFoundError as error:
+            if required or self.metadata_path.is_symlink():
+                raise RelationViolationError(
+                    "Bus protocol marker is missing or redirected."
+                ) from error
+            return WireMetadata()
+        except (ValueError, UnicodeError) as error:
+            raise RelationViolationError("Bus protocol marker is malformed.") from error
+        try:
+            metadata = FieldCodec.decode(WireMetadata, data)
+            # Omitted optional fields express absence. Explicit nulls, missing
+            # required public sequence and mixed protocol rows are not aliases.
+            if FieldCodec.encode(metadata) != data:
+                raise ValueError("Noncanonical bus protocol marker")
+            return metadata
+        except (TypeError, ValueError) as error:
+            raise RelationViolationError(f"Bus protocol marker is invalid: {error}") from error
 
-    def uses_private_protocol_unlocked(self) -> bool:
-        metadata = json.loads(self.metadata_path.read_text()) if self.metadata_path.exists() else {}
-        if not isinstance(metadata, dict):
-            raise RelationViolationError("Invalid ordinary delivery metadata.")
-        return "writer_protocol_version" in metadata
+    def write_metadata_unlocked(self, metadata: WireMetadata) -> None:
+        from .store_files import _atomic_write_text
 
-    def next_legacy_sequence_unlocked(self) -> int:
-        if self.uses_private_protocol_unlocked():
-            raise RelationViolationError("Legacy append is unavailable after private cutover.")
-        _repair_trailing_jsonl(self.path)
-        return (
-            max(self._read_last_sequence(self.metadata_path), self._last_row_sequence_unlocked())
-            + 1
+        _atomic_write_text(
+            self.metadata_path, json.dumps(FieldCodec.encode(metadata), indent=2), fsync_parent=True
         )
 
+    def next_legacy_sequence_unlocked(self) -> int:
+        if self.read_metadata_unlocked().private:
+            raise RelationViolationError("Legacy append is unavailable after private cutover.")
+        _repair_trailing_jsonl(self.path)
+        return max(self.read_metadata_unlocked().last_seq, self._last_row_sequence_unlocked()) + 1
+
     def append_legacy_unlocked(self, message: Message) -> None:
-        self.write_metadata_unlocked({"last_seq": message.seq})
+        self.write_metadata_unlocked(WireMetadata(last_seq=message.seq))
         _append_jsonl(self.path, message.to_wire())
 
     def require_fresh_private_root_unlocked(self) -> None:
@@ -785,11 +707,11 @@ class WireLog:
         if self.path.name != "bus.jsonl":
             raise RelationViolationError("Claim envelope publication requires the canonical bus.")
         metadata = self._private_marker_unlocked()
-        root_id = str(metadata["wire_root_id"])
-        if metadata.get("claim_envelopes_version") == 1:
+        root_id = metadata.root_id
+        if metadata.claims:
             return root_id
-        if int(metadata["last_seq"]) or (self.path.exists() and self.path.stat().st_size):
+        if metadata.last_seq or (self.path.exists() and self.path.stat().st_size):
             raise RelationViolationError("Claim read barrier requires an empty private bus.")
-        metadata["claim_envelopes_version"] = 1
+        metadata.claim_envelopes_version = 1
         self.write_metadata_unlocked(metadata)
         return root_id

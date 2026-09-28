@@ -35,7 +35,7 @@ _MAX_SOURCE_BYTES = 8 * 1024 * 1024
 def _source_witness_unlocked(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
     """Recheck exact certified revision, or hash a bounded legacy bus."""
     marker = bus.log._private_marker_unlocked()
-    if marker.get("checkpoint_version") == 1:
+    if marker.checkpoint_seal is not None:
         return verify_private_bus_checkpoint_unlocked(bus.log, marker)
     descriptor = os.open(bus.log.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
@@ -262,7 +262,7 @@ def advance_current_native_cursor(
         actual = registry.threads.get(owner.name)
         status = registry.statuses.get(owner.name)
         if (
-            marker["wire_root_id"] != wire_root_id
+            marker.root_id != wire_root_id
             or actual is None
             or status is None
             or not status.active
@@ -438,7 +438,7 @@ def read_current_native_cursor(
         status = registry.statuses.get(owner_name)
         admission_generation = registry.admission_generations.get(owner_name)
         if (
-            marker["wire_root_id"] != wire_root_id
+            marker.root_id != wire_root_id
             or actual is None
             or status is None
             or not status.active
@@ -533,7 +533,7 @@ def read_current_native_cursor(
         current = registry.threads.get(owner_name)
         status = registry.statuses.get(owner_name)
         if (
-            bus.log._private_marker_unlocked()["wire_root_id"] != wire_root_id
+            bus.log._private_marker_unlocked().root_id != wire_root_id
             or current is None
             or status is None
             or not status.active

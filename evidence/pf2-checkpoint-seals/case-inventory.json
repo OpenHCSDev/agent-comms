@@ -1,0 +1,27 @@
+{
+  "collected_cases": 264,
+  "counts": {
+    "test_checkpoint_seals": 30,
+    "test_envelope_bus_integration": 28,
+    "test_supervised_cutover": 5,
+    "test_private_human_ingress": 12,
+    "test_cohort_foreground": 13,
+    "test_private_bus_checkpoint": 29,
+    "test_native_source_cursor_certificate": 5,
+    "test_private_checkpoint_cursor_integration": 5,
+    "test_native_source_cursor_scale": 7,
+    "test_acp_private_nk_delivery": 28,
+    "test_registry_revision": 2,
+    "test_private_sidecar": 32,
+    "test_cutover_process_inventory": 1,
+    "test_private_nk_entrypoint": 23,
+    "test_coordination_response": 8,
+    "test_claim_admission_baseline": 1,
+    "test_claim_admission_verifier": 1,
+    "test_nk_foreground": 6,
+    "test_candidate_maintenance": 2,
+    "test_wake_candidate_index": 17,
+    "test_wake_candidate_index_incremental": 9
+  },
+  "note": "Every case executed in recorded shards; failed cases subsequently passed focused repair runs. Counts are unique, overlapping reruns are not added."
+}

@@ -52,6 +52,7 @@ if TYPE_CHECKING:
 
 from .catalog_store import ChannelCatalog
 from .wire_log import WireLog
+from .wire_metadata import WireMetadata
 
 
 class Publisher:
@@ -174,7 +175,7 @@ class Publisher:
         if _human_origin is not None and type(_human_origin) is not HumanOrigin:
             raise RelationViolationError("Human origin must be a typed local USER identity.")
         with self.log.locked():
-            if self.log.uses_private_protocol_unlocked():
+            if self.log.read_metadata_unlocked().private:
                 # Exact marker/root/private-registry validation and frozen N/K
                 # decisions remain owned by the existing private publisher.
                 return self.publish_initial_cohort(
@@ -207,7 +208,7 @@ class Publisher:
                 guard = PrivateRegistryGuard(self._registry.store.path, root_id)
                 guard.create_pending()
                 self.log.write_metadata_unlocked(
-                    {"last_seq": 0, "writer_protocol_version": 1, "wire_root_id": root_id}
+                    WireMetadata(last_seq=0, writer_protocol_version=1, wire_root_id=root_id)
                 )
                 guard.commit_initial()
                 return root_id
@@ -264,7 +265,7 @@ class Publisher:
             raise RelationViolationError("Bound claims require the selected wake boundary.")
         with nullcontext() if _bus_locked else self.log.locked():
             metadata = self.log._private_marker_unlocked()
-            if metadata.get("claim_envelopes_version") != 1:
+            if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
             sender, target = self._validate_publish_request(
                 message, registry_snapshot=_locked_registry_snapshot
@@ -272,7 +273,7 @@ class Publisher:
             projection, verified_sequence = self.log._claim_projection_unlocked(metadata)
             # The verified bus high-water also covers rows left by an earlier
             # uncertain append. Reserve and sync the next sequence before use.
-            last_sequence = max(int(metadata["last_seq"]), verified_sequence)
+            last_sequence = max(metadata.last_seq, verified_sequence)
             if last_sequence >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Claim bus sequence is exhausted.")
             stored = self._prepare_message_unlocked(
@@ -356,7 +357,7 @@ class Publisher:
                 previous_sequence = 0
                 for previous, _, _ in self.log._verified_private_rows_unlocked(metadata):
                     previous_sequence = previous.seq
-            if int(metadata["last_seq"]) >= MAX_WIRE_SEQ:
+            if metadata.last_seq >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (
                 self._registry.store.path,
@@ -435,7 +436,7 @@ class Publisher:
                 message,
                 sender=sender,
                 target=target,
-                sequence=max(int(metadata["last_seq"]), previous_sequence) + 1,
+                sequence=max(metadata.last_seq, previous_sequence) + 1,
                 snapshot=snapshot,
             )
             if _human_origin is not None:
@@ -457,7 +458,7 @@ class Publisher:
                     duplicate |= (
                         previous.sender == sender and previous.message_id == stored.message_id
                     )
-                if int(metadata["last_seq"]) != expected_sequence - 1:
+                if metadata.last_seq != expected_sequence - 1:
                     raise RelationViolationError(
                         "Private bus sequence reservation has UNKNOWN outcome; "
                         "human send blocked, do not retry."
@@ -500,7 +501,7 @@ class Publisher:
                 PRIVATE_WIRE_FIELD: {
                     "version": 1,
                     "initial": initial_sideband(
-                        str(metadata["wire_root_id"]),
+                        metadata.root_id,
                         stored,
                         audience,
                         decisions,
@@ -509,7 +510,7 @@ class Publisher:
                 },
             }
             # Check the exact bytes and one coherent source revision before any append.
-            validate_initial_record(row, str(metadata["wire_root_id"]))
+            validate_initial_record(row, metadata.root_id)
             if before_revisions != tuple(file_revision(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
             if _human_origin is None:
@@ -521,7 +522,7 @@ class Publisher:
                     # Even cancellation/interrupt after entry can follow a durable
                     # reservation or row. Never claim absence or retry this ID.
                     raise HumanInitialUnknownError(
-                        str(metadata["wire_root_id"]), stored.seq, stored.message_id
+                        metadata.root_id, stored.seq, stored.message_id
                     ) from error
             return stored
 
@@ -560,7 +561,7 @@ class Publisher:
             intent.execution_id, canonical_target
         ):
             raise RelationViolationError("Response publication key does not match its route.")
-        last_sequence = max(int(metadata["last_seq"]), previous_sequence)
+        last_sequence = max(metadata.last_seq, previous_sequence)
         if last_sequence >= MAX_WIRE_SEQ:
             raise RelationViolationError("Private bus sequence is exhausted.")
         stored = self._prepare_message_unlocked(
@@ -578,7 +579,7 @@ class Publisher:
             PRIVATE_WIRE_FIELD: {
                 "version": 1,
                 "response": {
-                    "wire_root_id": metadata["wire_root_id"],
+                    "wire_root_id": metadata.root_id,
                     "execution_id": intent.execution_id,
                     "publication_key": intent.publication_key,
                     "envelope_digest": public_envelope_digest(public),

@@ -471,7 +471,7 @@ class SelectedExecution:
         with self.bus.log.locked():
             _require_no_private_owner_rename(self.root)
             marker = self.bus.log._private_marker_unlocked()
-        if marker["wire_root_id"] != self.wire_root_id:
+        if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")
         self.store = MutationStore(str(self.root / "coordination.sqlite3"))
 
