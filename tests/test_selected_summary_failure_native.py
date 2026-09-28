@@ -20,13 +20,12 @@ from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
-from agent_comms.pi_commands import AgentCommsSummarizeCompaction
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.pi_summary_payloads import SelectedModel, SummaryFailedData
+from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.selected_pi_summary_rpc import (
     SelectedChildUnknown,
     SelectedSummarySlot,
-    _summary_response,
+    SelectedSummaryFailed,
 )
 from selected_summary_cases import manual_source
 
@@ -239,26 +238,50 @@ async def native_failure_owner(tmp_path, status):
         server.server_close()
 
 
+def selected_owner(child, reader, package, session, preparation):
+    persistent = PersistentPiSession()
+    persistent.proc, persistent.reader = child, reader
+    persistent.session_file, persistent.session_id = str(session), preparation.witness.session_id
+    persistent.revision = _session_revision(str(session))
+    persistent.launch_key = (
+        NativePiRpcLaunch(("node",), package, {}, session.parent, session, package),
+        (0, 0),
+    )
+    return (
+        persistent,
+        CompactionJournal(session.parent / "compaction-commits.sqlite3"),
+        SelectedSummarySlot("owner", preparation.witness.session_id),
+    )
+
+
 @pytest.mark.parametrize("status", [400, 429])
 async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_path, status):
     async with native_failure_owner(tmp_path, status) as fixture:
         package, session, original, preparation, selected, settings, calls, _, launch = fixture
-        child, _, exchange = await launch()
-        request = AgentCommsSummarizeCompaction(
-            id="summary",
-            version=1,
-            operation_id=uuid4().hex,
-            witness=preparation.witness,
-            selected=selected,
-            settings=settings,
-        )
-        raw, response = await exchange(request.to_rpc())
-        assert response["success"] and response["data"]["status"] == "failed", response
-        receipt = _summary_response(raw, request, preparation.tokens_before)
-        assert isinstance(receipt, SummaryFailedData)
-        assert "Local selected summary refused" in receipt.reason
-        assert receipt.witness == preparation.witness
-        assert receipt.selected == selected and receipt.settings == settings
+        child, reader, exchange = await launch()
+        persistent, journal, slot = selected_owner(child, reader, package, session, preparation)
+        with pytest.raises(
+            SelectedSummaryFailed, match="Local selected summary refused"
+        ) as failure:
+            await slot.run_selected_summary(
+                persistent,
+                journal,
+                preparation.witness,
+                dict(
+                    source=dict(ownerName="owner"),
+                    selected=selected.to_wire(),
+                    settings=dict(reserveTokens=2048, keepRecentTokens=1024),
+                ),
+                expected_package=package,
+                tokens_before=preparation.tokens_before,
+                idle_timeout_seconds=20,
+            )
+        state = journal.selected_summary(failure.value.operation_id).state
+        assert state.declared_name == "failed"
+        assert state.terminal and state.settled_without_original
+        assert not state.original_eligible
+        assert not journal.blocking_selected_summary(str(session))
+        assert persistent.reopen_required is None and child.returncode is None
         assert len(calls) == 2, "two map chunks, no retries"
         assert len({json.dumps(call["messages"]) for call in calls}) == 2
         assert "SAVED_HISTORY_0" in json.dumps(calls[0])
@@ -281,19 +304,7 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
             fixture
         )
         child, reader, _ = await launch()
-        persistent = PersistentPiSession()
-        persistent.proc, persistent.reader = child, reader
-        persistent.session_file, persistent.session_id = (
-            str(session),
-            preparation.witness.session_id,
-        )
-        persistent.revision = _session_revision(str(session))
-        persistent.launch_key = (
-            NativePiRpcLaunch(("node",), package, {}, tmp_path, session, package),
-            (0, 0),
-        )
-        journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-        slot = SelectedSummarySlot("owner", preparation.witness.session_id)
+        persistent, journal, slot = selected_owner(child, reader, package, session, preparation)
         task = asyncio.create_task(
             slot.run_selected_summary(
                 persistent,
