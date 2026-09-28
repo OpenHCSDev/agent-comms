@@ -12,6 +12,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.declarations import Goal, RelationViolationError, Thread
+from agent_comms.goal_states import PausedGoal
 from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
 from agent_comms.registration import Registration
 
@@ -99,7 +100,7 @@ def test_recheck_binds_same_store_revision(tmp_path) -> None:
             )
         ),
         lambda reg, own: reg.register(
-            replace(own, goal=replace(own.goal, status="paused", revision=own.goal.revision + 1))
+            replace(own, goal=replace(own.goal, state=PausedGoal(), revision=own.goal.revision + 1))
         ),
     ],
     ids=["stopped", "goal-replaced", "goal-progress", "goal-paused"],

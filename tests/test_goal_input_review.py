@@ -6,8 +6,15 @@ import pytest
 
 from agent_comms import Thread, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import (
+    ActiveGoalAction,
+    GoalPrecondition,
+    OwnerInvocable,
+    PausedGoalAction,
+    SetGoalAction,
+    StandbyGoalAction,
+)
 from agent_comms.tools import TOOLS
-from agent_comms.goal_actions import ActiveGoalAction, GoalPrecondition, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 
 
 async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp_path, monkeypatch):
@@ -19,7 +26,9 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     comms.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
     comms.begin_turn("parent", "parent-delegation-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
-    goal = comms.update_goal('worker', SetGoalAction(text='Delegate and wait'), owner_store=agent.turns.open_goal_store())
+    goal = comms.update_goal(
+        "worker", SetGoalAction(text="Delegate and wait"), owner_store=agent.turns.open_goal_store()
+    )
     messages = [
         comms.send_message("parent", "worker", text) for text in ("Set standby", "Yes wait")
     ]
@@ -102,8 +111,11 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
         # Durable explicit handling survives reopening and a later wait declaration.
         reopened = wire(comms.root)
-        reopened.update_goal('worker', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
-        reopened.update_goal('worker', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('parent',)))
+        reopened.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+        reopened.update_goal(
+            "worker",
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",)),
+        )
         fresh = comms.send_message("parent", "worker", "New result")
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _: None)
         await agent.inputs.drain_inbox("worker")
@@ -120,9 +132,13 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             if turn.origin.seq != fresh.seq
         )
         # The current owner pause cannot be bypassed by an inspection argument.
-        comms.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
+        comms.update_goal(
+            "worker",
+            PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+            actor=OwnerInvocable,
+        )
         with pytest.raises(ValueError, match="paused by the owner"):
             report.invoke(comms, {**args, "reviewed_inputs": keys})
-        assert comms.registry.require("worker").goal.status == "paused"
+        assert comms.registry.require("worker").goal.state.declared_name == "paused"
     finally:
         await agent.shutdown()

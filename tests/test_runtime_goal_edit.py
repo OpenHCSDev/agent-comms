@@ -6,9 +6,13 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import (
+    OwnerInvocable,
+    PausedGoalAction,
+    SetGoalAction,
+)
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.goal_actions import OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -42,11 +46,11 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         )
         changed = wire(comms.root).registry.require(session).goal
         assert result["goal"]["id"] == goal.id == changed.id
-        assert changed.status == "paused"
+        assert changed.state.declared_name == "paused"
         assert changed.text == result["goal"]["text"]
         assert changed.revision == paused.revision + 1
         assert changed.progress == paused.progress
-        assert comms.goal_pause(session).source == "owner"
+        assert comms.goal_pause(session).source.declared_name == "owner"
         assert result["goalExecution"]["state"] == "paused"
         async with asyncio.timeout(2):
             while not any(

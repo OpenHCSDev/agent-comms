@@ -314,7 +314,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             owner.inputs.drain_tasks["project"].cancel()
             await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
             if surface in {"acp_goal_original", "acp_terminal_goal"}:
-                owner._comms.update_goal('project', SetGoalAction(text='Continue useful work'), owner_store=owner.turns.open_goal_store())
+                owner._comms.update_goal(
+                    "project",
+                    SetGoalAction(text="Continue useful work"),
+                    owner_store=owner.turns.open_goal_store(),
+                )
 
         async def collect():
             if owner is not None:
@@ -448,7 +452,10 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                         == 1
                     )
                 if surface == "acp_terminal_goal":
-                    assert owner._comms.registry.require("project").goal.status == "active"
+                    assert (
+                        owner._comms.registry.require("project").goal.state.declared_name
+                        == "active"
+                    )
             else:
                 assert await asyncio.to_thread(cancelled.wait, 2), (
                     "Original request was not cancelled"
@@ -588,7 +595,7 @@ async def _mounted_send_now(
             comms = wire(root / "wire")
             await until(lambda: not view.queued_prompts and len(requests) == 3)
             goal = comms.registry.require("project").goal
-            assert goal is not None and goal.active, goal
+            assert goal is not None and goal.state.active, goal
             assert "User follow-up" in json.dumps(requests[1])
             assert "URGENT_INPUT" in json.dumps(requests[1])
             await view.slash_command("/goal clear")

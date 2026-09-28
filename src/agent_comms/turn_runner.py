@@ -260,7 +260,7 @@ class TurnRunner:
             await self.sessions.proxies[session_id].request("cancel")
             return
         name = self.sessions.bindings.get(session_id)
-        if name and (goal := self.comms.registry.require(name).goal) and goal.active:
+        if name and (goal := self.comms.registry.require(name).goal) and goal.state.active:
             self.comms.update_goal(
                 name,
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
@@ -485,7 +485,7 @@ class TurnRunner:
         if thread.pid != os.getpid() or not self.comms.registry.status(thread.name).running:
             return
         goal = thread.goal
-        if goal is not None and goal.active:
+        if goal is not None and goal.state.active:
             if self.comms.goal_wait(thread.name) is not None:
                 return
             if self.pending_goal_origins.get(thread.name) == goal.id:
@@ -555,7 +555,7 @@ class TurnRunner:
             or not snapshot.statuses[name].running
             or snapshot.admission_generations[name] != admission
             or current.goal is None
-            or not current.goal.active
+            or not current.goal.state.active
             or current.goal.id != generation.goal_id
         ):
             raise StaleAttempt("The executing goal owner changed before READY recovery.")

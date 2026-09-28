@@ -8,9 +8,9 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_drain import InputDrain
-from agent_comms.goal_actions import SetGoalAction
 
 
 @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
@@ -46,7 +46,7 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         assert observed
         assert len(agent.inputs.pending_turns["worker"]) == 1
         if revocation == "goal":
-            comms.update_goal('worker', SetGoalAction(text='New goal'))
+            comms.update_goal("worker", SetGoalAction(text="New goal"))
         elif revocation == "stop":
             comms.stop("worker")
         else:

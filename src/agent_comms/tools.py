@@ -16,15 +16,21 @@ from .declarations import (
     ViewPredicate,
     is_channel_target,
 )
-from .goal_actions import GoalAction, GoalPrecondition, ModelInvocable
-from .goal_states import ActiveGoal
+from .goal_actions import (
+    ActiveGoalAction,
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    ModelInvocable,
+    SetGoalAction,
+)
+from .goal_states import ActiveGoal, PausedGoal
 from .operations import Comms, ForkSpec, TagAction
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
     serialize_tool_output,
 )
-from .goal_actions import ActiveGoalAction, EditGoalAction, GoalPrecondition, SetGoalAction
 
 JsonObject = dict[str, object]
 ToolHandler = Callable[[Comms, Mapping[str, object]], JsonObject]
@@ -332,7 +338,7 @@ def _executing_thread() -> str:
 
 
 def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    goal = comms.update_goal(_executing_thread(), SetGoalAction(text=str(arguments['text'])))
+    goal = comms.update_goal(_executing_thread(), SetGoalAction(text=str(arguments["text"])))
     return {
         "goal": goal.to_wire() if goal else None,
         "instruction": (
@@ -371,7 +377,7 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     name = _executing_thread()
     goal_id = str(arguments["goal_id"])
     current = comms.registry.require(name).goal
-    if current is None or current.id != goal_id or current.status != "paused":
+    if current is None or current.id != goal_id or not isinstance(current.state, PausedGoal):
         # A blocked goal may have an unresolved paid attempt. Only the
         # authenticated human-recovery path can decide that disposition.
         raise ValueError("This goal cannot be resumed; refresh its state.")
@@ -383,8 +389,16 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     if pause.owner_instruction is not None:
         raise ValueError(pause.owner_instruction)
     progress = str(arguments["progress"])
-    goal = comms.update_goal(name, ActiveGoalAction(expect=GoalPrecondition(expected_goal=current, expected_status=current.status, goal_id=goal_id), progress=progress))
-    if goal is None or not goal.active or goal.progress != progress:
+    goal = comms.update_goal(
+        name,
+        ActiveGoalAction(
+            expect=GoalPrecondition(
+                expected_goal=current, expected_status=current.state.declared_name, goal_id=goal_id
+            ),
+            progress=progress,
+        ),
+    )
+    if goal is None or not goal.state.active or goal.progress != progress:
         raise ValueError("Goal changed during resume; refresh its state.")
     return {"goal": goal.to_wire()}
 
@@ -395,7 +409,13 @@ def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     current = comms.registry.require(name).goal
     if current is None or current.id != goal_id:
         raise ValueError("This goal was replaced or cleared; refresh its state.")
-    goal = comms.update_goal(name, EditGoalAction(expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=str(arguments['text'])))
+    goal = comms.update_goal(
+        name,
+        EditGoalAction(
+            expect=GoalPrecondition(expected_goal=current, goal_id=goal_id),
+            text=str(arguments["text"]),
+        ),
+    )
     return {"goal": goal.to_wire() if goal else None}
 
 

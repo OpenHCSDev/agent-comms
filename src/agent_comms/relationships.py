@@ -261,7 +261,7 @@ class ThreadRelationships:
         diagnostics: list[GoalMentionDiagnostic] = []
         for owner in registry.threads.values():
             goal = owner.goal
-            if goal is None or not goal.active or not owner.role.executable:
+            if goal is None or not goal.state.active or not owner.role.executable:
                 continue
             source = goal.mention_source
             if (

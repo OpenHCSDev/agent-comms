@@ -58,12 +58,11 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     toggle_label: ClassVar[str]
     acp_plan_status: ClassVar[str] = "in_progress"
 
-
     @classmethod
-    def from_wire(cls, reason: str | None, source: str | None) -> GoalState:
+    def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
-        return cls()
+        return {"kind": cls.declared_name}
 
     @classmethod
     @abstractmethod
@@ -136,10 +135,13 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     toggle_label = "Resume"
 
     @classmethod
-    def from_wire(cls, reason: str | None, source: str | None) -> PausedGoal:
+    def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
-        return cls(PauseSource.decode(source)() if source is not None else OwnerPause())
+        return {
+            "kind": cls.declared_name,
+            "source": {"kind": source if source is not None else OwnerPause.declared_name},
+        }
 
     @property
     def pause_source(self) -> PauseSource:
@@ -178,8 +180,8 @@ class BlockedGoal(GoalState, FromOpenGoal):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
 
     @classmethod
-    def from_wire(cls, reason: str | None, source: str | None) -> BlockedGoal:
-        return cls(reason)
+    def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
+        return {"kind": cls.declared_name, "block_reason": reason}
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:

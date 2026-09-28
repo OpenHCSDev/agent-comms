@@ -63,7 +63,7 @@ class GoalPrecondition:
         if self.goal_id is not None and (goal is None or goal.id != self.goal_id):
             raise ValueError("This goal was replaced or cleared; refresh its state.")
         if self.expected_status is not None and (
-            goal is None or goal.status != self.expected_status
+            goal is None or goal.state.declared_name != self.expected_status
         ):
             pause = goal.state.pause_source if goal is not None else None
             raise ValueError(
@@ -104,7 +104,6 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     def model_choices(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
-
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is not None:
             raise ValueError("Owner goal authority requires goal creation or explicit resume.")
@@ -133,7 +132,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         if goal is not None and goal.state.pause_source is not None:
             # Audit only; current pause authority is already durable in Goal.
             GoalPauseEvents(ctx.comms.root / GoalPauseEvents.filename).record(
-                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source.declared_name)
+                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source)
             )
         return goal
 
@@ -249,10 +248,12 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
         pending = ctx.comms.bus._history_page(
-            lambda message: message.target in aliases
-            and message.sender in senders
-            and (message.seq > cursor or message.seq in unresolved)
-            and message.seq not in reviewed_sequences | prior_reviews,
+            lambda message: (
+                message.target in aliases
+                and message.sender in senders
+                and (message.seq > cursor or message.seq in unresolved)
+                and message.seq not in reviewed_sequences | prior_reviews
+            ),
             before=None,
             after=None,
             limit=1,
@@ -286,7 +287,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         closed = GoalWaits.closed_wait_group(
             thread.name,
             wait_targets,
-            GoalWaits(ctx.comms.root / GoalWaits.filename).snapshot(),
+            GoalWaits(ctx.comms.root / GoalWaits.filename).read(),
             snapshot,
             ctx.comms._process_alive,
         )

@@ -22,6 +22,7 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked, StaleFence
 from agent_comms.declarations import MessageBus, RelationViolationError, Thread, _store_lock
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.operations import Comms
@@ -29,7 +30,6 @@ from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
-from agent_comms.goal_actions import SetGoalAction
 
 tmp_path = private_root_fixture
 
@@ -957,8 +957,8 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
     running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
-        goal = comms.update_goal('beta', SetGoalAction(text='Work on a separate task'))
-        assert goal.active
+        goal = comms.update_goal("beta", SetGoalAction(text="Work on a separate task"))
+        assert goal.state.active
     finally:
         release.set()
     with pytest.raises(StaleFence, match="owner changed before native send"):
@@ -976,7 +976,7 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
-    original = comms.update_goal('beta', SetGoalAction(text='Separate ongoing goal'))
+    original = comms.update_goal("beta", SetGoalAction(text="Separate ongoing goal"))
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1

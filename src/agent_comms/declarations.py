@@ -61,7 +61,6 @@ from .goal_states import (
     CompletedGoal,
     GoalState,
     PausedGoal,
-    PauseSource,
 )
 from .read_basis import DisplayBasis
 from .response_policy import ResponsePolicy
@@ -954,16 +953,6 @@ def channel_tag(target: str) -> str:
 # own parent. Every Thread in the system derives its semantics from this type.
 
 
-# Legacy public enum is a derived boundary projection, not another source roster.
-GoalPauseSource = StrEnum(  # type: ignore[misc]  # declaration-derived compatibility enum
-    "GoalPauseSource",
-    {
-        member.declared_name.upper(): member.declared_name
-        for member in PauseSource.members_with(PauseSource)
-    },
-)
-
-
 class GoalExecutionState(StrEnum):
     view: ExecutionPresentation
 
@@ -1065,11 +1054,6 @@ class GoalMentionSource:
             or not math.isfinite(self.owner_created_at)
         ):
             raise ValueError("Invalid goal mention source.")
-        bindings = tuple(
-            row if isinstance(row, GoalMentionBinding) else GoalMentionBinding(**row)
-            for row in self.bindings
-        )
-        object.__setattr__(self, "bindings", bindings)
 
 
 @dataclass(frozen=True)
@@ -1105,10 +1089,9 @@ class Goal:
         values = dict(data)
         if "state" in values:
             raise ValueError("Unexpected goal wire field: state")
-        state = GoalState.decode(values.pop("status", ActiveGoal.declared_name)).from_wire(
-            values.pop("block_reason", None), values.pop("pause_source", None)
-        )
-        values["state"] = FieldCodec.encode(state)
+        values["state"] = GoalState.decode(
+            values.pop("status", ActiveGoal.declared_name)
+        ).wire_payload(values.pop("block_reason", None), values.pop("pause_source", None))
         return FieldCodec.decode(cls, values)
 
     @classmethod
@@ -1120,10 +1103,10 @@ class Goal:
             "pause_source" not in values
             and GoalState.decode(values.get("status", ActiveGoal.declared_name)) is PausedGoal
         ):
-            events = GoalPauseEvents(root / GoalPauseEvents.filename).snapshot()
+            events = GoalPauseEvents(root / GoalPauseEvents.filename).read()
             event = events.get(f"{values['id']}:{values.get('revision', 0)}")
             if event is not None:
-                values["pause_source"] = str(event.source)
+                values["pause_source"] = event.source.declared_name
         return cls.from_wire(values)
 
     def __post_init__(self) -> None:
@@ -1133,19 +1116,6 @@ class Goal:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
-
-    @property
-    def active(self) -> bool:
-        return self.state.active
-
-    @property
-    def toggle_action(self) -> str:
-        action = self.state.toggle
-        return action.declared_name if action else ""
-
-    @property
-    def toggle_label(self) -> str:
-        return self.state.toggle_label
 
     @property
     def summary(self) -> str:
@@ -2029,7 +1999,7 @@ class ScheduledTurn:
         rechecks the unattempted disposition row before any native start.
         """
         return self.direct_interrupt_goal_id is None or (
-            goal is not None and goal.active and goal.id == self.direct_interrupt_goal_id
+            goal is not None and goal.state.active and goal.id == self.direct_interrupt_goal_id
         )
 
     @property

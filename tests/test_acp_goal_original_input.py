@@ -11,9 +11,9 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
-from agent_comms.goal_actions import SetGoalAction
 
 
 async def owner(tmp_path, monkeypatch):
@@ -44,7 +44,7 @@ def disposition_rows(agent):
 async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeypatch):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
-    goal = comms.update_goal('project', SetGoalAction(text='Keep reading'), owner_store=store)
+    goal = comms.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
 
     async def events(*args, **kwargs):
         native_id = "a" * 32
@@ -76,7 +76,7 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0]["status"] == "started"
         current = comms.registry.require("project").goal
-        assert current.id == goal.id and current.active
+        assert current.id == goal.id and current.state.active
         generation = store.snapshot(goal.id)
         assert generation.state == "ready" and generation.number == 2
     finally:
@@ -91,7 +91,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
     if existing_goal:
-        comms.update_goal('project', SetGoalAction(text='Original goal'), owner_store=store)
+        comms.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
     original_emit = agent.inputs.emit_input_disposition
     replacement = None
     backend_calls = 0
@@ -100,7 +100,9 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         nonlocal replacement
         await original_emit(session_id, row)
         if replacement is None:
-            replacement = comms.update_goal('project', SetGoalAction(text='New authority'), owner_store=store)
+            replacement = comms.update_goal(
+                "project", SetGoalAction(text="New authority"), owner_store=store
+            )
 
     async def events(*args, **kwargs):
         nonlocal backend_calls
@@ -118,7 +120,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         assert len(rows) == 1 and rows[0]["status"] == "unknown"
         assert rows[0]["native_id"] is None
         current = comms.registry.require("project").goal
-        assert current.id == replacement.id and current.active
+        assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
         assert generation.state == "ready" and generation.number == 1
         reopened = InputDispositions(comms.root)
@@ -131,7 +133,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
 async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
-    goal = comms.update_goal('project', SetGoalAction(text='Keep reading'), owner_store=store)
+    goal = comms.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
     boundaries = []
 
     async def events(*args, **kwargs):

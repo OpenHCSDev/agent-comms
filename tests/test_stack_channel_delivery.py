@@ -12,8 +12,8 @@ import pytest
 
 from agent_comms import Thread, wire
 from agent_comms.acp import CommsAgent
-from agent_comms.input_drain import InputDrain
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.input_drain import InputDrain
 
 
 @pytest.mark.parametrize(
@@ -136,7 +136,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
             assert agent.inputs.dispositions.status(key) == "unknown"
             if case == "goal":
-                comms.update_goal('worker', SetGoalAction(text='Changed goal'))
+                comms.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":
                 comms.stop("worker")
                 await agent.sessions.sync_identity("worker")

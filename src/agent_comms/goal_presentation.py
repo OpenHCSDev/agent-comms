@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .field_codec import FieldCodec
 from .goal_states import GoalState
 
 if TYPE_CHECKING:
@@ -24,7 +25,9 @@ class StateExecutionPresentation(ExecutionPresentation):
     state: type[GoalState]
 
     def render(self, execution: GoalExecution) -> tuple[str, str]:
-        return self.state.load(execution.block_reason, None).presentation()
+        return FieldCodec.decode(
+            GoalState, self.state.wire_payload(execution.block_reason, None)
+        ).presentation()
 
 
 class StandbyExecutionPresentation(ExecutionPresentation):
