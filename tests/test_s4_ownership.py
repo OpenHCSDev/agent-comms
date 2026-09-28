@@ -4,41 +4,9 @@ import ast
 from pathlib import Path
 
 
-from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
-from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
-from agent_comms.threads import Thread
-
-
-def test_alias_declaration_drives_lookup_delivery_history_and_audience(monkeypatch, tmp_path):
-    original = BuiltinChannel.aliases.fget
-    monkeypatch.setattr(
-        BuiltinChannel,
-        "aliases",
-        property(
-            lambda member: (
-                (*original(member), "everyone")
-                if member is BuiltinChannel.ALL
-                else original(member)
-            )
-        ),
-    )
-    assert BuiltinChannel.lookup("everyone") is BuiltinChannel.ALL
-    comms = wire(tmp_path)
-    for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
-    assert "everyone" in comms.channels.catalog.read().targets_for(frozenset())
-    assert "everyone" in comms.channels.catalog.read().history_targets("everyone")
-    comms.messaging.initialize_private_initial_protocol()
-    message = comms.messaging.send_user_message("everyone", "hello", worktree=str(tmp_path))
-    assert message.response_policy.starts_turn
-    assert comms.views.channel_history("everyone")[0].target == BuiltinChannel.ALL.value
-    assert comms.bus.pending_count("bob") == 1
-    assert not BuiltinChannel.exact_stored_target("everyone")
-    assert not BuiltinChannel.exact_stored_target(BuiltinChannel.ANY.value)
-    assert BuiltinChannel.exact_stored_target(BuiltinChannel.ALL.value)
 
 
 def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():

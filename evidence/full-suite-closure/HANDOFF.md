@@ -379,3 +379,30 @@ Other failures in the current remainder were obsolete APIs/fixtures. Parent owns
 paired artifact/activation. Passive and broadcast alias removals are published and
 will be integrated here; retired alias test will be deleted. No complete full-suite
 pass claimed, and no deployment hold imposed on that result.
+
+## Published parent integration and current blocker inventory
+
+Integrated parent c3e7252a: broadcast alias2fa3666a, passive-awareness2569e26c0ec,
+manual writer deletion5a4dd50, TL0A2572b4aeb38. Deleted the remaining S4 alias
+extension test instead of restoring BuiltinChannel.aliases. Combined focused36pass
+16.04s (S4, exact global channel, viewer index, candidate indexes and watcher).
+
+Actual outstanding production issue verified by this worker:
+- Selected claimed-write native-tool launch: Darwin0d7ebb4f package contains an
+  older selected_claimed_write extension than current broker/source permits.
+  Two actual loader tests refuse it; parent owns paired package pin/activation.
+  This is specific to SelectedToolMode.launch_arguments, not a demonstrated
+  ordinary ACP/compaction failure. No guard weakening or package mutation.
+
+Obsolete API/fixture failures fixed/deleted in this checkpoint:
+- Old public drain queue/cursor tests, split saved-view readers, registry timestamp
+  migration and read-marker compatibility tests.
+- Raw native-runtime SQL field/table readers migrated to existing TypedRow.
+- PID constructors, incomplete native store/root/package setup and diagnostic text.
+- Viewer cache decode-count, canonical append/replaced-inode and sparse rename facts.
+
+No other production blocker established by the completed remainder batches.
+Full old suite is not acceptance claimed and does not hold parent deployment.
+Meaningful current native/manual/owner/socket evidence is itemized above; parent
+owns current mounted acceptance and live migration. New failures, if discovered,
+will be triaged at their actual boundary rather than restoring removed APIs.
