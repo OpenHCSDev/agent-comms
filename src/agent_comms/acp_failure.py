@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .declared_family import DeclaredFamily
+from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
 
 
-class DeliveryFailure(DeclaredFamily, affix="Failure"):
+class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
     @property
     def title(self) -> str:
         return "Delivery unconfirmed"
