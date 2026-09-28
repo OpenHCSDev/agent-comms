@@ -1,7 +1,6 @@
 // Injected into the exact disposable Pi RPC build, never the installed pin.
 // One operation is NOT a replay grant. Python must journal its ID before send.
-const acSummaryLimits = Object.freeze({ deadlineMs: 90000,
-    sourceBytes: 1048576, outputBytes: 262144 });
+const acSummaryLimits = Object.freeze({ deadlineMs: 90000, outputBytes: 262144 });
 const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // Read the actual selected SettingsManager: it already owns project trust,
@@ -68,16 +67,6 @@ function acSummaryCompatible(session, binding) {
             session.settingsManager === binding.settingsManager && session.sessionManager === binding.manager &&
             session.modelRuntime.getAvailableSnapshot() === binding.catalog));
 }
-function acSummarySourceBytes(preparation) {
-    // Reject giant inputs before Pi serialization. Then measure Pi's actual
-    // summary source, not an unrelated JSON/characters-per-token estimate.
-    const raw = JSON.stringify([preparation.messagesToSummarize, preparation.previousSummary]);
-    if (!raw || Buffer.byteLength(raw, "utf8") > acSummaryLimits.sourceBytes) return Infinity;
-    const transcript = serializeConversation(convertToLlm(preparation.messagesToSummarize));
-    return Buffer.byteLength(transcript, "utf8") +
-        (preparation.previousSummary === undefined ? 0 :
-            Buffer.byteLength(`<previous-summary>\n${preparation.previousSummary}\n</previous-summary>\n\n`, "utf8"));
-}
 function acSummaryCurrent(session, request, binding) {
     if (session.isCompacting || session.isStreaming || !session.isIdle || session.isRetrying ||
         session._retryAttempt || session._nativeInterruptIds ||
@@ -112,7 +101,7 @@ function acSummaryValidUsage(usage) {
         acExactObject(usage.cost, costs) && costs.every(key => cost(usage.cost[key]));
 }
 function acSummaryValidResult(result, request) {
-    const files = paths => Array.isArray(paths) && paths.length <= 256 && paths.every(path =>
+    const files = paths => Array.isArray(paths) && paths.every(path =>
         typeof path === "string" && path.length > 0 && path.isWellFormed() &&
         Buffer.byteLength(path, "utf8") <= 4096 && !path.includes("\0"));
     return acExactObject(result, ["summary", "firstKeptEntryId", "tokensBefore", "usage", "details"]) &&
@@ -126,7 +115,6 @@ function acSummaryValidResult(result, request) {
 // Synchronous admission/preparation has no auth, hooks, provider, or native append.
 function acAdmitSummary(request, session, conflict, spent, host) {
     if (spent.has(request.operationId)) return { denial: "duplicate_operation" };
-    if (spent.size >= 1024) return { denial: "limit_exceeded" };
     if (conflict) return { denial: "in_flight" };
     const readiness = acPrepareReadiness({ ...request, type: "agent_comms_prepare_compaction", dryRun: true },
         session, false);
@@ -138,10 +126,9 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     catch { return { denial: "unsupported" }; }
     if (!preparation || preparation.isSplitTurn || preparation.turnPrefixMessages.length ||
         preparation.firstKeptEntryId !== request.witness.firstKeptEntryId) return { denial: "source_mismatch" };
-    let bytes;
-    try { bytes = acSummarySourceBytes(preparation); }
-    catch { return { denial: "unsupported" }; }
-    if (bytes > acSummaryLimits.sourceBytes) return { denial: "limit_exceeded" };
+    // Native compact() owns model-sized map/reduction requests. Total retained
+    // history is not a request-size limit, and raw JSON includes metadata that
+    // never reaches the model. Do not reject a valid preparation before chunking.
     const binding = { host, runner: session.extensionRunner, streamFn: session.agent.streamFunction,
         model: session.model, modelRuntime: session.modelRuntime,
         settingsManager: session.settingsManager, manager: session.sessionManager,
@@ -153,7 +140,7 @@ function acAdmitSummary(request, session, conflict, spent, host) {
 async function acExecuteSummary(slot, session, request, preparation, binding) {
     // Native compact() owns the finite map/reduction plan and its concurrency.
     // Do not confuse its worker count with a total provider-call allowance.
-    // This selected slot retains its deadline, source/output bounds and no replay.
+    // This selected slot retains its deadline, output bound and no replay.
     const inFlight = new Set();
     let responseBytes = 0;
     const deadline = Date.now() + acSummaryLimits.deadlineMs;

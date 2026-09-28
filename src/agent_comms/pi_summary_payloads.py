@@ -43,7 +43,7 @@ class SummaryFiles(PiPayload):
 
     def __post_init__(self):
         for paths in (self.read_files, self.modified_files):
-            if len(paths) > 256 or any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
+            if any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
                 raise ValueError("Invalid selected native file operations")
 
 
