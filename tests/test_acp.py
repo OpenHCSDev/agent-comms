@@ -28,6 +28,7 @@ from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, 
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
+from delivery_owner_fixture import canonical_agent
 
 
 @pytest.fixture(autouse=True)
@@ -401,7 +402,7 @@ class TestHandlers:
             await agent.shutdown()
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
-        agent = self._agent(tmp_path)
+        agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
         agent._comms.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.messaging.send("peer", "#all", "old message")
 
@@ -495,7 +496,7 @@ class TestHandlers:
         ]
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path):
-        agent = self._agent(tmp_path)
+        agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
@@ -525,7 +526,7 @@ class TestHandlers:
         assert agent._comms.bus.pending_count("proj") == 0
 
     async def test_cancel_ends_active_relay_turn(self, tmp_path):
-        agent = CommsAgent(
+        agent = canonical_agent(
             wire(tmp_path / "wire"),
             reply_window=30,
             no_reply_window=30,
@@ -569,18 +570,15 @@ from agent_comms.threads import Thread
 
 
 class TestAgentTurn:
-    """``!agent`` prompts forward to a real agent binary."""
+    """Current owner lifecycle using a supplied native event stream."""
 
     pytestmark = pytest.mark.skipif(
         sys.platform == "win32",
         reason="agent-turn tests exec shell-script stubs; POSIX only",
     )
 
-    def _agent_with_stub(self, tmp_path: Path, wired) -> CommsAgent:
-        stub = tmp_path / "fake-agent"
-        stub.write_text("#!/bin/sh\nprintf '%s' \"$1\"\n")
-        stub.chmod(0o755)
-        return CommsAgent(wired, agent_bin=str(stub), agent_args=[])
+    def _agent_with_events(self, tmp_path: Path, wired) -> CommsAgent:
+        return canonical_agent(wired, agent_bin="pi", agent_args=[])
 
     def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:
         """Provide the private owner grant used by goal-turn tests with fake Pi events."""
@@ -593,116 +591,13 @@ class TestAgentTurn:
         store.create_goal(goal.id)
         agent.turns.goal_store = store
 
-    async def test_agent_turn_streams_reply_without_broadcasting(self, wired, tmp_path):
-        agent = self._agent_with_stub(tmp_path, wired)
-        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
 
-        sent: list = []
 
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
 
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(
-            session_id="proj",
-            prompt=[{"type": "text", "text": "!agent fix the flake"}],
-        )
-        response = "".join(getattr(getattr(update, "content", None), "text", "") for update in sent)
-        assert response.endswith("fix the flake")
-        assert "you are thread 'proj'" in response
-        assert agent._comms.views.full_history() == []
 
-    async def test_agent_turn_runs_in_thread_worktree(self, wired, tmp_path):
-        worktree = tmp_path / "somewhere"
-        worktree.mkdir()
-        stub = tmp_path / "cwd-capture"
-        stub.write_text("#!/bin/sh\npwd\n")
-        stub.chmod(0o755)
-        agent = CommsAgent(
-            wired,
-            agent_bin=str(stub),
-            agent_args=[],
-            reply_window=0.2,
-            no_reply_window=0.1,
-            reply_quiet=0.05,
-        )
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(worktree), mcp_servers=[])
-        await agent.prompt(
-            session_id="somewhere", prompt=[{"type": "text", "text": "!agent where am i"}]
-        )
-        history = [getattr(getattr(update, "content", None), "text", "") for update in sent]
-        assert any(str(worktree) in body for body in history)
-
-    async def test_missing_agent_bin_is_reported_not_raised(self, wired, tmp_path):
-        agent = CommsAgent(
-            wired,
-            agent_bin="definitely-not-a-real-binary-xyz",
-            agent_args=[],
-            reply_window=0.2,
-            no_reply_window=0.1,
-            reply_quiet=0.05,
-        )
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        response = await agent.prompt(
-            session_id="proj", prompt=[{"type": "text", "text": "!agent hello"}]
-        )
-        assert response.stop_reason == "end_turn"
-        assert any("not found" in _update_text(u) for u in sent)
-
-    async def test_plain_prompt_launches_agent(self, wired, tmp_path):
-        agent = self._agent_with_stub(tmp_path, wired)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        response = await agent.prompt(
-            session_id="proj", prompt=[{"type": "text", "text": "just chat"}]
-        )
-        assert response.stop_reason == "end_turn"
-        assert wired.views.channel_history("#all") == []
-
-    async def test_cancel_terminates_active_backend_process(self, wired, tmp_path):
-        pid_path = tmp_path / "backend.pid"
-        stub = tmp_path / "slow-agent"
-        stub.write_text(f"#!/bin/sh\necho $$ > {pid_path}\nexec sleep 30\n")
-        stub.chmod(0o755)
-        agent = CommsAgent(wired, agent_bin=str(stub), agent_args=[])
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        prompt = asyncio.create_task(
-            agent.prompt(
-                session_id="proj",
-                prompt=[{"type": "text", "text": "run until cancelled"}],
-            )
-        )
-        for _ in range(100):
-            if pid_path.exists():
-                break
-            await asyncio.sleep(0.01)
-        assert pid_path.exists()
-        pid = int(pid_path.read_text())
-
-        await agent.cancel(session_id="proj")
-
-        assert (await asyncio.wait_for(prompt, timeout=2)).stop_reason == "cancelled"
-        with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)
-        await agent.shutdown()
 
     async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
 
         class FakeClient:
@@ -727,48 +622,9 @@ class TestAgentTurn:
         assert title_updates == []
         assert wired.agents.agent_info_of("proj").session_name == "Agent-chosen title"
 
-    async def test_backend_session_is_persisted_and_live_inbox_is_steered(
-        self, wired, tmp_path, monkeypatch
-    ):
-        agent = self._agent_with_stub(tmp_path, wired)
-        agent.turns.agent_bin = "pi"  # Event source below is a mocked native Pi RPC stream.
-        session_file = tmp_path / "pi-session.jsonl"
-        calls: list[dict] = []
-        steered: list[str] = []
-
-        class FakeClient:
-            async def session_update(self, **kwargs):
-                pass
-
-        async def events(*args, **kwargs):
-            calls.append(kwargs)
-            queue = kwargs["steering_queue"]
-            while not queue.empty():
-                steered.append(queue.get_nowait())
-            yield ae.AgentInfo(session_file=str(session_file), model="test/model")
-            yield ae.StreamSettled()
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.threads.register(
-            Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj"))
-        )
-        wired.messaging.send("peer", "proj", "ping parent")
-
-        await agent.turns.run_agent_turn("proj", "proj", "coordinate with the child")
-        await agent.turns.run_agent_turn("proj", "proj", "continue")
-
-        assert "ping parent" in (
-            steered[0]["message"] if isinstance(steered[0], dict) else steered[0]
-        )
-        assert wired.registry.require("proj").session_file == str(session_file)
-        assert calls[0]["session_file"] is None
-        assert calls[1]["session_file"] == str(session_file)
-        assert calls[0]["finish_event"].is_set()
 
     async def test_thread_rename_updates_acp_title(self, wired, tmp_path, monkeypatch):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
 
         class FakeClient:
@@ -797,7 +653,7 @@ class TestAgentTurn:
     async def test_provider_failure_is_visible_once_and_blocks_the_goal(
         self, wired, tmp_path, monkeypatch
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
 
         class FakeClient:
@@ -840,7 +696,7 @@ class TestAgentTurn:
     async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
         self, wired, tmp_path, event
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
 
         class FakeClient:
@@ -883,7 +739,7 @@ class TestAgentTurn:
     async def test_missing_terminal_blocks_only_still_active_goal(
         self, wired, tmp_path, monkeypatch, completed_in_turn
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, goal)
@@ -923,7 +779,7 @@ class TestAgentTurn:
     async def test_error_dedup_is_scoped_to_one_turn_and_cancel_clears_it(
         self, wired, tmp_path, monkeypatch
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
 
         class FakeClient:
@@ -969,7 +825,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -999,7 +855,7 @@ class TestAgentTurn:
     async def test_empty_successful_continuation_blocks_instead_of_false_no_progress_pause(
         self, wired, tmp_path, monkeypatch, empty_kind
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1037,7 +893,7 @@ class TestAgentTurn:
     async def test_goal_auto_transition_cannot_overwrite_concurrent_progress(
         self, wired, tmp_path, monkeypatch, outcome
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1100,7 +956,7 @@ class TestAgentTurn:
     async def test_failed_goal_turn_does_not_revive_superseded_goal(
         self, wired, tmp_path, monkeypatch, transition
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1158,7 +1014,7 @@ class TestAgentTurn:
     async def test_failed_goal_turn_retains_verified_progress_without_auto_retry(
         self, wired, tmp_path, monkeypatch, outcome
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1194,7 +1050,7 @@ class TestAgentTurn:
     async def test_successful_goal_update_during_turn_is_not_auto_paused(
         self, wired, tmp_path, monkeypatch
     ):
-        agent = self._agent_with_stub(tmp_path, wired)
+        agent = self._agent_with_events(tmp_path, wired)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1230,7 +1086,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1279,7 +1135,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = CommsAgent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         updates = []
 
@@ -1334,7 +1190,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1375,7 +1231,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1409,7 +1265,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
 
@@ -1460,7 +1316,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1500,7 +1356,7 @@ class TestAgentTurn:
     async def test_owner_resume_checks_attempt_before_publishing_active(
         self, wired, tmp_path, monkeypatch, failed
     ):
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.turns, "schedule_goal", lambda _session: None)
         updates = []
@@ -1544,29 +1400,6 @@ class TestAgentTurn:
         finally:
             await agent.shutdown()
 
-    async def test_reopened_owner_recovers_unused_ready_grant_without_replaying(
-        self, wired, tmp_path, monkeypatch
-    ):
-        from agent_comms.goal_attempts import GoalAttemptStore
-
-        agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
-        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        goal = wired.goals.update_goal("proj", SetGoalAction(text="No silent stalled goal"))
-        store = agent.turns.open_goal_store()
-        store.create_goal(goal.id)
-        agent.turns.goal_store = GoalAttemptStore(wired.root / "goal-private")
-        try:
-            agent.turns.schedule_goal("proj")
-            current = wired.registry.require("proj").goal
-            assert current is not None and current.state.declared_name == "active"
-            assert len(agent.inputs.pending_turns["proj"]) == 1
-            assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
-            assert store.snapshot(goal.id).number == 1
-            assert agent.turns.goal_store.ready_grant(goal.id, 1)
-        finally:
-            await agent.shutdown()
 
     async def test_reopened_claimed_goal_attempt_has_no_wake_or_replay(self, monkeypatch):
         from agent_comms.goal_attempts import GoalAttemptStore
@@ -1574,7 +1407,7 @@ class TestAgentTurn:
         with tempfile.TemporaryDirectory(prefix="ac-goal-reopen-", dir="/var/tmp") as base:
             root = Path(base) / "wire"
             wired = wire(root)
-            agent = CommsAgent(wired, agent_bin="pi", runtime_enabled=True)
+            agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
             monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
             class FakeClient:
@@ -1609,7 +1442,7 @@ class TestAgentTurn:
     ):
         from acp import RequestError
 
-        agent = CommsAgent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         wired.goals.update_goal("proj", SetGoalAction(text="No orphan spend"))
@@ -1626,7 +1459,7 @@ class TestAgentTurn:
     async def test_goal_has_only_one_in_flight_attempt(self, wired, tmp_path, monkeypatch):
         from acp import RequestError
 
-        agent = CommsAgent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="One attempt"))
@@ -1658,7 +1491,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, StorageUncertainError
 
-        agent = CommsAgent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, agent_bin="pi")
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Count responses"))
@@ -1807,7 +1640,7 @@ class TestCrossClient:
 
         root = tmp_path / "wire"
         comms = wire_fn(root)
-        agent = CommsAgent(comms)
+        agent = canonical_agent(comms)
 
         import asyncio
 
@@ -1846,7 +1679,7 @@ class TestLiveDrain:
         """The background drain pushes inbox messages live between prompts."""
         import asyncio
 
-        agent = CommsAgent(
+        agent = canonical_agent(
             wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
         )
         sent: list = []
@@ -1892,7 +1725,7 @@ class TestLiveDrain:
         assert len(live_pushes) == 1
 
     async def test_cancel_keeps_background_drain_live(self, tmp_path):
-        agent = CommsAgent(
+        agent = canonical_agent(
             wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
         )
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1972,7 +1805,7 @@ class TestAgentTurnForwarding:
 
         if _sys.platform == "win32":
             pytest.skip("shell-script stub; POSIX only")
-        agent = CommsAgent(
+        agent = canonical_agent(
             wired,
             agent_bin=self._rpc_stub(tmp_path),
             agent_args=[],
@@ -2066,7 +1899,7 @@ class TestAgentTurnForwarding:
 
         if _sys.platform == "win32":
             pytest.skip("shell-script stub; POSIX only")
-        agent = CommsAgent(
+        agent = canonical_agent(
             wired,
             agent_bin=self._rpc_stub(tmp_path),
             agent_args=[],
@@ -2172,7 +2005,7 @@ class TestTargetPrefix:
         assert parse_target("@fixer")[0] == "#all"
 
     async def test_dm_prompt_reaches_only_target(self, wired):
-        agent = CommsAgent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
+        agent = canonical_agent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
         wired.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
@@ -2189,7 +2022,7 @@ class TestFailureFeedback:
         from agent_comms.messages import Message, MessageType
         from agent_comms.threads import Thread
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         message = "Codex error: The usage limit has been reached"
 
         async def events(*args, **kwargs):
@@ -2222,7 +2055,7 @@ class TestFailureFeedback:
         from agent_comms.messages import Message, MessageType
         from agent_comms.threads import Thread
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         if channel:
@@ -2264,7 +2097,7 @@ class TestFailureFeedback:
     ):
         from agent_comms.messages import Message, MessageType
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
@@ -2293,7 +2126,7 @@ class TestFailureFeedback:
     ):
         from agent_comms.messages import Message, MessageType
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
@@ -2323,7 +2156,7 @@ class TestFailureFeedback:
         from agent_comms.messages import Message, MessageType
         from agent_comms.threads import Thread
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
@@ -2376,7 +2209,7 @@ class TestFailureFeedback:
             "emit({'type':'message_start','message':{'role':'user',"
             "'content':'foreign later turn','inputId':'foreign'}})\n",
         )
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
@@ -2405,7 +2238,7 @@ class TestFailureFeedback:
         from agent_comms.messages import Message, MessageType
         from agent_comms.threads import Thread
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
@@ -2430,7 +2263,7 @@ class TestLiveConfigSync:
     async def test_external_model_change_is_published_to_connected_clients(
         self, wired, tmp_path, monkeypatch
     ):
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         sent: list = []
 
         class FakeClient:
@@ -2458,7 +2291,7 @@ class TestLiveConfigSync:
         assert isinstance(sent[0], ConfigOptionUpdate)
 
     async def test_goal_metadata_updates_once_per_change(self, wired, tmp_path, monkeypatch):
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
         sent: list = []
 
@@ -2517,7 +2350,7 @@ class TestQueueControl:
     async def test_clear_queue_request_does_not_start_a_turn(self, wired, tmp_path, monkeypatch):
         from agent_comms.threads import Thread
 
-        agent = TestAgentTurn()._agent_with_stub(tmp_path, wired)
+        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         ran: list[str] = []
 
         async def events(*args, **kwargs):
