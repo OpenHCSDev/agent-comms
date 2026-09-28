@@ -35,26 +35,18 @@ from uuid import uuid4
 
 from acp import RequestError, run_agent
 from acp.schema import (
-    AgentCapabilities,
     AgentMessageChunk,
-    ConfigOptionUpdate,
     ContentToolCallContent,
-    Implementation,
     InitializeResponse,
     LoadSessionResponse,
     NewSessionResponse,
     PermissionOption,
-    PromptCapabilities,
     PromptResponse,
     RequestPermissionResponse,
-    SessionConfigOptionSelect,
-    SessionConfigSelectOption,
     SessionInfoUpdate,
     SetSessionConfigOptionResponse,
-    TerminalAuthMethod,
     TextContentBlock,
     ToolCallUpdate,
-    UserMessageChunk,
 )
 
 from . import agent_events as events
@@ -124,6 +116,9 @@ from .runtime import (
 )
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .selected_write_plan import PlannedWrite, SelectedWritePlans
+from .session_effects import SessionEffects
+from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from .transcript_updates import SentTranscriptUpdate, StartedTranscriptUpdate, TranscriptUpdate
 from .wire_watch import open_wire_watcher
 
 if TYPE_CHECKING:
@@ -170,12 +165,14 @@ class QueuedInput:
     admission: int
 
 
-class CommsAgent:
+class CommsAgent(SessionEffects):
     """ACP agent bound to one Comms wire.
 
     Session -> thread. Coding prompts run the configured backend; targeted
     prompts relay through the shared wire and drain replies back to the client.
     """
+
+    session_lifecycle_class = SessionLifecycle
 
     def __init__(
         self,
@@ -214,8 +211,6 @@ class CommsAgent:
         # may disable it; model/tool content cannot change this owner policy.
         self._adaptive_compaction_enabled = adaptive_compaction_enabled
         self._adaptive_summary_strategy = adaptive_summary_strategy
-        self._sessions: dict[str, str] = {}
-        self._client: Any = None
         self._agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
         arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
         self._agent_args = (
@@ -248,16 +243,14 @@ class CommsAgent:
         self._delivery_cursors = AcpDeliveryCursors(comms.root)
         self._passive_awareness = PassiveChannelAwareness(comms.root)
         self._legacy_through: dict[str, int] = {}
-        self._session_titles: dict[str, str] = {}
-        self._display_titles: dict[str, str | None] = {}
-        self._session_worktrees: dict[str, str] = {}
-        self._runtime_enabled = runtime_enabled
         self._runtime = RuntimeServer(self)
-        self._proxies: dict[str, RuntimeProxy] = {}
+        self.sessions = self.session_lifecycle_class(
+            comms, self._agent_bin, self._agent_args, self._runtime, runtime_enabled, self
+        )
+        self.config = self.sessions.config
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
         self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
-        self._proxy_image_support: dict[str, bool] = {}
         self._auto_wake = auto_wake
         self._pending_turns: dict[str, list[ScheduledTurn]] = {}
         # Ephemeral one-shot tickets exist only for freshly recorded direct
@@ -270,18 +263,7 @@ class CommsAgent:
         self._wake_tasks: dict[str, asyncio.Task[None]] = {}
         self._active_turns: dict[str, str] = {}
         self._emitted_errors: dict[str, str] = {}
-        self._model_catalog: list[backend.Model] | None = None
-        self._model_catalog_auth: tuple[int, int] | None = None
-        self._model_catalog_lock = asyncio.Lock()
-        self._catalog_publish_lock = asyncio.Lock()
-        self._catalog_generation = 0
-        self._session_catalog_generation: dict[str, int] = {}
-        self._session_config_signature: dict[str, tuple[str | None, str | None]] = {}
         self._goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
-        self._transcript_snapshots = False
-        self._transcript_diffs = False
-        self._setting_requests = PendingRequests()
-        self._thinking_catalog: dict[tuple[str | None, tuple[int, int]], list[str]] = {}
         self._reply_window = (
             reply_window
             if reply_window is not None
@@ -298,9 +280,100 @@ class CommsAgent:
             else float(os.environ.get("AGENT_COMMS_REPLY_QUIET", str(REPLY_QUIET)))
         )
 
+    def _initialize_session_delivery(
+        self, session_id: str, thread: Thread, *, fresh: bool, private: bool
+    ) -> None:
+        if private:
+            if not fresh:
+                self._inbox_cursors.pop(session_id, None)
+                self._legacy_through.pop(session_id, None)
+            return
+        cursor, legacy = self._delivery_cursors.initialize(
+            self._comms.registry.aliases_for(thread.name),
+            thread.name,
+            high_water=self._comms.message_high_water(),
+            fresh=fresh,
+        )
+        with _store_lock(self._comms._wire_lock_path):
+            owner = self._comms.registry.require(thread.name)
+            admission = self._comms.registry.snapshot().admission_generations[owner.name]
+            # Advisory awareness must not fail a committed session attach.
+            with suppress(OSError, TypeError, ValueError):
+                self._passive_awareness.initialize(
+                    owner,
+                    admission=admission,
+                    high_water=self._comms.message_high_water(),
+                    channels=self._comms.channel_catalog.targets_for(owner.tags),
+                    fresh=fresh,
+                )
+        self._inbox_cursors[session_id] = cursor
+        self._legacy_through[session_id] = legacy
+
+    def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
+        return RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
+
+    async def _close_idle_backend(self, session_id: str) -> None:
+        if session_id not in self._active_turns and (
+            persistent := self._persistent_backends.get(session_id)
+        ):
+            await persistent.close_idle()
+
+    def _active_backend_inbox(self, session_id: str) -> asyncio.Queue[str | dict[str, Any]] | None:
+        return self._backend_inboxes.get(session_id) if session_id in self._active_turns else None
+
+    # Private attachment ABI consumed by runtime/compaction. State exists only
+    # on its component; in-process consumers use that owner directly.
+    @property
+    def _runtime_enabled(self) -> bool:
+        return self.sessions.runtime_enabled
+
+    @property
+    def _sessions(self) -> dict[str, str]:
+        return self.sessions.bindings
+
+    @property
+    def _session_titles(self) -> dict[str, str]:
+        return self.sessions.titles
+
+    @property
+    def _display_titles(self) -> dict[str, str | None]:
+        return self.sessions.display_titles
+
+    @property
+    def _session_worktrees(self) -> dict[str, str]:
+        return self.sessions.worktrees
+
+    @property
+    def _proxies(self) -> dict[str, RuntimeProxy]:
+        return self.sessions.proxies
+
+    @property
+    def _proxy_image_support(self) -> dict[str, bool]:
+        return self.sessions.proxy_image_support
+
+    @property
+    def _transcript_snapshots(self) -> bool:
+        return self.sessions.transcript.snapshots
+
+    @property
+    def _transcript_diffs(self) -> bool:
+        return self.sessions.transcript.diffs
+
+    @property
+    def _setting_requests(self) -> PendingRequests:
+        return self.config.setting_requests
+
+    @property
+    def _client(self) -> Any:
+        return self.sessions.client
+
+    @_client.setter
+    def _client(self, client: Any) -> None:
+        self.sessions.client = client
+
     def on_connect(self, client: Any) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
-        self._client = client
+        self.sessions.client = client
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
 
@@ -310,140 +383,12 @@ class CommsAgent:
         client_capabilities: Any = None,
         client_info: Any = None,
     ) -> InitializeResponse:
-        meta = (
-            client_capabilities.get("_meta", {})
-            if isinstance(client_capabilities, dict)
-            else getattr(client_capabilities, "field_meta", None) or {}
-        )
-        self._transcript_snapshots = meta.get("agentComms", {}).get("transcriptSnapshots") is True
-        self._transcript_diffs = meta.get("agentComms", {}).get("transcriptDiffs") is True
-        capabilities = (
-            client_capabilities
-            if isinstance(client_capabilities, dict)
-            else (
-                client_capabilities.model_dump(by_alias=True, exclude_none=True)
-                if client_capabilities is not None
-                else {}
-            )
-        )
-        methods: list[Any] = []
-        if (capabilities.get("auth") or {}).get("terminal") and backend.rpc_args_for(
-            self._agent_bin, []
-        ) is not None:
-            methods = [
-                TerminalAuthMethod(
-                    type="terminal",
-                    id=f"pi-login-{provider or 'all'}",
-                    name=name,
-                    description="Sign in using Pi's native provider UI",
-                    args=["--login", provider] if provider else ["--login"],
-                )
-                for provider, name in (
-                    ("openai-codex", "ChatGPT subscription"),
-                    ("openrouter", "OpenRouter"),
-                    ("openai", "OpenAI API"),
-                    ("", "Other Pi provider"),
-                )
-            ]
-        return InitializeResponse(
-            protocol_version=protocol_version,
-            agent_capabilities=AgentCapabilities(
-                load_session=True,
-                prompt_capabilities=PromptCapabilities(
-                    image=backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
-                ),
-            ),
-            agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
-            auth_methods=methods,
-        )
-
-    def _declare_thread(self, cwd: str, owner_pid: int) -> Thread:
-        return self._comms.claim_thread(
-            self._thread_name_for(cwd),
-            tags=frozenset({"acp"}),
-            worktree=cwd,
-            pid=owner_pid,
-            start_at_latest=True,
-            model=backend.configured_model(self._agent_args),
-            thinking_level=backend.configured_thinking_level(self._agent_args),
-            auto_title_pending=backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
-        )
-
-    @staticmethod
-    def _reject_foreign_mcp(mcp_servers: list[Any] | None) -> None:
-        # ACP declarations are not Pi package declarations. Silently accepting
-        # them would misrepresent both the effective config and launch policy.
-        if mcp_servers is not None and (type(mcp_servers) is not list or mcp_servers):
-            raise RequestError.invalid_params(
-                {
-                    "reason": (
-                        "ACP mcpServers are unsupported; use Pi's native MCP package configuration."
-                    )
-                }
-            )
+        return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
 
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
-        self._reject_foreign_mcp(mcp_servers)
-        private = self._private_session_mode()
-        thread = self._declare_thread(cwd, os.getpid())
-        thread_name = thread.name
-        session_id = thread_name
-        self._sessions[session_id] = thread_name
-        if not private:
-            cursor, legacy = self._delivery_cursors.initialize(
-                self._comms.registry.aliases_for(thread_name),
-                thread_name,
-                high_water=self._comms.message_high_water(),
-                fresh=True,
-            )
-            with _store_lock(self._comms._wire_lock_path):
-                owner = self._comms.registry.require(thread_name)
-                admission = self._comms.registry.snapshot().admission_generations[owner.name]
-                # Optional awareness cannot turn a committed owner/session
-                # declaration into an apparent failed attach.
-                with suppress(OSError, TypeError, ValueError):
-                    self._passive_awareness.initialize(
-                        owner,
-                        admission=admission,
-                        high_water=self._comms.message_high_water(),
-                        channels=self._comms.channel_catalog.targets_for(owner.tags),
-                        fresh=True,
-                    )
-            self._inbox_cursors[session_id] = cursor
-            self._legacy_through[session_id] = legacy
-        self._session_titles[session_id] = thread_name
-        self._session_worktrees[session_id] = thread.worktree
-        if self._runtime_enabled:
-            await self._runtime.start()
-        self._ensure_live_drain(session_id)
-        config_options = await self._config_options(thread_name)
-        self._session_catalog_generation[session_id] = self._catalog_generation
-        # The session response already carries these options; only an external
-        # change should trigger a config update.
-        current = self._comms.registry.require(thread.name)
-        self._session_config_signature[session_id] = (
-            current.model,
-            current.thinking_level,
-        )
-        return NewSessionResponse(
-            session_id=session_id,
-            config_options=config_options,
-            field_meta=self._session_metadata(thread_name, session_id=session_id),
-        )
-
-    def _validated_thread(self, cwd: str, session_id: str) -> Thread:
-        thread = self._comms.registry.require(session_id)
-        known_paths = {
-            str(Path(path).expanduser().resolve())
-            for path in (thread.worktree, *thread.previous_worktrees)
-        }
-        if str(Path(cwd).expanduser().resolve()) not in known_paths:
-            raise RequestError.invalid_params(
-                {"reason": "The saved thread belongs to a different working directory."}
-            )
-        return thread
+        return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
 
     async def load_session(
         self,
@@ -452,84 +397,10 @@ class CommsAgent:
         mcp_servers: list[Any] | None = None,
         **kwargs: Any,
     ) -> LoadSessionResponse:
-        """Reconnect an ACP client to its persistent wire thread."""
-        self._reject_foreign_mcp(mcp_servers)
-        private = self._private_session_mode()
-        thread = self._validated_thread(cwd, session_id)
-        # A reconnect to an already-owned live session is not a new owner
-        # incarnation. Re-registering the same PID would bump its admission
-        # epoch and discard a correctly proven current native cursor.
-        if not (
-            self._sessions.get(session_id) == thread.name
-            and thread.pid == os.getpid()
-            and self._comms.registry.status(thread.name).active
-        ):
-            thread = self._comms.acquire_thread(thread.name, owner_pid=os.getpid())
-        if thread.pid != os.getpid():
-            return await self._attach_owner(thread, session_id)
-        self._comms.heartbeat(thread.name)
-        self._sessions[session_id] = thread.name
-        if not private:
-            cursor, legacy = self._delivery_cursors.initialize(
-                self._comms.registry.aliases_for(thread.name),
-                thread.name,
-                high_water=self._comms.message_high_water(),
-                fresh=False,
-            )
-            with _store_lock(self._comms._wire_lock_path):
-                owner = self._comms.registry.require(thread.name)
-                admission = self._comms.registry.snapshot().admission_generations[owner.name]
-                # A previously committed session remains attachable even if
-                # the best-effort advisory ledger cannot be initialized.
-                with suppress(OSError, TypeError, ValueError):
-                    self._passive_awareness.initialize(
-                        owner,
-                        admission=admission,
-                        high_water=self._comms.message_high_water(),
-                        channels=self._comms.channel_catalog.targets_for(owner.tags),
-                        fresh=False,
-                    )
-            self._inbox_cursors[session_id] = cursor
-            self._legacy_through[session_id] = legacy
-        else:
-            self._inbox_cursors.pop(session_id, None)
-            self._legacy_through.pop(session_id, None)
-        self._session_titles[session_id] = thread.name
-        self._session_worktrees[session_id] = thread.worktree
-        if self._runtime_enabled:
-            await self._runtime.start()
-        await self._replay_transcript(session_id, thread.name)
-        await self.replay_unknown_inputs(session_id)
-        self._ensure_thread_model(thread.name)
-        config_options = await self._config_options(thread.name)
-        self._session_catalog_generation[session_id] = self._catalog_generation
-        current = self._comms.registry.require(thread.name)
-        self._session_config_signature[session_id] = (
-            current.model,
-            current.thinking_level,
-        )
-        self._ensure_live_drain(session_id)
-        return LoadSessionResponse(
-            config_options=config_options,
-            field_meta=self._session_metadata(thread.name, session_id=session_id),
-        )
+        return await self.sessions.load_session(cwd, session_id, mcp_servers, **kwargs)
 
     async def _attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
-        proxy = RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
-        try:
-            metadata = await proxy.subscribe()
-        except (OSError, RuntimeError) as error:
-            await proxy.close()
-            raise RequestError.invalid_params(
-                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
-            ) from error
-        self._proxies[session_id] = proxy
-        self._proxy_image_support[session_id] = (
-            metadata.get("agentComms", {}).get("imagePrompts") is True
-        )
-        return LoadSessionResponse(
-            config_options=metadata.pop("configOptions", []), field_meta=metadata
-        )
+        return await self.sessions.attach_owner(thread, session_id)
 
     async def _replay_transcript(
         self,
@@ -540,73 +411,16 @@ class CommsAgent:
         snapshots: bool | None = None,
         diffs: bool | None = None,
     ) -> None:
-        """Replay the negotiated client view or an explicitly selected internal view.
-
-        None uses this attachment's capabilities. Explicit keyword overrides
-        are trusted owner-side calls, not ACP request parameters; old clients
-        never receive expanded snapshot fields merely by connecting.
-        """
-        use_snapshots = (
-            (
-                self._transcript_snapshots
-                if client is None
-                else getattr(client, "transcript_snapshots", False)
-            )
-            if snapshots is None
-            else snapshots is True
+        await self.sessions.transcript.replay(
+            session_id, name, client, snapshots=snapshots, diffs=diffs
         )
-        if use_snapshots:
-            page = await asyncio.to_thread(self._comms.thread_transcript_page, name)
-            include_diff = (
-                (
-                    self._transcript_diffs
-                    if client is None
-                    else getattr(client, "transcript_diffs", False)
-                )
-                if diffs is None
-                else diffs is True
-            )
-            await (client or self._runtime).session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={
-                        "agentComms": {
-                            "transcript": [
-                                event.to_wire(include_diff=include_diff) for event in page.events
-                            ],
-                            "transcriptPage": page.metadata(),
-                        }
-                    },
-                ),
-            )
-            return
-        events = await asyncio.to_thread(self._comms.thread_transcript, name)
-        for event in events:
-            await self._emit_event(
-                session_id,
-                {
-                    "type": event.kind,
-                    "text": event.text,
-                    "id": event.tool_call_id,
-                    "name": event.tool_name,
-                    "title": event.tool_name,
-                    "args": event.raw_input,
-                    "output": event.text,
-                    "ok": event.ok,
-                    "diff": event.diff,
-                    "route": event.routing.reply if event.routing else None,
-                },
-                client=client,
-            )
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
         instructions = self._manual_compaction_instructions(prompt, kwargs)
         if instructions is not None:
             # Idle owner bridge alone owns the lock and the one-POST budget.
-            if session_id in self._proxies:
-                result = await self._proxies[session_id].request(
+            if session_id in self.sessions.proxies:
+                result = await self.sessions.proxies[session_id].request(
                     "compact", instructions=instructions
                 )
             else:
@@ -649,8 +463,10 @@ class CommsAgent:
                 raise RequestError.invalid_params(
                     {"reason": "Selected write requires exact metadata and no prompt"}
                 )
-            if session_id in self._proxies:
-                result = await self._proxies[session_id].request("prompt", meta=meta, prompt=[])
+            if session_id in self.sessions.proxies:
+                result = await self.sessions.proxies[session_id].request(
+                    "prompt", meta=meta, prompt=[]
+                )
                 return PromptResponse.model_validate(result)
             owner = self._require_session(session_id)
             root_id = self._private_nk_marker()
@@ -659,7 +475,9 @@ class CommsAgent:
                     {"reason": "Selected write requires private N/K owner"}
                 )
             controller = self._runtime.controller.get()
-            if controller is None or (controller is UNBOUND_CONTROLLER and self._client is None):
+            if controller is None or (
+                controller is UNBOUND_CONTROLLER and self.sessions.client is None
+            ):
                 raise RequestError.invalid_params(
                     {"reason": "Selected write requires attached ACP controller"}
                 )
@@ -670,7 +488,7 @@ class CommsAgent:
                 resource=request["resource"],
                 contents=request["contents"],
             )
-            attached = self._client if controller is UNBOUND_CONTROLLER else controller
+            attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
             self._selected_write_controllers[(owner, request["sourceSeq"])] = (
                 str(receipt["operationId"]),
                 attached,
@@ -681,8 +499,8 @@ class CommsAgent:
         if options.get("clearQueue") is True:
             # Attachment-only clients clear the owner's queue through the
             # existing prompt channel; no turn is launched.
-            if session_id in self._proxies:
-                await self._proxies[session_id].request("clear_queue")
+            if session_id in self.sessions.proxies:
+                await self.sessions.proxies[session_id].request("clear_queue")
             else:
                 await self.clear_queued_inputs(session_id)
             return PromptResponse(stop_reason="end_turn")
@@ -692,8 +510,8 @@ class CommsAgent:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         if images:
             supported = (
-                self._proxy_image_support.get(session_id, False)
-                if session_id in self._proxies
+                self.sessions.proxy_image_support.get(session_id, False)
+                if session_id in self.sessions.proxies
                 else backend.rpc_args_for(self._agent_bin, self._agent_args) is not None
             )
             if not supported:
@@ -704,8 +522,8 @@ class CommsAgent:
                 raise RequestError.invalid_params(
                     {"reason": "Send images to an agent thread, not as a coordination relay."}
                 )
-        if session_id in self._proxies:
-            result = await self._proxies[session_id].request(
+        if session_id in self.sessions.proxies:
+            result = await self.sessions.proxies[session_id].request(
                 "prompt",
                 meta=meta,
                 prompt=[
@@ -808,7 +626,7 @@ class CommsAgent:
             # absent); never fall back to a passive ACP client in that case.
             existing = self._runtime.controller.get()
             context = (
-                self._runtime.controller.set(self._client)
+                self._runtime.controller.set(self.sessions.client)
                 if existing is UNBOUND_CONTROLLER
                 else None
             )
@@ -894,7 +712,7 @@ class CommsAgent:
     def _queue_binding(self, session_id: str) -> dict[str, Any] | None:
         try:
             owner, admission = self._comms.registry.live_owner_with_admission(
-                self._sessions.get(session_id, session_id)
+                self.sessions.bindings.get(session_id, session_id)
             )
         except (OSError, ValueError):
             return None
@@ -1079,7 +897,7 @@ class CommsAgent:
         assert turn_task is not None
         self._turn_tasks[session_id] = turn_task
         try:
-            thread_name = await self._sync_session_identity(session_id)
+            thread_name = await self.sessions.sync_identity(session_id)
             self._comms.registry.require(thread_name)
             text = self._prompt_text(prompt)
             images = self._prompt_images(prompt)
@@ -1232,10 +1050,10 @@ class CommsAgent:
         return False
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
-        if session_id in self._proxies:
-            await self._proxies[session_id].request("cancel")
+        if session_id in self.sessions.proxies:
+            await self.sessions.proxies[session_id].request("cancel")
             return
-        name = self._sessions.get(session_id)
+        name = self.sessions.bindings.get(session_id)
         if name and (goal := self._comms.registry.require(name).goal) and goal.active:
             self._comms.update_goal(
                 name,
@@ -1247,90 +1065,14 @@ class CommsAgent:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
             await backend.terminate_task_process(task)
-        thread_name = self._sessions.get(session_id)
+        thread_name = self.sessions.bindings.get(session_id)
         if thread_name:
             self._comms.acknowledge(thread_name)
 
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: Any
     ) -> SetSessionConfigOptionResponse:
-        if config_id not in {"model", "thinking_level"} or not isinstance(value, str):
-            raise RequestError.invalid_params(
-                {"reason": f"Unknown session configuration option: {config_id!r}"}
-            )
-        if session_id in self._proxies:
-            result = await self._proxies[session_id].request(
-                "set_config_option", config_id=config_id, value=value
-            )
-            return SetSessionConfigOptionResponse.model_validate(result)
-        thread_name = await self._sync_session_identity(session_id)
-        thread = self._comms.registry.require(thread_name)
-        if config_id == "model":
-            choices = {model.id for model in await self._models_for(thread_name)}
-            if value not in choices:
-                raise RequestError.invalid_params({"reason": f"Unknown model: {value!r}"})
-            await self._set_active_backend_option(
-                session_id,
-                {
-                    "type": "set_model",
-                    "provider": value.split("/", 1)[0],
-                    "modelId": value.split("/", 1)[1],
-                },
-                events.ModelChanged,
-                "Model change timed out",
-            )
-            self._comms.set_thread_model(thread_name, value)
-            levels = await self._thinking_levels_for(value)
-            if thread.thinking_level not in levels:
-                self._comms.set_thread_thinking_level(
-                    thread_name, "medium" if "medium" in levels else levels[0]
-                )
-        else:
-            levels = await self._thinking_levels_for(thread.model)
-            if value not in levels:
-                raise RequestError.invalid_params(
-                    {"reason": f"Thinking level {value!r} is unavailable for this model"}
-                )
-            await self._set_active_backend_option(
-                session_id,
-                {"type": "set_thinking_level", "level": value},
-                events.ThinkingChanged,
-                "Thinking level change timed out",
-            )
-            self._comms.set_thread_thinking_level(thread_name, value)
-        if session_id not in self._active_turns and (
-            persistent := self._persistent_backends.get(session_id)
-        ):
-            await persistent.close_idle()
-        config_options = await self._config_options(thread_name)
-        await self._runtime.session_update(
-            session_id=session_id,
-            update=ConfigOptionUpdate(
-                session_update="config_option_update", config_options=config_options
-            ),
-        )
-        return SetSessionConfigOptionResponse(config_options=config_options)
-
-    async def _set_active_backend_option(
-        self,
-        session_id: str,
-        command: dict[str, Any],
-        result_type: type[events.SettingChangeResult],
-        timeout_message: str,
-    ) -> None:
-        if session_id not in self._active_turns or not (
-            inbox := self._backend_inboxes.get(session_id)
-        ):
-            return
-        request_id = uuid4().hex
-        future = self._setting_requests.add(result_type, request_id)
-        inbox.put_nowait({"id": request_id, **command})
-        try:
-            await asyncio.wait_for(future, timeout=10)
-        except (TimeoutError, RuntimeError) as error:
-            raise RequestError.invalid_params({"reason": str(error) or timeout_message}) from error
-        finally:
-            self._setting_requests.discard(result_type, request_id)
+        return await self.config.set_option(config_id, session_id, value)
 
     async def authenticate(self, method_id: str, **kwargs: Any) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
@@ -1338,15 +1080,7 @@ class CommsAgent:
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
     def _require_session(self, session_id: str) -> str:
-        thread_name = self._sessions.get(session_id)
-        if thread_name is None:
-            raise RequestError.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
-        return thread_name
-
-    @staticmethod
-    def _thread_name_for(cwd: str) -> str:
-        leaf = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(cwd).name or "session").strip("-")
-        return leaf or "session"
+        return self.sessions.require(session_id)
 
     def _private_cursor_scope(self, thread_name: str, session_id: str) -> dict[str, Any] | None:
         root_id = self._private_nk_wire_root_id
@@ -1471,181 +1205,28 @@ class CommsAgent:
     def _session_metadata(
         self, thread_name: str, *, session_id: str | None = None
     ) -> dict[str, Any]:
-        thread = self._comms.registry.require(thread_name)
-        goal, execution = self._comms.goal_snapshot(thread_name)
-        info = self._comms.agent_info_of(thread_name)
-        queue_binding, queue_state = self._queue_state(session_id or thread_name)
-        usage = (
-            {"used": info.context_used, "size": info.context_size, "source": "last_response"}
-            if info is not None and info.context_used is not None and info.context_size
-            else None
-        )
+        return self.sessions.metadata(thread_name, session_id=session_id)
+
+    def _session_runtime_metadata(self, thread_name: str, session_id: str) -> dict[str, Any]:
+        queue_binding, queue_state = self._queue_state(session_id)
         return {
-            "agentComms": {
-                "thread": thread_name,
-                "goal": asdict(goal) if goal else None,
-                "goalExecution": asdict(execution) if execution else None,
-                "wireRoot": str(self._comms.root.resolve()),
-                "persistence": "shared on-disk wire",
-                "transport": "per-session stdio ACP",
-                "ownerPid": os.getpid(),
-                "contextUsage": usage,
-                "turnLifecycle": True,
-                "queueBinding": queue_binding,
-                "queueState": queue_state,
-                "model": thread.model,
-                "thinkingLevel": thread.thinking_level,
-                "worktree": thread.worktree,
-                **(
-                    {
-                        "privateNativeCursor": self._private_cursor_metadata(
-                            thread_name, session_id or thread_name
-                        )
-                    }
-                    if self._private_nk_wire_root_id is not None
-                    else {}
-                ),
-                "autoTitle": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
-                "title": thread.title or thread.name,
-                "promptQueue": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
-                "imagePrompts": backend.rpc_args_for(self._agent_bin, self._agent_args) is not None,
-            }
+            "queueBinding": queue_binding,
+            "queueState": queue_state,
+            **(
+                {"privateNativeCursor": self._private_cursor_metadata(thread_name, session_id)}
+                if self._private_nk_wire_root_id is not None
+                else {}
+            ),
         }
 
-    def _ensure_thread_model(self, thread_name: str) -> str | None:
-        thread = self._comms.registry.require(thread_name)
-        selected = thread.model
-        if selected is None:
-            selected = self._comms.resolve_thread_model(
-                thread.name, backend.configured_model(self._agent_args)
-            )
-        if selected is not None and selected != thread.model:
-            self._comms.set_thread_model(thread.name, selected)
-        return selected
-
-    async def _models_for(self, thread_name: str) -> list[backend.Model]:
-        selected = self._ensure_thread_model(thread_name)
-        async with self._model_catalog_lock:
-            if self._model_catalog is None or self._model_catalog_auth != backend.auth_revision():
-                self._model_catalog = await backend.discover_models(
-                    self._agent_bin, self._agent_args, selected
-                )
-                self._model_catalog_auth = backend.auth_revision()
-                self._catalog_generation += 1
-        if selected and all(model.id != selected for model in self._model_catalog):
-            return [backend.Model(selected, selected), *self._model_catalog]
-        return self._model_catalog
-
     async def _refresh_auth_models(self) -> None:
-        if self._model_catalog is None:
-            return
-        if self._model_catalog_auth == backend.auth_revision() and all(
-            self._session_catalog_generation.get(sid) == self._catalog_generation
-            for sid in self._sessions
-        ):
-            return
-        async with self._catalog_publish_lock:
-            for sid, name in tuple(self._sessions.items()):
-                options = await self._config_options(name)
-                if self._session_catalog_generation.get(sid) == self._catalog_generation:
-                    continue
-                await self._runtime.session_update(
-                    session_id=sid,
-                    update=ConfigOptionUpdate(
-                        session_update="config_option_update", config_options=options
-                    ),
-                )
-                self._session_catalog_generation[sid] = self._catalog_generation
+        await self.config.refresh_auth_models()
 
     async def _config_options(self, thread_name: str) -> list[Any]:
-        selected = self._ensure_thread_model(thread_name)
-        if selected is None:
-            return []
-        models = await self._models_for(thread_name)
-        levels = await self._thinking_levels_for(selected)
-        thread = self._comms.registry.require(thread_name)
-        thinking_level = thread.thinking_level
-        if thinking_level not in levels:
-            thinking_level = "medium" if "medium" in levels else levels[0]
-            self._comms.set_thread_thinking_level(thread_name, thinking_level)
-        return [
-            SessionConfigOptionSelect(
-                id="model",
-                name="Model",
-                description="Model used by this persistent agent thread",
-                category="model",
-                type="select",
-                current_value=selected,
-                options=[
-                    SessionConfigSelectOption(
-                        value=model.id,
-                        name=model.name,
-                        description=model.description,
-                    )
-                    for model in models
-                ],
-            ),
-            SessionConfigOptionSelect(
-                id="thinking_level",
-                name="Thinking level",
-                description="Reasoning effort used by this persistent agent thread",
-                category="thought_level",
-                type="select",
-                current_value=thinking_level,
-                options=[
-                    SessionConfigSelectOption(value=level, name=level.title()) for level in levels
-                ],
-            ),
-        ]
-
-    async def _thinking_levels_for(self, model: str | None) -> list[str]:
-        key = (model, backend.auth_revision())
-        if key not in self._thinking_catalog:
-            self._thinking_catalog[key] = await backend.discover_thinking_levels(
-                self._agent_bin, self._agent_args, model
-            )
-        return self._thinking_catalog[key]
+        return await self.config.options(thread_name)
 
     async def _sync_session_identity(self, session_id: str) -> str:
-        """Follow permanent aliases and publish the canonical wire name."""
-        cached_name = self._require_session(session_id)
-        thread = self._comms.registry.require(cached_name)
-        thread_name = thread.name
-        if (
-            session_id not in self._active_turns
-            and (persistent := self._persistent_backends.get(session_id))
-            and (
-                thread_name != cached_name
-                or thread.pid != os.getpid()
-                or not self._comms.registry.status(thread_name).running
-            )
-        ):
-            await persistent.close_idle()
-        self._sessions[session_id] = thread_name
-        if (
-            self._session_titles.get(session_id) != thread_name
-            or self._display_titles.get(session_id) != thread.title
-        ):
-            await self._runtime.session_update(
-                session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update",
-                    title=thread.title or thread_name,
-                    field_meta={"agentComms": {"thread": thread_name}},
-                ),
-            )
-            self._session_titles[session_id] = thread_name
-            self._display_titles[session_id] = thread.title
-        if self._session_worktrees.get(session_id) != thread.worktree:
-            await self._runtime.session_update(
-                session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update",
-                    field_meta={"agentComms": {"worktree": thread.worktree}},
-                ),
-            )
-            self._session_worktrees[session_id] = thread.worktree
-        return thread_name
+        return await self.sessions.sync_identity(session_id)
 
     def _ensure_live_drain(self, session_id: str) -> None:
         """Keep one background task per session pushing inbox messages live."""
@@ -1665,12 +1246,12 @@ class CommsAgent:
                         watcher.changed.clear()
                     try:
                         await self._drain_inbox(session_id)
-                        await self._sync_thread_config(session_id)
+                        await self.config.sync_thread(session_id)
                         if time.monotonic() >= next_goal_wait_check:
                             self._comms.recover_closed_goal_wait(session_id)
                             next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                         self._schedule_goal(session_id)
-                        await self._refresh_auth_models()
+                        await self.config.refresh_auth_models()
                     except asyncio.CancelledError:
                         raise
                     except Exception as error:
@@ -1702,28 +1283,7 @@ class CommsAgent:
             return await self._drain_owned_inbox(session_id)
 
     async def _sync_thread_config(self, session_id: str) -> None:
-        """Publish a thread's model/thinking when another client changes it.
-
-        An agent can change another thread's model with ``comms_model``. The
-        owning process must then tell its connected clients, or their model
-        switcher keeps showing the previous selection.
-        """
-        thread_name = await self._sync_session_identity(session_id)
-        await self._sync_goal_execution(session_id, thread_name)
-        thread = self._comms.registry.require(thread_name)
-        signature = (thread.model, thread.thinking_level)
-        if self._session_config_signature.get(session_id) == signature:
-            return
-        self._session_config_signature[session_id] = signature
-        if self._client is None and not self._runtime_enabled:
-            return
-        options = await self._config_options(thread_name)
-        await self._runtime.session_update(
-            session_id=session_id,
-            update=ConfigOptionUpdate(
-                session_update="config_option_update", config_options=options
-            ),
-        )
+        await self.config.sync_thread(session_id)
 
     async def _sync_goal_execution(self, session_id: str, thread_name: str) -> None:
         event = self._comms.goal_changed(
@@ -1788,7 +1348,7 @@ class CommsAgent:
                 "private N/K ACP requires an explicit matching root and native package"
             )
         _preflight(self._comms.root, wire_root_id, package, True)
-        thread_name = await self._sync_session_identity(session_id)
+        thread_name = await self.sessions.sync_identity(session_id)
         # Registry admission may change without session/new or session/load.
         # Publish the observed status even when stopped, busy, or no-wake;
         # callbacks may only invalidate a prior client binding, not replace it.
@@ -1830,7 +1390,7 @@ class CommsAgent:
             if isinstance(controller, SocketClient):
                 if not self._runtime.is_controller(session_id, controller):
                     raise IdentityConflict("Selected write controller disconnected")
-            elif controller is not self._client or controller is None:
+            elif controller is not self.sessions.client or controller is None:
                 raise IdentityConflict("Selected write ACP controller changed")
 
         def load_plan(claim: WakeClaim, owner: Thread, epoch: int) -> PlannedWrite | None:
@@ -1893,11 +1453,11 @@ class CommsAgent:
             return await self._drain_private_nk(session_id, private_root)
         if self._private_nk_native_package is not None:
             raise PublicationActivationBlocked("configured private N/K ACP has no durable marker")
-        thread_name = await self._sync_session_identity(session_id)
+        thread_name = await self.sessions.sync_identity(session_id)
         if self._comms.registry.status(thread_name).stopped:
             return 0
         backend_inbox = self._backend_inboxes.get(session_id)
-        if self._client is None and backend_inbox is None and not self._runtime_enabled:
+        if self.sessions.client is None and backend_inbox is None and not self._runtime_enabled:
             return 0
         pushed = 0
         after = self._inbox_cursors.get(session_id, 0)
@@ -2339,7 +1899,7 @@ class CommsAgent:
             actor=OwnerInvocable,
         )
         assert edited is not None
-        await self._sync_thread_config(session_id)
+        await self.config.sync_thread(session_id)
         return edited
 
     async def update_goal(
@@ -2369,7 +1929,7 @@ class CommsAgent:
         finally:
             # Resume can discover that a paused attempt failed. Publish the
             # reconciled BLOCKED state even when the action returns an error.
-            await self._sync_thread_config(session_id)
+            await self.config.sync_thread(session_id)
         if action.schedules_goal:
             self._schedule_goal(session_id)
         return updated
@@ -2475,7 +2035,7 @@ class CommsAgent:
                 if not isinstance(reply, dict):
                     return None
                 outcome = reply
-            elif controller is self._client:
+            elif controller is self.sessions.client:
                 response = await asyncio.wait_for(
                     controller.request_permission(
                         session_id=session_id, tool_call=tool_call, options=options
@@ -2627,7 +2187,7 @@ class CommsAgent:
                     if autonomous_goal:
                         return
                     raise _goal_attempt_unavailable() from error
-        self._sessions[session_id] = thread_name
+        self.sessions.bindings[session_id] = thread_name
         # Error-display deduplication belongs to one backend turn, not a session.
         self._emitted_errors.pop(session_id, None)
         turn_id = uuid4().hex
@@ -3184,11 +2744,9 @@ class CommsAgent:
                     if sent is not None:
                         await agent._emit_event(
                             session_id,
-                            {
-                                "type": "sent",
-                                "text": sent.body,
-                                "route": MessageRoute(sent.sender, (sent.target,)),
-                            },
+                            SentTranscriptUpdate(
+                                text=sent.body, route=MessageRoute(sent.sender, (sent.target,))
+                            ),
                         )
 
             class TurnEventConsumer(events.AgentEventConsumer):
@@ -3383,7 +2941,9 @@ class CommsAgent:
                         (
                             item.text
                             if item and item.echo
-                            else initial_display_text if input_id is None else None
+                            else initial_display_text
+                            if input_id is None
+                            else None
                         ),
                         input_id,
                         queued_item=item,
@@ -3392,7 +2952,7 @@ class CommsAgent:
 
                 @handles(events.SettingChangeResult)
                 async def setting_result(self, event: events.SettingChangeResult) -> None:
-                    agent._setting_requests.resolve(event)
+                    agent.config.setting_requests.resolve(event)
 
                 async def before_agent_info(self, event: events.AgentInfo) -> None:
                     session_file = event.session_file
@@ -3403,27 +2963,14 @@ class CommsAgent:
                         agent._comms.attach_session(thread_name, str(session_file))
 
                 async def after_agent_info(self, event: events.AgentInfo) -> None:
-                    if event.model and agent._comms.registry.require(thread_name).model is None:
-                        agent._comms.set_thread_model(thread_name, event.model)
-                        await agent._runtime.session_update(
-                            session_id=session_id,
-                            update=ConfigOptionUpdate(
-                                session_update="config_option_update",
-                                config_options=await agent._config_options(thread_name),
-                            ),
-                        )
-                    if (
-                        event.thinking_level
-                        and agent._comms.registry.require(thread_name).thinking_level is None
-                    ):
-                        agent._comms.set_thread_thinking_level(thread_name, event.thinking_level)
+                    await agent.config.observe_agent_info(session_id, thread_name, event)
 
                 @handles(events.ToolEnd)
                 async def tool_ended(self, event: events.ToolEnd) -> None:
                     nonlocal thread_name, successful_tool_observed
                     if event.ok:
                         successful_tool_observed = True
-                    thread_name = await agent._sync_session_identity(session_id)
+                    thread_name = await agent.sessions.sync_identity(session_id)
                     if event.name == "comms_set_goal" and event.ok is True:
                         current_goal = agent._comms.registry.require(thread_name).goal
                         if current_goal is not None:
@@ -3507,7 +3054,7 @@ class CommsAgent:
                         started_goal=goal,
                         expected_worktree=thread.worktree,
                         diagnostic=(
-                            "Backend turn ended without a result; " "inspect local diagnostics."
+                            "Backend turn ended without a result; inspect local diagnostics."
                         ),
                     )
             if goal_permit is not None:
@@ -3699,7 +3246,7 @@ class CommsAgent:
                 pending = backend_inbox.get_nowait()
                 if isinstance(pending, str):
                     self._pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
-            thread_name = await self._sync_session_identity(session_id)
+            thread_name = await self.sessions.sync_identity(session_id)
             current_project = self._comms.registry.require(thread_name).worktree
             if current_project != thread.worktree and (
                 persistent := self._persistent_backends.get(session_id)
@@ -3783,22 +3330,17 @@ class CommsAgent:
         finally:
             self._comms.release_waits_after_terminal_turn(terminal_fence)
 
-    def _started_event(self, thread_name: str, turn_id: str) -> dict[str, Any]:
+    def _started_event(self, thread_name: str, turn_id: str) -> StartedTranscriptUpdate:
         """Project one owner-authored turn without inventing presentation timestamps."""
         thread = self._comms.registry.require(thread_name)
         active = thread.active_turn
         activity = self._comms.activity_of(thread.name)
-        return {
-            "type": "started",
-            "turn_id": turn_id,
-            **(
-                {"started_at": active.started_at}
-                if active is not None and active.id == turn_id
-                else {}
-            ),
-            "activity": activity.state.value,
-            "activity_detail": activity.detail,
-        }
+        return StartedTranscriptUpdate(
+            turn_id=turn_id,
+            started_at=active.started_at if active is not None and active.id == turn_id else None,
+            activity=activity.state.value,
+            activity_detail=activity.detail,
+        )
 
     async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
         thread_name = self._require_session(session_id)
@@ -3817,8 +3359,7 @@ class CommsAgent:
             wake_task.cancel()
         self._direct_interrupt_tickets.clear()
         await asyncio.gather(*self._wake_tasks.values(), return_exceptions=True)
-        for proxy in self._proxies.values():
-            await proxy.close()
+        await self.sessions.close_proxies()
         turns = list(self._turn_tasks.values())
         self._turn_tasks.clear()
         for task in turns:
@@ -3838,17 +3379,7 @@ class CommsAgent:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-        for name in set(self._sessions.values()):
-            try:
-                canonical = self._comms.registry.require(name).name
-                if (
-                    self._comms.registry.require(canonical).pid == os.getpid()
-                    and self._comms.registry.status(canonical).running
-                ):
-                    self._comms.stop(canonical)
-            except Exception as error:
-                self._debug_log(f"shutdown error: {error!r}")
-        await self._runtime.close()
+        await self.sessions.release_owned()
 
     async def _emit_text(
         self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None
@@ -3872,7 +3403,7 @@ class CommsAgent:
     async def _emit_event(
         self,
         session_id: str,
-        event: events.AgentEvent | dict[str, Any],
+        event: events.AgentEvent | TranscriptUpdate | dict[str, Any],
         client: Any = None,
         *,
         turn_id: str | None = None,
@@ -3883,51 +3414,8 @@ class CommsAgent:
         if isinstance(event, events.AgentEvent):
             await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
             return
-        kind = event.get("type")
-        if kind == "user":
-            text = event.get("text") or ""
-            if text:
-                await client.session_update(
-                    session_id=session_id,
-                    update=UserMessageChunk(
-                        session_update="user_message_chunk",
-                        content=TextContentBlock(type="text", text=text),
-                    ),
-                )
-        elif kind in {"assistant", "notice", "sent"}:
-            text = event.get("text") or ""
-            if text:
-                await self._emit_text(session_id, text, client, event.get("route"))
-        elif kind == "started":
-            lifecycle = {
-                "turnStarted": True,
-                "turnId": event.get("turn_id"),
-            }
-            lifecycle.update(
-                {
-                    **(
-                        {"startedAt": event["started_at"]}
-                        if event.get("started_at") is not None
-                        else {}
-                    ),
-                    **(
-                        {"activity": event["activity"]} if event.get("activity") is not None else {}
-                    ),
-                    **(
-                        {"activityDetail": event["activity_detail"]}
-                        if event.get("activity_detail") is not None
-                        else {}
-                    ),
-                }
-            )
-            await client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta={"agentComms": lifecycle},
-                ),
-            )
+        update = TranscriptUpdate.from_legacy(event) if isinstance(event, dict) else event
+        await update.publish(session_id, client)
 
     @staticmethod
     def _sanitized_compaction_summary(value: Any) -> str:
@@ -3946,32 +3434,9 @@ class CommsAgent:
 
 
 class CommsClient(CommsAgent):
-    """A stdio connection is an attachment, never a thread's executor."""
+    """A stdio connection attaches to a separately owned executor."""
 
-    async def new_session(
-        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
-    ) -> NewSessionResponse:
-        self._reject_foreign_mcp(mcp_servers)
-        thread = self._declare_thread(cwd, 0)
-        loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
-        return NewSessionResponse(
-            session_id=thread.name,
-            config_options=loaded.config_options,
-            field_meta=loaded.field_meta,
-        )
-
-    async def load_session(
-        self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
-    ) -> LoadSessionResponse:
-        self._reject_foreign_mcp(mcp_servers)
-        thread = self._validated_thread(cwd, session_id)
-        owner = await asyncio.to_thread(
-            self._comms.ensure_owner,
-            thread.name,
-            agent_bin=self._agent_bin,
-            agent_args=self._agent_args,
-        )
-        return await self._attach_owner(owner, session_id)
+    session_lifecycle_class = AttachedSessionLifecycle
 
 
 def parse_target(text: str) -> tuple[str, str]:
