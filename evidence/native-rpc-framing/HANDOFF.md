@@ -30,5 +30,10 @@ failed receipt retained. Additional actual-native cancellation and forced EOF
 mid-large-frame retire children, retain one input/context commitment and settle
 UNKNOWN without retry authority. One localHTTP request per case, zero paid calls.
 
-The shared-child regression and installed-wheel acceptance are running. This is
-not yet an installed/live acceptance claim. CI is deferred per owner.
+Final acceptance:66 shared-child/reader cases passed in24.22s. The noneditable
+wheel passed9 actual pinned-native cases in29.27s, including large complete
+record/cancel/EOF, ordinary configured-provider success, restart/reopen, missing
+credentials, provider429 and length refusal. Installed import was verified under
+.artifacts/rpc-framing-installed. No live deployment by this sidecar; parent owns
+integration. CI is deferred per owner. Owned generated native session copies
+were removed after process retirement; branch, receipts and wheel are retained.
