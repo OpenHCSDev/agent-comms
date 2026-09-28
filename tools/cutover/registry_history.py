@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.goal_states import ActiveGoal, GoalState, PausedGoal, PauseSource
 from agent_comms.goals import Goal
@@ -147,34 +148,42 @@ def stage(source: Path, destination: Path) -> RegistryRewrite:
     count = 0
     if history_path.exists():
         saved = destination / "original-goal-history.sqlite3"
-        rewritten = destination / history_path.name
         with (
             closing(sqlite3.connect(history_path.as_uri() + "?mode=ro", uri=True)) as origin,
             closing(sqlite3.connect(saved)) as archive,
-            closing(sqlite3.connect(rewritten)) as output,
         ):
             origin.backup(archive)
-            archive.backup(output)
             os.chmod(saved, 0o600)
-            os.chmod(rewritten, 0o600)
-            rows = output.execute(
-                "SELECT sequence, before_goal, after_goal FROM entries"
-            ).fetchall()
-            with output:
-                for sequence, before_goal, after_goal in rows:
-                    goals = [
-                        json.dumps(
-                            convert_goal(FieldCodec.decode(StoredGoal, json.loads(value))).to_wire()
-                        )
+            if archive.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise ValueError("Retained goal history failed SQLite integrity check")
+            archive.row_factory = sqlite3.Row
+            expected = []
+            for row in archive.execute("SELECT * FROM entries ORDER BY sequence"):
+                payload = dict(row)
+                for old, new in (("before_goal", "before"), ("after_goal", "after")):
+                    value = payload.pop(old)
+                    payload[new] = (
+                        convert_goal(FieldCodec.decode(StoredGoal, json.loads(value)))
                         if value is not None
                         else None
-                        for value in (before_goal, after_goal)
-                    ]
-                    output.execute(
-                        "UPDATE entries SET before_goal=?, after_goal=? WHERE sequence=?",
-                        (*goals, sequence),
                     )
-            count = len(rows)
+                # TypedTable.insert validates every declared field before SQLite
+                # coercion. Here only the retired goal JSON needs decoding.
+                expected.append(GoalHistoryEntry(**payload))
+            # Build only the current declaration-owned schema. Keep the original
+            # database above as evidence; no retired tables enter the runtime.
+            history = GoalHistoryStore(destination / "registry.json")
+            with history._transaction() as output:
+                for entry in expected:
+                    entry.insert(output)
+            reopened = GoalHistoryStore(destination / "registry.json")
+            with closing(reopened._connect()) as output:
+                actual = GoalHistoryEntry.select(output, order_by=("sequence",))
+                if actual != expected or output.execute("PRAGMA integrity_check").fetchone() != (
+                    "ok",
+                ):
+                    raise ValueError("Reopened goal history differs from retained source rows")
+            count = len(expected)
     if before != tuple(file_revision(path) for path in (registry_path, pauses_path, history_path)):
         raise ValueError("Source changed during staging; candidate is not installable")
     receipt = RegistryRewrite(
