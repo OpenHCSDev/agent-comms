@@ -14,8 +14,8 @@ from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
-from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_events import Response
