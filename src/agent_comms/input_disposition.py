@@ -7,7 +7,6 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, Literal
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
 from .input_attempt import (
     GoalInputDecision,
     InputAttempt,
@@ -122,22 +121,6 @@ class InputDispositions(LockedStore[InputDocument]):
 
     def empty(self) -> InputDocument:
         return InputDocument()
-
-    def _decode(self, data) -> InputDocument:
-        if isinstance(data, dict) and isinstance(data.get("rows"), dict):
-            data = {
-                **data,
-                "rows": {
-                    key: StoredInput.declaration_record(row) for key, row in data["rows"].items()
-                },
-            }
-        return FieldCodec.decode(InputDocument, data)
-
-    def _encode(self, value: InputDocument):
-        return {
-            **FieldCodec.encode(value),
-            "rows": {key: row.stored_record() for key, row in value.rows.items()},
-        }
 
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
