@@ -113,3 +113,22 @@ def test_one_way_import_preserves_indexed_routes_and_retires_source_column(tmp_p
         event.routing
         for event in wire(comms.root).transcripts.thread_transcript_page("worker").events
     ] == [late, modern, late]
+
+
+def test_invalid_saved_route_rolls_back_migration_without_losing_original(tmp_path):
+    from agent_comms.transcript_routes import TranscriptRoutes
+    import pytest
+
+    saved = tmp_path / "transcript_routes.json"
+    original = json.dumps({"session": {"entry": {"requests": "not a list", "reply": None}}})
+    saved.write_text(original)
+    owner = TranscriptRoutes(tmp_path)
+    with pytest.raises(ValueError):
+        owner.for_session("session")
+    assert saved.read_text() == original
+    with sqlite3.connect(owner.database_path) as db:
+        assert db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall() == []
+    routing = TurnRouting(reply=MessageRoute("worker", ("#team",)))
+    saved.write_text(json.dumps({"session": {"entry": routing.to_wire()}}))
+    with owner.for_session("session") as routes:
+        assert routes.get("entry") == routing
