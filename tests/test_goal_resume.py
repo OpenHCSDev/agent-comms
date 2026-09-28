@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -42,7 +43,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
     assert result["id"] == started["id"]
     assert result["text"] == started["text"]
-    assert result["status"] == "active"
+    assert FieldCodec.decode(Goal, result).state.active
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
 

@@ -1,0 +1,62 @@
+
+==================================== ERRORS ====================================
+_______________ ERROR collecting tests/test_checkpoint_seals.py ________________
+ImportError while importing test module '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/tests/test_checkpoint_seals.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_checkpoint_seals.py:13: in <module>
+    from test_private_bus_checkpoint import _page, _root, stable_thread_lookup
+tests/test_private_bus_checkpoint.py:17: in <module>
+    from agent_comms.coordination import PublicationIntent, canonical_publication_key
+E   ImportError: cannot import name 'PublicationIntent' from 'agent_comms.coordination' (/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/src/agent_comms/coordination.py)
+__________ ERROR collecting tests/test_owner_compaction_authority.py ___________
+ImportError while importing test module '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/tests/test_owner_compaction_authority.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_owner_compaction_authority.py:18: in <module>
+    from agent_comms.owner_compaction_process import (
+E   ModuleNotFoundError: No module named 'agent_comms.owner_compaction_process'
+____________ ERROR collecting tests/test_owner_compaction_commit.py ____________
+ImportError while importing test module '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/tests/test_owner_compaction_commit.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_owner_compaction_commit.py:33: in <module>
+    from agent_comms.owner_compaction_process import CompactionTransportUnknownError
+E   ModuleNotFoundError: No module named 'agent_comms.owner_compaction_process'
+____________ ERROR collecting tests/test_private_bus_checkpoint.py _____________
+ImportError while importing test module '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/tests/test_private_bus_checkpoint.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_private_bus_checkpoint.py:17: in <module>
+    from agent_comms.coordination import PublicationIntent, canonical_publication_key
+E   ImportError: cannot import name 'PublicationIntent' from 'agent_comms.coordination' (/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/src/agent_comms/coordination.py)
+_____________ ERROR collecting tests/test_prompt_restart_queue.py ______________
+tests/test_prompt_restart_queue.py:16: in <module>
+    spec.loader.exec_module(queue)
+<frozen importlib._bootstrap_external>:755: in exec_module
+    ???
+<frozen importlib._bootstrap_external>:892: in get_code
+    ???
+<frozen importlib._bootstrap_external>:950: in get_data
+    ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/integration/tools/prompt_restart_queue.py'
+=========================== short test summary info ============================
+ERROR tests/test_checkpoint_seals.py
+ERROR tests/test_owner_compaction_authority.py
+ERROR tests/test_owner_compaction_commit.py
+ERROR tests/test_private_bus_checkpoint.py
+ERROR tests/test_prompt_restart_queue.py - FileNotFoundError: [Errno 2] No su...
+!!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
+2871 deselected, 5 errors in 6.74s

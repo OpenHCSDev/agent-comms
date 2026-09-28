@@ -25,6 +25,7 @@ from agent_comms.coordination_store import (
 )
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
@@ -69,7 +70,9 @@ def failed_owner(directory, output, exit_allowed):
     else:
         raise AssertionError("failure fixture unexpectedly succeeded")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute("SELECT * FROM native_runtime_input").fetchone()
+        row = store._connection.execute(
+            f"SELECT * FROM {NativeRuntimeInput.declared_name}"
+        ).fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
     os.environ["AGENT_COMMS_THREAD"] = "beta"
     comms.owners.release("beta")
@@ -111,7 +114,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         before = tuple(
             store._connection.execute(
-                "SELECT * FROM native_runtime_input WHERE input_id=?", (input_id,)
+                f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?", (input_id,)
             ).fetchone()
         )
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as proof:
@@ -126,7 +129,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
         assert not settled.replay.replay_safe
         after = tuple(
             store._connection.execute(
-                "SELECT * FROM native_runtime_input WHERE input_id=?", (input_id,)
+                f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?", (input_id,)
             ).fetchone()
         )
         assert after == before  # No forged context, cursor, or acceptance receipt.

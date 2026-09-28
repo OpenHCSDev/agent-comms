@@ -1,0 +1,319 @@
+..............ssFF.....................................F.FF
+=================================== FAILURES ===================================
+______ test_inspected_unknown_dependencies_allow_standby_but_never_replay ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-1/test_inspected_unknown_depende0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faa72a47e00>
+
+    async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp_path, monkeypatch):
+        monkeypatch.setenv("PI_AGENT_ID", "worker")
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.threads.register(
+            Thread(
+                "parent",
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.begin_turn("parent", "parent-delegation-in-flight")
+        comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
+        goal = comms.goals.update_goal(
+            "worker", SetGoalAction(text="Delegate and wait"), owner_store=agent.turns.open_goal_store()
+        )
+        messages = [
+            comms.messaging.send_message("parent", "worker", text)
+            for text in ("Set standby", "Yes wait")
+        ]
+        inbox = next(t for t in TOOLS if t.name == "comms_inbox")
+        report = next(t for t in TOOLS if t.name == "comms_goal")
+        args = {
+            "goal_id": goal.id,
+            "status": "standby",
+            "progress": "Waiting for later parent reply",
+            "wait_for": ["parent"],
+        }
+        try:
+>           await agent.inputs.drain_inbox("worker")
+
+tests/test_goal_input_review.py:54:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:350: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:341: in _drain_private_if_changed
+    result = await self.effects._drain_private_nk(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.acp.CommsAgent object at 0x7faa72babc50>
+session_id = 'worker', wire_root_id = '224afb9cc78c49ebaa0bb68079bb3b2e'
+
+    async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
+        """Selected private wake for this ACP session, never legacy inbox ACK.
+
+        This explicitly configured path reuses the reviewed one-shot native
+        reservation/send boundary. No schema/participant is installed here;
+        both must already belong to the same private root. A failing or
+        uncertain native turn propagates and cannot be replayed by a drain.
+        """
+        package = self._private_nk_native_package
+        if package is None or self._private_nk_wire_root_id != wire_root_id:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP requires an explicit matching root and native package"
+            )
+E           agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP requires an explicit matching root and native package
+
+src/agent_comms/acp.py:601: PublicationActivationBlocked
+_______________________ test_same_id_resume_from_paused ________________________
+
+comms = <agent_comms.comms.Comms object at 0x7faa729fc350>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faa7288c980>
+
+    def test_same_id_resume_from_paused(comms, monkeypatch):
+        started = _goal(comms, monkeypatch)
+        comms.goals.update_goal(
+            "owner",
+            PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="previous"),
+        )
+
+        result = invoke_tool(
+            comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "user resumed"}
+        )["goal"]
+
+        assert result["id"] == started["id"]
+        assert result["text"] == started["text"]
+>       assert result["status"] == "active"
+               ^^^^^^^^^^^^^^^^
+E       KeyError: 'status'
+
+tests/test_goal_resume.py:45: KeyError
+____ test_acp_optional_reply_read_failure_after_settled_does_not_fail_done _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-1/test_acp_optional_reply_read_f0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faa72aba4a0>
+
+    async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
+        tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        child = (await agent.new_session(str(tmp_path / "child"))).session_id
+        _thread(comms, "owner", tmp_path)
+        goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
+        assert goal is not None
+        terminal = []
+        original_emit = agent._emit_event
+
+        async def capture_emit(session_id, event, **kwargs):
+            if isinstance(event, (ae.StreamSettled, ae.TurnSettled)):
+                terminal.append("settled")
+            await original_emit(session_id, event, **kwargs)
+
+        async def events(*_args, **_kwargs):
+            comms.goals.update_goal(
+                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+            )
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
+
+        original_history_page = comms.bus._history_page
+
+        def unavailable(*args, **kwargs):
+            if not terminal:
+                return original_history_page(*args, **kwargs)
+            assert terminal == ["settled"]
+            assert comms.registry.require(child).active_turn is None
+            raise OSError("injected optional direct-reply read failure")
+
+        monkeypatch.setattr(agent, "_emit_event", capture_emit)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        monkeypatch.setattr(comms.bus, "_history_page", unavailable)
+        try:
+>           await agent.turns.run_agent_turn(child, child, "Finish work")
+
+tests/test_goal_standby_liveness.py:437:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7faa72bfd7f0>
+session_id = 'child'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_________ test_acp_delayed_old_callback_after_new_finish_before_reply __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-1/test_acp_delayed_old_callback_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faa72abb460>
+
+    async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        child = (await agent.new_session(str(tmp_path / "child"))).session_id
+        _thread(comms, "owner", tmp_path)
+        goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
+        assert goal is not None
+        old_settled = asyncio.Event()
+        release_old = asyncio.Event()
+        real_emit = agent._emit_event
+
+        async def delayed_emit(session_id, event, **kwargs):
+            if isinstance(event, (ae.StreamSettled, ae.TurnSettled)) and not old_settled.is_set():
+                old_settled.set()
+                await release_old.wait()
+            await real_emit(session_id, event, **kwargs)
+
+        async def events(*_args, **_kwargs):
+            comms.goals.update_goal(
+                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+            )
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
+
+        monkeypatch.setattr(agent, "_emit_event", delayed_emit)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        old_task = asyncio.create_task(agent.turns.run_agent_turn(child, child, "Finish work"))
+        try:
+            await asyncio.wait_for(old_settled.wait(), 2)
+            assert comms.registry.require(child).active_turn is None
+            new_claim = comms.agents.begin_turn(child, "new-child-turn")
+            new_fence = comms.agents.finish_turn(new_claim)
+            release_old.set()
+>           await asyncio.wait_for(old_task, 2)  # OLD callback sees idle NEW turn, no reply yet.
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_standby_liveness.py:511:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7faa72bff0b0>
+session_id = 'child'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_ test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model[False] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-1/test_acp_settled_is_not_termin0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faa728d29e0>
+reply = False
+
+    @pytest.mark.parametrize("reply", [False, True])
+    async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
+        tmp_path, monkeypatch, reply
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        child = (await agent.new_session(str(tmp_path / "child"))).session_id
+        _thread(comms, "owner", tmp_path)
+        goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
+        assert goal is not None
+        streamed = []
+
+        async def events(*_args, **_kwargs):
+            streamed.append(child)
+            # The active child turn began before model events are streamed.
+            comms.goals.update_goal(
+                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+            )
+            if reply:
+                yield ae.Chunk(text="Reported")
+            yield ae.StreamSettled()
+            assert comms.registry.require("owner").goal.state.active
+            assert comms.goals.goal_wait("owner") is not None
+            yield ae.Done(ok=True, text="Reported" if reply else "")
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn(
+                child, child, "Finish work", reply_targets=("owner",) if reply else ()
+            )
+
+tests/test_goal_standby_liveness.py:553:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7faa72bfec30>
+session_id = 'child'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+=========================== short test summary info ============================
+FAILED tests/test_goal_input_review.py::test_inspected_unknown_dependencies_allow_standby_but_never_replay
+FAILED tests/test_goal_resume.py::test_same_id_resume_from_paused - KeyError:...
+FAILED tests/test_goal_standby_liveness.py::test_acp_optional_reply_read_failure_after_settled_does_not_fail_done
+FAILED tests/test_goal_standby_liveness.py::test_acp_delayed_old_callback_after_new_finish_before_reply
+FAILED tests/test_goal_standby_liveness.py::test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model[False]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 5 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+5 failed, 52 passed, 2 skipped in 8.16s

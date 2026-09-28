@@ -28,6 +28,7 @@ from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.selected_write_plan import SelectedWritePlans
 from agent_comms.threads import Thread
 from test_coordinated_runtime import _fake_model
@@ -385,7 +386,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 )
                 assert (
                     store._connection.execute(
-                        "SELECT COUNT(*) FROM native_runtime_inputs"
+                        f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
                     ).fetchone()[0]
                     == 1
                 )
