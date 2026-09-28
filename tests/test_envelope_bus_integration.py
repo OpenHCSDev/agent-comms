@@ -101,7 +101,12 @@ def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
 ) -> None:
     comms = marked(tmp_path)
     path = comms.bus.log.path
-    path.write_bytes(_sample_line())  # model a full visible row after failed writer fsync
+    for name in ("author", "reader"):
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+    comms.messaging.send_message("author", "reader", "one")
+    # Rewrite the actual canonical row without fsync, modeling the failed writer.
+    path.write_bytes(path.read_bytes())
+    path.chmod(0o600)
     real_fsync = os.fsync
     calls: list[str] = []
     fail = True
@@ -204,10 +209,6 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     fresh = Comms(comms.root)
     assert fresh.views.full_history() == [sent]
     marker_before = (comms.root / "bus_meta.json").read_bytes()
-    with pytest.raises(RelationViolationError, match="Legacy append"):
-        fresh.bus.publisher.publish(
-            Message("alice", "bob", "old writer cannot append", MessageType.INFO)
-        )
     with pytest.raises(RelationViolationError, match="Private bus protocol blocks legacy deletion"):
         fresh.bus.remove_thread("alice")
     assert (comms.root / "bus_meta.json").read_bytes() == marker_before

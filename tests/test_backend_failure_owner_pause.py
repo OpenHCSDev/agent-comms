@@ -5,7 +5,7 @@ import json
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -25,7 +25,7 @@ from test_acp import TestAgentTurn as GoalFixture
 async def test_failed_attempt_preserves_explicit_owner_pause(
     wired, tmp_path, monkeypatch, outcome, pause_timing
 ):
-    agent = CommsAgent(wired, agent_bin="pi")
+    agent = canonical_agent(wired, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
     goal = wired.goals.update_goal("project", SetGoalAction(text="Continue independent work"))

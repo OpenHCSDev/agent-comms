@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_states import GoalState
+from agent_comms.goal_states import BlockedGoal, GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 from agent_comms.child_process import ProcessIdentity
@@ -20,7 +20,12 @@ from agent_comms.threads import Thread
 def test_goal_family_survives_registry_and_history_reopen(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     for name in GoalState.names():
-        goal = Goal("Keep the objective", name, state=GoalState.decode(name)())
+        state_type = GoalState.decode(name)
+        state = (
+            BlockedGoal(block_reason="Waiting for the fixture dependency")
+            if state_type is BlockedGoal else state_type()
+        )
+        goal = Goal("Keep the objective", name, state=state)
         owner = Thread(name, frozenset(), str(tmp_path), goal=goal)
         registry.register(owner)
         assert FieldCodec.decode(Goal, goal.to_wire()) == goal
