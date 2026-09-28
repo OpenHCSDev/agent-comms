@@ -7,29 +7,33 @@ import json
 import os
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms.backend import PersistentPiSession, _session_revision
+from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.selected_pi_child_deadline import SelectedChildUnknown
-from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 
 CHILD = r"""
 import json,sys,sqlite3,time
+from agent_comms.compaction_journal import SelectedSummaryAttempt
+from agent_comms.compaction_states import ReservedSummary
 from pathlib import Path
 mode,journal,received=sys.argv[1:]
+print('ready',file=sys.stderr,flush=True)
 r=json.loads(sys.stdin.readline())
 # Check the actual persisted reservation before producing any result.
 db=sqlite3.connect(journal)
-row=db.execute('SELECT status FROM selected_summary_attempts WHERE operation_id=?',
-               (r['operationId'],)).fetchone()
-assert row==('reserved',),row
+row=SelectedSummaryAttempt.one(db,operation_id=r['operationId'])
+assert row is not None and isinstance(row.state,ReservedSummary),row
 Path(received).write_text(json.dumps(r))
 if mode in ('progress','duplicate-progress','foreign-progress'):
     for sequence in range(1, 6):
@@ -60,7 +64,8 @@ d=dict(version=1,status='summarized',operationId=r['operationId'],
        witness=r['witness'],selected=r['selected'],settings=r['settings'],result=result)
 if mode=='wrong': d['operationId']='f'*32
 if mode in ('decline','limit'):
-    d=dict(version=1,status='declined',operationId=r['operationId'],reason='limit_exceeded' if mode=='limit' else 'split_turn')
+    d=dict(version=1,status='declined',operationId=r['operationId'],
+           reason='limit_exceeded' if mode=='limit' else 'split_turn')
 if mode=='unknown': d=dict(version=1,status='unknown',operationId=r['operationId'])
 if mode in ('provider-error', 'invalid-error', 'oversize-error'):
     d=dict(version=1,status='unknown',operationId=r['operationId'],
@@ -82,23 +87,26 @@ async def selected(tmp_path, mode="success"):
     file.write_text('{"type":"session","version":3,"id":"session"}\n')
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
     received = tmp_path / "received.json"
-    child = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-u",
-        "-c",
-        CHILD,
-        mode,
-        str(journal.path),
-        str(received),
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        start_new_session=True,
+    child = await AttachedChild.start(
+        (
+            sys.executable,
+            "-u",
+            "-c",
+            CHILD,
+            mode,
+            str(journal.path),
+            str(received),
+        )
     )
+    async with asyncio.timeout(5):
+        assert await child.stderr.readline() == b"ready\n"
     persistent = PersistentPiSession()
     persistent.proc = child
     persistent.reader = PiRpcChannel(child.stdout)
-    persistent.launch_key = ("existing-pi",)
+    persistent.launch_key = (
+        NativePiRpcLaunch((sys.executable,), tmp_path, {}, tmp_path, file, tmp_path),
+        (0, 0),
+    )
     persistent.session_file = str(file)
     persistent.session_id = "session"
     persistent.revision = _session_revision(str(file))
@@ -122,7 +130,7 @@ async def selected(tmp_path, mode="success"):
             journal,
             witness,
             source,
-            expected_launcher="existing-pi",
+            expected_package=tmp_path,
             tokens_before=1200,
             **kwargs,
         )
@@ -131,9 +139,6 @@ async def selected(tmp_path, mode="success"):
         yield run, persistent, journal, file, received
     finally:
         await persistent.close_idle()
-        if child.returncode is None:
-            child.kill()
-            await child.wait()
 
 
 async def test_existing_child_summary_preserves_native_metadata_and_blocks_replay(tmp_path):
@@ -141,8 +146,8 @@ async def test_existing_child_summary_preserves_native_metadata_and_blocks_repla
         before = file.read_bytes()
         result = await run()
         assert result.summary.text == "native summary"
-        assert result.summary.details == dict(readFiles=["foo.py"], modifiedFiles=[])
-        assert result.summary.usage["cost"]["total"] == 0
+        assert result.summary.details.read_files == ("foo.py",)
+        assert result.summary.usage.cost.total == 0
         assert result.decline_reason is None
         assert json.loads(received.read_text())["operationId"] == result.operation_id
         assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
@@ -216,9 +221,14 @@ async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
 
 
-async def test_stale_child_never_reserves_or_sends(tmp_path):
+@pytest.mark.parametrize("changed", ["revision", "package"])
+async def test_stale_child_never_reserves_or_sends(tmp_path, changed):
     async with selected(tmp_path) as (run, persistent, journal, file, received):
-        persistent.revision = None
+        if changed == "revision":
+            persistent.revision = None
+        else:
+            launch, auth = persistent.launch_key
+            persistent.launch_key = (replace(launch, package=tmp_path / "changed-package"), auth)
         with pytest.raises(SelectedChildUnknown, match="stale"):
             await run()
         assert not received.exists()
@@ -254,20 +264,16 @@ async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
 async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
     tmp_path, provider_error
 ):
+    package = Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve()
     env = dict(os.environ, PR95_RPC_FIXTURE="1", TMPDIR=str(tmp_path))
     if provider_error:
         env["PR95_PROVIDER_ERROR"] = "1"
     script = (
         Path(__file__).resolve().parents[1] / "stack/test-native-selected-compaction-summary.mjs"
     )
-    child = await asyncio.create_subprocess_exec(
-        "node",
-        str(script),
+    child = await AttachedChild.start(
+        ("node", str(script)),
         env=env,
-        start_new_session=True,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
     )
     persistent = PersistentPiSession()
     persistent.proc = child
@@ -280,7 +286,12 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             persistent.session_file = fixture["sessionFile"]
             persistent.session_id = fixture["witness"]["sessionId"]
             persistent.revision = _session_revision(fixture["sessionFile"])
-            persistent.launch_key = ("native-fixture",)
+            persistent.launch_key = (
+                NativePiRpcLaunch(
+                    ("node",), tmp_path, env, tmp_path, Path(fixture["sessionFile"]), package
+                ),
+                (0, 0),
+            )
             source = dict(
                 source=dict(ownerName="owner"),
                 selected=fixture["selected"],
@@ -295,7 +306,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 FieldCodec.decode(NativeWitness, fixture["witness"]),
                 source,
                 tokens_before=fixture["tokensBefore"],
-                expected_launcher="native-fixture",
+                expected_package=package,
                 idle_timeout_seconds=5,
             )
             if provider_error:
@@ -314,13 +325,13 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 return
             result = await exchange
             assert "Synthetic summary" in result.summary.text
-            assert result.summary.details == dict(readFiles=[], modifiedFiles=[])
-            assert result.summary.usage["output"] > 0
+            assert result.summary.details.read_files == result.summary.details.modified_files == ()
+            assert result.summary.usage.output > 0
             assert file.read_bytes() == before
             assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
             assert not native_input_admitted(journal.path.parent, str(file))
             child.stdin.close()
-            assert await child.wait() == 0
+            assert (await child.wait()).successful
     finally:
         await persistent.close_idle()
 
@@ -387,6 +398,27 @@ async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
 async def test_selected_frame_uses_transport_without_retired_file_count_budget(tmp_path):
     async with selected(tmp_path, "many-files") as (run, persistent, journal, file, _):
         result = await run()
-        assert len(result.summary.details["readFiles"]) == 3800
+        assert len(result.summary.details.read_files) == 3800
         assert persistent.proc.returncode is None
         assert journal.blocking_selected_summary(str(file))
+
+
+async def test_refusal_recovery_rechecks_exact_record_and_never_reattempts(tmp_path):
+    from agent_comms.compaction_states import RetiredRefusalSummary
+
+    async with selected(tmp_path, "limit") as (run, _, journal, file, _):
+        result = await run()
+        attempt = journal.selected_summary(result.operation_id)
+        journal.refuse_selected_summary(result.operation_id, result.decline_reason)
+        assert journal.selected_summary(result.operation_id) == attempt
+        with pytest.raises(CompactionJournalError, match="refusal transition"):
+            journal.refuse_selected_summary(result.operation_id, "different native reason")
+        with pytest.raises(CompactionJournalError, match="commit reservation"):
+            attempt.state.require_commit_reservation()
+        journal.retire_refused_summary(attempt)
+        retired = journal.selected_summary(result.operation_id)
+        assert isinstance(retired.state, RetiredRefusalSummary)
+        assert retired.state.decline_reason == result.decline_reason
+        with pytest.raises(CompactionJournalError, match="changed"):
+            journal.retire_refused_summary(attempt)
+        assert journal.selected_summary(result.operation_id) == retired

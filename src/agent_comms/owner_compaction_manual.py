@@ -80,7 +80,7 @@ async def compact_manual_owner(
         return await read_selected_compaction_decision(
             persistent,
             session_file=owner.session_file,
-            expected_launcher=runner.agent_bin,
+            expected_package=Path(package),
             provider=provider,
             model_id=model,
             context_tokens=info.context_used,
@@ -123,7 +123,7 @@ async def compact_manual_owner(
             bridge.journal,
             prepared.witness,
             source,
-            expected_launcher=runner.agent_bin,
+            expected_package=Path(package),
             tokens_before=prepared.tokens_before,
             custom_instructions=instructions.strip() if instructions else None,
         )

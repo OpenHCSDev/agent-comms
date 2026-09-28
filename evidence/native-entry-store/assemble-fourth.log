@@ -1,0 +1,37 @@
+patching file dist/core/session-manager.js
+patching file dist/core/compaction/compaction.js
+patching file dist/core/agent-session-runtime.js
+patching file dist/core/agent-session.js
+Hunk #4 succeeded at 483 (offset 24 lines).
+Hunk #5 succeeded at 858 (offset 24 lines).
+Hunk #6 succeeded at 1143 (offset 24 lines).
+Hunk #7 succeeded at 1888 (offset 24 lines).
+Hunk #8 succeeded at 1944 (offset 24 lines).
+Hunk #9 succeeded at 2056 (offset 24 lines).
+Hunk #10 succeeded at 2154 (offset 24 lines).
+Hunk #11 succeeded at 2233 (offset 24 lines).
+Hunk #12 succeeded at 2943 (offset 24 lines).
+Hunk #13 succeeded at 3020 (offset 24 lines).
+Hunk #14 succeeded at 3042 (offset 24 lines).
+Hunk #15 succeeded at 3068 (offset 24 lines).
+Hunk #16 succeeded at 3123 (offset 24 lines).
+patching file dist/core/cache-stats.d.ts
+patching file dist/core/cache-stats.js
+patching file dist/core/compaction/branch-summarization.d.ts
+patching file dist/core/compaction/branch-summarization.js
+patching file dist/core/compaction/compaction.d.ts
+patching file dist/core/export-html/index.js
+patching file dist/core/extensions/types.d.ts
+patching file dist/core/output-guard.js
+patching file dist/core/sdk.js
+patching file dist/core/session-export.js
+patching file dist/core/session-manager.d.ts
+patching file dist/index.d.ts
+patching file dist/index.js
+patching file dist/main.js
+patching file dist/modes/interactive/components/footer.js
+patching file dist/modes/interactive/interactive-mode.js
+patching file dist/modes/rpc/rpc-mode.js
+
+added 95 packages in 2s
+/home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/complete-native/node_modules/@earendil-works/pi-coding-agent

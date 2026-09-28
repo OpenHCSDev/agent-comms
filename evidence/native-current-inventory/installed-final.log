@@ -1,0 +1,28 @@
+{
+  "source": "c3e7252a",
+  "package": "/home/ts/.local/share/agent-comms/native-current-689ce4b5d0592b9a/node_modules/@earendil-works/pi-coding-agent",
+  "manifest_sha256": "689ce4b5d0592b9aa6b6701cec0a0df6407c091cc33af5091d083ef15f16d908",
+  "cli_identity_matches": true,
+  "native_input_capability": "pi-native-input-v1-live-only",
+  "saved_session_unchanged": true,
+  "provider_requests": 0,
+  "inventory_version": 2,
+  "inventory_has_compatibility": false,
+  "inventory": {
+    "version": 2,
+    "projectRoot": "/home/ts/wt/comms-native-current-inventory-20260928/.artifacts/fresh-native-ye_t0ljn",
+    "projectTrustedSaved": false,
+    "projectConfigSkipped": false,
+    "lifetime": "active_pi_turn",
+    "live": {
+      "state": "not_running"
+    },
+    "declarations": {
+      "user": [],
+      "project": []
+    }
+  },
+  "cli_stderr": "",
+  "inventory_stderr": "",
+  "fresh_cli_retired": true
+}

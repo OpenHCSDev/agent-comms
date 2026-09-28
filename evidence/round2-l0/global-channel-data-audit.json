@@ -1,0 +1,23 @@
+{
+  "readonly": true,
+  "field_checked": "to",
+  "sources": [
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/bus.jsonl",
+      "messages": 146,
+      "broadcast_targets": []
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198/bus.jsonl",
+      "messages": 8400,
+      "broadcast_targets": []
+    },
+    {
+      "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w/bus.jsonl",
+      "messages": 20,
+      "broadcast_targets": []
+    }
+  ],
+  "migration_required": false,
+  "correction": "Prior receipt checked target rather than serialized to; this replaces that invalid audit."
+}

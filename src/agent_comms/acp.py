@@ -17,8 +17,6 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
-
 import asyncio
 import json
 import os
@@ -43,20 +41,21 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from . import backend, manual_compaction_bridge
+from . import manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials
-from .coordination_cohort import next_sealed_assignment
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
 from .coordination import CoordinationError, WakeAssignment
+from .coordination_cohort import next_sealed_assignment
 from .coordination_store import (
     IdentityConflict,
     MutationStore,
     PublicationActivationBlocked,
     StaleFence,
 )
+from .field_codec import FieldCodec
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
@@ -245,10 +244,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 return PromptResponse.model_validate(result)
             owner = self.sessions.require(session_id)
             root_id = self._private_nk_marker()
-            if root_id is None or self._private_nk_native_package is None:
-                raise RequestError.invalid_params(
-                    {"reason": "Selected write requires private N/K owner"}
-                )
             controller = self._runtime.controller.get()
             if controller is None or (
                 controller is UNBOUND_CONTROLLER and self.sessions.client is None
@@ -287,7 +282,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             supported = (
                 self.sessions.proxy_image_support.get(session_id, False)
                 if session_id in self.sessions.proxies
-                else backend.rpc_args_for(self.turns.agent_bin, self.turns.agent_args) is not None
+                else True
             )
             if not supported:
                 raise RequestError.invalid_params(
@@ -316,8 +311,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return PromptResponse(stop_reason="end_turn")
         text = self._prompt_text(prompt)
         if (
-            session_id in self.turns.active_turns
-            and backend.rpc_args_for(self.turns.agent_bin, self.turns.agent_args) is not None
+            (session_id in self.turns.active_turns or session_id in self.turns.turn_tasks)
             and self.inputs.backend_inboxes.get(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
@@ -561,36 +555,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             ),
         }
 
-    def _private_session_mode(self) -> bool:
-        marker = self._private_nk_marker()
-        if marker is None:
-            return False
-        if self._private_nk_wire_root_id != marker or self._private_nk_native_package is None:
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
             raise PublicationActivationBlocked(
                 "private N/K ACP session requires explicit matching root and package"
             )
-        return True
-
-    def _private_nk_marker(self) -> str | None:
-        """Distinguish exact legacy metadata from a guarded private marker.
-
-        Both protocols use bus_meta.json. A mere file-existence test would
-        reject ordinary public ACP roots; an ambiguous/damaged marker must not
-        fall back to their legacy ACK path.
-        """
-        marker_path = self._comms.root / "bus_meta.json"
         with self._comms.bus.log.locked():
-            if marker_path.is_symlink():
-                raise IdentityConflict("ACP bus marker is redirected")
-            if not marker_path.exists():
-                return None
-            metadata = self._comms.bus.log.read_metadata_unlocked(required=True)
-            if metadata.private:
-                return self._comms.bus.log._private_marker_unlocked().root_id
-            return None
+            marker = self._comms.bus.log._private_marker_unlocked()
+            if marker.root_id != self._private_nk_wire_root_id:
+                raise PublicationActivationBlocked(
+                    "private N/K ACP root does not match configuration"
+                )
+            verify_private_bus_checkpoint_unlocked(self._comms.bus.log, marker)
+            return marker.root_id
 
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
-        """Selected private wake for this ACP session, never legacy inbox ACK.
+        """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native
         reservation/send boundary. No schema/participant is installed here;
@@ -608,7 +591,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # callbacks may only invalidate a prior client binding, not replace it.
         await self._publish_private_cursor(session_id, thread_name)
         if not self.inputs.auto_wake or not self.sessions.runtime_enabled:
-            return 0  # Explicitly disabled: no legacy path or ACK fallback.
+            return 0  # Explicitly disabled by owner runtime configuration.
         if self._comms.registry.status(thread_name).stopped:
             return 0
         if (
@@ -625,6 +608,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
+        with bus.log.locked():
+            admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
         with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
                 bus,
@@ -636,7 +621,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 native_package=package,
             )
             participant = store.participant(stable_thread_lookup(owner.created_at))
-            candidate = next_sealed_assignment(store, participant.lookup, owner.name)
+            candidate = next_sealed_assignment(
+                store, participant.lookup, owner.name, after_seq=admission_after_seq
+            )
             runnable = candidate is not None and participant.pointer.execution_id is None
         plans = SelectedWritePlans(self._comms, wire_root_id)
 
@@ -667,7 +654,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         result = None
         if runnable:
-            result = await SelectedExecution(
+            execution = SelectedExecution(
                 root=self._comms.root,
                 wire_root_id=wire_root_id,
                 owner_name=thread_name,
@@ -680,7 +667,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     if self._private_selected_tool_intent is not None
                     else {}
                 ),
-            ).run()
+            )
+            result = await self.turns.run_selected(session_id, execution)
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current epoch or an all-N prefix;
@@ -818,7 +806,12 @@ def main() -> int:
                             debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
 
             asyncio.create_task(watchdog())
-        agent = CommsClient(comms, runtime_enabled=True)
+        agent = CommsClient(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=private_nk.native_package if private_nk else None,
+            private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+        )
 
         def observe(event: Any) -> None:
             agent._debug_log(

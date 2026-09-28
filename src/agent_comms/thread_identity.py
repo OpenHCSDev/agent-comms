@@ -20,11 +20,11 @@ class ThreadIncarnation:
     created_at: float
 
     def current(self, snapshot: RegistrySnapshot) -> bool:
-        thread = snapshot.threads.get(self.name)
+        thread = snapshot.threads.get(snapshot.aliases.get(self.name, self.name))
         return (
             thread is None
             if self.created_at == -1.0
-            else thread is not None and thread.incarnation == self
+            else thread is not None and thread.created_at == self.created_at
         )
 
 

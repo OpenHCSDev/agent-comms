@@ -1,0 +1,65 @@
+....................................F.......................ss.......    [100%]
+=================================== FAILURES ===================================
+_________ test_acp_final_boundary_consumes_exact_ack_at_native_id_bind _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_final_boundary_consum0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd2faba63c0>
+
+    @pytest.mark.asyncio
+    async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path, monkeypatch):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+>       await agent.new_session(str(tmp_path / "project"))
+
+tests/test_selected_summary_admission.py:480: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:180: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:170: in new_session
+    thread = self.declare_thread(cwd, os.getpid())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:130: in declare_thread
+    return self.comms.threads.claim_thread(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7fd2fc3c50a0>
+base_name = 'project', tags = frozenset({'acp'})
+worktree = '/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_final_boundary_consum0/project'
+pid = 116127, start_at_latest = True, model = 'openrouter/z-ai/glm-5.3-flash'
+thinking_level = None, auto_title_pending = True
+
+    def claim_thread(
+        self,
+        base_name: str,
+        *,
+        tags: frozenset[str],
+        worktree: str,
+        pid: int = 0,
+        start_at_latest: bool = False,
+        model: str | None = None,
+        thinking_level: str | None = None,
+        auto_title_pending: bool = False,
+    ) -> Thread:
+        """Atomically register a unique thread and optionally baseline its inbox."""
+        with _store_lock(self._wire_lock_path):
+            name = base_name
+            suffix = 2
+            while self.registry.name_reserved(name):
+                name = f"{base_name}-{suffix}"
+                suffix += 1
+>           thread = Thread(
+                name=name,
+                tags=tags,
+                worktree=worktree,
+                pid=pid,
+                model=model,
+                thinking_level=thinking_level,
+                auto_title_pending=auto_title_pending,
+            )
+E           TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+src/agent_comms/thread_management.py:306: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_admission.py::test_acp_final_boundary_consumes_exact_ack_at_native_id_bind
+1 failed, 66 passed, 2 skipped in 3.58s

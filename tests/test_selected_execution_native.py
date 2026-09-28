@@ -10,16 +10,35 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import IdentityConflict, MutationStore
-from test_coordinated_runtime import _root, tmp_path
+from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.selected_tool_broker import SelectedToolIntent
+from test_coordinated_runtime import _root
+from test_coordinated_runtime import tmp_path as private_root_fixture
+
+tmp_path = private_root_fixture
 
 
-async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch):
+@pytest.mark.parametrize("after_cutover, selected_write", [(False, False), (True, False), (False, True)])
+async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover, selected_write):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
     root, root_id, comms, initial, people = _root(tmp_path, direct=True, claims=True)
+    old_seq = initial.message.seq
+    if after_cutover:
+        with comms.bus.log.locked():
+            marker = comms.bus.log._private_marker_unlocked()
+            marker.admission_after_seq = marker.last_seq
+            comms.bus.log.write_metadata_unlocked(marker)
+        fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
+        initial = comms.bus.log.read_initial_cohort(root_id, fresh.seq)
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
@@ -32,10 +51,16 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
         (
             "bash",
             {
-                "command": "python -c \"from pathlib import Path; assert Path('input.txt').read_text() == Path('nested/result.txt').read_text() == 'state=AFTER\\n'\""
+                "command": (
+                    "python -c \"from pathlib import Path; assert Path('input.txt').read_text() == "
+                    "Path('nested/result.txt').read_text() == 'state=AFTER\\n'\""
+                )
             },
         ),
     ]
+
+    if selected_write:
+        calls = [("selected_claimed_write", {"resource": "input.txt", "contents": "state=AFTER\n"})]
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -46,9 +71,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2
                 if len(requests) == 1:
-                    assert {t["function"]["name"] for t in request["tools"]} == {
-                        n for n, _ in calls
-                    }
+                    assert {t["function"]["name"] for t in request["tools"]} == {name for name, _ in calls}
                     delta = {
                         "role": "assistant",
                         "tool_calls": [
@@ -64,9 +87,10 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
                     reason = "tool_calls"
                 else:
                     tools = [m for m in request["messages"] if m["role"] == "tool"]
-                    assert len(tools) == 4
+                    assert len(tools) == len(calls)
                     assert (tmp_path / "input.txt").read_text() == "state=AFTER\n"
-                    assert (tmp_path / "nested/result.txt").read_text() == "state=AFTER\n"
+                    if not selected_write:
+                        assert (tmp_path / "nested/result.txt").read_text() == "state=AFTER\n"
                     assert not any("Error:" in str(t["content"]) for t in tools)
                     delta = {"role": "assistant", "content": "CODING_TOOLS_OK"}
                     reason = "stop"
@@ -129,7 +153,8 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     execution = SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path(package)
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path(package),
+        selected_tool_intent=SelectedToolIntent() if selected_write else None
     )
     try:
         outcome = await asyncio.wait_for(execution.run(), 40)
@@ -141,13 +166,27 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert comms.registry.require("beta").active_turn is None
-        assert not comms.bus.log.claim_projection()
+        if not selected_write:
+            assert not comms.bus.log.claim_projection()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             snapshot = store.snapshot(execution.execution_id)
             assert snapshot.execution.lifecycle.completed
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
+            assert execution.assignment.wire_seq == initial.message.seq
+            cursor = read_current_native_cursor(
+                comms.bus, store, wire_root_id=root_id, owner_name="beta"
+            )
+            assert cursor is not None
+            assert cursor.injected_seq == initial.message.seq
+            assert cursor.covered_seq >= cursor.injected_seq
+            assert cursor.input_id == outcome.input_id
+            if after_cutover:
+                assert read_historical_native_inputs(
+                    store, wire_root_id=root_id,
+                    recipient_lookup=stable_thread_lookup(owner.created_at), source_seq=old_seq,
+                ) == ()
         with pytest.raises(IdentityConflict, match="cannot be reused"):
             await execution.run()
         assert len(requests) == 2

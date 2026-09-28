@@ -1,0 +1,16 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Missing expected exception.
+    at empty-file-race (file:///home/ts/wt/comms-refactor2-s13-20260928/stack/test-native-writer-coverage.mjs:157:22)
+    at file:///home/ts/wt/comms-refactor2-s13-20260928/stack/test-native-writer-coverage.mjs:331:20 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: /rewrite source changed/,
+  operator: 'throws',
+  diff: 'simple'
+}
+
+Node.js v26.5.0

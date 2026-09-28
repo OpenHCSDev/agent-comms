@@ -15,6 +15,7 @@ from agent_comms.bus_publication import (
     public_envelope_digest,
     stable_thread_lookup,
 )
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import canonical_publication_key
@@ -36,7 +37,7 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     # These tests own the explicit WAL maintenance schedule and fault points;
     # the production post-commit worker has separate integration coverage.
     monkeypatch.setattr(
-        "agent_comms.messaging.schedule_private_candidate_after_commit", lambda *_: None
+        "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
     )
 
 
@@ -47,7 +48,13 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
         comms.threads.register(
-            Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), created_at=identity)
+            Thread(
+                name,
+                frozenset({"team"}),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                created_at=identity,
+            )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = {name: stable_thread_lookup(identity) for name, identity in created.items()}
@@ -72,7 +79,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     assert index.maintain(rebuild=True)
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 2
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
     selected = index.page(
         root_id=root_id,
         recipient_lookup=lookup["Alice"],
@@ -195,58 +202,6 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
         )
 
 
-def test_explicit_bounded_rebuild_upgrades_v1_without_exposing_old_rows(
-    tmp_path: Path,
-) -> None:
-    comms, root_id, lookup = _private(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
-    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
-    index = WakeCandidateIndex(comms.bus)
-    assert index.maintain(rebuild=True)
-    with sqlite3.connect(index.path) as db:
-        db.execute("DROP TABLE response_keys")  # v1 had no cross-batch key history.
-        db.execute("UPDATE checkpoint SET version=1")
-    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=first.seq,
-        )
-    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
-        index.maintain()
-    assert not index.maintain(rebuild=True, max_rows=1)
-    with sqlite3.connect(index.path) as db:
-        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 2
-        assert db.execute(
-            "SELECT name FROM sqlite_master WHERE name='response_keys'"
-        ).fetchone() == ("response_keys",)
-        assert db.execute("SELECT count(*) FROM recipients").fetchone()[0] == 1
-    with pytest.raises(ProjectionUnavailableError, match="stale"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=second.seq,
-        )
-    assert index.maintain(max_rows=1)
-    assert (
-        len(
-            index.page(
-                root_id=root_id,
-                recipient_lookup=lookup["Alice"],
-                after_seq=0,
-                required_through_seq=second.seq,
-            ).entries
-        )
-        == 2
-    )
-    with sqlite3.connect(index.path) as db:
-        db.execute("UPDATE checkpoint SET version=3")
-    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
-        index.maintain(rebuild=True)  # Unknown future schemas are not auto-destroyed.
-
-
 def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
@@ -282,7 +237,8 @@ def _replace_rows(comms: Comms, rows: list[dict]) -> None:
 def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
@@ -297,7 +253,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
             after_seq=0,
             required_through_seq=messages[2].seq,
         )
-    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
 
 
@@ -314,7 +270,8 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     public = {key: value for key, value in rows[1].items() if key != PRIVATE_WIRE_FIELD}
@@ -337,7 +294,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
             after_seq=0,
             required_through_seq=messages[2].seq,
         )
-    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
 
 
@@ -347,7 +304,8 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3, 4)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3, 4)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     for row in rows[1:3]:
@@ -385,17 +343,17 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     )
     assert [candidate.source_seq for candidate in first.entries] == [messages[0].seq]
     with sqlite3.connect(index.path) as db:
-        checkpoint = db.execute("SELECT * FROM checkpoint").fetchall()
-        recipients = db.execute("SELECT * FROM recipients").fetchall()
-        keys = db.execute("SELECT * FROM response_keys").fetchall()
+        checkpoint = db.execute("SELECT * FROM candidate_checkpoint").fetchall()
+        recipients = db.execute("SELECT * FROM candidate").fetchall()
+        keys = db.execute("SELECT * FROM candidate_response_key").fetchall()
     with pytest.raises(
         ProjectionUnavailableError, match="duplicate private response publication key"
     ):
         index.maintain(max_rows=2)
     with sqlite3.connect(index.path) as db:
-        assert db.execute("SELECT * FROM checkpoint").fetchall() == checkpoint
-        assert db.execute("SELECT * FROM recipients").fetchall() == recipients
-        assert db.execute("SELECT * FROM response_keys").fetchall() == keys
+        assert db.execute("SELECT * FROM candidate_checkpoint").fetchall() == checkpoint
+        assert db.execute("SELECT * FROM candidate").fetchall() == recipients
+        assert db.execute("SELECT * FROM candidate_response_key").fetchall() == keys
     with pytest.raises(ProjectionUnavailableError, match="stale"):
         index.page(
             root_id=root_id,
@@ -403,7 +361,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             after_seq=0,
             required_through_seq=messages[3].seq,
         )
-    with pytest.raises(RelationViolationError, match="malformed private bus receipt"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         comms.bus.log.read_initial_cohort(root_id, messages[3].seq)
 
 

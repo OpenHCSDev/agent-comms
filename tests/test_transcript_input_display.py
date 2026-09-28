@@ -7,8 +7,8 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.pi_payloads import PiMessage
 from agent_comms.native_entries import TranscriptProjection
+from agent_comms.pi_payloads import PiMessage
 from agent_comms.threads import Thread
 
 GOAL_PROMPT = (
@@ -72,17 +72,19 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     ]
 
 
-def test_existing_route_database_accepts_new_input_annotations_on_reopen(tmp_path):
+def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.transcripts.routes.record_input_display("a" * 32, "first input")
-    # This is exactly the schema present before input display was introduced.
-    with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
-        connection.execute("DROP TABLE input_display")
+    path = comms.transcripts.routes.database_path
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TABLE transcript_route")
+    before = path.read_bytes()
     reopened = wire(comms.root)
-    reopened.transcripts.routes.record_input_display("b" * 32, None)
-    with reopened.transcripts.routes.for_session("new-session.jsonl") as routes:
-        assert routes.input_display("a" * 32) is None
-        assert routes.input_display("b" * 32).text is None
+    with pytest.raises(ValueError, match="one-shot durable migration"):
+        reopened.transcripts.routes.record_input_display("b" * 32, None)
+    with pytest.raises(ValueError, match="one-shot durable migration"):
+        reopened.transcripts.routes.input_bindings()
+    assert path.read_bytes() == before
 
 
 @pytest.mark.asyncio
@@ -129,7 +131,6 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
 
 
 def test_adjacent_assistant_text_parts_preserve_one_markdown_message(tmp_path):
-    comms = wire(tmp_path / "wire")
     events = PiMessage.from_wire(
         {
             "role": "assistant",

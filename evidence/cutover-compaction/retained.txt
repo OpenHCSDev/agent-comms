@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-certified-source-bootstrap-20260928/tools/cutover/compaction_journal.py", line 207, in <module>
+    print(json.dumps(FieldCodec.encode(stage(args.source, args.destination)), indent=2))
+                                       ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-certified-source-bootstrap-20260928/tools/cutover/compaction_journal.py", line 178, in stage
+    row.current().insert(current)
+    ~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-certified-source-bootstrap-20260928/tools/cutover/compaction_journal.py", line 89, in current
+    state = FieldCodec.decode(state_type, payload)
+  File "/home/ts/wt/comms-certified-source-bootstrap-20260928/src/agent_comms/field_codec.py", line 129, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-certified-source-bootstrap-20260928/src/agent_comms/field_codec.py", line 209, in _decode
+    raise ValueError(f"Expected a string family {tag}.")
+ValueError: Expected a string family kind.

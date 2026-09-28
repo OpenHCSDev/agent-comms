@@ -1,0 +1,135 @@
+{
+  "parent": "e6d7fe085b318e672c1b97f08df53ea382b92d1c",
+  "prs": [
+    {
+      "baseRefName": "refactor/canonical-bus-retirement-20260928",
+      "headRefName": "refactor/tr0-packaged-ratchet-20260928",
+      "headRefOid": "e320080ecf20b1a82ea9946d85a62bf03e2f99b1",
+      "isDraft": true,
+      "number": 254,
+      "title": "TR0: package the shared ratchet and delete standalone script",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/254",
+      "head_is_ancestor_of_audited_parent": false
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "fix/bounded-transcript-read-index-20260928",
+      "headRefOid": "1931bad4a404247b9029685bc15ea12c91da1dd9",
+      "isDraft": false,
+      "number": 246,
+      "title": "Bound and cancel retained transcript unread indexing",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/246",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "fix/native-input-proof-streaming-20260928",
+      "headRefOid": "f878403d64a9c4d00f5d7587e1a62d8668922d48",
+      "isDraft": true,
+      "number": 244,
+      "title": "Stream retained native proof recovery; retire lifetime quota and transcript record drops",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/244",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/native-session-entry-store-20260928",
+      "headRefOid": "61e68302371aab5a4a3a8aeca6605c4fe0f1d8ee",
+      "isDraft": true,
+      "number": 243,
+      "title": "Replace native SessionManager eager history with indexed entry ownership",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/243",
+      "head_is_ancestor_of_audited_parent": false
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "fix/live-compaction-recovery-20260928",
+      "headRefOid": "d04105d7ad8efe347def4106519526447416b531",
+      "isDraft": true,
+      "number": 240,
+      "title": "Persist selected compaction refusals and implement canonical manual journal route",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/240",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/round2-s12-caller-closure",
+      "headRefOid": "13547ee0a855f9ecd9fc48701f0a5e0c109c44d8",
+      "isDraft": false,
+      "number": 237,
+      "title": "S12: close typed SQLite owners and delete raw callers",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/237",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/round2-s9-compaction-20260928",
+      "headRefOid": "a346c9fe85aa9d7c58fbf01834833a9c1290a1f5",
+      "isDraft": true,
+      "number": 236,
+      "title": "S9: unify compaction declarations, helpers and journal/process ownership",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/236",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/round2-l0a-loaders",
+      "headRefOid": "e7e91193f52d0e8f813d4823d2b1adb9d056b325",
+      "isDraft": true,
+      "number": 235,
+      "title": "L0A: delete old registry/goal loaders and retired thread purge",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/235",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/s10-pi-boundary-20260928",
+      "headRefOid": "7b03b7eee0b5a1d7bb8f8c7155daca0b97ea83b9",
+      "isDraft": true,
+      "number": 234,
+      "title": "S10/L0B: native-only owner execution and selected followup lifecycle closure",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/234",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/round2-s13-child-process",
+      "headRefOid": "665bf1f4996dfce4f6c7974d2e744979f89bc379",
+      "isDraft": true,
+      "number": 232,
+      "title": "S13: centralize child supervision and eliminate bare-PID ownership",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/232",
+      "head_is_ancestor_of_audited_parent": false
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "refactor/canonical-bus-retirement-20260928",
+      "headRefOid": "e6d7fe085b318e672c1b97f08df53ea382b92d1c",
+      "isDraft": true,
+      "number": 229,
+      "title": "L0: retire old bus writer and ACP execution path; complete history cutover",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/229",
+      "head_is_ancestor_of_audited_parent": true
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "fix/pr114-macos-ci",
+      "headRefOid": "715b3e176d2c502b972001e5324274ce7165ccd8",
+      "isDraft": true,
+      "number": 115,
+      "title": "test: stabilize macOS private-root and native preflight fixtures",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/115",
+      "head_is_ancestor_of_audited_parent": false
+    },
+    {
+      "baseRefName": "main",
+      "headRefName": "feat/pr17-selected-claim-awareness-20260926",
+      "headRefOid": "5b2d75cbdbf8af34fc98af4767401027aac5ae56",
+      "isDraft": true,
+      "number": 108,
+      "title": "Observe selected resource claims without granting writes",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/108",
+      "head_is_ancestor_of_audited_parent": false
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+..................................................FF..F
+=================================== FAILURES ===================================
+_______ test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[False] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-10/test_real_bus_sql_tx1_exact_re0')
+direct = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, direct: bool) -> None:
+        case = _ready(tmp_path, direct=direct)
+        try:
+            result = prepare_fenced_response(
+                case.store,
+                case.bus,
+                case.fence,
+                "Response on the original route",
+                timestamp=123.5,
+                owner_witness=case.witness,
+            )
+            intent = result.value
+            assert intent.exact_target == case.reply_target
+            assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
+            assert case.bus.log.read_keyed_response(intent) is None
+            with pytest.raises(PublicationUncertain):
+                resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            assert case.comms.bus.log.latest_sequence() == case.origin_seq
+            assert isinstance(
+                prepare_fenced_response(
+                    case.store,
+                    case.bus,
+                    case.fence,
+                    intent.payload,
+                    timestamp=intent.timestamp,
+                    owner_witness=case.witness,
+                ),
+                AlreadyApplied,
+            )
+>           published = publish_fenced_response(
+                case.store, case.bus, case.fence, owner_witness=case.witness
+            ).value
+
+tests/test_coordination_response.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordination_response.py:638: in publish_fenced_response
+    return _settle_fenced_response(
+src/agent_comms/coordination_response.py:627: in _settle_fenced_response
+    return Applied(store._snapshot(intent.execution_id))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_store.py:733: in _snapshot
+    for name in PublicationReceipt.columns()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:278: in columns
+    return tuple(item.name for item in cls._fields())
+                                       ^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:264: in _fields
+    return tuple(
+           ^^^^^
+src/agent_comms/typed_table.py:270: in <genexpr>
+    item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.typed_table.SqlStorage'>
+annotation = <enum 'MessageType'>
+
+    @classmethod
+    def for_type(cls, annotation: object) -> type[SqlStorage]:
+        annotation, _ = _base_type(annotation)
+        if get_origin(annotation) is Literal:
+            literal_types = {type(value) for value in get_args(annotation)}
+            if len(literal_types) == 1:
+                annotation = next(iter(literal_types))
+        for storage in cls.members_with(cls):
+            if storage.accepts(annotation):
+                return storage
+>       raise TypeError(f"Unsupported SQLite field type: {annotation!r}")
+E       TypeError: Unsupported SQLite field type: <enum 'MessageType'>
+
+src/agent_comms/typed_table.py:81: TypeError
+_______ test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[True] ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-10/test_real_bus_sql_tx1_exact_re1')
+direct = True
+
+    @pytest.mark.parametrize("direct", [False, True])
+    def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, direct: bool) -> None:
+        case = _ready(tmp_path, direct=direct)
+        try:
+            result = prepare_fenced_response(
+                case.store,
+                case.bus,
+                case.fence,
+                "Response on the original route",
+                timestamp=123.5,
+                owner_witness=case.witness,
+            )
+            intent = result.value
+            assert intent.exact_target == case.reply_target
+            assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
+            assert case.bus.log.read_keyed_response(intent) is None
+            with pytest.raises(PublicationUncertain):
+                resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            assert case.comms.bus.log.latest_sequence() == case.origin_seq
+            assert isinstance(
+                prepare_fenced_response(
+                    case.store,
+                    case.bus,
+                    case.fence,
+                    intent.payload,
+                    timestamp=intent.timestamp,
+                    owner_witness=case.witness,
+                ),
+                AlreadyApplied,
+            )
+>           published = publish_fenced_response(
+                case.store, case.bus, case.fence, owner_witness=case.witness
+            ).value
+
+tests/test_coordination_response.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordination_response.py:638: in publish_fenced_response
+    return _settle_fenced_response(
+src/agent_comms/coordination_response.py:627: in _settle_fenced_response
+    return Applied(store._snapshot(intent.execution_id))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_store.py:733: in _snapshot
+    for name in PublicationReceipt.columns()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:278: in columns
+    return tuple(item.name for item in cls._fields())
+                                       ^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:264: in _fields
+    return tuple(
+           ^^^^^
+src/agent_comms/typed_table.py:270: in <genexpr>
+    item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.typed_table.SqlStorage'>
+annotation = <enum 'MessageType'>
+
+    @classmethod
+    def for_type(cls, annotation: object) -> type[SqlStorage]:
+        annotation, _ = _base_type(annotation)
+        if get_origin(annotation) is Literal:
+            literal_types = {type(value) for value in get_args(annotation)}
+            if len(literal_types) == 1:
+                annotation = next(iter(literal_types))
+        for storage in cls.members_with(cls):
+            if storage.accepts(annotation):
+                return storage
+>       raise TypeError(f"Unsupported SQLite field type: {annotation!r}")
+E       TypeError: Unsupported SQLite field type: <enum 'MessageType'>
+
+src/agent_comms/typed_table.py:81: TypeError
+__________ test_lost_bus_ack_is_read_only_resolved_after_sql_rollback __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-10/test_lost_bus_ack_is_read_only0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f208008bf50>
+
+    def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        case = _ready(tmp_path)
+        try:
+            intent = prepare_fenced_response(
+                case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            ).value
+            real_append = case.bus.publisher._publish_keyed_response_unlocked
+    
+            def committed_then_lost_ack(frozen, *, registry_snapshot=None):
+                real_append(frozen, registry_snapshot=registry_snapshot)
+                raise OSError("injected loss after bus fsync")
+    
+            monkeypatch.setattr(
+                case.bus.publisher, "_publish_keyed_response_unlocked", committed_then_lost_ack
+            )
+            with pytest.raises(OSError):
+                publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            assert case.bus.log.read_keyed_response(intent) is not None
+            assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
+            monkeypatch.undo()
+            case.store.close()
+            with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
+>               result = resolve_existing_response(
+                    reopened, case.bus, case.fence, owner_witness=case.witness
+                )
+
+tests/test_coordination_response.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordination_response.py:651: in resolve_existing_response
+    return _settle_fenced_response(
+src/agent_comms/coordination_response.py:627: in _settle_fenced_response
+    return Applied(store._snapshot(intent.execution_id))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_store.py:733: in _snapshot
+    for name in PublicationReceipt.columns()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:278: in columns
+    return tuple(item.name for item in cls._fields())
+                                       ^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:264: in _fields
+    return tuple(
+           ^^^^^
+src/agent_comms/typed_table.py:270: in <genexpr>
+    item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.typed_table.SqlStorage'>
+annotation = <enum 'MessageType'>
+
+    @classmethod
+    def for_type(cls, annotation: object) -> type[SqlStorage]:
+        annotation, _ = _base_type(annotation)
+        if get_origin(annotation) is Literal:
+            literal_types = {type(value) for value in get_args(annotation)}
+            if len(literal_types) == 1:
+                annotation = next(iter(literal_types))
+        for storage in cls.members_with(cls):
+            if storage.accepts(annotation):
+                return storage
+>       raise TypeError(f"Unsupported SQLite field type: {annotation!r}")
+E       TypeError: Unsupported SQLite field type: <enum 'MessageType'>
+
+src/agent_comms/typed_table.py:81: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_coordination_response.py::test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[False]
+FAILED tests/test_coordination_response.py::test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[True]
+FAILED tests/test_coordination_response.py::test_lost_bus_ack_is_read_only_resolved_after_sql_rollback
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 3 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+3 failed, 52 passed in 5.61s

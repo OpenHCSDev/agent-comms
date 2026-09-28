@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 
@@ -15,7 +15,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", auto_wake=False)
+    agent = canonical_agent(comms, agent_bin="pi", auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
 
@@ -57,7 +57,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
 async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", auto_wake=False)
+    agent = canonical_agent(comms, agent_bin="pi", auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
 

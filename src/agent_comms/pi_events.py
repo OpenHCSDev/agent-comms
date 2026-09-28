@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -157,7 +158,7 @@ class CompactionEnd(PiEvent):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import PROMPT_START_TIMEOUT_SECONDS, _terminate_process, compaction_summary
+        from .backend import PROMPT_START_TIMEOUT_SECONDS, compaction_summary
 
         session.last_model_progress = session.now
         session.result = self.result
@@ -198,7 +199,7 @@ class CompactionEnd(PiEvent):
             yield session.turn_state(
                 "failed", "prestart_compaction_failed", 0, event_phase="compaction"
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             session.finished = True
             return
         if self.will_retry:
@@ -282,6 +283,39 @@ class ContextCommitted(PiEvent):
     llm_context_digest: str | None = field(default=None, metadata={"wire_name": "llmContextDigest"})
 
 
+class ExtensionUiChoice(ABC):
+    """The controller's decision, constrained to the requesting Pi dialog."""
+
+    @abstractmethod
+    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse: ...
+
+
+@dataclass(frozen=True)
+class CancelledUiChoice(ExtensionUiChoice):
+    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse:
+        return ExtensionUiResponse(id=request.id, cancelled=True)
+
+
+@dataclass(frozen=True)
+class ConfirmedUiChoice(ExtensionUiChoice):
+    confirmed: bool
+
+    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse:
+        if request.method == "confirm":
+            return ExtensionUiResponse(id=request.id, confirmed=self.confirmed)
+        return CancelledUiChoice().response(request)
+
+
+@dataclass(frozen=True)
+class ValueUiChoice(ExtensionUiChoice):
+    value: str
+
+    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse:
+        if request.method == "select" and request.options and self.value in request.options:
+            return ExtensionUiResponse(id=request.id, value=self.value)
+        return CancelledUiChoice().response(request)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ExtensionUiRequest(PiEvent):
     method: str | None = None
@@ -295,7 +329,7 @@ class ExtensionUiRequest(PiEvent):
     default_value: str | None = field(default=None, metadata={"wire_name": "defaultValue"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _pi_mcp_live_receipt, _terminate_process
+        from .backend import _pi_mcp_live_receipt
 
         if self.method == "setStatus":
             if (
@@ -324,13 +358,13 @@ class ExtensionUiRequest(PiEvent):
             session.record_failure(
                 failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             session.finished = True
             return
         if session.method not in {"confirm", "select", "input", "editor"}:
             session.skip = True
             return
-        session.choice: dict[str, Any] | None = None
+        choice: ExtensionUiChoice = CancelledUiChoice()
         if (
             session.request_id not in session.ui_seen
             and len(session.ui_seen) < 64
@@ -345,28 +379,12 @@ class ExtensionUiRequest(PiEvent):
         ):
             session.ui_seen.add(session.request_id)
             with suppress(Exception):
-                session.choice = await asyncio.wait_for(
-                    session.ui_request(self.to_wire()), timeout=15
-                )
-        session.response = ExtensionUiResponse(id=session.request_id, cancelled=True)
-        if session.method == "confirm" and isinstance(session.choice, dict):
-            session.response = ExtensionUiResponse(
-                id=session.request_id, confirmed=session.choice.get("confirmed") is True
-            )
-        elif session.method == "select" and isinstance(session.choice, dict):
-            session.options = self.options
-            if (
-                session.options is not None
-                and type(session.choice.get("value")) is str
-                and (session.choice["value"] in session.options)
-            ):
-                session.response = ExtensionUiResponse(
-                    id=session.request_id, value=session.choice["value"]
-                )
+                choice = await asyncio.wait_for(session.ui_request(self), timeout=15)
+        response = choice.response(self)
         try:
             if session.proc.stdin is None or session.proc.returncode is not None:
                 raise BrokenPipeError
-            session.proc.stdin.write(session.reader.encode(session.response))
+            session.proc.stdin.write(session.reader.encode(response))
             await asyncio.wait_for(session.proc.stdin.drain(), timeout=2)
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             session.record_failure(
@@ -374,7 +392,7 @@ class ExtensionUiRequest(PiEvent):
                     "Pi extension UI response could not reach the requesting child."
                 )
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             session.finished = True
             return
         session.skip = True

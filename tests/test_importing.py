@@ -52,16 +52,12 @@ def opencode_export(path, project):
     )
 
 
-@pytest.mark.parametrize("legacy_directory", [False, True])
-def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, legacy_directory):
+def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
     before = source.read_bytes()
     comms = wire(tmp_path / "wire")
     directory = comms.root / "imported_sessions"
-    if legacy_directory:
-        directory.mkdir(parents=True)
-        directory.chmod(0o755)
     receipt = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
     assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
@@ -84,7 +80,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, l
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
-def test_import_refuses_redirected_legacy_session_directory(tmp_path):
+def test_import_refuses_redirected_session_directory(tmp_path):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
     comms = wire(tmp_path / "wire")

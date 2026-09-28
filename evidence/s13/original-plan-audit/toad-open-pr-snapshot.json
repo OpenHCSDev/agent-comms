@@ -1,0 +1,83 @@
+[
+  {
+    "baseRefName": "main",
+    "headRefName": "refactor/t1-settings-20260928",
+    "headRefOid": "762601d152c6a8ea6feff73823d44f89bb8843bc",
+    "isDraft": true,
+    "number": 119,
+    "title": "T1: replace settings schema and dispatch with typed owners",
+    "url": "https://github.com/OpenHCSDev/toad/pull/119"
+  },
+  {
+    "baseRefName": "refactor/round2-l0a-callers",
+    "headRefName": "refactor/tr0-test-collection-20260928",
+    "headRefOid": "82502a3d9156ef23ae9aad4263e3dcfcb9cbedb6",
+    "isDraft": true,
+    "number": 117,
+    "title": "TR0: collect installed pilots, retire manual roster and share ratchet",
+    "url": "https://github.com/OpenHCSDev/toad/pull/117"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "feat/workspace-session-lifetimes-20260928",
+    "headRefOid": "ad28ce528c0aba721b869012a54d9c0e7d112577",
+    "isDraft": true,
+    "number": 116,
+    "title": "Implement nominal workspace and bounded session presentation lifetimes",
+    "url": "https://github.com/OpenHCSDev/toad/pull/116"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "refactor/t8-small-boundaries-20260928",
+    "headRefOid": "142feb1804bc71fec7ee31f4d05ff1dd417bc227",
+    "isDraft": true,
+    "number": 115,
+    "title": "T8: own terminal environment, saved session rows and danger behavior",
+    "url": "https://github.com/OpenHCSDev/toad/pull/115"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "refactor/t7-terminal-20260928",
+    "headRefOid": "02a8be5e58abee0aa94a8de29d77638b8db1a7b4",
+    "isDraft": true,
+    "number": 114,
+    "title": "T7: own terminal command read mode and escape behavior; delete dispatch",
+    "url": "https://github.com/OpenHCSDev/toad/pull/114"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "investigate/frame-pipeline-20260928",
+    "headRefOid": "23a6025597bc25cc5b629e74440e210d34c5309a",
+    "isDraft": true,
+    "number": 110,
+    "title": "Investigate structural frame cost and UI ownership scaling",
+    "url": "https://github.com/OpenHCSDev/toad/pull/110"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "refactor/round2-l0a-callers",
+    "headRefOid": "1d8bf470b0e15bd2e697eac72107a06bce4f56ee",
+    "isDraft": false,
+    "number": 107,
+    "title": "L0A: typed Goal consumers and remove retired thread purge UI",
+    "url": "https://github.com/OpenHCSDev/toad/pull/107"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "docs/command-discovery-handoff",
+    "headRefOid": "8ee6dc62f8627c9e3312a67005f31f4ce103afa8",
+    "isDraft": true,
+    "number": 53,
+    "title": "Unify right-click and slash action discovery",
+    "url": "https://github.com/OpenHCSDev/toad/pull/53"
+  },
+  {
+    "baseRefName": "main",
+    "headRefName": "feat/toad-textual-web-20260925",
+    "headRefOid": "4d26fd00ab71141804bb8d9fa42a3d03633d0706",
+    "isDraft": true,
+    "number": 50,
+    "title": "Gate existing Toad browser serving to authenticated loopback clients",
+    "url": "https://github.com/OpenHCSDev/toad/pull/50"
+  }
+]

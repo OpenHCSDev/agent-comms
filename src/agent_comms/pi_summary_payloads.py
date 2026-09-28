@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .owner_compaction_prepare import NativeWitness
+from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
 
 
@@ -19,20 +20,6 @@ class SelectedModel(PiPayload):
     def __post_init__(self):
         if not self.provider or not self.model_id or not 0 < self.context_window <= 2**53 - 1:
             raise ValueError("Exact bounded selected model required")
-
-
-@dataclass(frozen=True)
-class SelectedSettings(PiPayload):
-    strict_fields = True
-    reserve_tokens: int = field(metadata={"wire_name": "reserveTokens"})
-    keep_recent_tokens: int = field(metadata={"wire_name": "keepRecentTokens"})
-
-    def __post_init__(self):
-        if (
-            not 0 <= self.reserve_tokens <= 10_000_000
-            or not 0 < self.keep_recent_tokens <= 10_000_000
-        ):
-            raise ValueError("Bounded native compaction settings required")
 
 
 @dataclass(frozen=True)
@@ -140,7 +127,7 @@ class SummarySummarizedData(SelectedSummaryData, declared_name="summary_summariz
     status: Literal["summarized"]
     witness: NativeWitness
     selected: SelectedModel
-    settings: SelectedSettings
+    settings: PiCompactionSettings
     result: SummaryResult
 
 
@@ -162,7 +149,7 @@ class ProbeReadyData(SelectedProbeData, declared_name="probe_ready"):
     )
     witness: NativeWitness
     selected: SelectedModel
-    settings: SelectedSettings
+    settings: PiCompactionSettings
 
 
 @dataclass(frozen=True, kw_only=True)

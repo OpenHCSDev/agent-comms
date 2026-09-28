@@ -1,0 +1,247 @@
+FF
+=================================== FAILURES ===================================
+_______ test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[False] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-24/test_real_bus_sql_tx1_exact_re0')
+direct = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, direct: bool) -> None:
+        case = _ready(tmp_path, direct=direct)
+        try:
+>           result = prepare_fenced_response(
+                case.store,
+                case.bus,
+                case.fence,
+                "Response on the original route",
+                timestamp=123.5,
+                owner_witness=case.witness,
+            )
+
+tests/test_coordination_response.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordination_response.py:398: in prepare_fenced_response
+    snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_response.py:340: in _require_final_owner
+    _require_cohort_assignments(store, bus, snapshot, wire_root_id)
+src/agent_comms/coordination_response.py:275: in _require_cohort_assignments
+    receipts = SelectedResponseRoute.read(
+src/agent_comms/typed_table.py:302: in read
+    values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:261: in decode
+    return self.storage.codec.decode(
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>, target = <class 'int'>
+data = 'resolver-v1'
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            unknown = set(data) - {key for _, key in declared}
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            hints = cls._types(target)
+            return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+        if isinstance(target, type) and issubclass(target, Enum):
+            return target(data)
+        if target in (str, int, bool, type(None)) and type(data) is target:
+            return data
+        if target is float and type(data) in (int, float) and math.isfinite(data):
+            return data
+>       raise ValueError(f"Expected {target}, received {type(data).__name__}")
+E       ValueError: Expected <class 'int'>, received str
+
+src/agent_comms/field_codec.py:237: ValueError
+_______ test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[True] ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-24/test_real_bus_sql_tx1_exact_re1')
+direct = True
+
+    @pytest.mark.parametrize("direct", [False, True])
+    def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, direct: bool) -> None:
+        case = _ready(tmp_path, direct=direct)
+        try:
+>           result = prepare_fenced_response(
+                case.store,
+                case.bus,
+                case.fence,
+                "Response on the original route",
+                timestamp=123.5,
+                owner_witness=case.witness,
+            )
+
+tests/test_coordination_response.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordination_response.py:398: in prepare_fenced_response
+    snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_response.py:340: in _require_final_owner
+    _require_cohort_assignments(store, bus, snapshot, wire_root_id)
+src/agent_comms/coordination_response.py:275: in _require_cohort_assignments
+    receipts = SelectedResponseRoute.read(
+src/agent_comms/typed_table.py:302: in read
+    values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:261: in decode
+    return self.storage.codec.decode(
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>, target = <class 'int'>
+data = 'resolver-v1'
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require JSON-compatible data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            unknown = set(data) - {key for _, key in declared}
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            hints = cls._types(target)
+            return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+        if isinstance(target, type) and issubclass(target, Enum):
+            return target(data)
+        if target in (str, int, bool, type(None)) and type(data) is target:
+            return data
+        if target is float and type(data) in (int, float) and math.isfinite(data):
+            return data
+>       raise ValueError(f"Expected {target}, received {type(data).__name__}")
+E       ValueError: Expected <class 'int'>, received str
+
+src/agent_comms/field_codec.py:237: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_coordination_response.py::test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[False]
+FAILED tests/test_coordination_response.py::test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay[True]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 2 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+2 failed in 0.43s

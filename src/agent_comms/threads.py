@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import os
 import time
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field, fields
-from datetime import datetime
-from functools import lru_cache
-from pathlib import Path
-from typing import Self
+from dataclasses import dataclass, field
 
 from .channel_targets import Tag
+from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .goals import Goal
@@ -37,7 +32,7 @@ class Thread:
     worktree: str
     parent: str | None = None
     task: str | None = None
-    pid: int = 0
+    process_identity: ProcessIdentity | None = None
     session_file: str | None = None
     model: str | None = None
     thinking_level: str | None = None
@@ -110,60 +105,14 @@ class Thread:
         }:
             raise ValueError("Unknown thinking level.")
 
-    @staticmethod
-    @lru_cache(maxsize=512)
-    def session_created_at(session_file: str) -> float:
-        # Pi session headers are immutable; avoid reopening legacy transcripts
-        # on every registry lookup before their creation date is persisted.
-        with Path(session_file).open("rb") as stream:
-            line = stream.readline(8192)
-        try:
-            header = json.loads(line)
-            if header.get("type") == "session" and header.get("timestamp"):
-                return datetime.fromisoformat(
-                    header["timestamp"].replace("Z", "+00:00")
-                ).timestamp()
-        except (ValueError, TypeError, AttributeError):
-            pass
-        return 0.0
+    @property
+    def pid(self) -> int:
+        """Numeric OS projection of the sole stored process authority."""
+        return self.process_identity.pid if self.process_identity is not None else 0
 
-    @staticmethod
-    def registry_created_at(data: Mapping) -> float:
-        """Read old session headers when a registry predates creation timestamps."""
-        if "created_at" in data:
-            return float(data["created_at"])
-        if session_file := data.get("session_file"):
-            try:
-                return Thread.session_created_at(session_file)
-            except OSError:
-                pass
-        # Unknown legacy creation dates sort oldest, never by a mutable heartbeat.
-        return 0.0
-
-    @classmethod
-    def from_registry(cls, name: str, data: Mapping, root: Path) -> Self:
-        """Decode fields from their declaration, preserving old document defaults."""
-        hints = FieldCodec._types(cls)
-        special = {
-            "name": name,
-            "created_at": cls.registry_created_at(data),
-            "tags": frozenset(data.get("tags", [])),
-            "worktree": data.get("worktree", ""),
-            "goal": Goal.from_registry(data["goal"], root) if data.get("goal") else None,
-            "active_turn": ActiveTurn.from_wire(data["active_turn"])
-            if data.get("active_turn")
-            else None,
-            "auto_title_pending": bool(data.get("auto_title_pending", False)),
-        }
-        return cls(
-            **{
-                declaration.name: special[declaration.name]
-                if declaration.name in special
-                else FieldCodec.decode(hints[declaration.name], data[declaration.name])
-                for declaration in fields(cls)
-                if declaration.init and (declaration.name in special or declaration.name in data)
-            }
-        )
+    @property
+    def process_alive(self) -> bool:
+        return self.process_identity is not None and self.process_identity.alive()
 
     @property
     def incarnation(self) -> ThreadIncarnation:
@@ -203,14 +152,7 @@ class Thread:
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
-        values = asdict(self)
-        values.pop("_generated_created_at")  # construction provenance is not durable authority
-        return {
-            **values,
-            "tags": sorted(self.tags),
-            "active_turn": self.active_turn.to_wire() if self.active_turn else None,
-            "goal": self.goal.to_wire() if self.goal else None,
-        }
+        return FieldCodec.encode(self)
 
 
 def current_thread() -> Thread:
@@ -231,5 +173,5 @@ def current_thread() -> Thread:
         worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
         parent=os.environ.get("PI_PARENT_ID"),
         task=os.environ.get("PI_TASK"),
-        pid=os.getpid(),
+        process_identity=ProcessIdentity.capture(os.getpid()),
     )

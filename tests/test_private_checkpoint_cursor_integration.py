@@ -5,7 +5,6 @@ Provider-free native fake only: a source certificate is not an ACK or input perm
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -14,6 +13,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -22,8 +22,8 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
 
@@ -41,21 +41,29 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
         Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             model="openai-codex/gpt-6-sol",
         ),
-        Thread("other", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "other",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
     ]
     for person in people:
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
-    install_private_bus_checkpoint(comms.bus.log)  # fresh private root only
     first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -68,9 +76,8 @@ def _root(tmp_path: Path):
     return root, root_id, comms, first, lookup
 
 
-@pytest.mark.parametrize("migrate_existing", [False, True])
 async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
-    tmp_path, monkeypatch, migrate_existing
+    tmp_path, monkeypatch
 ):
     root, root_id, comms, first, lookup = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
@@ -81,23 +88,13 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
-        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number:04}-" + "x" * 8700)
-    second = comms.messaging.send_initial_cohort("sender", "#team", "selected after 1000 other rows")
+        comms.messaging.send_initial_cohort(
+            "sender", "other", f"unrelated-{number:04}-" + "x" * 8700
+        )
+    second = comms.messaging.send_initial_cohort(
+        "sender", "#team", "selected after 1000 other rows"
+    )
     assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
-    if migrate_existing:
-        # Build the large fixture through the real certified publisher, then
-        # remove only its certificate to represent the same pre-migration bus.
-        # This avoids O(n**2) fixture setup through the old unindexed writer.
-        marker_path = root / "bus_meta.json"
-        marker = json.loads(marker_path.read_text())
-        del marker["checkpoint_version"]
-        del marker["checkpoint_seal"]
-        marker_path.write_text(json.dumps(marker))
-        (root / "private_bus_checkpoint.sqlite3").unlink()
-        before = comms.bus.log.path.read_bytes()
-        witness = install_private_bus_checkpoint(Comms(root).bus.log)
-        assert witness.through_seq == second.seq
-        assert comms.bus.log.path.read_bytes() == before
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.SelectedExecution(
@@ -139,7 +136,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
         assert (
             reopened._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name} WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
             == 0
@@ -194,7 +191,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
             )
         assert (
             reopened._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
+                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"
             ).fetchone()[0]
             == 0
         )

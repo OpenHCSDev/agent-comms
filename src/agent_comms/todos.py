@@ -7,15 +7,17 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
-import json
 import math
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal, get_type_hints
 
+from .field_codec import FieldCodec
 from .threads import Thread
+from .typed_table import Column, TypedRow, TypedTable
 
 
 class TodoError(ValueError):
@@ -56,31 +58,24 @@ class Assignment:
         _text(self.generation, "Assignment generation", 128)
 
 
-def _assignment_token(assignment: Assignment) -> str:
-    """Stable persisted identity of the predecessor used by one transition."""
-    return json.dumps(
-        (
-            assignment.owner,
-            float(assignment.owner_created),
-            assignment.parent,
-            float(assignment.parent_created),
-            assignment.generation,
-        ),
-        separators=(",", ":"),
-    )
-
-
 @dataclass(frozen=True, slots=True)
-class Todo:
-    id: str
+class Todo(TypedTable):
+    id: str = field(metadata={"sql": Column(primary_key=True)})
     repo: str
     text: str
     creator: str
     creator_created: float
-    state: str
-    revision: int
+    state: Literal["open", "blocked", "done"]
+    revision: int = field(metadata={"sql": Column(check="revision>0")})
     goal: GoalRef | None
     assignment: Assignment | None
+    last_transition: Literal["transfer", "release"] | None = None
+    last_previous: Assignment | None = None
+
+
+@dataclass(frozen=True)
+class _TodoTable(TypedRow):
+    name: str
 
 
 def _text(value: str, label: str, limit: int) -> str:
@@ -135,28 +130,20 @@ class TodoStore:
         self.path = directory / "todos.sqlite3"
         with closing(self._connect()) as db:
             db.execute("PRAGMA journal_mode=WAL")
-            db.execute("""CREATE TABLE IF NOT EXISTS todos (
-                id TEXT PRIMARY KEY, repo TEXT NOT NULL, text TEXT NOT NULL,
-                creator TEXT NOT NULL, creator_created REAL NOT NULL,
-                state TEXT NOT NULL CHECK(state IN ('open','blocked','done')),
-                revision INTEGER NOT NULL CHECK(revision > 0),
-                goal_owner TEXT, goal_created REAL, goal_id TEXT,
-                assignee TEXT, assignee_created REAL, parent TEXT,
-                parent_created REAL, generation TEXT,
-                last_transition TEXT, last_previous TEXT,
-                CHECK ((goal_owner IS NULL AND goal_created IS NULL AND goal_id IS NULL)
-                    OR (goal_owner IS NOT NULL AND goal_created IS NOT NULL
-                        AND goal_id IS NOT NULL)),
-                CHECK ((assignee IS NULL AND assignee_created IS NULL AND parent IS NULL
-                    AND parent_created IS NULL AND generation IS NULL)
-                    OR (assignee IS NOT NULL AND assignee_created IS NOT NULL
-                        AND parent IS NOT NULL AND parent_created IS NOT NULL
-                        AND generation IS NOT NULL))
-            )""")
+            db.execute("BEGIN IMMEDIATE")
+            tables = _TodoTable.read(
+                db.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+            if not tables:
+                Todo.create(db)
+            elif tables != [_TodoTable(Todo.declared_name)]:
+                raise TodoError("Todo storage requires the one-shot durable migration.")
+            # Decode exactly the current declared columns; no runtime converters.
+            Todo.select(db, where="0")
+            db.execute("COMMIT")
 
     def _connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5.0, isolation_level=None)
-        db.row_factory = sqlite3.Row
         db.execute("PRAGMA busy_timeout=5000")
         db.execute("PRAGMA synchronous=FULL")
         return db
@@ -176,50 +163,11 @@ class TodoStore:
             db.close()
 
     @staticmethod
-    def _todo(row: sqlite3.Row) -> Todo:
-        goal = (
-            GoalRef(row["goal_owner"], row["goal_created"], row["goal_id"])
-            if row["goal_id"] is not None
-            else None
-        )
-        assignment = (
-            Assignment(
-                row["assignee"],
-                row["assignee_created"],
-                row["parent"],
-                row["parent_created"],
-                row["generation"],
-            )
-            if row["assignee"] is not None
-            else None
-        )
-        return Todo(
-            row["id"],
-            row["repo"],
-            row["text"],
-            row["creator"],
-            row["creator_created"],
-            row["state"],
-            row["revision"],
-            goal,
-            assignment,
-        )
-
-    @classmethod
-    def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
-        row = db.execute("SELECT * FROM todos WHERE id=?", (todo_id,)).fetchone()
+    def _current(db: sqlite3.Connection, todo_id: str) -> Todo:
+        row = Todo.one(db, id=todo_id)
         if row is None:
             raise TodoError(f"Unknown todo: {todo_id}.")
-        return cls._todo(row)
-
-    @staticmethod
-    def _last_transition_matches(
-        db: sqlite3.Connection, todo_id: str, kind: str, previous: Assignment
-    ) -> bool:
-        row = db.execute(
-            "SELECT last_transition, last_previous FROM todos WHERE id=?", (todo_id,)
-        ).fetchone()
-        return row is not None and tuple(row) == (kind, _assignment_token(previous))
+        return row
 
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
@@ -229,9 +177,11 @@ class TodoStore:
     def list(self, repo: str) -> tuple[Todo, ...]:
         with closing(self._connect()) as db:
             return tuple(
-                self._todo(row)
-                for row in db.execute(
-                    "SELECT * FROM todos WHERE repo=? ORDER BY rowid", (_repo(repo),)
+                Todo.read(
+                    db.execute(
+                        f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid",
+                        (_repo(repo),),
+                    )
                 )
             )
 
@@ -251,9 +201,8 @@ class TodoStore:
         if goal is not None and type(goal) is not GoalRef:
             raise TodoError("Goal reference must be a typed GoalRef.")
         with self._write() as db:
-            row = db.execute("SELECT * FROM todos WHERE id=?", (todo_id,)).fetchone()
-            if row is not None:
-                current = self._todo(row)
+            current = Todo.one(db, id=todo_id)
+            if current is not None:
                 if (
                     current.repo,
                     current.text,
@@ -263,22 +212,17 @@ class TodoStore:
                 ) == (repo_id, text, name, created, goal):
                     return current  # Same request ID never creates a second todo.
                 raise TodoConflict(current)
-            db.execute(
-                """INSERT INTO todos (
-                id,repo,text,creator,creator_created,state,revision,
-                goal_owner,goal_created,goal_id
-            ) VALUES (?,?,?,?,?,'open',1,?,?,?)""",
-                (
-                    todo_id,
-                    repo_id,
-                    text,
-                    name,
-                    created,
-                    goal.owner if goal else None,
-                    goal.owner_created if goal else None,
-                    goal.goal_id if goal else None,
-                ),
-            )
+            Todo(
+                id=todo_id,
+                repo=repo_id,
+                text=text,
+                creator=name,
+                creator_created=created,
+                state="open",
+                revision=1,
+                goal=goal,
+                assignment=None,
+            ).insert(db)
             return self._current(db, todo_id)
 
     def assign(
@@ -304,10 +248,12 @@ class TodoStore:
                 or current.assignment is not None
             ):
                 raise TodoConflict(current)
-            db.execute(
-                """UPDATE todos SET assignee=?,assignee_created=?,parent=?,
-                parent_created=?,generation=?,revision=revision+1 WHERE id=?""",
-                (name, created, parent_name, parent_created, generation, todo_id),
+            Todo.update(
+                db,
+                where="id=?",
+                parameters=(todo_id,),
+                assignment=proposed,
+                revision=current.revision + 1,
             )
             return self._current(db, todo_id)
 
@@ -335,7 +281,8 @@ class TodoStore:
                 and current.assignment == proposed
                 and current.state == "open"
                 and generation != previous.generation
-                and self._last_transition_matches(db, todo_id, "transfer", previous)
+                and current.last_transition == "transfer"
+                and current.last_previous == previous
             ):
                 return current  # Exact retry after a committed, uncertain response.
             if (
@@ -345,19 +292,14 @@ class TodoStore:
                 or generation == previous.generation
             ):
                 raise TodoConflict(current)
-            db.execute(
-                """UPDATE todos SET assignee=?,assignee_created=?,parent=?,
-                parent_created=?,generation=?,revision=revision+1,
-                last_transition='transfer',last_previous=? WHERE id=?""",
-                (
-                    name,
-                    created,
-                    parent_name,
-                    parent_created,
-                    generation,
-                    _assignment_token(previous),
-                    todo_id,
-                ),
+            Todo.update(
+                db,
+                where="id=?",
+                parameters=(todo_id,),
+                assignment=proposed,
+                revision=current.revision + 1,
+                last_transition="transfer",
+                last_previous=previous,
             )
             return self._current(db, todo_id)
 
@@ -370,7 +312,8 @@ class TodoStore:
                 current.revision == expected_revision + 1
                 and current.assignment is None
                 and current.state != "done"
-                and self._last_transition_matches(db, todo_id, "release", previous)
+                and current.last_transition == "release"
+                and current.last_previous == previous
             ):
                 return current  # Exact retry after a committed, uncertain response.
             if (
@@ -379,12 +322,14 @@ class TodoStore:
                 or current.state == "done"
             ):
                 raise TodoConflict(current)
-            db.execute(
-                """UPDATE todos SET assignee=NULL,assignee_created=NULL,
-                parent=NULL,parent_created=NULL,generation=NULL,revision=revision+1
-                ,last_transition='release',last_previous=?
-                WHERE id=?""",
-                (_assignment_token(previous), todo_id),
+            Todo.update(
+                db,
+                where="id=?",
+                parameters=(todo_id,),
+                assignment=None,
+                revision=current.revision + 1,
+                last_transition="release",
+                last_previous=previous,
             )
             return self._current(db, todo_id)
 
@@ -398,8 +343,10 @@ class TodoStore:
         generation: str | None = None,
     ) -> Todo:
         """An explicit, revision-checked decision; never infer it from Pi output."""
-        if state not in {"open", "blocked", "done"}:
-            raise TodoError("Unknown todo state.")
+        try:
+            state = FieldCodec.decode(get_type_hints(Todo)["state"], state)
+        except ValueError as error:
+            raise TodoError("Unknown todo state.") from error
         actor_name, actor_created = _participant(actor)
         with self._write() as db:
             current = self._current(db, todo_id)
@@ -422,15 +369,12 @@ class TodoStore:
                 raise TodoConflict(current)
             if state == current.state:
                 return current
-            if state == "done":
-                db.execute(
-                    """UPDATE todos SET state='done',revision=revision+1,
-                    assignee=NULL,assignee_created=NULL,parent=NULL,parent_created=NULL,
-                    generation=NULL WHERE id=?""",
-                    (todo_id,),
-                )
-            else:
-                db.execute(
-                    "UPDATE todos SET state=?,revision=revision+1 WHERE id=?", (state, todo_id)
-                )
+            Todo.update(
+                db,
+                where="id=?",
+                parameters=(todo_id,),
+                state=state,
+                revision=current.revision + 1,
+                assignment=None if state == "done" else current.assignment,
+            )
             return self._current(db, todo_id)

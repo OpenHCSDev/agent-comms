@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-refactor2-l0a-20260928
+configfile: pyproject.toml
+plugins: platformdirs-4.12.0, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 73 items
+
+tests/test_tools.py .......                                              [  9%]
+tests/test_channels.py .........................                         [ 43%]
+tests/test_thread_status.py ...........                                  [ 58%]
+tests/test_registry_current_format.py ..                                 [ 61%]
+tests/test_command_families.py ...........................               [ 98%]
+tests/test_l0a_guards.py .                                               [100%]
+
+============================== 73 passed in 4.13s ==============================

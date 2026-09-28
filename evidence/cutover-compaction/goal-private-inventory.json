@@ -1,0 +1,23 @@
+{
+  "source": "/home/ts/.agent-comms/goal-private/goal_attempts.sqlite3",
+  "bytes": 2686976,
+  "tables": {
+    "metadata": 1,
+    "goals": 55,
+    "attempts": 667,
+    "human_decisions": 29,
+    "provider_usage": 7651,
+    "failed_turn_observations": 1
+  },
+  "goal_states": {
+    "blocked": 7,
+    "cancelled": 32,
+    "completed": 9,
+    "ready": 7
+  },
+  "attempt_phases": {
+    "failed": 7,
+    "resolved": 59,
+    "succeeded": 601
+  }
+}

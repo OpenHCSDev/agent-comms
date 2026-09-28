@@ -10,11 +10,12 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.thread_identity import ThreadRole
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
 def _peer(root: Path, name: str) -> Thread:
-    return Thread(name, frozenset({"talk"}), str(root), pid=os.getpid())
+    return Thread(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def _mark(comms, peer, root, page):
@@ -59,7 +60,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     old = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert old.display_basis is not None
     comms.registry.unregister("peer")
-    comms.threads.delete("peer")
+    comms.registry.remove("peer")
     comms.threads.register(_peer(tmp_path, "peer"))
     comms.messaging.send("peer", viewer, "new peer unseen")
     before = comms.bus.pending_count(viewer, "peer")
@@ -90,7 +91,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
             expected_display_basis=page.display_basis,
         )
     comms.registry.unregister(viewer)
-    comms.threads.delete(viewer)
+    comms.registry.remove(viewer)
     comms.threads.register(Thread(viewer, frozenset(), str(tmp_path), role=ThreadRole.USER))
     comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, "peer")

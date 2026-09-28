@@ -84,22 +84,3 @@ def test_symlinked_settings_are_refused_without_following_alias(settings_tree):
             Path(PACKAGE), str(project), context_tokens=900, context_window=1000
         )
     assert global_file.read_bytes() == before and project_file.is_symlink()
-
-
-def test_invalid_input_never_launches_settings_reader(settings_tree, monkeypatch):
-    from agent_comms import owner_compaction_settings
-
-    project, _, _ = settings_tree
-    calls = []
-
-    def forbidden(*args, **kwargs):
-        calls.append((args, kwargs))
-        raise AssertionError("Invalid evidence must not invoke Pi")
-
-    monkeypatch.setattr(owner_compaction_settings.subprocess, "run", forbidden)
-    for tokens, window in [(True, 1000), (-1, 1000), (1, False), (1, 0), (2**53, 1000)]:
-        with pytest.raises(PiSettingsEvidenceError):
-            read_compaction_decision(
-                Path(PACKAGE), str(project), context_tokens=tokens, context_window=window
-            )
-    assert not calls

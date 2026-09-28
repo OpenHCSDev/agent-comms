@@ -560,88 +560,14 @@ def test_recovery_postcommit_fsync_failure_revokes_old_and_new_authority(store, 
     assert reopened.reserve("goal", next_generation.number).generation == 3
 
 
-def test_legacy_v1_ready_row_is_not_upgraded_or_launched(tmp_path):
-    root = tmp_path / "old-owner"
-    root.mkdir(mode=0o700)
-    path = root / "goal_attempts.sqlite3"
-    with sqlite3.connect(path) as conn:
-        conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL)")
-        conn.execute("INSERT INTO metadata VALUES('schema_version','1')")
-        conn.execute(
-            "CREATE TABLE goals (goal_id TEXT, generation INT, state TEXT, attempt_id TEXT)"
-        )
-        conn.execute("INSERT INTO goals VALUES('goal',1,'ready',NULL)")
-    path.chmod(0o600)
-    with pytest.raises(StorageUncertainError, match="Unsupported"):
-        GoalAttemptStore(root)
-    with pytest.raises(StorageUncertainError, match="Unsupported"):
-        GoalAttemptStore.initialize(root)
-    with sqlite3.connect(path) as conn:
-        assert conn.execute("SELECT * FROM goals").fetchall() == [("goal", 1, "ready", None)]
 
-
-def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
-    root = tmp_path / "old-owner"
-    root.mkdir(mode=0o700)
-    path = root / "goal_attempts.sqlite3"
-    with sqlite3.connect(path) as conn:
-        conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL)")
-        conn.execute("INSERT INTO metadata VALUES('schema_version','2')")
-        conn.execute(
-            "CREATE TABLE goals (goal_id TEXT PRIMARY KEY,generation INTEGER NOT NULL,"
-            "state TEXT NOT NULL CHECK(state IN ('ready','reserved','blocked')) ,"
-            "attempt_id TEXT,ready_digest TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE attempts (attempt_id TEXT PRIMARY KEY,goal_id TEXT NOT NULL,"
-            "generation INTEGER NOT NULL,token TEXT NOT NULL,phase TEXT NOT NULL,"
-            "progress_witness TEXT,resolution TEXT,FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
-        )
-        conn.execute(
-            "CREATE TABLE human_decisions (goal_id TEXT,decision_id TEXT,generation INTEGER,"
-            "FOREIGN KEY(goal_id) REFERENCES goals(goal_id))"
-        )
-        conn.execute("INSERT INTO goals VALUES('goal',1,'reserved','attempt','')")
-        conn.execute("INSERT INTO attempts VALUES('attempt','goal',1,'token','claimed',NULL,NULL)")
-    path.chmod(0o600)
-
-    migrated = GoalAttemptStore(root)
-    assert migrated.snapshot("goal").lifecycle == ReservedGeneration()
-    with sqlite3.connect(path) as conn:
-        assert conn.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone() == (
-            "5",
-        )
-        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
-    with pytest.raises(ReservationConflictError):
-        migrated.reserve("goal", 1)
-    retired = migrated.retire_goal("goal", expected_generation=1, attempt_id="attempt")
-    assert retired.lifecycle == CancelledGeneration()
-
-
-def test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting(store):
+def test_incomplete_current_schema_is_not_repaired_or_regranted(store):
     store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
-    store.claim_launch(reservation)
     with sqlite3.connect(store.path) as conn:
-        conn.execute("DROP TABLE provider_usage")
-        conn.execute("DROP TABLE failed_turn_observations")
-        conn.execute("UPDATE metadata SET value='3' WHERE key='schema_version'")
-
-    migrated = GoalAttemptStore(store.root)
-    assert migrated.snapshot("goal").lifecycle == ReservedGeneration()
-    assert migrated.provider_usage_total("goal").responses == 0
-    with pytest.raises(ReservationConflictError):
-        migrated.reserve("goal", 1)
-
-
-@pytest.mark.parametrize("transition", ["claimed", "reserved"])
-def test_failure_blocks_unresolved_attempt_from_any_prelaunch_phase(store, transition):
-    store.create_goal("goal")
-    reservation = store.reserve("goal", 1)
-    if transition == "claimed":
-        store.claim_launch(reservation)
-    store.record_failed(reservation, "unknown outcome")
-    with pytest.raises(UnresolvedAttemptError):
-        store.resume("goal", 1)
-    with pytest.raises(ReservationConflictError):
-        store.reserve("goal", 1)
+        conn.execute("DROP TABLE goal_human_decision")
+    before = store.path.read_bytes()
+    with pytest.raises(StorageUncertainError, match="Unsupported"):
+        GoalAttemptStore(store.root)
+    with pytest.raises(StorageUncertainError, match="Unsupported"):
+        GoalAttemptStore.initialize(store.root)
+    assert store.path.read_bytes() == before

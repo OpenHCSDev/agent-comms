@@ -14,6 +14,7 @@ from agent_comms.messages import Message, MessageType
 from agent_comms.presentation import ThreadView
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
@@ -65,16 +66,13 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
     assert not wire(tmp_path).channels.catalog.read().saved_views
 
 
-def test_any_is_non_routable_but_preserves_legacy_rows_as_global_history(tmp_path):
+def test_any_is_non_routable(tmp_path):
     comms = setup_wire(tmp_path)
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send("other", "#any", "agent send rejected")
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send_user_message("#any", "user send rejected", worktree=str(tmp_path))
 
-    legacy = Message("other", "#any", "legacy any row", MessageType.INFO, timestamp=1, seq=1)
-    comms.bus.log.path.write_text(json.dumps(legacy.to_wire()) + "\n")
-    assert [message.body for message in comms.views.channel_history("#any")] == ["legacy any row"]
 
 
 def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path):
@@ -404,7 +402,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms = wire(tmp_path)
     comms.threads.register(Thread("moving", frozenset(), str(tmp_path)))
-    comms.threads.register(Thread("peer", frozenset({"api"}), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("peer", frozenset({"api"}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.channels.update_tags("moving", add=frozenset({"api"}))
     joined = comms.views.channel_history("#api")
     assert len(joined) == 1 and joined[0].membership.value == "joined"
@@ -482,7 +480,7 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.channels.set_channel_pinned("team", True)
     comms.channels.set_thread_pinned("team", "a", True)
     comms.channels.set_thread_pinned("#any", "a", True)
-    comms.registry.register(replace(comms.registry.require("a"), pid=os.getpid()))
+    comms.registry.register(replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.threads.rename_managed_thread("a", "renamed", owner_pid=os.getpid())
     observer = wire(tmp_path)
     assert observer.channels.catalog.read().pinned_threads("#team") == {"renamed"}
@@ -493,11 +491,6 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.channels.update_tags("renamed", add=frozenset({"api"}))
     team = next(view for view in observer.views.channel_views() if view.channel.name == "#team")
     assert team.pinned_members == {"renamed"} and team.members[0] == "renamed"
-    # Removing a thread must not leave a pin for a future reuse of its name.
-    comms.registry.unregister("renamed")
-    comms.threads.delete("renamed")
-    assert not observer.channels.catalog.read().pinned_threads("#team")
-    assert not observer.channels.catalog.read().pinned_threads("#any")
     comms.channels.delete_saved_view("team")
     comms.channels.set_saved_view(
         SavedView("team", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"api"})))

@@ -1,0 +1,1 @@
+PASS: actual prior TodoStore -> current staged/reopened store: 3 tasks, order, goal, revisions, release/transfer retry identities, done state; source unchanged; old schema refused; existing stage refused.

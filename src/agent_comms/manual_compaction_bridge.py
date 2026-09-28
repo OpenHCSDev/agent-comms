@@ -10,8 +10,8 @@ from uuid import uuid4
 from acp.schema import AgentMessageChunk, TextContentBlock
 
 from . import agent_events as events
-from . import backend, manual_compaction
 from .activity import ActivityState
+from .compaction_journal import CompactionJournalError
 from .transcript_updates import StartedTranscriptUpdate
 
 if TYPE_CHECKING:
@@ -31,15 +31,10 @@ async def compact_context(
     async with lock:
         if session_id in runner.active_turns:
             return {"ok": False, "error": "Wait for the current response before compacting."}
-        canonical = runner.effects._private_nk_marker() is not None
+        runner.effects._private_nk_marker()
         thread = runner.comms.registry.require(thread_name)
         if not thread.session_file:
             return {"ok": False, "error": "This thread has no saved session to compact."}
-        # Pi holds an in-memory copy of the saved branch while idle. Close it
-        # before the compaction writer acquires the session fence and rewrites
-        # that branch; the next prompt will load the compacted file anew.
-        if not canonical and (persistent := runner.persistent_backends.get(session_id)):
-            await persistent.close_idle()
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
         assert task is not None
@@ -75,23 +70,9 @@ async def compact_context(
             )
             started = True
             await runner.effects._emit_event(session_id, events.CompactionStart(reason="manual"))
-            if canonical:
-                from .owner_compaction_manual import compact_manual_owner
+            from .owner_compaction_manual import compact_manual_owner
 
-                result = await compact_manual_owner(
-                    runner, session_id, thread_name, info, instructions
-                )
-            else:
-                result = await manual_compaction.ManualCompaction(
-                    runner.agent_bin,
-                    backend.args_for_thinking_level(
-                        backend.args_for_model(runner.agent_args, thread.model),
-                        thread.thinking_level,
-                    ),
-                    thread.session_file,
-                    thread.worktree,
-                    instructions.strip() if instructions else None,
-                ).run()
+            result = await compact_manual_owner(runner, session_id, thread_name, info, instructions)
             success = result.get("ok") is True
             # A client may receive this terminal event then raise. Do not send
             # a contradictory abort after an uncertain delivery.
@@ -113,6 +94,8 @@ async def compact_context(
                     ),
                 )
             return result
+        except (ValueError, CompactionJournalError) as error:
+            return {"ok": False, "error": str(error)}
         finally:
             if started and not terminal_attempted:
                 with suppress(Exception, asyncio.CancelledError):

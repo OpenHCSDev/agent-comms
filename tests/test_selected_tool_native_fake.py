@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import pytest
 
 from agent_comms import native_pi as native
 from agent_comms import selected_tool_broker as broker
+from agent_comms.child_process import AttachedChild
 from agent_comms.selected_tool_broker import (
     SelectedToolMode,
     consume_selected_slot,
@@ -54,8 +54,9 @@ call = {'type':'toolCall','id':'call_1','name':'selected_claimed_write','argumen
 send({'type':'message_end','message':{'role':'assistant','stopReason':'toolUse','content':[call]}})
 send({'type':'tool_execution_start','toolCallId':'call_1','toolName':'selected_claimed_write','args':args})
 sock = socket.socket(socket.AF_UNIX); sock.connect(os.environ['AGENT_COMMS_SELECTED_TOOL_SOCKET'])
-wire = {'token':os.environ['AGENT_COMMS_SELECTED_TOOL_TOKEN'],'call_id':'call_1',
-        'resource':'notes.txt','contents':'new contents' if variant != 'tamper' else 'different'}
+wire = {'token':os.environ['AGENT_COMMS_SELECTED_TOOL_TOKEN'],
+        'request':{'call_id':'call_1','arguments':{'resource':'notes.txt',
+        'contents':'new contents' if variant != 'tamper' else 'different'}}}
 sock.sendall((json.dumps(wire)+'\\n').encode()); answer = b''
 while not answer.endswith(b'\\n'): answer += sock.recv(1024)
 sock.close(); ok = json.loads(answer)['ok']
@@ -68,15 +69,15 @@ if ok or variant == 'forged_terminal':
           'content':[{'type':'text','text':'Done'}]}})
 send({'type':'agent_settled'})
 """)
-    orig = asyncio.create_subprocess_exec
+    orig = AttachedChild.start
 
     async def launch(*_argv: str, **kwargs: object):
         return await orig(
-            sys.executable, "-u", str(fake), str(tmp_path / "sessions"), variant, **kwargs
+            (sys.executable, "-u", str(fake), str(tmp_path / "sessions"), variant), **kwargs
         )
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(native.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     observed: list[str] = []
 
     def owner_action(request) -> None:
