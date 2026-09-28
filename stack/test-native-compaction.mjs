@@ -100,7 +100,7 @@ const entries = [
     message: { role: 'assistant', content: [{ type: 'text', text: `kept ${'x'.repeat(120000)}` }],
       provider: 'openrouter', model: 'fake', stopReason: 'stop', timestamp: 2, usage } },
 ];
-const preparation = prepareCompaction(entries, { reserveTokens: 16384, keepRecentTokens: 20000 });
+const preparation = prepareCompaction(entries, { reserveTokens: 16384, keepRecentTokens: 20000 }, model);
 assert.equal(preparation.isSplitTurn, true);
 const splitRequests = [];
 const splitProgress = [];

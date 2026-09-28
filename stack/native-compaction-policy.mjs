@@ -45,6 +45,26 @@ export class CompactionPolicy {
         if (bytes < 4096) throw new Error('Compaction model context is too small');
         return bytes;
     }
+    messageBytes(message) {
+        return Buffer.byteLength(JSON.stringify(message));
+    }
+    contextFits(messages, model, reserveTokens) {
+        const limit = this.inputBytes(model, reserveTokens);
+        let bytes = 0;
+        for (const message of messages) {
+            bytes += this.messageBytes(message);
+            if (bytes > limit) return false;
+        }
+        return true;
+    }
+    requireContext(messages, model, reserveTokens) {
+        if (!this.contextFits(messages, model, reserveTokens))
+            throw new Error('Compaction result exceeds its selected context budget');
+    }
+    retainedBytes(model, reserveTokens) {
+        // The existing source allocation leaves room for synthesized context.
+        return Math.floor(this.inputBytes(model, reserveTokens) * this.sourceBudgetRatio);
+    }
     summaryTokens(model, byteLimit, reserveTokens) {
         return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);

@@ -82,7 +82,12 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
 
 @dataclass(frozen=True)
 class PreparationRequest(SessionHelperRequest):
-    settings: PiCompactionSettings | None
+    settings: PiCompactionSettings
+    context_window: int
+
+    def __post_init__(self):
+        if type(self.context_window) is not int or not 0 < self.context_window <= 2**53 - 1:
+            raise NativePreparationError("Exact selected context window required")
 
 
 class PrepareCompactionHelper(PiHelper):
@@ -92,13 +97,13 @@ class PrepareCompactionHelper(PiHelper):
 
 
 def prepare_native_source(
-    package: Path, session_file: str, *, keep_recent_tokens: int | None = None
+    package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
 ) -> NativePreparation | None:
     """Derive Pi's actual cut point without a model call or a session mutation.
 
-    A test may explicitly override Pi's recent window; production defaults to
-    Pi's declared DEFAULT_COMPACTION_SETTINGS. The returned witness is not
-    authority: the owner captures source and the writer later CASes on disk.
+    The caller supplies the actual selected window and effective settings.
+    The returned witness is not authority: the owner captures source and the
+    writer later CASes on disk.
     """
     try:
         package = package.resolve(strict=True)
@@ -119,9 +124,8 @@ def prepare_native_source(
                 PreparationRequest(
                     str(package),
                     str(file),
-                    PiCompactionSettings(0, keep_recent_tokens)
-                    if keep_recent_tokens is not None
-                    else None,
+                    settings,
+                    context_window,
                 ),
                 cwd=file.parent,
             )

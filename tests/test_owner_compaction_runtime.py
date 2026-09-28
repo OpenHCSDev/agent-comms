@@ -11,6 +11,7 @@ import pytest
 from agent_comms import owner_compaction_runtime
 from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness
 from agent_comms.owner_compaction_provider import NativeSummary
+from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.owner_compaction_runtime import compact_owner_once
 
 
@@ -60,7 +61,15 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
 
     async def owner():
         async with turn_lock:
-            await compact_owner_once(Bridge(), object(), 1, Persistent(), synthetic_summary)
+            await compact_owner_once(
+                Bridge(),
+                object(),
+                1,
+                Persistent(),
+                synthetic_summary,
+                settings=PiCompactionSettings(16384, 20000),
+                context_window=128000,
+            )
 
     task = asyncio.create_task(owner(), name="actual-owner-turn")
     try:

@@ -12,15 +12,11 @@ export class SessionContext {
         const model=session.model;
         const settings=session.settingsManager.getCompactionSettings();
         const policy=CompactionPolicy.fromEnvironment();
-        let bytes=0;
-        const budget=model ? policy.inputBytes(model,settings.reserveTokens) : 0;
-        for(const entry of manager.buildContextEntries()) {
-            for(const message of sessionEntryToContextMessages(entry))bytes+=Buffer.byteLength(JSON.stringify(message));
-            if(bytes>budget) {
+        if (!model || !policy.contextFits(
+            manager.buildContextEntries().flatMap(sessionEntryToContextMessages), model, settings.reserveTokens)) {
                 session.storedContext=new CompactionContext(manager);
                 session.storedContext.install(session.agent);
                 return session.storedContext;
-            }
         }
         session.storedContext=new ReadyContext(manager);
         session.storedContext.install(session.agent);
