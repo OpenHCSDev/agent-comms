@@ -88,7 +88,7 @@ console.log(manager.getSessionFile());
         text="new input, not yet attempted",
     )
     monkeypatch.setattr(
-        "agent_comms.owner_compaction_adaptive.package_for_launcher",
+        "agent_comms.native_pi.NativePiRpcLaunch.package_for_command",
         lambda _: Path(PACKAGE),
     )
     monkeypatch.setattr(

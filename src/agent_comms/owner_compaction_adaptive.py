@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
-import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -19,7 +18,7 @@ from .compaction_journal import CompactionJournalError
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
-from .native_session_reopen import package_for_launcher
+from .native_pi import NativePiRpcLaunch
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
@@ -83,11 +82,7 @@ async def maybe_compact_owner_turn(
     provider, model_id = owner.model.split("/", 1)
     if not provider or not model_id:
         return False
-    if summary_strategy is None:
-        executable = Path(shutil.which(launcher) or launcher).resolve()
-        if executable.name not in {"pi-native", "pi-comms-native"}:
-            return False
-    package = package_for_launcher(launcher)
+    package = NativePiRpcLaunch.package_for_command(launcher)
     # A selected child owns effective settings including project trust and model
     # overrides. Detached injected strategies still need conservative file proof.
     project_settings = Path(owner.worktree) / ".pi" / "settings.json"

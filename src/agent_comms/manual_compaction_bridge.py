@@ -33,13 +33,13 @@ async def compact_context(
     async with lock:
         if session_id in runner.active_turns:
             return {"ok": False, "error": "Wait for the current response before compacting."}
-        # The legacy /compact helper hashes the separately installed Pi and
+        # The explicit /compact operation verifies the separately installed Pi and
         # makes Pi commit its own summary. It cannot be an alternate writer of
         # the canonical PR95 root or bypass the owner journal/outbox.
         launcher = shutil.which(runner.agent_bin) or runner.agent_bin
         # Canonical pi-native may be invoked through a renamed symlink. Match
         # the resolved executable just as saved-session reopen does; spelling
-        # alone cannot authorize the older unjournaled direct writer.
+        # alone cannot authorize an unjournaled direct writer.
         if Path(launcher).resolve().name in {"pi-native", "pi-comms-native"}:
             return {
                 "ok": False,
@@ -62,7 +62,9 @@ async def compact_context(
         started = False
         terminal_attempted = False
         try:
-            runner.comms.agents.set_activity(thread_name, ActivityState.WORKING, "Compacting context")
+            runner.comms.agents.set_activity(
+                thread_name, ActivityState.WORKING, "Compacting context"
+            )
             active = runner.comms.registry.require(thread_name).active_turn
             assert active is not None and active.id == turn_id
             await runner.effects._emit_event(
