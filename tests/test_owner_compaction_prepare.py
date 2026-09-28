@@ -350,12 +350,17 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     session.write_bytes(torn)
     started = []
 
-    async def forbidden_spawn(*args, **kwargs):
-        started.append(args)
-        raise AssertionError("Corrupt saved session must not launch or send")
-
-    monkeypatch.setattr(backend.asyncio, "create_subprocess_exec", forbidden_spawn)
     launcher = Path(PACKAGE).parents[3] / "bin/pi-native"
+    start_child = backend.AttachedChild.start
+
+    async def prevent_provider_launch(command, **kwargs):
+        if command[0] == str(launcher):
+            started.append(command)
+            raise AssertionError("Corrupt saved session must not launch or send")
+        # Read-only A14 validation itself owns a real bounded child.
+        return await start_child(command, **kwargs)
+
+    monkeypatch.setattr(backend.AttachedChild, "start", prevent_provider_launch)
     events = [
         event
         async for event in backend.stream_agent_events(

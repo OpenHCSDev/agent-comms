@@ -16,6 +16,7 @@ def files():
             ROOT / name
             for name in (
                 "manual_compaction.py",
+                "manual_compaction_bridge.py",
                 "native_session_reopen.py",
                 "compaction_journal.py",
                 "compaction_states.py",
