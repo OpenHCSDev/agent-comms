@@ -1,9 +1,30 @@
-# S12 continuation — active, not merge-ready closure
+# S12 source closure — review-ready; parent activation pending
 
 Foundation #230 merged at reviewed cca3b282. Caller closure draft #237. Current branch:
 `refactor/round2-s12-caller-closure`.
 
-## Latest caller/table closure
+## Current checkpoint
+
+Code head dd4cbe1 closes all S12 production owners/callers and widens the guard
+package-wide. Coordinator schema8; wake_claims uses assignment_id; lifecycle
+fields are the writable state owners. See final sections below for contracts,
+checks and cutover duties. Parent720316a +24192b42ba integrated. No S12 source
+work remains unassigned; overall S12 completion requires parent's quiet durable
+cutover and actual retained-session/RPC acceptance.
+
+Net branch difference vs parent720316a (including241 notification/test integration):
+source +3586/-3383; tests +1193/-1372.
+These are diff counts, not an assertion that every added line is authored here.
+Exact disposable index names: private_bus_checkpoint.sqlite3 (marker-coupled),
+wake_candidates.sqlite3, bus_page_index.sqlite3, transcript_reply_index.sqlite3.
+Durable goal history file: goal_history.sqlite3. Runtime/persistence contracts are
+listed below; no database was changed on the live root.
+
+## Chronological implementation receipts
+
+Earlier in-progress statements below are superseded by the current checkpoint.
+
+## Initial caller/table closure
 
 - `CurrentExecutions`, `ReplayAssessments`, `PublicationIntents` are now sole
   behavior and table owners. Deleted CurrentExecutionPointer, ReplayAssessment,
