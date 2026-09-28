@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
+from .child_process import ProcessIdentity
 from .cohort_schema import install_private_cohort_schema
 from .comms import Comms
 from .coordinated_runtime import (
@@ -160,7 +161,9 @@ async def run_foreground_once(
         if not marker.claims:
             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
         selected_existing_file_write.resource.normalized(worktree)
-    thread = Thread(name, tags, str(worktree), pid=os.getpid())
+    thread = Thread(
+        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+    )
     # The registry name reservation and registration must be ONE wire-locked
     # operation; `claim_thread` silently chooses a suffix on a collision.
     with _store_lock(comms._wire_lock_path):

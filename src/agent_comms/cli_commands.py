@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
+from .child_process import ProcessIdentity
 from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
@@ -436,7 +437,7 @@ class RegisterCliCommand(CliCommand):
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
-            pid=self.pid,
+            process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
         )
         ctx.threads.register(thread)
         return {"registered": self.name}

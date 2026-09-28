@@ -25,7 +25,7 @@ from .coordination_store import (
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
-from .owner_lifecycle import OBSERVATION_INTERVAL
+from .messages import Message
 from .passive_channel_awareness import PassiveChannelAwareness
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
@@ -36,7 +36,7 @@ from .threads import Thread
 from .wire_watch import open_wire_watcher
 
 AGENT_PREFIX = "!agent "
-LIVE_DRAIN_INTERVAL = OBSERVATION_INTERVAL
+LIVE_DRAIN_INTERVAL = 0.05
 WATCH_FALLBACK_INTERVAL = 1.0
 GOAL_WAIT_RECHECK_INTERVAL = 60.0
 
