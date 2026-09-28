@@ -57,13 +57,15 @@ class RootRehearsal:
     archived_runtime_databases: tuple[str, ...]
 
 
-def stage(source: Path, destination: Path, access: WireAccess = WritableAccess()) -> RootRehearsal:
+def stage(source: Path, destination: Path, access: WireAccess | None = None) -> RootRehearsal:
     """This stages the active root, not attached history or final install state.
 
     Runtime journals are preserved as evidence, excluded from fresh runtime
     authority. Input dispositions remain current typed observations. Nothing
     copies a process binding, schedules an old input, or contacts a provider.
     """
+    if access is None:
+        access = WritableAccess()
     source, destination = source.resolve(), destination.absolute()
     durable = (
         "registry.json",

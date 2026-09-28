@@ -1,3 +1,26 @@
+## Current checkpoint — 2026-09-28
+
+- Parent229 integrates S10 followup closure7b03b7e; actual selected-native followups
+  now preserve exactly-once input and parked goal/wait authority.
+- Original required guards passed24 before this merge. Full local suite and paired
+  install are still pending; no broad pass claim.
+- D22 current root and both attached histories staged, preserving all458 goal
+  history rows and original transcript annotations with SQLite/JSON precedence.
+  Current root staging preserves human read offsets and seen identity.
+- Live compaction interruption: parent PR242 and Darwin240 own correction on
+  installed225 base. Actual retained143MB copy now passes selected native CLI,
+  ACP manual compact, native journal commit and strict reopen.601read/211modified
+  files retained; original session unchanged, no user input replay. Loopback model
+  responses only. Installed wheel acceptance and systemic framing/session-resource
+  closure are ongoing.
+- PR241 Nietzsche owns notification projection fix: delete query to retired
+  native_runtime_inputs and use current typed owner; Toad107 Copernicus has the
+  actual installed paired acceptance awaiting that fix.
+- Owner instruction: "alwayus polymorphism, thers no such thing as too much polymorphism".
+  Behavioral cases extend public ABC owners, inherit shared mechanics, and remove
+  replaced switches/catalogs. No compatibility restoration.
+- Existing live install remains225; full refactor is not activated. CI deferred.
+
 # Nominal refactor: plan, PR and deletion ledger
 
 Updated 2026-09-28. Parent owns integration and installed acceptance.
