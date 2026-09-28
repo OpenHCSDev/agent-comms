@@ -1,0 +1,1330 @@
+........................................................................ [ 64%]
+...............................FFF.F.F.                                  [100%]
+=================================== FAILURES ===================================
+_ test_public_acp_preplan_one_selected_write_after_verified_fake_native[success] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc99e7dfbd0>
+scenario = 'success'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "success",
+            "reconnect",
+            "lost_process_state",
+            "commit_unknown",
+            "native_failure",
+            "older_claims",
+            "parent_retry",
+        ],
+    )
+    async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
+        monkeypatch, scenario
+    ):
+        with TemporaryDirectory(prefix="ac-acp-selected-write-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root = base / "wire"
+            root.mkdir(mode=0o700)
+            work = base / "work"
+            work.mkdir(mode=0o700)
+            resource = work / "module.py"
+            resource.write_bytes(b"before\n")
+            package = base / "fake-package"
+            package.mkdir(mode=0o700)
+            comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+            for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
+                comms.register(
+                    Thread(
+                        name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    )
+                )
+            root_id = comms.initialize_private_initial_protocol()
+            comms.initialize_private_claim_protocol()
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                install_prompt_binding_schema(store)
+                for name in ("alpha", "beta"):
+                    store.register_participant(
+                        stable_thread_lookup(comms.registry.require(name).created_at),
+                        name,
+                        name,
+                        committed=True,
+                    )
+            agent = CommsAgent(
+                comms,
+                runtime_enabled=True,
+                private_nk_wire_root_id=root_id,
+                private_nk_native_package=package,
+            )
+            agent._sessions["beta"] = "beta"
+            agent._session_titles["beta"] = "beta"
+            agent._session_worktrees["beta"] = str(work)
+            agent._sessions["alpha"] = "alpha"
+            agent._session_titles["alpha"] = "alpha"
+            agent._session_worktrees["alpha"] = str(work)
+    
+            class AttachedClient:
+                async def session_update(self, **_kwargs):
+                    return None
+    
+            agent._client = AttachedClient()  # explicit attached direct ACP test controller
+            prior_seq = 0
+            if scenario == "older_claims":
+                for index in range(100):
+                    prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
+            bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+            if prior_seq:
+                with MutationStore(str(root / "coordination.sqlite3")) as store:
+                    _accept_visible_initials(
+                        bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                    )
+            message = comms.send_message("sender", "#team", "@beta inspect module.py")
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(
+                    bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
+                )
+            options = {
+                "selectedExistingFileWrite": {
+                    "sourceSeq": message.seq,
+                    "sourceMessageId": message.message_id,
+                    "resource": str(resource),
+                    "contents": "after selected\n",
+                }
+            }
+            # Public ACP prompt metadata is an operator intent with no text/model turn.
+            with pytest.raises(IdentityConflict):
+                await agent.prompt("alpha", [], field_meta={"agentComms": options})
+            assert resource.read_bytes() == b"before\n"
+            with pytest.raises(IdentityConflict, match="source identity changed"):
+                await agent.prompt(
+                    "beta",
+                    [],
+                    field_meta={
+                        "agentComms": {
+                            "selectedExistingFileWrite": {
+                                **options["selectedExistingFileWrite"],
+                                "sourceMessageId": "wrong",
+                            }
+                        }
+                    },
+                )
+            with pytest.raises(IdentityConflict, match="matching private claim root"):
+                SelectedWritePlans(comms, "foreign-root").submit(
+                    owner_name="beta",
+                    source_seq=message.seq,
+                    source_message_id=message.message_id,
+                    resource=str(resource),
+                    contents="not written",
+                )
+            if scenario == "parent_retry":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_parent(path):
+                    if path == root:
+                        raise OSError("ambiguous parent fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                    with pytest.raises(OSError, match="ambiguous parent fsync"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert (root / "selected-write-plans").is_dir()
+                assert not list((root / "selected-write-plans").glob("*.json"))
+            if scenario == "commit_unknown":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_commit(path):
+                    if path.name == "selected-write-plans":
+                        raise OSError("ambiguous directory fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
+                    with pytest.raises(OSError, match="ambiguous"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert resource.read_bytes() == b"before\n"
+                assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
+                await agent.shutdown()
+                return
+            response = await agent.prompt("beta", [], field_meta={"agentComms": options})
+            receipt = response.field_meta["agentComms"]["selectedWrite"]
+            assert receipt["status"] == "accepted_not_applied"
+            assert resource.read_bytes() == b"before\n"
+            if scenario == "older_claims":
+                assert message.seq > 100
+                await agent.shutdown()
+                return
+            with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                await agent.prompt("beta", [], field_meta={"agentComms": options})
+            monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+            monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+            fake, calls = _fake_model(
+                decision="FULL", fail_on=1 if scenario == "native_failure" else None
+            )
+            monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+            if scenario == "native_failure":
+                with pytest.raises(NativePiUnavailable):
+                    await agent._drain_private_nk("beta", root_id)
+                assert len(calls) == 1 and resource.read_bytes() == b"before\n"
+                assert not list(Comms(root).claim_projection())
+                await agent.shutdown()
+                return
+            if scenario in {"reconnect", "lost_process_state"}:
+                if scenario == "reconnect":
+                    agent._client = AttachedClient()  # different ACP controller, same owner process
+                else:
+                    agent._selected_write_controllers.clear()  # owner-process crash loses binding
+                with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
+                    await agent._drain_private_nk("beta", root_id)
+                assert not calls and resource.read_bytes() == b"before\n"
+                rows = list((root / "selected-write-plans").glob("*.json"))
+                assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "accepted"
+                await agent.shutdown()
+                return
+>           assert await agent._drain_private_nk("beta", root_id) == 1
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_selected_write_plan.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:1405: in _drain_private_nk
+    result = await run_one_sealed_claim(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/var/tmp/ac-acp-selected-write-atxty35n/wire')
+wire_root_id = '54c66a6540714bd28a7f3b30badd2a3d', owner_name = 'beta'
+native_package = PosixPath('/var/tmp/ac-acp-selected-write-atxty35n/fake-package')
+opt_in = True, after_seq = 0, session_file = None
+fresh_private_enrollment = False, selected_thinking_level = None
+selected_existing_file_write = None, selected_tool_intent = None
+selected_write_plan_loader = <function CommsAgent._drain_private_nk.<locals>.load_plan at 0x7fc99e75ac40>
+selected_write_plan_check = <function CommsAgent._drain_private_nk.<locals>.check_plan_controller at 0x7fc99e75a820>
+selected_write_plan_applied = <function CommsAgent._drain_private_nk.<locals>.applied_plan at 0x7fc99e75a6c0>
+optional_awareness_builder = None
+
+    async def run_one_sealed_claim(
+        root: Path,
+        *,
+        wire_root_id: str,
+        owner_name: str,
+        native_package: Path,
+        opt_in: bool = True,
+        after_seq: int = 0,
+        session_file: Path | None = None,
+        fresh_private_enrollment: bool = False,
+        selected_thinking_level: str | None = None,
+        selected_existing_file_write: SelectedExistingFileWrite | None = None,
+        selected_tool_intent: SelectedToolIntent | None = None,
+        selected_write_plan_loader: (
+            Callable[[WakeClaim, Thread, int], PlannedWrite | None] | None
+        ) = None,
+        selected_write_plan_check: Callable[[WakeClaim, Thread, str], None] | None = None,
+        selected_write_plan_applied: Callable[[WakeClaim, Thread, str], None] | None = None,
+        optional_awareness_builder: (
+            Callable[[CommittedInitial, WakeClaim, Thread], OptionalAwarenessSupplement] | None
+        ) = None,
+    ) -> CoordinatedTurn | None:
+        """Run at most one original selected claim in a disposable private root.
+    
+        No daemon, polling, ACK, monitor, old-writer cutover, or retry capability.
+        A crash leaves an explicit reserved input and non-replayable SQL status.
+        """
+        root = Path(root).absolute()
+        if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
+            raise PublicationActivationBlocked("coordinated runtime requires a private /var/tmp root")
+        _private_session_dir(root)
+        if type(fresh_private_enrollment) is not bool or (
+            fresh_private_enrollment and session_file is not None
+        ):
+            raise IdentityConflict("Fresh private enrollment requires a new, explicit session")
+        if selected_thinking_level is not None and (
+            not fresh_private_enrollment
+            or type(selected_thinking_level) is not str
+            or selected_thinking_level not in {"low", "high"}
+        ):
+            raise IdentityConflict("Selected level requires explicitly supported fresh enrollment")
+        _trusted_package(native_package)  # fail BEFORE any claim is reserved
+        if (
+            selected_existing_file_write is not None
+            and type(selected_existing_file_write) is not SelectedExistingFileWrite
+        ):
+            raise TypeError("selected write requires an explicit trusted plan")
+        if selected_tool_intent is not None:
+            # Nominal intent is owner-supplied, never inferred from model text.
+            from .selected_tool_broker import SelectedToolIntent
+    
+            if type(selected_tool_intent) is not SelectedToolIntent:
+                raise TypeError("selected tool requires a nominal owner intent")
+            if selected_existing_file_write is not None:
+                raise IdentityConflict("selected tool cannot share an operator file plan")
+        comms = Comms(root)
+        bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+        with _store_lock(bus._path):
+            _require_no_private_owner_rename(root)
+            marker = bus._private_marker_unlocked()
+        if marker["wire_root_id"] != wire_root_id:
+            raise IdentityConflict("private initial wire root changed")
+        store = MutationStore(str(root / "coordination.sqlite3"))
+        owned_turn_id: str | None = None
+        fence: OwnerFence | None = None
+        input_id: str | None = None
+        try:
+            with store._read_transaction():
+                _assert_schema(store._connection)
+                _assert_response_schema(store._connection)
+                assert_native_runtime_schema(store._connection)
+            try:
+                owner, owner_epoch = comms.registry.live_owner_with_admission(owner_name)
+            except (RelationViolationError, ValueError) as error:
+                raise StaleFence("recipient registry identity stopped or changed") from error
+            _require_registry_owner(comms, owner, owner_epoch)
+            lookup = stable_thread_lookup(owner.created_at)
+            person = store.participant(lookup)
+            with store._read_transaction():
+                _require_owner(store, lookup, owner, person.generation)
+            # A saturated page of already settled claims is not proof that there is
+            # no later selected work. Scan a bounded number of sealed pages, then
+            # require an explicit cursor rather than reporting a false empty inbox.
+            cursor = after_seq
+            pending = None
+            for _ in range(10):
+                selected = sealed_cohort_claims(store, lookup, after_seq=cursor, limit=100)
+                pending = next(
+                    (
+                        claim
+                        for claim in selected
+                        if claim.recipient == owner.name
+                        and claim.disposition
+                        in {ClaimDisposition.TRIAGE_PENDING, ClaimDisposition.FULL_PENDING}
+                    ),
+                    None,
+                )
+                if pending is not None:
+                    break
+                if len(selected) < 100:
+                    return None
+                cursor = selected[-1].wire_seq
+            if pending is None:
+                raise IdentityConflict(
+                    f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
+                )
+            if person.pointer.execution_id is not None:
+                raise StaleFence(
+                    "selected owner has an unresolved execution; new claims remain pending"
+                )
+            model_selection = comms.resolve_thread_model(owner.name)
+            if not model_selection or "/" not in model_selection:
+>               raise IdentityConflict("Selected owner has no configured provider/model")
+E               agent_comms.coordination_store.IdentityConflict: Selected owner has no configured provider/model
+
+src/agent_comms/coordinated_runtime.py:1090: IdentityConflict
+_ test_public_acp_preplan_one_selected_write_after_verified_fake_native[reconnect] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc99eafe350>
+scenario = 'reconnect'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "success",
+            "reconnect",
+            "lost_process_state",
+            "commit_unknown",
+            "native_failure",
+            "older_claims",
+            "parent_retry",
+        ],
+    )
+    async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
+        monkeypatch, scenario
+    ):
+        with TemporaryDirectory(prefix="ac-acp-selected-write-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root = base / "wire"
+            root.mkdir(mode=0o700)
+            work = base / "work"
+            work.mkdir(mode=0o700)
+            resource = work / "module.py"
+            resource.write_bytes(b"before\n")
+            package = base / "fake-package"
+            package.mkdir(mode=0o700)
+            comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+            for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
+                comms.register(
+                    Thread(
+                        name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    )
+                )
+            root_id = comms.initialize_private_initial_protocol()
+            comms.initialize_private_claim_protocol()
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                install_prompt_binding_schema(store)
+                for name in ("alpha", "beta"):
+                    store.register_participant(
+                        stable_thread_lookup(comms.registry.require(name).created_at),
+                        name,
+                        name,
+                        committed=True,
+                    )
+            agent = CommsAgent(
+                comms,
+                runtime_enabled=True,
+                private_nk_wire_root_id=root_id,
+                private_nk_native_package=package,
+            )
+            agent._sessions["beta"] = "beta"
+            agent._session_titles["beta"] = "beta"
+            agent._session_worktrees["beta"] = str(work)
+            agent._sessions["alpha"] = "alpha"
+            agent._session_titles["alpha"] = "alpha"
+            agent._session_worktrees["alpha"] = str(work)
+    
+            class AttachedClient:
+                async def session_update(self, **_kwargs):
+                    return None
+    
+            agent._client = AttachedClient()  # explicit attached direct ACP test controller
+            prior_seq = 0
+            if scenario == "older_claims":
+                for index in range(100):
+                    prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
+            bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+            if prior_seq:
+                with MutationStore(str(root / "coordination.sqlite3")) as store:
+                    _accept_visible_initials(
+                        bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                    )
+            message = comms.send_message("sender", "#team", "@beta inspect module.py")
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(
+                    bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
+                )
+            options = {
+                "selectedExistingFileWrite": {
+                    "sourceSeq": message.seq,
+                    "sourceMessageId": message.message_id,
+                    "resource": str(resource),
+                    "contents": "after selected\n",
+                }
+            }
+            # Public ACP prompt metadata is an operator intent with no text/model turn.
+            with pytest.raises(IdentityConflict):
+                await agent.prompt("alpha", [], field_meta={"agentComms": options})
+            assert resource.read_bytes() == b"before\n"
+            with pytest.raises(IdentityConflict, match="source identity changed"):
+                await agent.prompt(
+                    "beta",
+                    [],
+                    field_meta={
+                        "agentComms": {
+                            "selectedExistingFileWrite": {
+                                **options["selectedExistingFileWrite"],
+                                "sourceMessageId": "wrong",
+                            }
+                        }
+                    },
+                )
+            with pytest.raises(IdentityConflict, match="matching private claim root"):
+                SelectedWritePlans(comms, "foreign-root").submit(
+                    owner_name="beta",
+                    source_seq=message.seq,
+                    source_message_id=message.message_id,
+                    resource=str(resource),
+                    contents="not written",
+                )
+            if scenario == "parent_retry":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_parent(path):
+                    if path == root:
+                        raise OSError("ambiguous parent fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                    with pytest.raises(OSError, match="ambiguous parent fsync"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert (root / "selected-write-plans").is_dir()
+                assert not list((root / "selected-write-plans").glob("*.json"))
+            if scenario == "commit_unknown":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_commit(path):
+                    if path.name == "selected-write-plans":
+                        raise OSError("ambiguous directory fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
+                    with pytest.raises(OSError, match="ambiguous"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert resource.read_bytes() == b"before\n"
+                assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
+                await agent.shutdown()
+                return
+            response = await agent.prompt("beta", [], field_meta={"agentComms": options})
+            receipt = response.field_meta["agentComms"]["selectedWrite"]
+            assert receipt["status"] == "accepted_not_applied"
+            assert resource.read_bytes() == b"before\n"
+            if scenario == "older_claims":
+                assert message.seq > 100
+                await agent.shutdown()
+                return
+            with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                await agent.prompt("beta", [], field_meta={"agentComms": options})
+            monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+            monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+            fake, calls = _fake_model(
+                decision="FULL", fail_on=1 if scenario == "native_failure" else None
+            )
+            monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+            if scenario == "native_failure":
+                with pytest.raises(NativePiUnavailable):
+                    await agent._drain_private_nk("beta", root_id)
+                assert len(calls) == 1 and resource.read_bytes() == b"before\n"
+                assert not list(Comms(root).claim_projection())
+                await agent.shutdown()
+                return
+            if scenario in {"reconnect", "lost_process_state"}:
+                if scenario == "reconnect":
+                    agent._client = AttachedClient()  # different ACP controller, same owner process
+                else:
+                    agent._selected_write_controllers.clear()  # owner-process crash loses binding
+>               with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AssertionError: Regex pattern did not match.
+E                 Expected regex: 'controller changed|no longer bound'
+E                 Actual message: 'Selected owner has no configured provider/model'
+
+tests/test_acp_selected_write_plan.py:213: AssertionError
+_ test_public_acp_preplan_one_selected_write_after_verified_fake_native[lost_process_state] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc99eafe510>
+scenario = 'lost_process_state'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "success",
+            "reconnect",
+            "lost_process_state",
+            "commit_unknown",
+            "native_failure",
+            "older_claims",
+            "parent_retry",
+        ],
+    )
+    async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
+        monkeypatch, scenario
+    ):
+        with TemporaryDirectory(prefix="ac-acp-selected-write-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root = base / "wire"
+            root.mkdir(mode=0o700)
+            work = base / "work"
+            work.mkdir(mode=0o700)
+            resource = work / "module.py"
+            resource.write_bytes(b"before\n")
+            package = base / "fake-package"
+            package.mkdir(mode=0o700)
+            comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+            for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
+                comms.register(
+                    Thread(
+                        name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    )
+                )
+            root_id = comms.initialize_private_initial_protocol()
+            comms.initialize_private_claim_protocol()
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                install_prompt_binding_schema(store)
+                for name in ("alpha", "beta"):
+                    store.register_participant(
+                        stable_thread_lookup(comms.registry.require(name).created_at),
+                        name,
+                        name,
+                        committed=True,
+                    )
+            agent = CommsAgent(
+                comms,
+                runtime_enabled=True,
+                private_nk_wire_root_id=root_id,
+                private_nk_native_package=package,
+            )
+            agent._sessions["beta"] = "beta"
+            agent._session_titles["beta"] = "beta"
+            agent._session_worktrees["beta"] = str(work)
+            agent._sessions["alpha"] = "alpha"
+            agent._session_titles["alpha"] = "alpha"
+            agent._session_worktrees["alpha"] = str(work)
+    
+            class AttachedClient:
+                async def session_update(self, **_kwargs):
+                    return None
+    
+            agent._client = AttachedClient()  # explicit attached direct ACP test controller
+            prior_seq = 0
+            if scenario == "older_claims":
+                for index in range(100):
+                    prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
+            bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+            if prior_seq:
+                with MutationStore(str(root / "coordination.sqlite3")) as store:
+                    _accept_visible_initials(
+                        bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                    )
+            message = comms.send_message("sender", "#team", "@beta inspect module.py")
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(
+                    bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
+                )
+            options = {
+                "selectedExistingFileWrite": {
+                    "sourceSeq": message.seq,
+                    "sourceMessageId": message.message_id,
+                    "resource": str(resource),
+                    "contents": "after selected\n",
+                }
+            }
+            # Public ACP prompt metadata is an operator intent with no text/model turn.
+            with pytest.raises(IdentityConflict):
+                await agent.prompt("alpha", [], field_meta={"agentComms": options})
+            assert resource.read_bytes() == b"before\n"
+            with pytest.raises(IdentityConflict, match="source identity changed"):
+                await agent.prompt(
+                    "beta",
+                    [],
+                    field_meta={
+                        "agentComms": {
+                            "selectedExistingFileWrite": {
+                                **options["selectedExistingFileWrite"],
+                                "sourceMessageId": "wrong",
+                            }
+                        }
+                    },
+                )
+            with pytest.raises(IdentityConflict, match="matching private claim root"):
+                SelectedWritePlans(comms, "foreign-root").submit(
+                    owner_name="beta",
+                    source_seq=message.seq,
+                    source_message_id=message.message_id,
+                    resource=str(resource),
+                    contents="not written",
+                )
+            if scenario == "parent_retry":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_parent(path):
+                    if path == root:
+                        raise OSError("ambiguous parent fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                    with pytest.raises(OSError, match="ambiguous parent fsync"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert (root / "selected-write-plans").is_dir()
+                assert not list((root / "selected-write-plans").glob("*.json"))
+            if scenario == "commit_unknown":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_commit(path):
+                    if path.name == "selected-write-plans":
+                        raise OSError("ambiguous directory fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
+                    with pytest.raises(OSError, match="ambiguous"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert resource.read_bytes() == b"before\n"
+                assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
+                await agent.shutdown()
+                return
+            response = await agent.prompt("beta", [], field_meta={"agentComms": options})
+            receipt = response.field_meta["agentComms"]["selectedWrite"]
+            assert receipt["status"] == "accepted_not_applied"
+            assert resource.read_bytes() == b"before\n"
+            if scenario == "older_claims":
+                assert message.seq > 100
+                await agent.shutdown()
+                return
+            with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                await agent.prompt("beta", [], field_meta={"agentComms": options})
+            monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+            monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+            fake, calls = _fake_model(
+                decision="FULL", fail_on=1 if scenario == "native_failure" else None
+            )
+            monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+            if scenario == "native_failure":
+                with pytest.raises(NativePiUnavailable):
+                    await agent._drain_private_nk("beta", root_id)
+                assert len(calls) == 1 and resource.read_bytes() == b"before\n"
+                assert not list(Comms(root).claim_projection())
+                await agent.shutdown()
+                return
+            if scenario in {"reconnect", "lost_process_state"}:
+                if scenario == "reconnect":
+                    agent._client = AttachedClient()  # different ACP controller, same owner process
+                else:
+                    agent._selected_write_controllers.clear()  # owner-process crash loses binding
+>               with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AssertionError: Regex pattern did not match.
+E                 Expected regex: 'controller changed|no longer bound'
+E                 Actual message: 'Selected owner has no configured provider/model'
+
+tests/test_acp_selected_write_plan.py:213: AssertionError
+_ test_public_acp_preplan_one_selected_write_after_verified_fake_native[native_failure] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc99eafe270>
+scenario = 'native_failure'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "success",
+            "reconnect",
+            "lost_process_state",
+            "commit_unknown",
+            "native_failure",
+            "older_claims",
+            "parent_retry",
+        ],
+    )
+    async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
+        monkeypatch, scenario
+    ):
+        with TemporaryDirectory(prefix="ac-acp-selected-write-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root = base / "wire"
+            root.mkdir(mode=0o700)
+            work = base / "work"
+            work.mkdir(mode=0o700)
+            resource = work / "module.py"
+            resource.write_bytes(b"before\n")
+            package = base / "fake-package"
+            package.mkdir(mode=0o700)
+            comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+            for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
+                comms.register(
+                    Thread(
+                        name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    )
+                )
+            root_id = comms.initialize_private_initial_protocol()
+            comms.initialize_private_claim_protocol()
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                install_prompt_binding_schema(store)
+                for name in ("alpha", "beta"):
+                    store.register_participant(
+                        stable_thread_lookup(comms.registry.require(name).created_at),
+                        name,
+                        name,
+                        committed=True,
+                    )
+            agent = CommsAgent(
+                comms,
+                runtime_enabled=True,
+                private_nk_wire_root_id=root_id,
+                private_nk_native_package=package,
+            )
+            agent._sessions["beta"] = "beta"
+            agent._session_titles["beta"] = "beta"
+            agent._session_worktrees["beta"] = str(work)
+            agent._sessions["alpha"] = "alpha"
+            agent._session_titles["alpha"] = "alpha"
+            agent._session_worktrees["alpha"] = str(work)
+    
+            class AttachedClient:
+                async def session_update(self, **_kwargs):
+                    return None
+    
+            agent._client = AttachedClient()  # explicit attached direct ACP test controller
+            prior_seq = 0
+            if scenario == "older_claims":
+                for index in range(100):
+                    prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
+            bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+            if prior_seq:
+                with MutationStore(str(root / "coordination.sqlite3")) as store:
+                    _accept_visible_initials(
+                        bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                    )
+            message = comms.send_message("sender", "#team", "@beta inspect module.py")
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(
+                    bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
+                )
+            options = {
+                "selectedExistingFileWrite": {
+                    "sourceSeq": message.seq,
+                    "sourceMessageId": message.message_id,
+                    "resource": str(resource),
+                    "contents": "after selected\n",
+                }
+            }
+            # Public ACP prompt metadata is an operator intent with no text/model turn.
+            with pytest.raises(IdentityConflict):
+                await agent.prompt("alpha", [], field_meta={"agentComms": options})
+            assert resource.read_bytes() == b"before\n"
+            with pytest.raises(IdentityConflict, match="source identity changed"):
+                await agent.prompt(
+                    "beta",
+                    [],
+                    field_meta={
+                        "agentComms": {
+                            "selectedExistingFileWrite": {
+                                **options["selectedExistingFileWrite"],
+                                "sourceMessageId": "wrong",
+                            }
+                        }
+                    },
+                )
+            with pytest.raises(IdentityConflict, match="matching private claim root"):
+                SelectedWritePlans(comms, "foreign-root").submit(
+                    owner_name="beta",
+                    source_seq=message.seq,
+                    source_message_id=message.message_id,
+                    resource=str(resource),
+                    contents="not written",
+                )
+            if scenario == "parent_retry":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_parent(path):
+                    if path == root:
+                        raise OSError("ambiguous parent fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                    with pytest.raises(OSError, match="ambiguous parent fsync"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert (root / "selected-write-plans").is_dir()
+                assert not list((root / "selected-write-plans").glob("*.json"))
+            if scenario == "commit_unknown":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_commit(path):
+                    if path.name == "selected-write-plans":
+                        raise OSError("ambiguous directory fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
+                    with pytest.raises(OSError, match="ambiguous"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert resource.read_bytes() == b"before\n"
+                assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
+                await agent.shutdown()
+                return
+            response = await agent.prompt("beta", [], field_meta={"agentComms": options})
+            receipt = response.field_meta["agentComms"]["selectedWrite"]
+            assert receipt["status"] == "accepted_not_applied"
+            assert resource.read_bytes() == b"before\n"
+            if scenario == "older_claims":
+                assert message.seq > 100
+                await agent.shutdown()
+                return
+            with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                await agent.prompt("beta", [], field_meta={"agentComms": options})
+            monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+            monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+            fake, calls = _fake_model(
+                decision="FULL", fail_on=1 if scenario == "native_failure" else None
+            )
+            monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+            if scenario == "native_failure":
+                with pytest.raises(NativePiUnavailable):
+>                   await agent._drain_private_nk("beta", root_id)
+
+tests/test_acp_selected_write_plan.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:1405: in _drain_private_nk
+    result = await run_one_sealed_claim(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/var/tmp/ac-acp-selected-write-a_1u0wk2/wire')
+wire_root_id = '0c587247e73b4d16baee963175bb082f', owner_name = 'beta'
+native_package = PosixPath('/var/tmp/ac-acp-selected-write-a_1u0wk2/fake-package')
+opt_in = True, after_seq = 0, session_file = None
+fresh_private_enrollment = False, selected_thinking_level = None
+selected_existing_file_write = None, selected_tool_intent = None
+selected_write_plan_loader = <function CommsAgent._drain_private_nk.<locals>.load_plan at 0x7fc99f0bd380>
+selected_write_plan_check = <function CommsAgent._drain_private_nk.<locals>.check_plan_controller at 0x7fc99f0be1f0>
+selected_write_plan_applied = <function CommsAgent._drain_private_nk.<locals>.applied_plan at 0x7fc99f0bf950>
+optional_awareness_builder = None
+
+    async def run_one_sealed_claim(
+        root: Path,
+        *,
+        wire_root_id: str,
+        owner_name: str,
+        native_package: Path,
+        opt_in: bool = True,
+        after_seq: int = 0,
+        session_file: Path | None = None,
+        fresh_private_enrollment: bool = False,
+        selected_thinking_level: str | None = None,
+        selected_existing_file_write: SelectedExistingFileWrite | None = None,
+        selected_tool_intent: SelectedToolIntent | None = None,
+        selected_write_plan_loader: (
+            Callable[[WakeClaim, Thread, int], PlannedWrite | None] | None
+        ) = None,
+        selected_write_plan_check: Callable[[WakeClaim, Thread, str], None] | None = None,
+        selected_write_plan_applied: Callable[[WakeClaim, Thread, str], None] | None = None,
+        optional_awareness_builder: (
+            Callable[[CommittedInitial, WakeClaim, Thread], OptionalAwarenessSupplement] | None
+        ) = None,
+    ) -> CoordinatedTurn | None:
+        """Run at most one original selected claim in a disposable private root.
+    
+        No daemon, polling, ACK, monitor, old-writer cutover, or retry capability.
+        A crash leaves an explicit reserved input and non-replayable SQL status.
+        """
+        root = Path(root).absolute()
+        if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
+            raise PublicationActivationBlocked("coordinated runtime requires a private /var/tmp root")
+        _private_session_dir(root)
+        if type(fresh_private_enrollment) is not bool or (
+            fresh_private_enrollment and session_file is not None
+        ):
+            raise IdentityConflict("Fresh private enrollment requires a new, explicit session")
+        if selected_thinking_level is not None and (
+            not fresh_private_enrollment
+            or type(selected_thinking_level) is not str
+            or selected_thinking_level not in {"low", "high"}
+        ):
+            raise IdentityConflict("Selected level requires explicitly supported fresh enrollment")
+        _trusted_package(native_package)  # fail BEFORE any claim is reserved
+        if (
+            selected_existing_file_write is not None
+            and type(selected_existing_file_write) is not SelectedExistingFileWrite
+        ):
+            raise TypeError("selected write requires an explicit trusted plan")
+        if selected_tool_intent is not None:
+            # Nominal intent is owner-supplied, never inferred from model text.
+            from .selected_tool_broker import SelectedToolIntent
+    
+            if type(selected_tool_intent) is not SelectedToolIntent:
+                raise TypeError("selected tool requires a nominal owner intent")
+            if selected_existing_file_write is not None:
+                raise IdentityConflict("selected tool cannot share an operator file plan")
+        comms = Comms(root)
+        bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+        with _store_lock(bus._path):
+            _require_no_private_owner_rename(root)
+            marker = bus._private_marker_unlocked()
+        if marker["wire_root_id"] != wire_root_id:
+            raise IdentityConflict("private initial wire root changed")
+        store = MutationStore(str(root / "coordination.sqlite3"))
+        owned_turn_id: str | None = None
+        fence: OwnerFence | None = None
+        input_id: str | None = None
+        try:
+            with store._read_transaction():
+                _assert_schema(store._connection)
+                _assert_response_schema(store._connection)
+                assert_native_runtime_schema(store._connection)
+            try:
+                owner, owner_epoch = comms.registry.live_owner_with_admission(owner_name)
+            except (RelationViolationError, ValueError) as error:
+                raise StaleFence("recipient registry identity stopped or changed") from error
+            _require_registry_owner(comms, owner, owner_epoch)
+            lookup = stable_thread_lookup(owner.created_at)
+            person = store.participant(lookup)
+            with store._read_transaction():
+                _require_owner(store, lookup, owner, person.generation)
+            # A saturated page of already settled claims is not proof that there is
+            # no later selected work. Scan a bounded number of sealed pages, then
+            # require an explicit cursor rather than reporting a false empty inbox.
+            cursor = after_seq
+            pending = None
+            for _ in range(10):
+                selected = sealed_cohort_claims(store, lookup, after_seq=cursor, limit=100)
+                pending = next(
+                    (
+                        claim
+                        for claim in selected
+                        if claim.recipient == owner.name
+                        and claim.disposition
+                        in {ClaimDisposition.TRIAGE_PENDING, ClaimDisposition.FULL_PENDING}
+                    ),
+                    None,
+                )
+                if pending is not None:
+                    break
+                if len(selected) < 100:
+                    return None
+                cursor = selected[-1].wire_seq
+            if pending is None:
+                raise IdentityConflict(
+                    f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
+                )
+            if person.pointer.execution_id is not None:
+                raise StaleFence(
+                    "selected owner has an unresolved execution; new claims remain pending"
+                )
+            model_selection = comms.resolve_thread_model(owner.name)
+            if not model_selection or "/" not in model_selection:
+>               raise IdentityConflict("Selected owner has no configured provider/model")
+E               agent_comms.coordination_store.IdentityConflict: Selected owner has no configured provider/model
+
+src/agent_comms/coordinated_runtime.py:1090: IdentityConflict
+_ test_public_acp_preplan_one_selected_write_after_verified_fake_native[parent_retry] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc99eafe430>
+scenario = 'parent_retry'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "success",
+            "reconnect",
+            "lost_process_state",
+            "commit_unknown",
+            "native_failure",
+            "older_claims",
+            "parent_retry",
+        ],
+    )
+    async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
+        monkeypatch, scenario
+    ):
+        with TemporaryDirectory(prefix="ac-acp-selected-write-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root = base / "wire"
+            root.mkdir(mode=0o700)
+            work = base / "work"
+            work.mkdir(mode=0o700)
+            resource = work / "module.py"
+            resource.write_bytes(b"before\n")
+            package = base / "fake-package"
+            package.mkdir(mode=0o700)
+            comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+            for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
+                comms.register(
+                    Thread(
+                        name, frozenset({"team"}), str(work), pid=os.getpid(), created_at=incarnation
+                    )
+                )
+            root_id = comms.initialize_private_initial_protocol()
+            comms.initialize_private_claim_protocol()
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                install_private_response_schema(store)
+                install_native_runtime_schema(store)
+                install_prompt_binding_schema(store)
+                for name in ("alpha", "beta"):
+                    store.register_participant(
+                        stable_thread_lookup(comms.registry.require(name).created_at),
+                        name,
+                        name,
+                        committed=True,
+                    )
+            agent = CommsAgent(
+                comms,
+                runtime_enabled=True,
+                private_nk_wire_root_id=root_id,
+                private_nk_native_package=package,
+            )
+            agent._sessions["beta"] = "beta"
+            agent._session_titles["beta"] = "beta"
+            agent._session_worktrees["beta"] = str(work)
+            agent._sessions["alpha"] = "alpha"
+            agent._session_titles["alpha"] = "alpha"
+            agent._session_worktrees["alpha"] = str(work)
+    
+            class AttachedClient:
+                async def session_update(self, **_kwargs):
+                    return None
+    
+            agent._client = AttachedClient()  # explicit attached direct ACP test controller
+            prior_seq = 0
+            if scenario == "older_claims":
+                for index in range(100):
+                    prior_seq = comms.send_message("sender", "#team", f"@beta earlier {index}").seq
+            bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+            if prior_seq:
+                with MutationStore(str(root / "coordination.sqlite3")) as store:
+                    _accept_visible_initials(
+                        bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                    )
+            message = comms.send_message("sender", "#team", "@beta inspect module.py")
+            with MutationStore(str(root / "coordination.sqlite3")) as store:
+                _accept_visible_initials(
+                    bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
+                )
+            options = {
+                "selectedExistingFileWrite": {
+                    "sourceSeq": message.seq,
+                    "sourceMessageId": message.message_id,
+                    "resource": str(resource),
+                    "contents": "after selected\n",
+                }
+            }
+            # Public ACP prompt metadata is an operator intent with no text/model turn.
+            with pytest.raises(IdentityConflict):
+                await agent.prompt("alpha", [], field_meta={"agentComms": options})
+            assert resource.read_bytes() == b"before\n"
+            with pytest.raises(IdentityConflict, match="source identity changed"):
+                await agent.prompt(
+                    "beta",
+                    [],
+                    field_meta={
+                        "agentComms": {
+                            "selectedExistingFileWrite": {
+                                **options["selectedExistingFileWrite"],
+                                "sourceMessageId": "wrong",
+                            }
+                        }
+                    },
+                )
+            with pytest.raises(IdentityConflict, match="matching private claim root"):
+                SelectedWritePlans(comms, "foreign-root").submit(
+                    owner_name="beta",
+                    source_seq=message.seq,
+                    source_message_id=message.message_id,
+                    resource=str(resource),
+                    contents="not written",
+                )
+            if scenario == "parent_retry":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_parent(path):
+                    if path == root:
+                        raise OSError("ambiguous parent fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                    with pytest.raises(OSError, match="ambiguous parent fsync"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert (root / "selected-write-plans").is_dir()
+                assert not list((root / "selected-write-plans").glob("*.json"))
+            if scenario == "commit_unknown":
+                original_sync = SelectedWritePlans._fsync_dir
+    
+                def fail_commit(path):
+                    if path.name == "selected-write-plans":
+                        raise OSError("ambiguous directory fsync")
+                    return original_sync(path)
+    
+                with monkeypatch.context() as fault:
+                    fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
+                    with pytest.raises(OSError, match="ambiguous"):
+                        await agent.prompt("beta", [], field_meta={"agentComms": options})
+                with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                assert resource.read_bytes() == b"before\n"
+                assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
+                await agent.shutdown()
+                return
+            response = await agent.prompt("beta", [], field_meta={"agentComms": options})
+            receipt = response.field_meta["agentComms"]["selectedWrite"]
+            assert receipt["status"] == "accepted_not_applied"
+            assert resource.read_bytes() == b"before\n"
+            if scenario == "older_claims":
+                assert message.seq > 100
+                await agent.shutdown()
+                return
+            with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
+                await agent.prompt("beta", [], field_meta={"agentComms": options})
+            monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+            monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+            fake, calls = _fake_model(
+                decision="FULL", fail_on=1 if scenario == "native_failure" else None
+            )
+            monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+            if scenario == "native_failure":
+                with pytest.raises(NativePiUnavailable):
+                    await agent._drain_private_nk("beta", root_id)
+                assert len(calls) == 1 and resource.read_bytes() == b"before\n"
+                assert not list(Comms(root).claim_projection())
+                await agent.shutdown()
+                return
+            if scenario in {"reconnect", "lost_process_state"}:
+                if scenario == "reconnect":
+                    agent._client = AttachedClient()  # different ACP controller, same owner process
+                else:
+                    agent._selected_write_controllers.clear()  # owner-process crash loses binding
+                with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
+                    await agent._drain_private_nk("beta", root_id)
+                assert not calls and resource.read_bytes() == b"before\n"
+                rows = list((root / "selected-write-plans").glob("*.json"))
+                assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "accepted"
+                await agent.shutdown()
+                return
+>           assert await agent._drain_private_nk("beta", root_id) == 1
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_selected_write_plan.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:1405: in _drain_private_nk
+    result = await run_one_sealed_claim(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/var/tmp/ac-acp-selected-write-jbp8k29o/wire')
+wire_root_id = 'efdeec152d9e44d1b2df86d76446c2bf', owner_name = 'beta'
+native_package = PosixPath('/var/tmp/ac-acp-selected-write-jbp8k29o/fake-package')
+opt_in = True, after_seq = 0, session_file = None
+fresh_private_enrollment = False, selected_thinking_level = None
+selected_existing_file_write = None, selected_tool_intent = None
+selected_write_plan_loader = <function CommsAgent._drain_private_nk.<locals>.load_plan at 0x7fc99f0bd6f0>
+selected_write_plan_check = <function CommsAgent._drain_private_nk.<locals>.check_plan_controller at 0x7fc99f0becf0>
+selected_write_plan_applied = <function CommsAgent._drain_private_nk.<locals>.applied_plan at 0x7fc99f0bde80>
+optional_awareness_builder = None
+
+    async def run_one_sealed_claim(
+        root: Path,
+        *,
+        wire_root_id: str,
+        owner_name: str,
+        native_package: Path,
+        opt_in: bool = True,
+        after_seq: int = 0,
+        session_file: Path | None = None,
+        fresh_private_enrollment: bool = False,
+        selected_thinking_level: str | None = None,
+        selected_existing_file_write: SelectedExistingFileWrite | None = None,
+        selected_tool_intent: SelectedToolIntent | None = None,
+        selected_write_plan_loader: (
+            Callable[[WakeClaim, Thread, int], PlannedWrite | None] | None
+        ) = None,
+        selected_write_plan_check: Callable[[WakeClaim, Thread, str], None] | None = None,
+        selected_write_plan_applied: Callable[[WakeClaim, Thread, str], None] | None = None,
+        optional_awareness_builder: (
+            Callable[[CommittedInitial, WakeClaim, Thread], OptionalAwarenessSupplement] | None
+        ) = None,
+    ) -> CoordinatedTurn | None:
+        """Run at most one original selected claim in a disposable private root.
+    
+        No daemon, polling, ACK, monitor, old-writer cutover, or retry capability.
+        A crash leaves an explicit reserved input and non-replayable SQL status.
+        """
+        root = Path(root).absolute()
+        if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
+            raise PublicationActivationBlocked("coordinated runtime requires a private /var/tmp root")
+        _private_session_dir(root)
+        if type(fresh_private_enrollment) is not bool or (
+            fresh_private_enrollment and session_file is not None
+        ):
+            raise IdentityConflict("Fresh private enrollment requires a new, explicit session")
+        if selected_thinking_level is not None and (
+            not fresh_private_enrollment
+            or type(selected_thinking_level) is not str
+            or selected_thinking_level not in {"low", "high"}
+        ):
+            raise IdentityConflict("Selected level requires explicitly supported fresh enrollment")
+        _trusted_package(native_package)  # fail BEFORE any claim is reserved
+        if (
+            selected_existing_file_write is not None
+            and type(selected_existing_file_write) is not SelectedExistingFileWrite
+        ):
+            raise TypeError("selected write requires an explicit trusted plan")
+        if selected_tool_intent is not None:
+            # Nominal intent is owner-supplied, never inferred from model text.
+            from .selected_tool_broker import SelectedToolIntent
+    
+            if type(selected_tool_intent) is not SelectedToolIntent:
+                raise TypeError("selected tool requires a nominal owner intent")
+            if selected_existing_file_write is not None:
+                raise IdentityConflict("selected tool cannot share an operator file plan")
+        comms = Comms(root)
+        bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+        with _store_lock(bus._path):
+            _require_no_private_owner_rename(root)
+            marker = bus._private_marker_unlocked()
+        if marker["wire_root_id"] != wire_root_id:
+            raise IdentityConflict("private initial wire root changed")
+        store = MutationStore(str(root / "coordination.sqlite3"))
+        owned_turn_id: str | None = None
+        fence: OwnerFence | None = None
+        input_id: str | None = None
+        try:
+            with store._read_transaction():
+                _assert_schema(store._connection)
+                _assert_response_schema(store._connection)
+                assert_native_runtime_schema(store._connection)
+            try:
+                owner, owner_epoch = comms.registry.live_owner_with_admission(owner_name)
+            except (RelationViolationError, ValueError) as error:
+                raise StaleFence("recipient registry identity stopped or changed") from error
+            _require_registry_owner(comms, owner, owner_epoch)
+            lookup = stable_thread_lookup(owner.created_at)
+            person = store.participant(lookup)
+            with store._read_transaction():
+                _require_owner(store, lookup, owner, person.generation)
+            # A saturated page of already settled claims is not proof that there is
+            # no later selected work. Scan a bounded number of sealed pages, then
+            # require an explicit cursor rather than reporting a false empty inbox.
+            cursor = after_seq
+            pending = None
+            for _ in range(10):
+                selected = sealed_cohort_claims(store, lookup, after_seq=cursor, limit=100)
+                pending = next(
+                    (
+                        claim
+                        for claim in selected
+                        if claim.recipient == owner.name
+                        and claim.disposition
+                        in {ClaimDisposition.TRIAGE_PENDING, ClaimDisposition.FULL_PENDING}
+                    ),
+                    None,
+                )
+                if pending is not None:
+                    break
+                if len(selected) < 100:
+                    return None
+                cursor = selected[-1].wire_seq
+            if pending is None:
+                raise IdentityConflict(
+                    f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
+                )
+            if person.pointer.execution_id is not None:
+                raise StaleFence(
+                    "selected owner has an unresolved execution; new claims remain pending"
+                )
+            model_selection = comms.resolve_thread_model(owner.name)
+            if not model_selection or "/" not in model_selection:
+>               raise IdentityConflict("Selected owner has no configured provider/model")
+E               agent_comms.coordination_store.IdentityConflict: Selected owner has no configured provider/model
+
+src/agent_comms/coordinated_runtime.py:1090: IdentityConflict
+=========================== short test summary info ============================
+FAILED tests/test_acp_selected_write_plan.py::test_public_acp_preplan_one_selected_write_after_verified_fake_native[success]
+FAILED tests/test_acp_selected_write_plan.py::test_public_acp_preplan_one_selected_write_after_verified_fake_native[reconnect]
+FAILED tests/test_acp_selected_write_plan.py::test_public_acp_preplan_one_selected_write_after_verified_fake_native[lost_process_state]
+FAILED tests/test_acp_selected_write_plan.py::test_public_acp_preplan_one_selected_write_after_verified_fake_native[native_failure]
+FAILED tests/test_acp_selected_write_plan.py::test_public_acp_preplan_one_selected_write_after_verified_fake_native[parent_retry]
+5 failed, 106 passed in 41.47s
