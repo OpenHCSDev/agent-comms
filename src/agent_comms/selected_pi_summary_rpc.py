@@ -16,6 +16,7 @@ from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession, _session_r
 from .compaction_journal import CompactionJournal, SelectedSummarySource
 from .field_codec import FieldCodec
 from .fresh_private_session import FreshPrivateSession
+from .input_disposition import FutureInputQueue
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_provider import NativeSummary
 from .pi_commands import AgentCommsSummarizeCompaction
@@ -124,6 +125,7 @@ class SelectedSummarySlot:
         custom_instructions: str | None = None,
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
     ) -> SelectedSummaryResult:
         """Reserve durably, exchange once, and leave settlement to the owner.
@@ -178,6 +180,7 @@ class SelectedSummarySlot:
                 source,
                 fresh_session=fresh_session,
                 admission_generation=admission_generation,
+                future_queue=future_queue,
             )
             request = replace(request, operation_id=operation)
             # The durable reservation blocks new inputs even after process

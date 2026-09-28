@@ -197,6 +197,7 @@ async def maybe_compact_owner_turn(
                 },
                 expected_package=package,
                 tokens_before=prepared.tokens_before,
+                future_queue=future_queue,
             )
             if result.summary is None:
                 if result.decline_reason in {"split_turn", "unsupported"}:

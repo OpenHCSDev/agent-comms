@@ -20,6 +20,7 @@ from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
     NativeContextProof,
+    NativePiPromptRejected,
     NativePiTerminalFailure,
     NativePiUnavailable,
     _trusted_package,
@@ -787,9 +788,7 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     reason = (
         "fake prewrite boundary"
         if damage == "valid_preflight"
-        else "saved inode changed"
-        if damage == "changed_inode"
-        else "runtime or inode differs"
+        else "saved inode changed" if damage == "changed_inode" else "runtime or inode differs"
     )
     expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
     with pytest.raises(expected, match=reason):
@@ -925,7 +924,9 @@ def durable_attempt(tmp_path):
         yield DurableTurn(store, started.fence, started.snapshot.pointer_revision, INPUT_ID)
 
 
-@pytest.mark.parametrize("outcome", ["429", "length", "stop", "configured"])
+@pytest.mark.parametrize(
+    "outcome", ["429", "length", "stop", "configured", "restarted", "rejected"]
+)
 async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     tmp_path: Path, monkeypatch, outcome: str, durable_attempt
 ) -> None:
@@ -935,8 +936,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
     package = Path(selected)
     _trusted_package(package)
-    provider = "configured-fixture" if outcome == "configured" else "openrouter"
-    model = "fixture-model" if outcome == "configured" else "z-ai/glm-5.3-flash"
+    provider = "configured-fixture" if outcome in {"configured", "restarted"} else "openrouter"
+    model = "fixture-model" if outcome in {"configured", "restarted"} else "z-ai/glm-5.3-flash"
     calls: list[str] = []
     chunk = {
         "id": "fixture-length",
@@ -1013,7 +1014,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                                 {
                                     "id": model,
                                     "name": "Offline fixture",
-                                    "contextWindow": 8192,
+                                    "contextWindow": 272000,
                                     "maxTokens": 128,
                                 }
                             ],
@@ -1026,6 +1027,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         (canonical / "auth.json").write_text(
             json.dumps({provider: {"type": "api_key", "key": "canonical-offline-fixture"}})
         )
+        if outcome == "rejected":
+            (canonical / "auth.json").write_text("{}")
         preload = tmp_path / "offline-fetch.cjs"
         prefix = f"http://127.0.0.1:{server.server_port}/"
         preload.write_text(
@@ -1039,6 +1042,10 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("NODE_OPTIONS", f"--require={preload}")
         monkeypatch.setenv("PI_CODING_AGENT_DIR", str(canonical))
+        monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
+        if outcome == "restarted":
+            monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(canonical))
+            monkeypatch.setenv("PI_CODING_AGENT_DIR", str(sessions / ".native-pi-agent"))
 
         observed: list[str] = []
         rpc_events: list[dict] = []
@@ -1056,9 +1063,20 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                     observed.append(event["type"])
                 return raw
 
+        class StderrReader:
+            def __init__(self, stream):
+                self.stream = stream
+
+            async def read(self, *args):
+                raw = await self.stream.read(*args)
+                if raw:
+                    print(raw.decode())
+                return raw
+
         async def launch(argv, **kwargs):
             child = await real_launch(argv, **kwargs)
             child.stdout = Reader(child.stdout)
+            child.stderr = StderrReader(child.stderr)
             return child
 
         monkeypatch.setattr(AttachedChild, "start", launch)
@@ -1080,7 +1098,32 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             provider=provider,
             model=model,
         )
-        if outcome in {"stop", "configured"}:
+        if outcome == "rejected":
+            from agent_comms.diagnostics import record_terminal_failure
+
+            with pytest.raises(NativePiPromptRejected) as failed:
+                await run_native_pi_turn(package, **request)
+            response = failed.value.rejected_response
+            assert response.id == "native-prompt" and response.success is False
+            assert "No API key" in response.error
+            assert calls == []
+            assert not any(event["type"] == "input_committed" for event in rpc_events)
+            assert not list(sessions.glob("*.jsonl.input-proof"))
+            diagnostic = record_terminal_failure(
+                tmp_path,
+                turn_id=INPUT_ID,
+                thread="test",
+                event={},
+                sequences=(152,),
+                native_response=response,
+            )
+            saved = json.loads(diagnostic.read_text())
+            assert saved["native_response"] == response.rejection_details()
+            assert saved["native_response"]["command"] == "prompt"
+            assert "fixture only" not in diagnostic.read_text()
+            assert diagnostic.stat().st_mode & 0o777 == 0o600
+            return
+        if outcome in {"stop", "configured", "restarted"}:
             result = await run_native_pi_turn(package, **request)
             assert "prompt_accepted" in durable_phases
             assert "model_running" in durable_phases
@@ -1128,6 +1171,30 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         assert len(proof_files) == 1
         assert len(proof_files[0].read_text().splitlines()) == 1
         assert json.loads(proof_files[0].read_text())["requestGeneration"] == 1
+        if outcome == "restarted":
+            # A second real child reopens the first child's saved private history.
+            # The outer worker still has its isolated PI_CODING_AGENT_DIR.
+            request.pop("observe_event")
+            request.update(input_id="b" * 32, session_file=result.context.session_file)
+            reopened = await run_native_pi_turn(package, **request)
+            assert reopened.text == "X"
+            assert reopened.context.input_id == "b" * 32
+            assert reopened.context.session_file == result.context.session_file
+            assert calls == ["/v1/chat/completions"] * 2
+            proofs = [json.loads(line) for line in proof_files[0].read_text().splitlines()]
+            assert [(row["inputId"], row["requestGeneration"]) for row in proofs] == [
+                (INPUT_ID, 1),
+                (INPUT_ID, 2),
+                ("b" * 32, 2),
+            ]
+            entries = [
+                json.loads(line) for line in reopened.context.session_file.read_text().splitlines()
+            ]
+            assert [
+                entry["message"]["inputId"]
+                for entry in entries
+                if entry["type"] == "message" and entry["message"]["role"] == "user"
+            ] == [INPUT_ID, "b" * 32]
     finally:
         server.shutdown()
         server.server_close()

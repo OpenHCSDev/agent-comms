@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .backend import _session_revision
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .input_disposition import InputDispositions
+from .input_disposition import InputDocument
 from .native_entries import NativeEntry
 from .native_pi import NativeContextProof
 from .native_runtime_input import NativeRuntimeInput
@@ -25,7 +25,11 @@ from .selected_source import SelectedSource
 
 
 def verify_continued_private_session(
-    root: Path, session: Path, source: SelectedSource, raw_ids: frozenset[str]
+    root: Path,
+    session: Path,
+    source: SelectedSource,
+    raw_ids: frozenset[str],
+    inputs: InputDocument,
 ) -> None:
     """Reprove complete saved user history; never promote an unresolved attempt."""
     before = _session_revision(str(session))
@@ -40,8 +44,9 @@ def verify_continued_private_session(
     if header.version != 3:
         raise ValueError("Continued private session needs a strict native header")
     tracked = NativeEntry.tracked_users(entries)
-    rows = InputDispositions(root / InputDispositions.filename).read().rows
-    # Any unresolved owner input except the exact new original remains a stop.
+    rows = inputs.rows
+    # The locked document already excludes proven process-local future inputs.
+    # Every other unresolved owner input except the exact original remains a stop.
     # Do not use admission rollover to hide uncertain history.
     if any(
         row.owner == owner and row.unresolved and key != source.pending_input_key

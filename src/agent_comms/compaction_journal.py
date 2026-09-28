@@ -23,10 +23,11 @@ from weakref import WeakKeyDictionary
 from .child_process import ProcessIdentity
 from .field_codec import FieldCodec
 from .input_attempt import InputAttempt
-from .input_disposition import InputDispositions, InputDocument
+from .input_disposition import FutureInputQueue, InputDispositions, InputDocument
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SelectedModel
 from .selected_source import SelectedSource
+from .store_files import _store_lock
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, Index, TypedRow, TypedTable
@@ -429,6 +430,7 @@ class CompactionJournal:
         operation_id: str | None = None,
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
+        future_queue: FutureInputQueue | None = None,
     ) -> str:
         """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
 
@@ -473,69 +475,86 @@ class CompactionJournal:
             raise ValueError("Selected summary source exceeds bound")
         from .backend import _session_revision
 
-        envelope.source.reservation_check(
-            _session_revision(canonical),
-            InputDispositions(self.path.parent / InputDispositions.filename).read(),
-        ).require_valid()
         try:
-            with (
-                InputDispositions(
-                    self.path.parent / InputDispositions.filename
-                ).reading() as inputs,
-                self._transaction() as db,
-            ):
-                if private and fresh_session is not None:
-                    assert fresh_session is not None
-                    coverage = EnrolledPrivateSession.one(db, session_file=canonical)
-                    witness = envelope.source
-                    if (
-                        coverage is None
-                        or _returned_fresh_enrollments.get(fresh_session)
-                        != (str(self.path), coverage)
-                        or witness.incarnation != coverage.incarnation
-                        or Path(canonical).parent.name != coverage.owner_lookup
-                        or witness.owner != coverage.creator
-                        or (
-                            admission_generation is not None
-                            and admission_generation != coverage.admission_generation
-                        )
-                    ):
-                        raise CompactionJournalError("Fresh private owner coverage differs")
-                    fresh_session.verify_saved_identity()
-                raw_ids = frozenset(
-                    row.input_id
-                    for row in PrivateRawInput.select(
-                        db, where="session_file=?", parameters=(canonical,)
-                    )
-                )
-                if private and fresh_session is None:
-                    from .continued_private_session import verify_continued_private_session
+            with _store_lock(self.path.parent / "wire"):
+                if future_queue is not None:
+                    from .registration import Registration
 
-                    try:
-                        verify_continued_private_session(
-                            self.path.parent, Path(canonical), envelope.source, raw_ids
+                    owner, _ = Registration(
+                        self.path.parent / "registry.json"
+                    ).live_owner_with_generation(envelope.source.incarnation.name)
+                with (
+                    InputDispositions(
+                        self.path.parent / InputDispositions.filename
+                    ).reading() as inputs,
+                    self._transaction() as db,
+                ):
+                    envelope.source.reservation_check(
+                        _session_revision(canonical), inputs
+                    ).require_valid()
+                    covered_inputs = (
+                        future_queue.compaction_inputs(envelope.source, owner, inputs)
+                        if future_queue is not None
+                        else inputs
+                    )
+                    if private and fresh_session is not None:
+                        assert fresh_session is not None
+                        coverage = EnrolledPrivateSession.one(db, session_file=canonical)
+                        witness = envelope.source
+                        if (
+                            coverage is None
+                            or _returned_fresh_enrollments.get(fresh_session)
+                            != (str(self.path), coverage)
+                            or witness.incarnation != coverage.incarnation
+                            or Path(canonical).parent.name != coverage.owner_lookup
+                            or witness.owner != coverage.creator
+                            or (
+                                admission_generation is not None
+                                and admission_generation != coverage.admission_generation
+                            )
+                        ):
+                            raise CompactionJournalError("Fresh private owner coverage differs")
+                        fresh_session.verify_saved_identity()
+                    raw_ids = frozenset(
+                        row.input_id
+                        for row in PrivateRawInput.select(
+                            db, where="session_file=?", parameters=(canonical,)
                         )
-                    except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
+                    )
+                    if private and fresh_session is None:
+                        from .continued_private_session import verify_continued_private_session
+
+                        try:
+                            verify_continued_private_session(
+                                self.path.parent,
+                                Path(canonical),
+                                envelope.source,
+                                raw_ids,
+                                covered_inputs,
+                            )
+                        except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
+                            raise CompactionJournalError(
+                                "Private selected reservation requires reviewed "
+                                "raw-history coverage floor"
+                            ) from error
+                    if CompactionOperation.select(
+                        db,
+                        where=(
+                            "session_file=? AND json_extract(state, '$.kind') IN "
+                            f"{sql_names(OperationState, unresolved=True)} LIMIT 1"
+                        ),
+                        parameters=(canonical,),
+                    ):
                         raise CompactionJournalError(
-                            "Private selected reservation requires reviewed "
-                            "raw-history coverage floor"
-                        ) from error
-                if CompactionOperation.select(
-                    db,
-                    where=(
-                        "session_file=? AND json_extract(state, '$.kind') IN "
-                        f"{sql_names(OperationState, unresolved=True)} LIMIT 1"
-                    ),
-                    parameters=(canonical,),
-                ):
-                    raise CompactionJournalError("Unresolved native commit; no selected summary")
-                if self._blocking_selected_summary(db, canonical, inputs) or (
-                    raw_ids and (not private or fresh_session is not None)
-                ):
-                    raise CompactionJournalError("Blocked selected summary; never replay")
-                SelectedSummaryAttempt(operation_id, canonical, payload, ReservedSummary()).insert(
-                    db
-                )
+                            "Unresolved native commit; no selected summary"
+                        )
+                    if self._blocking_selected_summary(db, canonical, inputs) or (
+                        raw_ids and (not private or fresh_session is not None)
+                    ):
+                        raise CompactionJournalError("Blocked selected summary; never replay")
+                    SelectedSummaryAttempt(
+                        operation_id, canonical, payload, ReservedSummary()
+                    ).insert(db)
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(
                 "Blocked selected summary or reused operation ID; never replay"
