@@ -1,0 +1,30 @@
+{
+  "admission-human-live-response.json": {
+    "runtime": "runtime-admission-20260927",
+    "source_id": "332f6440b995",
+    "seq": 23,
+    "reply_seq": 24,
+    "latency_seconds": 16.333992958068848
+  },
+  "admission-agent-live-response.json": {
+    "seq": 25
+  },
+  "relationship-cleanup-live-response.json": {
+    "runtime": "runtime-relationship-cleanup-20260928",
+    "source_id": "d9fdad2dc947",
+    "source_seq": 49,
+    "reply_seq": 50,
+    "reply": "RELATIONSHIP_CLEANUP_OK",
+    "elapsed": 22.0143780708313,
+    "verified_success": true
+  },
+  "presence-live-response.json": {
+    "runtime": "runtime-presence-20260928",
+    "source_id": "c43014d302e9",
+    "source_seq": 51,
+    "reply_seq": 52,
+    "reply": "PRESENCE_OK",
+    "elapsed": 18.81253933906555,
+    "verified_success": true
+  }
+}
