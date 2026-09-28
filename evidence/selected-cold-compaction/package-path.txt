@@ -1,1 +1,1 @@
-/home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-c6897fc58beb5b0a/node_modules/@earendil-works/pi-coding-agent
+/home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-905f9f6facb3070a/node_modules/@earendil-works/pi-coding-agent

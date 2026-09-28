@@ -90,8 +90,8 @@ function acSummaryCurrent(session, request, binding) {
     try {
         const witness = session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId);
         if (Object.keys(request.witness).some(key => witness[key] !== request.witness[key])) return false;
-        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, session.sessionManager.getLeafId());
-        return preparation && !preparation.isSplitTurn && preparation.turnPrefixMessages.isEmpty() &&
+        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId());
+        return preparation &&
             preparation.firstKeptEntryId === request.witness.firstKeptEntryId;
     } catch { return false; }
 }
@@ -129,9 +129,9 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
     let preparation;
     try { preparation = prepareCompaction(session.sessionManager.entryStore,
-        session.settingsManager.getCompactionSettings(), session.sessionManager.getLeafId()); }
+        session.settingsManager.getCompactionSettings(), session.model, session.sessionManager.getLeafId()); }
     catch { return { denial: "unsupported" }; }
-    if (!preparation || preparation.isSplitTurn || !preparation.turnPrefixMessages.isEmpty() ||
+    if (!preparation ||
         preparation.firstKeptEntryId !== request.witness.firstKeptEntryId) return { denial: "source_mismatch" };
     // Native compact() owns model-sized map/reduction requests. Total retained
     // history is not a request-size limit, and raw JSON includes metadata that

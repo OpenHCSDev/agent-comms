@@ -35,3 +35,31 @@ Pi appended those startup records. The corrected fixture includes both declarati
 and proves byte-for-byte saved-session preservation. Raw failed-attempt evidence is
 retained locally; the concise failure receipt is published. No provider requests
 occurred. New package manifest SHA prefix c6897fc58beb5b0a.
+
+## Followthrough: source and committed-context budget
+
+NEW immutable canonical package:
+/home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-905f9f6facb3070a/node_modules/@earendil-works/pi-coding-agent
+
+Mandatory APIs: prepareCompaction(store, settings, model, leafId);
+prepare_native_source(..., settings: PiCompactionSettings, context_window: int);
+OwnerCompactionCommit.prepare_source and compact_owner_once require these same
+settings/window arguments. keep_recent_tokens and allow_split_turn are deleted.
+Parent owns adaptive/manual production callers and retained ACP test migrations.
+No guessed window, default reserve or context-usage fallback.
+
+CompactionPolicy now owns exact JSON message-byte accounting shared with
+SessionContext.restore. Preparation reserves the exact cumulative file-operation
+annotation projection before selecting its suffix; the existing policy allocates
+synthesis room separately. File operations remain in their existing full details
+owner and summary annotations. compact checks the actual final synthesized
+message (including all annotations and JSON escaping) plus retained context
+before returning a result. No summary retry to make a result fit.
+
+Native compact already combines history and split-turn prefix into one result.
+The obsolete selected-readiness/summary and runtime split refusals were removed.
+The actual retained source's initial byte-only cut was whole-turn,132907bytes;
+final annotation-aware source measurements and tests follow in this PR.
+
+The original first/adaptive retained source is read only; native indexes are
+owned beneath this worktree. This package is not deployed.
