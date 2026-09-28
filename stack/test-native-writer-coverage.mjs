@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(packageDir, 'provide disposable PI_NATIVE_PACKAGE_DIR');
 const moduleURL = pathToFileURL(join(packageDir, 'dist/core/session-manager.js')).href;
-const { SessionManager } = await import(moduleURL);
+const { SessionManager, sessionEntryToContextMessages } = await import(moduleURL);
 const root = fs.mkdtempSync(join(tmpdir(), 'pr48-writer-coverage-'));
 process.env.AGENT_COMMS_SESSION_INDEX_DIR = join(root, 'indexes');
 const managers = new Set();
@@ -303,13 +303,16 @@ if (process.env.AC_CAPACITY_SESSION) {
         assert.ok(manager.getEntry('history-user-0').message.content[0].text
             .includes('OBSOLETE_LARGE_PAYLOAD'), 'old payload remains accessible');
         const mainLeaf = manager.getLeafId();
-        const main = manager.buildSessionContext();
+        const main = manager.entryStore.contextSettings(mainLeaf);
         assert.deepEqual(main.model, { provider: 'fixture', modelId: 'fixture' });
         assert.equal(main.thinkingLevel, 'low');
-        assert.ok(JSON.stringify(main.messages).includes('MAIN_RETAINED_SUMMARY'));
-        assert.ok(!JSON.stringify(main.messages).includes('OBSOLETE_LARGE_PAYLOAD'));
+        const mainMessages = JSON.stringify([...manager.buildContextEntries()
+            .flatMap(sessionEntryToContextMessages)]);
+        assert.ok(mainMessages.includes('MAIN_RETAINED_SUMMARY'));
+        assert.ok(!mainMessages.includes('OBSOLETE_LARGE_PAYLOAD'));
         manager.branch('side-compaction');
-        const side = JSON.stringify(manager.buildSessionContext().messages);
+        const side = JSON.stringify([...manager.buildContextEntries()
+            .flatMap(sessionEntryToContextMessages)]);
         assert.ok(side.includes('SIDE_SUMMARY_ONLY') && side.includes('SIDE_BRANCH_ONLY'));
         assert.ok(!side.includes('MAIN_RETAINED_SUMMARY') && !side.includes('ACTIVE_BRANCH_MARKER'));
         manager.branch(mainLeaf);

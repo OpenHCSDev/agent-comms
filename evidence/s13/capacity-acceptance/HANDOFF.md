@@ -1,14 +1,27 @@
-# S13 native history acceptance — manager layer passes; full chain still open
+# S13 native history acceptance — combined243/244 full chain passes
 
 Source: existing tests/test_owner_compaction_prepare.py and stack/test-native-writer-coverage.mjs. Parent assigned production changes to Darwin/S9 and Pascal/S10; no production mechanism added here.
 
-## Current dispatch and package dependency
+## Final combined acceptance — PASS
 
-Full combined243/244 actual CLI -> prepare -> journal/inherited-FD commit -> strict reopen -> fresh CLI remains first. Darwin24363415f8 has helper/caller/package and empty-file initialization closure outstanding; Pascal244f878403 (production22b71b1) has proof startup acceptance. Both received the package/manifest/Python checkpoint request. Parent's round2 ProcessIdentity/typed-registration Python source must be composed with these native changes; no legacy Thread(pid) adapter will be added to make an unmatched checkpoint pass.
+Darwin243 `2c03f7f` (production2755c23), combined242/244, final native package:
+`/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent`.
+Launcher: same tree `stack/bin/pi-native`; matching Python: same tree `src` (installed225/242 receiver). No package/manifest/production source mutation or validator bypass.
 
-The combined test now also requires exact selected session ID/path and native input-proof capability on both CLI launches, refusing startup proof emissions. Its observer blocks HTTP/HTTPS/net/fetch provider routes. `cli-identity-contract.log` passes this changed contract against the existing small real native fixture (VmHWM161748KiB, Python73016KiB), all generated data removed. This is a narrow test-helper validation, **not** a combined capacity result; unchanged302/604MB manager checks were not repeated.
+| Actual history bytes | Maximum native VmHWM/sample | Python VmHWM | Full chain |
+| --- | --- | --- | --- |
+|302,041,828|217,132KiB (212.0MiB)|75,920KiB|PASS|
+|604,009,724|224,084KiB (218.8MiB)|75,872KiB|PASS|
 
-Queued only after this acceptance: independent T7 terminal refactor from `~/wt/toad-refactor-dispatch-20260928/docs/refactor`. At dispatch read complete surface/rules and NRA skill; own persistent worktree, prompt code-bearing draft, full command/read/mode-switch deletion, escaped-byte contract and large-stream performance. No T7 implementation started.
+Both actual runners exited0: native CLI selected identity/capability and get_messages -> branch/replay/malformed checks -> real OwnerCompactionCommit.prepare_source -> journaled inherited-authority native commit -> strict native reopen -> fresh actual CLI selected identity/capability. The summary is a fixed literal supplied to the real owner commit API; no provider/model or CLI `compact` summary request is made in this acceptance. Darwin's separate canonical CLI compact/loopback receipts cover his summary algorithm; this receipt covers the assigned owner/journal full chain on >256MiB disk history.
+
+Two branches, retained floor/settings, old commit replay refusal and four malformed late records all pass. Original history prefix remains byte-for-byte intact and commit appends. Native128MiB old-space/240MiB RSS test budgets stayed satisfied; all exact native process identities retired. Generated histories/indexes/config files removed in finally. `combined-receipt.json`, both logs and the runner retain reproducible details.
+
+`combined-empty-file-race.log`: independent actual external initializer regression now PASS. The probe accepts refusal or coherent reload and no longer requires the old implementation's specific refusal.
+
+Receiver/test migration only: `run_receiver_225.py` loads authoritative PR232 A12 under a private test module for actual CLI cleanup/RAM observation and explicitly changes the disposable Thread fixture to this receiver's real `pid=os.getpid()` contract. It does not add a production adapter or fake birth value. The first combined attempt reached CLI open but found my probe's deleted buildSessionContext call; `combined-288-first.log` is retained as that failed test-consumer attempt. Probe now uses actual entryStore.contextSettings/buildContextEntries/sessionEntryToContextMessages; no retired API restored. Unchanged standalone manager checks were not repeated.
+
+This establishes the assigned two-size retained-history chain, not a general bound on a single giant message, unbounded full-record consumers, summary quality or parent251's newly integrated Python receiver. Parent owns final combined receiver/pin/wheel/copied-root install/activation. No live mutation, paid calls or CI wait. T7 is already published as Toad114; it did not delay this acceptance.
 
 ## What is implemented
 
@@ -29,7 +42,7 @@ Configured bundle: /home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e4
 - Initial observer syntax error fixed; failed receipt retained separately, never counted as production evidence.
 - Ruff and node syntax checks pass. Existing143MB manualACP/installed-wheel pass was not repeated.
 
-## Run when integrated native artifacts are supplied
+## Historical pre-integration runner instructions
 
 Use PYTHONPATH=src, TMPDIR under this worktree, PI_COMPACTION_TEST_PACKAGE and AC_NATIVE_STACK_BIN pointing to one matching prepared package/manifest, AC_NATIVE_LARGE_HISTORY=1.
 
