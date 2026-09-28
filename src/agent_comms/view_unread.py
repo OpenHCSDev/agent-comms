@@ -12,7 +12,7 @@ from weakref import WeakValueDictionary
 from .native_entries import NativeEntry
 from .read_ledger import ReadLedger
 from .store_files import file_revision
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 
 _INDEX_VERSION = 2
 
@@ -35,11 +35,6 @@ class TranscriptReply(ReplyIndexTable, TypedTable):
     end: int = field(metadata={"sql": Column(primary_key=True)})
     ordinal: int
     without_rowid = True
-
-
-@dataclass(frozen=True)
-class _IndexVersion(TypedRow):
-    user_version: int
 
 
 @dataclass(frozen=True)
@@ -90,7 +85,7 @@ class TranscriptReadState:
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
                 connection.execute("BEGIN IMMEDIATE")
-                (version,) = _IndexVersion.read(connection.execute("PRAGMA user_version"))
+                (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
                 if version.user_version == 0:
                     if _IndexTable.read(
                         connection.execute("SELECT name FROM sqlite_master WHERE type='table'")

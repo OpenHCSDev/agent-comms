@@ -326,6 +326,10 @@ class AgentCommsSummarizeCompaction(PiCommand):
     selected: SelectedModel
     settings: PiCompactionSettings
 
+    custom_instructions: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}
+    )
+
 
 @dataclass(frozen=True, kw_only=True)
 class AgentCommsPrepareCompaction(PiCommand):

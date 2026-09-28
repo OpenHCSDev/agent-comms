@@ -1,7 +1,5 @@
 // Injected into the exact disposable Pi RPC build, never the installed pin.
 // One operation is NOT a replay grant. Python must journal its ID before send.
-const acSummaryLimits = Object.freeze({ deadlineMs: 90000,
-    sourceBytes: 1048576, outputBytes: 262144 });
 const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // Read the actual selected SettingsManager: it already owns project trust,
@@ -38,7 +36,12 @@ function acSelectedCompactionSettings(command, session, conflict) {
             trigger: shouldCompact(command.contextTokens, model.contextWindow, settings)}};
 }
 function acValidSummaryRequest(value) {
-    if (!acExactObject(value, ["id", "type", "version", "operationId", "witness", "selected", "settings"]) ||
+    const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings"];
+    if (value && Object.hasOwn(value, "customInstructions")) {
+        if (typeof value.customInstructions !== "string" || !value.customInstructions.isWellFormed()) return false;
+        fields.push("customInstructions");
+    }
+    if (!acExactObject(value, fields) ||
         value.type !== "agent_comms_summarize_compaction" || !acSummaryId(value.operationId)) return false;
     const readiness = { id: value.id, type: "agent_comms_prepare_compaction", version: value.version,
         dryRun: true, witness: value.witness, selected: value.selected, settings: value.settings };
@@ -67,16 +70,6 @@ function acSummaryCompatible(session, binding) {
             session.model === binding.model && session.modelRuntime === binding.modelRuntime &&
             session.settingsManager === binding.settingsManager && session.sessionManager === binding.manager &&
             session.modelRuntime.getAvailableSnapshot() === binding.catalog));
-}
-function acSummarySourceBytes(preparation) {
-    // Reject giant inputs before Pi serialization. Then measure Pi's actual
-    // summary source, not an unrelated JSON/characters-per-token estimate.
-    const raw = JSON.stringify([preparation.messagesToSummarize, preparation.previousSummary]);
-    if (!raw || Buffer.byteLength(raw, "utf8") > acSummaryLimits.sourceBytes) return Infinity;
-    const transcript = serializeConversation(convertToLlm(preparation.messagesToSummarize));
-    return Buffer.byteLength(transcript, "utf8") +
-        (preparation.previousSummary === undefined ? 0 :
-            Buffer.byteLength(`<previous-summary>\n${preparation.previousSummary}\n</previous-summary>\n\n`, "utf8"));
 }
 function acSummaryCurrent(session, request, binding) {
     if (session.isCompacting || session.isStreaming || !session.isIdle || session.isRetrying ||
@@ -112,12 +105,12 @@ function acSummaryValidUsage(usage) {
         acExactObject(usage.cost, costs) && costs.every(key => cost(usage.cost[key]));
 }
 function acSummaryValidResult(result, request) {
-    const files = paths => Array.isArray(paths) && paths.length <= 256 && paths.every(path =>
+    const files = paths => Array.isArray(paths) && paths.every(path =>
         typeof path === "string" && path.length > 0 && path.isWellFormed() &&
         Buffer.byteLength(path, "utf8") <= 4096 && !path.includes("\0"));
     return acExactObject(result, ["summary", "firstKeptEntryId", "tokensBefore", "usage", "details"]) &&
         typeof result.summary === "string" && result.summary.trim().length > 0 &&
-        result.summary.isWellFormed() && Buffer.byteLength(result.summary, "utf8") <= acSummaryLimits.outputBytes &&
+        result.summary.isWellFormed() &&
         result.firstKeptEntryId === request.witness.firstKeptEntryId &&
         Number.isSafeInteger(result.tokensBefore) && result.tokensBefore >= 0 &&
         acExactObject(result.details, ["readFiles", "modifiedFiles"]) &&
@@ -126,7 +119,6 @@ function acSummaryValidResult(result, request) {
 // Synchronous admission/preparation has no auth, hooks, provider, or native append.
 function acAdmitSummary(request, session, conflict, spent, host) {
     if (spent.has(request.operationId)) return { denial: "duplicate_operation" };
-    if (spent.size >= 1024) return { denial: "limit_exceeded" };
     if (conflict) return { denial: "in_flight" };
     const readiness = acPrepareReadiness({ ...request, type: "agent_comms_prepare_compaction", dryRun: true },
         session, false);
@@ -138,10 +130,9 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     catch { return { denial: "unsupported" }; }
     if (!preparation || preparation.isSplitTurn || preparation.turnPrefixMessages.length ||
         preparation.firstKeptEntryId !== request.witness.firstKeptEntryId) return { denial: "source_mismatch" };
-    let bytes;
-    try { bytes = acSummarySourceBytes(preparation); }
-    catch { return { denial: "unsupported" }; }
-    if (bytes > acSummaryLimits.sourceBytes) return { denial: "limit_exceeded" };
+    // Native compact() owns model-sized map/reduction requests. Total retained
+    // history is not a request-size limit, and raw JSON includes metadata that
+    // never reaches the model. Do not reject a valid preparation before chunking.
     const binding = { host, runner: session.extensionRunner, streamFn: session.agent.streamFunction,
         model: session.model, modelRuntime: session.modelRuntime,
         settingsManager: session.settingsManager, manager: session.sessionManager,
@@ -150,17 +141,18 @@ function acAdmitSummary(request, session, conflict, spent, host) {
         return { denial: "source_mismatch" };
     return { preparation, binding };
 }
-async function acExecuteSummary(slot, session, request, preparation, binding) {
+async function acExecuteSummary(slot, session, request, preparation, binding, output) {
     // Native compact() owns the finite map/reduction plan and its concurrency.
     // Do not confuse its worker count with a total provider-call allowance.
-    // This selected slot retains its deadline, source/output bounds and no replay.
+    // Pi policy owns per-call output tokens. The owner enforces inactivity
+    // across correlated real progress; total history does not get a second budget.
     const inFlight = new Set();
-    let responseBytes = 0;
-    const deadline = Date.now() + acSummaryLimits.deadlineMs;
-    const timer = setTimeout(() => { slot.timedOut = true; slot.controller.abort(); }, acSummaryLimits.deadlineMs);
+    let progressSequence = 0;
+    const progress = () => output({ type: "agent_comms_compaction_progress",
+        id: request.id, operationId: request.operationId, sequence: ++progressSequence });
     const selectedStream = (model, context, options) => {
         // No standalone getAuth: actual selected streamFn resolves auth on use.
-        if (slot.controller.signal.aborted || Date.now() >= deadline ||
+        if (slot.controller.signal.aborted ||
             !acSummaryCurrent(session, request, binding) || model !== binding.model ||
             !acSummaryCompatible(session, binding)) throw new Error("Selected route changed before call");
         // Everything after this line, including auth/header hooks, is possibly
@@ -169,7 +161,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
         let stream;
         try {
             stream = binding.streamFn(model, context, { ...options, maxRetries: 0,
-                signal: slot.controller.signal, timeoutMs: Math.max(1, deadline - Date.now()) });
+                signal: slot.controller.signal });
         } catch {
             // STARTED, but the stream function gave no receipt to join. It may
             // already have started provider work; hold until external retirement.
@@ -199,28 +191,23 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
             void providerTerminal.catch(() => {}); // join below retains rejection
             let terminal;
             let sawStart = false;
-            let overBudget = false;
-            let callDeltaBytes = 0;
+            let invalidEvent = false;
             // Consume the pinned AssistantMessageEventStream itself. Its
             // `result()` buffers everything before returning; deltas permit an
             // early abort request. We STILL drain/join through terminal, even
-            // after an oversized chunk or tool call, before releasing the slot.
+            // after a tool call or malformed event, before releasing the slot.
             try {
                 for await (const event of source) {
                     const type = typeof event?.type === "string" ? event.type : null;
-                    if (!type) overBudget = true;
+                    if (!type) invalidEvent = true;
                     if (type === "start") sawStart = true;
-                    if (["text_delta", "thinking_delta", "toolcall_delta"].includes(type)) {
-                        if (typeof event.delta !== "string") overBudget = true;
-                        else {
-                            const bytes = Buffer.byteLength(event.delta, "utf8");
-                            callDeltaBytes += bytes;
-                            responseBytes += bytes;
-                        }
-                        if (responseBytes > acSummaryLimits.outputBytes) overBudget = true;
-                    }
-                    if (type?.startsWith("toolcall_")) overBudget = true;
-                    if (overBudget && !slot.controller.signal.aborted) slot.controller.abort();
+                    if (["text_delta", "thinking_delta", "toolcall_delta"].includes(type) &&
+                        typeof event.delta !== "string") invalidEvent = true;
+                    if (type?.startsWith("toolcall_")) invalidEvent = true;
+                    if (invalidEvent && !slot.controller.signal.aborted) slot.controller.abort();
+                    if (!invalidEvent && (type === "start" || type === "done" ||
+                        type === "error" || ((type === "text_delta" || type === "thinking_delta") && event.delta.length)))
+                        progress();
                     if (type === "done" || type === "error") terminal = event;
                 }
             } catch (error) {
@@ -238,8 +225,8 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
                     await new Promise(() => {});
                 }
             }
-            if (overBudget)
-                throw new Error("Selected summary stream exceeded its output limit or contained unsupported events");
+            if (invalidEvent)
+                throw new Error("Selected summary stream contained unsupported events");
             if (terminal?.type === "error")
                 throw new Error(typeof terminal.error?.errorMessage === "string" && terminal.error.errorMessage.trim()
                     ? terminal.error.errorMessage : `Selected summary provider stopped: ${terminal.reason}`);
@@ -249,13 +236,9 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
             if (!value || value.stopReason !== "stop" || !acSummaryValidUsage(value.usage) ||
                 !Array.isArray(value.content) || value.content.some(block => block.type === "toolCall"))
                 throw new Error("Invalid native summary response");
-            // A provider can emit a large single chunk, or omit deltas. The
-            // final-result check is a separate conservative ceiling, NOT a
-            // network/heap cap on untrusted provider internals.
-            const finalBytes = Buffer.byteLength(JSON.stringify(value.content), "utf8");
-            responseBytes += Math.max(0, finalBytes - callDeltaBytes);
-            if (responseBytes > acSummaryLimits.outputBytes)
-                throw new Error("Native summary result too large");
+            if (!Number.isSafeInteger(options.maxTokens) || options.maxTokens < 1 ||
+                value.usage.output > options.maxTokens)
+                throw new Error("Summary provider exceeded the native plan output token budget");
             return value;
         })();
         inFlight.add(response);
@@ -266,23 +249,20 @@ async function acExecuteSummary(slot, session, request, preparation, binding) {
         // Native Pi generation only: never call AgentSession.compact(), which
         // aborts turns, emits hooks and appends session entries.
         const result = await compact(preparation, binding.model, undefined, undefined,
-            undefined, slot.controller.signal, "low", selectedStream, undefined,
+            request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
             { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, undefined, undefined);
         await Promise.allSettled([...inFlight]);
-        if (slot.controller.signal.aborted || slot.timedOut || Date.now() >= deadline ||
+        if (slot.controller.signal.aborted ||
             !acSummaryCurrent(session, request, binding) || !acSummaryValidResult(result, request))
             throw new Error("Summary completion invalid or state changed");
         return { version: 1, status: "summarized", operationId: request.operationId,
             witness: request.witness, selected: request.selected, settings: request.settings, result };
     } catch (error) {
-        const reason = slot.timedOut
-            ? `Selected summary exceeded its ${acSummaryLimits.deadlineMs / 1000} second deadline`
-            : error instanceof Error && error.message ? error.message : "Selected summary failed without error detail";
+        const reason = error instanceof Error && error.message ? error.message : "Selected summary failed without error detail";
         return slot.started ? acSummaryUnknown(request.operationId, reason) :
             acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported");
     } finally {
         slot.controller.abort();
         await Promise.allSettled([...inFlight]); // concurrent map chunks must join before releasing slot
-        clearTimeout(timer);
     }
 }

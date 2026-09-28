@@ -31,20 +31,14 @@ async def compact_context(
     async with lock:
         if session_id in runner.active_turns:
             return {"ok": False, "error": "Wait for the current response before compacting."}
-        # The wire's current root marker owns the canonical-session boundary.
-        # Launcher spelling cannot authorize a separate stock-Pi writer here.
-        if runner.effects._private_nk_marker() is not None:
-            return {
-                "ok": False,
-                "error": "Canonical native compaction requires the owner journal bridge.",
-            }
+        canonical = runner.effects._private_nk_marker() is not None
         thread = runner.comms.registry.require(thread_name)
         if not thread.session_file:
             return {"ok": False, "error": "This thread has no saved session to compact."}
         # Pi holds an in-memory copy of the saved branch while idle. Close it
         # before the compaction writer acquires the session fence and rewrites
         # that branch; the next prompt will load the compacted file anew.
-        if persistent := runner.persistent_backends.get(session_id):
+        if not canonical and (persistent := runner.persistent_backends.get(session_id)):
             await persistent.close_idle()
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
@@ -81,16 +75,23 @@ async def compact_context(
             )
             started = True
             await runner.effects._emit_event(session_id, events.CompactionStart(reason="manual"))
-            result = await manual_compaction.ManualCompaction(
-                runner.agent_bin,
-                backend.args_for_thinking_level(
-                    backend.args_for_model(runner.agent_args, thread.model),
-                    thread.thinking_level,
-                ),
-                thread.session_file,
-                thread.worktree,
-                instructions.strip() if instructions else None,
-            ).run()
+            if canonical:
+                from .owner_compaction_manual import compact_manual_owner
+
+                result = await compact_manual_owner(
+                    runner, session_id, thread_name, info, instructions
+                )
+            else:
+                result = await manual_compaction.ManualCompaction(
+                    runner.agent_bin,
+                    backend.args_for_thinking_level(
+                        backend.args_for_model(runner.agent_args, thread.model),
+                        thread.thinking_level,
+                    ),
+                    thread.session_file,
+                    thread.worktree,
+                    instructions.strip() if instructions else None,
+                ).run()
             success = result.get("ok") is True
             # A client may receive this terminal event then raise. Do not send
             # a contradictory abort after an uncertain delivery.

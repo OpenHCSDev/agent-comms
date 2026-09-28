@@ -1,0 +1,1 @@
+{"package": "/var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent", "session_bytes": 143686055, "tokens_before": 312227, "readiness": "ready", "summary_status": "declined", "reason": "limit_exceeded", "provider_calls": 0, "requests": [], "transport": "loopback only", "native_commit_exercised": false}

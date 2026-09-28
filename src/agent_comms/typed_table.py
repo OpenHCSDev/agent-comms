@@ -264,6 +264,11 @@ class _Field:
         )
 
 
+def sql_literal(value: str | None) -> str:
+    """Quote a declaration-owned SQL constant, never a query parameter."""
+    return "NULL" if value is None else "'" + value.replace("'", "''") + "'"
+
+
 class TypedRow:
     """Typed query projection; also the shared decoder for stored row types."""
 
@@ -328,6 +333,16 @@ class SQLiteSchemaObject(TypedRow):
 @dataclass(frozen=True)
 class SQLiteForeignKeys(TypedRow):
     foreign_keys: bool
+
+
+@dataclass(frozen=True)
+class SQLiteJournalMode(TypedRow):
+    journal_mode: str
+
+
+@dataclass(frozen=True)
+class SQLiteUserVersion(TypedRow):
+    user_version: int
 
 
 class TypedTable(TypedRow, DeclaredFamily, affix="Row"):

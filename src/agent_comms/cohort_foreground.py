@@ -27,7 +27,7 @@ from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
-from .cohort_schema import install_private_cohort_schema
+from .cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from .comms import Comms
 from .coordinated_runtime import (
     CoordinatedTurn,
@@ -204,16 +204,18 @@ async def run_foreground_once(
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     with store._read_transaction():
-                        observer = store._connection.execute(
-                            "SELECT d.wire_seq FROM cohort_delivery_receipts d "
-                            "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
-                            "AND r.wire_seq=d.wire_seq WHERE r.sealed=1 "
-                            "AND d.wire_root_id=? AND d.recipient_lookup=? "
-                            "AND d.kind='unmentioned_observer' AND d.wire_seq<=? "
-                            "ORDER BY d.wire_seq DESC LIMIT 1",
-                            (wire_root_id, lookup, cursor),
-                        ).fetchone()
-                    return NoWakeReceipt(observer[0]) if observer else None
+                        observers = CohortDeliveryReceipts.read(
+                            store._connection.execute(
+                                "SELECT d.* FROM cohort_delivery_receipts d "
+                                "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
+                                "AND r.wire_seq=d.wire_seq WHERE r.sealed=1 "
+                                "AND d.wire_root_id=? AND d.recipient_lookup=? "
+                                "AND d.kind='unmentioned_observer' AND d.wire_seq<=? "
+                                "ORDER BY d.wire_seq DESC LIMIT 1",
+                                (wire_root_id, lookup, cursor),
+                            )
+                        )
+                    return NoWakeReceipt(observers[0].wire_seq) if observers else None
                 await asyncio.sleep(min(0.1, remaining))
     finally:
         # Do not stop a replacement owner. A killed process may leave a stale

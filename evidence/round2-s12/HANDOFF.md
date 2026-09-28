@@ -1,9 +1,30 @@
-# S12 continuation — active, not merge-ready closure
+# S12 source closure — review-ready; parent activation pending
 
-Foundation #230 merged at reviewed cca3b282. Caller closure draft #237. Current branch:
+Foundation #230 merged at reviewed cca3b282. Caller closure #237 is ready for review. Current branch:
 `refactor/round2-s12-caller-closure`.
 
-## Latest caller/table closure
+## Current checkpoint
+
+Code head72ca98d integrates parenta5809ab cleanly; all S12 production owners/callers are closed and the guard covers the
+whole package. Coordinator schema8; wake_claims uses assignment_id; lifecycle
+fields are the writable state owners. See final sections below for contracts,
+checks and cutover duties. Parenta5809ab (including24192b42ba and S9 73c9dbc) integrated. No S12 source
+work remains unassigned; overall S12 completion requires parent's quiet durable
+cutover and actual retained-session/RPC acceptance.
+
+Net branch difference vs parent720316a (including241 notification/test integration):
+source +3586/-3383; tests +1193/-1372.
+These are diff counts, not an assertion that every added line is authored here.
+Exact disposable index names: private_bus_checkpoint.sqlite3 (marker-coupled),
+wake_candidates.sqlite3, bus_page_index.sqlite3, transcript_reply_index.sqlite3.
+Durable goal history file: goal_history.sqlite3. Runtime/persistence contracts are
+listed below; no database was changed on the live root.
+
+## Chronological implementation receipts
+
+Earlier in-progress statements below are superseded by the current checkpoint.
+
+## Initial caller/table closure
 
 - `CurrentExecutions`, `ReplayAssessments`, `PublicationIntents` are now sole
   behavior and table owners. Deleted CurrentExecutionPointer, ReplayAssessment,
@@ -247,3 +268,269 @@ existing StoredGoal.current for snapshot rewrite; no new runtime reader. Preserv
 source backup, no resequencing/re-timestamping or observe()/automatic reconciliation
 while staging. Compare all rows after close/reopen; do not install old metadata.
 This extends parent's existing one-shot, not a second tool or migration store.
+
+## Goal attempt ledger closure (durable evidence, no automatic regrant)
+
+Six tables now derive from GoalLedgerTable capabilities: Generation, AttemptRecord,
+GoalHumanDecision, GoalProviderUsage, GoalAttemptSchema(version6), FailedTurnEvidence.
+Generation and AttemptRecord are the existing semantic owners; lifecycle/phase
+and Reservation are stored through FieldCodec, not reconstructed from flat rows.
+AttemptRecord's query keys derive as generated columns from Reservation; no
+second token/goal/generation authority is written. FailedTurnObservation keeps
+its reservation capability only in memory and persists separate non-secret
+FailedTurnEvidence after exact reservation/evidence identity agreement.
+
+Deleted runtime v2/v3/v4 migration, old DDL creators, positional writes, hand
+row mappers and three exclusive converter tests plus per-table mapper tests.
+72 behavior/family/guard checks pass,8ACP cases excluded until current parent
+registration/test fixture integration. Actual process crashes, concurrency,
+commit/fsync uncertainty, explicit retry and secret-free passive evidence tested.
+
+`goal-private/goal_attempts.sqlite3` must preserve evidence, not be blindly reset:
+goal generations/UNKNOWN attempts, human decision IDs and exact provider usage
+are durable. Parent owns the one-shot, no duplicate converter created here.
+Carry old goals to Generation(goal_id,number,typed GenerationState,attempt_id,
+ready_digest=...), attempts to AttemptRecord(Reservation(goal_id,generation,
+attempt_id,token),typed GoalAttemptPhase,progress_witness,resolution), all human
+decisions to GoalHumanDecision, exact canonical usage_json to GoalProviderUsage,
+and existing observations to FailedTurnEvidence. Preserve every token/digest,
+ID/generation, phase/resolution/witness and usage value; no backfilled observations.
+Create a fresh current schema via GoalAttemptStore.initialize(stage0700), then
+insert parent rows before their references and reopen for equality. Do NOT call
+create_goal/reserve/claim/authorize APIs when staging; those would mint authority.
+Reopened stores intentionally have empty in-memory _ready_grants/_owned; no
+previous READY or RESERVED/CLAIMED row is launch permission. UNKNOWN stays
+unresolved, explicit existing owner decisions still required. Parent must keep
+archived evidence without allowing old rows to bypass the durable admission floor.
+
+### Parent121f526 integration receipt
+
+Latest parent integrated without conflicts. Goal attempts, failure observations,
+goal history and lifecycle:82passed including the previously excluded ACP cases.
+ACP fixtures now explicitly configure the current private root and native package.
+These are real SQLite/process crash/reopen tests and controlled ACP backend tests,
+not an installed provider activation claim. Parent owns quiet installation.
+
+Inherited passive-channel suite still expects session startup to initialize the
+optional JSON awareness ledger; current parent has no initialize caller. Observed
+43passed2failed in combined diagnostic, first failures are missing ledger. No
+production fallback or invented awareness has been added. Parent channel owner
+should close that old caller/test boundary deliberately.
+
+## Certified checkpoint and candidate index closure
+
+PrefixCertificate now owns its SQLite schema via A13 (version2, physical
+`prefix_certificate`); ResponseKeys, Initials, Addressed own the other sealed
+source tables. Deleted the local DDL/insert/update generator, table-name roster
+and all raw readers. Existing writer-owned pending/final seal fsync ordering,
+complete canonical prefix verification, exact source IDs and bounded pages stay
+in place. Typed schemas/reads reject corruption; retained validated history below
+parent floor still reaches _index_row without a duplicate rejection.
+
+Existing Candidate is now its table owner (physical `candidate`), with derived
+selected/passive indexes; CandidateCheckpoint(version3, `candidate_checkpoint`)
+and CandidateResponseKey(`candidate_response_key`) own the remaining projection.
+Deleted tuple row alias, positional writes, raw checkpoint/page decoders and
+allow_v1_rebuild runtime upgrade. An incompatible/partial schema is refused
+without modifying saved rows even on rebuild=True; parent resets disposable
+old format outside src. Current-format explicit rebuild still replays a bounded
+source batch, never runs in send/wake and never grants source/native authority.
+
+Reset classification: wake_candidates.sqlite3 (+ SQLite WAL/SHM after quiet
+close) is disposable. private_bus_checkpoint.sqlite3 is a derived source index
+whose inode/content is sealed in durable WireMetadata: parent must remove/reset
+checkpoint_version/checkpoint_seal together with that sidecar, then certify the
+current canonical preserved bus using install_private_bus_checkpoint. Preserve
+last_seq, root ID, admission_after_seq and access exactly; never merely delete
+the sealed sidecar while leaving its old marker binding, nor seed native proof.
+Archived snapshots require the same current source schema/marker consistency.
+
+84 focused behavior checks passed, then18 cursor/consumer/guard checks passed.
+Tests include real on-disk rebuild/reopen, duplicate response keys across batches,
+WAL readers during writer commits, corrupt/missing index denial, fsync uncertainty,
+complete native-source page barriers. Four large scale cases excluded from the
+consumer run to keep bounded; no installed provider activation claim. Updated
+current marker fixtures to required floor/access and actual WireLog fsync seam.
+
+SQLiteJournalMode moved from owned goal ledger into A13 for reuse by candidate
+and cohort connections; S9's JournalMode/JournalSchemaObject can adopt shared
+SQLiteJournalMode/SQLiteSchemaObject at its coordinated crossing (not edited here).
+
+## Cohort, recovery, and relation owner closure
+
+Coordinator schema4 consolidates ExecutionAssignmentLink and ConnectivityFacet
+with their row declarations and deletes ExecutionClaims/Connectivity duplicates.
+Physical execution_claims now uses assignment_id; external snapshot claim_id
+spelling stays unchanged. Connectivity fields are owner/acp_client, typed enums.
+Old positional relation/connectivity writes and snapshot mappers deleted.
+Core WakeAssignment/ExecutionRecord/AttemptRecord/ResponseObligation lifecycle
+consolidation and their remaining mutation calls still open.
+
+All six cohort tables now own A13 schemas, exact checks, foreign keys, sealing
+and immutable-fact triggers. Cohort metadata and optional provenance version2.
+The recipient/sequence index derives from CohortDeliveryReceipts. Deleted two
+handwritten DDL/name rosters and redundant cohort validation copy; the sole
+assert_cohort_schema lives in cohort_schema, current imports updated. Mandatory
+installation and optional savepoints preserve omission/no-retroactive-proof
+semantics. Parent's strict admission_after_seq floor remains at acceptance and
+foreground scanning, and native proof is never manufactured from that floor.
+Cohort acceptance/receipts/pages, foreground observer projection and coverage
+reader now use typed SQL boundaries and writes; no raw row extraction remains
+in these modules. Existing _assignment conversion accepts typed WakeClaims
+while core nominal lifecycle consolidation remains open.
+
+Recovery readers/gateway now use one declared joined RecoverySelection and
+existing public ProjectedRecovery/ProjectedConnectivity types. Deleted raw
+integer/boolean checking and positional mappers. Removed obsolete forced
+execution_owner_status_idx references: the declared owner/status index serves
+those bounded queries. Existing canonical owner scope, Linux peer credentials,
+read-only rollback transaction, reply redaction and bounded child cleanup stay.
+SQLiteUserVersion is shared A13 authority; removed three identical owner-local
+classes in coordinator, reply index and awareness.
+
+Evidence: recovery/socket45pass plus one removed-helper-only failure; after
+deleting the helper assertions the retained actual corrupt-view test+family
+guards6pass. Coordinator/recovery/awareness160pass (one96child stress excluded).
+Cohort first25pass2stale parent-root expectations; consumer40pass2issues
+(archived-target message expectation, fake provider lacking actual bounded
+pre-admission wait); corrected only these seams, final7pass including actual
+concurrent DB acceptance through the existing raw writer's admission wait.
+No unchanged suite repeated afterward. Real OS socket/SQLite/child checks are
+provider-free, not an installed native activation receipt. Parent owns that.
+
+Parent-owned crossing requested before integrating this batch: history_views
+notification join must produce typed WakeClaims before _assignment, or parent
+can hand off that exact reader. Its current raw join also retains retired
+native_runtime_inputs/n.claim_id names. Parent owns history changes; no file
+edit made here, no compatibility fallback. Full237 remains draft until remaining
+core lifecycle/callers and this crossing close.
+
+All cohort/recovery/relation tables are inside coordination.sqlite3 and reset
+under parent's quiet D22 procedure, preserving WireMetadata admission_after_seq
+and access/current history. Recovery projection/gateway add no durable store.
+
+## Response obligation owner closure
+
+ResponseObligation now directly owns the obligations table and its lifecycle;
+Obligations and the snapshot mapper are deleted. Coordinator schema5 stores
+ResponseState through FieldCodec and derives state/receipt query columns. All
+obligation mutation callers write the typed lifecycle. Existing snapshot and
+external publication formats remain unchanged. BEFORE triggers read the actual
+NEW/OLD lifecycle JSON: SQLite can expose unset NEW generated columns during
+metadata-only updates. The real constraint tests caught this and now prove the
+immutable receipt and same-state metadata guards still reject invalid writes.
+186 focused coordinator/response/recovery/awareness/guard checks passed (one
+concurrent fresh-process stress test deselected). No installed activation claim.
+Runtime reset remains the entire coordination.sqlite3 under parent's quiet
+cutover; no new durable store. ExecutionRecord/AttemptRecord/WakeAssignment
+consolidation and the parent notification reader crossing remain open.
+
+## Execution and attempt owner closure
+
+Integrated parent720316a and notification241 at92b42ba before continuing.
+ExecutionRecord and AttemptRecord now own executions/attempts; removed Executions,
+Attempts, _execution, _attempt and generic _row. Typed lifecycle writes cover
+creation, retry, lease renewal, progress/finality, response settlement and verified
+owner loss. Lifecycle-derived generated query/FK columns preserve actual SQL
+constraints; BEFORE triggers use base lifecycle expressions, including declared
+transition edges. Coordinator schema7. Both remain runtime-only coordination.sqlite3.
+Current snapshot names remain projected; generated SQL columns cannot be supplied
+as constructor state. No compatibility readers or aliases.
+
+Execution acceptance:196pass with one stale constructor-field assertion corrected.
+Attempt acceptance:84 coordinator constraint cases passed, then85 changed store,
+response, nominal, recovery and family guard cases passed after correcting the
+optional no-attempt lookup. Raw SQL fixtures now write current lifecycle JSON;
+actual corruption and immutable-identity/finality tests retained. No repeated
+unchanged gateway suite. Remaining production consolidation: WakeAssignment and
+its notification/cohort/caller boundary, then global guards and final integration.
+
+## S12 source closure: wake owner, notifications, package-wide guard
+
+WakeAssignment now owns wake_claims (physical assignment_id, lifecycle).
+Deleted WakeClaims and _assignment; all coordinator/cohort/publication/native
+triage writers use declared columns. Assignment/engagement classes own SQL
+mode/verdict/binding projections; removed the old hand-listed assignment case
+constraint. Generated mode/verdict/binding columns remain read-only. Schema8
+preserves acceptance immutability, exact execution relations, transitions and
+CAS. NativeRuntimeInput/ExecutionAssignmentLink/cohort FKs and history/awareness
+joins all target assignment_id. External snapshots still spell claim_id.
+
+HistoryViews notification query uses NotificationAssignment(TypedRow), preserving
+241's process_alive/current-turn checks. Its actual current schema query no longer
+passes a raw joined SQLite row into a deleted mapper. No history/attachment data
+regions were changed. OpenCode's external SQLite snapshot importer now uses typed
+read-only projections and streams messages with explicit cursor release; no
+foreign format rewrite or source writes. This was the final raw SQL reader.
+
+The guard now covers every Python file under src/agent_comms recursively; only
+its owning typed_table implementation can create tables/write column lists/read
+raw SQLite. No adopted-module loophole, per-module allowlist or runtime converter.
+All source extraction/write/DDL checks pass. Removed the lifecycle old-format
+capture-only test and evidence/s3/legacy-lifecycles.json. New-case behavior proves
+a declared assignment gets SQLite mode/binding projection and transitions without
+editing a registry/schema roster. Existing no-replay and fault tests remain.
+
+Acceptance receipts: wake-owner-current134pass,1stress deselected; SQL boundary
+first13pass including real external OpenCode readonly file equality; remaining
+native consumers68pass after current S9 fixture corrections; two previously failing
+consumer cases2pass. Native checks include actual child release/UNKNOWN recovery,
+current proof/digest mismatch, no wake replay, pointer/revocation, cohort-page
+continuation, notifications, and shared declarations/guards. Some providers are
+fixture-controlled; this is not an installed retained-session/RPC activation proof.
+That real-path acceptance remains parent-owned. No unchanged suite rerun after
+these results. Focused lint (excluding existing long SQL lines) and diff checks pass.
+
+### Exact remaining cutover obligations (parent)
+
+No unowned S12 production table/caller remains. Source closure is ready for review;
+S12 overall is NOT globally complete until quiet activation/durable one-shots and
+real retained-session/native/RPC acceptance finish. No live operation performed.
+
+- Close owners before resetting coordination.sqlite3 and its -wal/-shm together.
+  Schema8 includes core typed lifecycle tables, cohort/awareness, response metadata,
+  native runtime input/current cursor; history/backlog never becomes fresh work.
+- Reset native_prompt_bindings.sqlite3 and closed SQLite sidecars; no manufactured
+  current proof or binding, no reissued UNKNOWN/input attempt.
+- Derived wake_candidates.sqlite3 and transcript_reply_index.sqlite3/page index
+  files may be recreated only after current canonical source validation. Candidate
+  checkpoint is an index boundary, not input/provider authority.
+- For private checkpoint sidecar reset, remove checkpoint_version/checkpoint_seal
+  from the SAME staged root marker and recertify the canonical full prefix before
+  attach. Preserve root ID, last sequence, required access and admission_after_seq.
+  Capture H once under quiet lock; current admission/scanners stay strictly >H;
+  native proof starts0 until genuine post-floor source coverage. No parallel store.
+- Durable todos.sqlite3, goal history + goal-private/goal_attempts.sqlite3,
+  transcript route/input-display annotations, read ledger and attached history
+  preserve IDs, rows, content and uncertainty through parent's one-shot stage and
+  reopen equality. Never reset them with runtime state. Parent already implements
+  actual annotation and goal conversion; do not duplicate converters in src.
+
+S9 owns compaction journal tables/adoption; its remaining JournalMode and
+JournalSchemaObject duplicates should use A13 SQLiteJournalMode/SQLiteSchemaObject.
+Parent was notified; this file was not edited. S10 owns selected_tool_broker and
+already uses NativeRuntimeInput. Parent retains actual quiet activation/unknown
+session proof and deletes one-shot tools after successful durable replacement.
+
+
+## Parent a5809ab integration checkpoint
+
+Merged parenta5809ab into S12 at72ca98d with zero conflicts. Eight focused
+notification/current-process identity and package SQL guard checks pass on the
+combined source; R0 versus parent: TypeIdentity-7, LongBooleanChain-2,
+StringSubscript-87. Prior complete-batch acceptance is unchanged; no broad suite
+was repeated. Receipts: parent-a5809ab-integration.log and parent-a5809ab-ratchet.json.
+
+History conflict guidance for any later parent edits: keep S12 NotificationAssignment
+and the typed _notification_rows/_project_notifications implementation, including
+SQLiteUserVersion; schema8 uses WakeAssignment and w.assignment_id. Preserve241
+thread.process_alive, matching active-turn ownership, blocked-prior-turn feedback,
+and notice association by message ID/sequence. Do not restore WakeClaims,
+_assignment(raw_row), or w.claim_id. Existing parent history/attachment sections
+merge unchanged. This commit requires no manual conflict resolution.
+
+No independent S12 source batch remains open. Remaining full acceptance is quiet
+runtime reset/durable one-shot carryover and retained-session/RPC proof, owned by
+parent229. Parent242 live compaction corrective activation is separate; S12 did
+not restart/install anything. S9's duplicate JournalSchemaObject/JournalMode are
+still present in73c9dbc; S9/parent owns their shared-A13 cleanup.

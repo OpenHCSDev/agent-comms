@@ -18,7 +18,12 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from .assignment_states import AssignmentState, EngagedAssignment
-from .attempt_states import AttemptState
+from .attempt_states import (
+    AttemptFailedAttempt,
+    AttemptState,
+    PromptStartingAttempt,
+    SucceededAttempt,
+)
 from .coordination import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -35,7 +40,6 @@ from .coordination import (
     ExecutionOrigin,
     ExecutionRecord,
     IntegrityViolationError,
-    MessageAudience,
     OwnerConnectivity,
     OwnerFence,
     OwnerGenerations,
@@ -53,11 +57,22 @@ from .coordination import (
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
-from .execution_states import ExecutionState, QueuedExecution
+from .execution_states import (
+    ActiveExecution,
+    CompletedExecution,
+    DeferredExecution,
+    FailedExecution,
+    PendingExecution,
+    QueuedExecution,
+)
 from .native_runtime_input import NativeRuntimeInput
-from .obligation_states import ResponseState
+from .obligation_states import (
+    DeferredResponse,
+    FailedResponse,
+    PendingResponse,
+    SilentResponse,
+)
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
-from .wake_policy import WakePolicy
 
 T = TypeVar("T")
 INITIAL_LEASE_POLICY_VERSION = "initial-lease-v1"
@@ -194,10 +209,7 @@ class VerifiedOwnerLoss:
                 process is not None
                 and current.process_identity == process
                 and (
-                    (
-                        admission_generation is not None
-                        and release.before >= admission_generation
-                    )
+                    (admission_generation is not None and release.before >= admission_generation)
                     or (
                         admission_generation is None
                         and registry.statuses[current.name].stopped
@@ -295,63 +307,6 @@ def _bounded_reason(reason: str | None) -> None:
         raise ValueError("reason code is invalid")
 
 
-def _assignment(row: sqlite3.Row) -> WakeAssignment:
-    return WakeAssignment(
-        assignment_id=row["claim_id"],
-        recipient=row["recipient"],
-        recipient_lookup=row["recipient_lookup"],
-        wire_seq=row["wire_seq"],
-        message_id=row["message_id"],
-        audience=MessageAudience(row["audience"]),
-        accepted_at_ms=row["accepted_at_ms"],
-        updated_at_ms=row["updated_at_ms"],
-        revision=row["revision"],
-        resolver_version=row["resolver_version"],
-        policy_version=row["policy_version"],
-        lifecycle=AssignmentState.decode(row["disposition"]).load(
-            WakePolicy.decode(row["wake_mode"])(),
-            row["triage_verdict"],
-            row["execution_id"],
-            row["exact_target"],
-        ),
-    )
-
-
-def _execution(row: sqlite3.Row) -> ExecutionRecord:
-    return ExecutionRecord(
-        execution_id=row["execution_id"],
-        origin=ExecutionOrigin(row["origin"]),
-        owner_thread=row["owner_thread"],
-        owner_lookup=row["owner_lookup"],
-        revision=row["revision"],
-        max_attempts=row["max_attempts"],
-        reason_code=row["reason_code"],
-        created_at_ms=row["created_at_ms"],
-        updated_at_ms=row["updated_at_ms"],
-        exact_target=row["exact_target"],
-        lifecycle=ExecutionState.decode(row["status"]).load(row["current_attempt_ordinal"]),
-    )
-
-
-def _attempt(row: sqlite3.Row) -> AttemptRecord:
-    return AttemptRecord(
-        execution_id=row["execution_id"],
-        attempt_ordinal=row["attempt_ordinal"],
-        owner_lookup=row["owner_lookup"],
-        owner_thread=row["owner_thread"],
-        owner_generation=row["owner_generation"],
-        owner_token_digest=row["owner_token_digest"],
-        revision=row["revision"],
-        last_progress_at_ms=row["last_progress_at_ms"],
-        reason_code=row["reason_code"],
-        created_at_ms=row["created_at_ms"],
-        updated_at_ms=row["updated_at_ms"],
-        lifecycle=AttemptState.decode(row["phase"]).load(
-            row["lease_expires_at_ms"], bool(row["backend_done"]), bool(row["process_dead"])
-        ),
-    )
-
-
 class MutationStore(CoordinationStore):
     """Single-writer transactions over Slice-1's frozen private schema."""
 
@@ -412,13 +367,6 @@ class MutationStore(CoordinationStore):
         finally:
             if db.in_transaction:
                 db.execute("ROLLBACK")
-
-    def _row(self, table: str, column: str, key: object) -> sqlite3.Row | None:
-        # Both identifiers are exclusively internal static call sites.
-        row: sqlite3.Row | None = self._connection.execute(
-            f"SELECT * FROM {table} WHERE {column} = ?", (key,)
-        ).fetchone()
-        return row
 
     def _participant(self, lookup: str) -> ParticipantSnapshot:
         db = self._connection
@@ -566,10 +514,10 @@ class MutationStore(CoordinationStore):
             return Applied(self._participant(lookup))
 
     def assignment(self, assignment_id: str) -> WakeAssignment:
-        row = self._row("wake_claims", "claim_id", assignment_id)
+        row = WakeAssignment.one(self._connection, assignment_id=assignment_id)
         if row is None:
             raise IdentityConflict("unknown claim")
-        return _assignment(row)
+        return row
 
     def accept_assignment(
         self, assignment: WakeAssignment
@@ -586,12 +534,18 @@ class MutationStore(CoordinationStore):
         ):
             raise IdentityConflict("claim acceptance requires initial frozen decision")
         with self._transaction() as db:
-            row = db.execute(
-                "SELECT * FROM wake_claims WHERE claim_id=? OR (recipient_lookup=? AND wire_seq=?)",
-                (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq),
-            ).fetchone()
+            rows = WakeAssignment.read(
+                db.execute(
+                    (
+                        "SELECT * FROM wake_claims WHERE assignment_id=? OR (recipient_lookup="
+                        "? AND wire_seq=?) LIMIT 1"
+                    ),
+                    (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq),
+                )
+            )
+            row = next(iter(rows), None)
             if row is not None:
-                current = _assignment(row)
+                current = row
                 immutable = (
                     "assignment_id",
                     "recipient",
@@ -608,30 +562,7 @@ class MutationStore(CoordinationStore):
                 ):
                     raise IdentityConflict("accepted claim identity conflicts")
                 return AlreadyApplied(current)
-            db.execute(
-                "INSERT INTO wake_claims(claim_id,recipient,recipient_lookup,wire_seq,"
-                "message_id,exact_target,audience,wake_mode,triage_verdict,disposition,"
-                "resolver_version,policy_version,accepted_at_ms,updated_at_ms,"
-                "revision,execution_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    assignment.assignment_id,
-                    assignment.recipient,
-                    assignment.recipient_lookup,
-                    assignment.wire_seq,
-                    assignment.message_id,
-                    None,
-                    assignment.audience.value,
-                    assignment.lifecycle.mode.declared_name,
-                    assignment.lifecycle.verdict if assignment.lifecycle.verdict else None,
-                    assignment.lifecycle.declared_name,
-                    assignment.resolver_version,
-                    assignment.policy_version,
-                    assignment.accepted_at_ms,
-                    assignment.updated_at_ms,
-                    1,
-                    None,
-                ),
-            )
+            assignment.insert(db)
             return Applied(assignment)
 
     def transition_preengagement(
@@ -663,17 +594,13 @@ class MutationStore(CoordinationStore):
             )
             if after.lifecycle.mode != current.lifecycle.mode:
                 raise IdentityConflict("preengagement cannot change frozen wake policy")
-            db.execute(
-                "UPDATE wake_claims SET disposition=?,triage_verdict=?,updated_at_ms=?,"
-                "revision=? WHERE claim_id=? AND revision=?",
-                (
-                    disposition.declared_name,
-                    after.lifecycle.verdict,
-                    after.updated_at_ms,
-                    after.revision,
-                    assignment_id,
-                    expected_revision,
-                ),
+            WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=?",
+                parameters=(assignment_id, expected_revision),
+                lifecycle=after.lifecycle,
+                updated_at_ms=after.updated_at_ms,
+                revision=after.revision,
             )
             return Applied(after)
 
@@ -683,40 +610,24 @@ class MutationStore(CoordinationStore):
 
     def _snapshot(self, execution_id: str) -> RecoverySnapshot:
         db = self._connection
-        row = self._row("executions", "execution_id", execution_id)
+        row = ExecutionRecord.one(self._connection, execution_id=execution_id)
         if row is None:
             raise IdentityConflict("unknown execution")
-        execution = _execution(row)
-        attempt_row = db.execute(
-            "SELECT * FROM attempts WHERE execution_id=? AND attempt_ordinal=?",
-            (execution_id, execution.lifecycle.current_attempt_ordinal),
-        ).fetchone()
-        attempt = _attempt(attempt_row) if attempt_row else None
+        execution = row
+        ordinal = execution.lifecycle.current_attempt_ordinal
+        attempt = (
+            AttemptRecord.one(db, execution_id=execution_id, attempt_ordinal=ordinal)
+            if ordinal is not None
+            else None
+        )
         links = tuple(
-            ExecutionAssignmentLink(r["execution_id"], r["claim_id"], r["ordinal"])
-            for r in db.execute(
-                "SELECT * FROM execution_claims WHERE execution_id=? ORDER BY ordinal",
-                (execution_id,),
+            ExecutionAssignmentLink.select(
+                db, where="execution_id=?", parameters=(execution_id,), order_by=("ordinal",)
             )
         )
         assignments = tuple(self.assignment(link.assignment_id) for link in links)
         replay = ReplayAssessments.one(db, execution_id=execution_id)
-        obligation_row = self._row("obligations", "execution_id", execution_id)
-        obligation = (
-            ResponseObligation(
-                execution_id=execution_id,
-                exact_target=obligation_row["exact_target"],
-                reason_code=obligation_row["reason_code"],
-                created_at_ms=obligation_row["created_at_ms"],
-                updated_at_ms=obligation_row["updated_at_ms"],
-                revision=obligation_row["revision"],
-                lifecycle=ResponseState.decode(obligation_row["state"]).load(
-                    obligation_row["receipt_message_id"], obligation_row["receipt_seq"]
-                ),
-            )
-            if obligation_row
-            else None
-        )
+        obligation = ResponseObligation.one(db, execution_id=execution_id)
         # Read-only projections do not grant Tx1, append, Tx2 or resolution.
         intent = PublicationIntents.one(db, execution_id=execution_id)
         receipt_row = PublicationReceipts.one(db, execution_id=execution_id)
@@ -736,18 +647,7 @@ class MutationStore(CoordinationStore):
                     (execution_id,),
                 )
             )
-        connectivity_row = self._row("connectivity", "execution_id", execution_id)
-        connectivity = (
-            ConnectivityFacet(
-                execution_id,
-                OwnerConnectivity(connectivity_row["owner_state"]),
-                ACPClientConnectivity(connectivity_row["acp_client_state"]),
-                connectivity_row["revision"],
-                connectivity_row["observed_at_ms"],
-            )
-            if connectivity_row
-            else None
-        )
+        connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
         audit = next(
             iter(
                 RecoveryAudit.read(
@@ -795,7 +695,7 @@ class MutationStore(CoordinationStore):
         if origin is not ExecutionOrigin.WIRE and (assignment_ids or exact_target is not None):
             raise IdentityConflict("claimless execution cannot bind claims")
         with self._transaction() as db:
-            row = self._row("executions", "execution_id", execution_id)
+            row = ExecutionRecord.one(self._connection, execution_id=execution_id)
             if row is not None:
                 snapshot = self.snapshot(execution_id)
                 e = snapshot.execution
@@ -824,22 +724,19 @@ class MutationStore(CoordinationStore):
             if len(set(assignment_ids)) != len(assignment_ids):
                 raise IdentityConflict("duplicate claim membership")
             now = self._now()
-            db.execute(
-                "INSERT INTO executions(execution_id,origin,status,exact_target,owner_thread,"
-                "owner_lookup,revision,current_attempt_ordinal,max_attempts,reason_code,"
-                "created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,1,NULL,?,NULL,?,?)",
-                (
-                    execution_id,
-                    origin.value,
-                    QueuedExecution.declared_name,
-                    exact_target,
-                    owner_thread,
-                    owner_lookup,
-                    max_attempts,
-                    now,
-                    now,
-                ),
-            )
+            ExecutionRecord(
+                execution_id=execution_id,
+                origin=origin,
+                lifecycle=QueuedExecution(),
+                exact_target=exact_target,
+                owner_thread=owner_thread,
+                owner_lookup=owner_lookup,
+                revision=1,
+                max_attempts=max_attempts,
+                reason_code=None,
+                created_at_ms=now,
+                updated_at_ms=now,
+            ).insert(db)
             for ordinal, assignment_id in enumerate(assignment_ids):
                 assignment = self.assignment(assignment_id)
                 if (
@@ -851,29 +748,25 @@ class MutationStore(CoordinationStore):
                 decision = EngagedAssignment.build(
                     assignment.lifecycle.mode, execution_id, exact_target
                 )
-                db.execute(
-                    "UPDATE wake_claims SET disposition=?,triage_verdict=?,exact_target=?,"
-                    "execution_id=?,revision=revision+1,updated_at_ms=? WHERE claim_id=?",
-                    (
-                        decision.declared_name,
-                        decision.verdict,
-                        decision.exact_target,
-                        decision.execution_id,
-                        self._now(assignment.updated_at_ms),
-                        assignment_id,
-                    ),
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=?",
+                    parameters=(assignment_id,),
+                    lifecycle=decision,
+                    revision=assignment.revision + 1,
+                    updated_at_ms=self._now(assignment.updated_at_ms),
                 )
-                db.execute(
-                    "INSERT INTO execution_claims VALUES (?,?,?)",
-                    (execution_id, assignment_id, ordinal),
-                )
+                ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
             if origin is ExecutionOrigin.WIRE:
-                db.execute(
-                    "INSERT INTO obligations(execution_id,exact_target,state,reason_code,"
-                    "created_at_ms,updated_at_ms,revision,receipt_message_id,receipt_seq) "
-                    "VALUES (?,?,'pending',NULL,?,?,1,NULL,NULL)",
-                    (execution_id, exact_target, now, now),
-                )
+                ResponseObligation(
+                    execution_id,
+                    exact_target,
+                    PendingResponse(),
+                    None,
+                    now,
+                    now,
+                    1,
+                ).insert(db)
             return Applied(self.snapshot(execution_id))
 
     def mark_pending(
@@ -885,10 +778,13 @@ class MutationStore(CoordinationStore):
                 raise StaleRevision("execution revision changed")
             if not snapshot.execution.lifecycle.queued:
                 raise IdentityConflict("only queued executions can become pending")
-            db.execute(
-                "UPDATE executions SET status='pending',revision=revision+1,"
-                "updated_at_ms=? WHERE execution_id=? AND revision=?",
-                (self._now(snapshot.execution.updated_at_ms), execution_id, expected_revision),
+            ExecutionRecord.update(
+                db,
+                where="execution_id=? AND revision=?",
+                parameters=(execution_id, expected_revision),
+                lifecycle=PendingExecution(),
+                revision=expected_revision + 1,
+                updated_at_ms=self._now(snapshot.execution.updated_at_ms),
             )
             return Applied(self.snapshot(execution_id))
 
@@ -910,24 +806,38 @@ class MutationStore(CoordinationStore):
                 raise StaleRevision("execution revision changed")
             if not execution.lifecycle.unstarted:
                 raise IdentityConflict("unstarted failure requires queued/pending work")
-            state = "failed"
             now = self._now(execution.updated_at_ms)
-            db.execute(
-                "UPDATE executions SET status=?,revision=revision+1,"
-                "reason_code=?,updated_at_ms=? WHERE execution_id=?",
-                (state, reason_code, now, execution_id),
+            ExecutionRecord.update(
+                db,
+                where="execution_id=?",
+                parameters=(execution_id,),
+                lifecycle=FailedExecution(),
+                revision=execution.revision + 1,
+                reason_code=reason_code,
+                updated_at_ms=now,
             )
             if before.obligation is not None:
-                db.execute(
-                    "UPDATE obligations SET state=?,revision=revision+1,"
-                    "reason_code=?,updated_at_ms=? WHERE execution_id=?",
-                    (state, reason_code, self._now(before.obligation.updated_at_ms), execution_id),
+                ResponseObligation.update(
+                    db,
+                    where="execution_id=?",
+                    parameters=(execution_id,),
+                    lifecycle=FailedResponse(),
+                    revision=before.obligation.revision + 1,
+                    reason_code=reason_code,
+                    updated_at_ms=self._now(before.obligation.updated_at_ms),
                 )
             for assignment in before.assignments:
-                db.execute(
-                    "UPDATE wake_claims SET disposition=?,revision=revision+1,"
-                    "updated_at_ms=? WHERE claim_id=?",
-                    (state, self._now(assignment.updated_at_ms), assignment.assignment_id),
+                WakeAssignment.update(
+                    db,
+                    where="assignment_id=?",
+                    parameters=(assignment.assignment_id,),
+                    lifecycle=FailedExecution.assignment_state().build(
+                        assignment.lifecycle.mode,
+                        assignment.lifecycle.execution_id,
+                        assignment.lifecycle.exact_target,
+                    ),
+                    revision=assignment.revision + 1,
+                    updated_at_ms=self._now(assignment.updated_at_ms),
                 )
             return Applied(self.snapshot(execution_id))
 
@@ -972,12 +882,8 @@ class MutationStore(CoordinationStore):
             )
             # Replay identity is immutable creation identity, NEVER mutable phase,
             # lease, replay, claims, obligation, pointer or CAS revisions.
-            prior = db.execute(
-                "SELECT * FROM attempts WHERE execution_id=? AND owner_token_digest=?",
-                (execution_id, digest),
-            ).fetchone()
-            if prior is not None:
-                old = _attempt(prior)
+            old = AttemptRecord.one(db, execution_id=execution_id, owner_token_digest=digest)
+            if old is not None:
                 if (
                     old.attempt_ordinal,
                     old.owner_lookup,
@@ -1005,9 +911,7 @@ class MutationStore(CoordinationStore):
                         ),
                     )
                 )
-            if db.execute(
-                "SELECT 1 FROM attempts WHERE owner_token_digest=?", (digest,)
-            ).fetchone():
+            if AttemptRecord.one(db, owner_token_digest=digest) is not None:
                 raise IdentityConflict("prepared fence token has already been issued")
             participant = self._participant(execution.owner_lookup)
             if not participant.committed or (
@@ -1045,28 +949,28 @@ class MutationStore(CoordinationStore):
             created = self._now(execution.updated_at_ms)
             # Versioned fixed policy: no caller-selected initial lease, no semantic mirror.
             lease = created + INITIAL_LEASE_DURATION_MS
-            db.execute(
-                "INSERT INTO attempts(execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-                "owner_generation,owner_token_digest,phase,revision,lease_expires_at_ms,"
-                "last_progress_at_ms,backend_done,process_dead,reason_code,"
-                "created_at_ms,updated_at_ms) "
-                "VALUES (?,?,?,?,?,?,'prompt_starting',1,?,NULL,0,0,NULL,?,?)",
-                (
-                    execution_id,
-                    ordinal,
-                    execution.owner_lookup,
-                    owner_thread,
-                    owner_generation,
-                    digest,
-                    lease,
-                    created,
-                    created,
-                ),
-            )
-            db.execute(
-                "UPDATE executions SET status='active',current_attempt_ordinal=?,"
-                "revision=revision+1,reason_code=NULL,updated_at_ms=? WHERE execution_id=?",
-                (ordinal, created, execution_id),
+            AttemptRecord(
+                execution_id=execution_id,
+                attempt_ordinal=ordinal,
+                owner_lookup=execution.owner_lookup,
+                owner_thread=owner_thread,
+                owner_generation=owner_generation,
+                owner_token_digest=digest,
+                lifecycle=PromptStartingAttempt(lease),
+                revision=1,
+                last_progress_at_ms=None,
+                reason_code=None,
+                created_at_ms=created,
+                updated_at_ms=created,
+            ).insert(db)
+            ExecutionRecord.update(
+                db,
+                where="execution_id=?",
+                parameters=(execution_id,),
+                lifecycle=ActiveExecution(ordinal),
+                revision=execution.revision + 1,
+                reason_code=None,
+                updated_at_ms=created,
             )
             CurrentExecutions.update(
                 db,
@@ -1094,17 +998,28 @@ class MutationStore(CoordinationStore):
                 and snapshot.obligation is not None
                 and snapshot.obligation.lifecycle.deferred
             ):
-                db.execute(
-                    "UPDATE obligations SET state='pending',revision=revision+1,"
-                    "reason_code=NULL,updated_at_ms=? WHERE execution_id=?",
-                    (self._now(snapshot.obligation.updated_at_ms), execution_id),
+                ResponseObligation.update(
+                    db,
+                    where="execution_id=?",
+                    parameters=(execution_id,),
+                    lifecycle=PendingResponse(),
+                    revision=snapshot.obligation.revision + 1,
+                    reason_code=None,
+                    updated_at_ms=self._now(snapshot.obligation.updated_at_ms),
                 )
             if execution.lifecycle.retry:
                 for assignment in snapshot.assignments:
-                    db.execute(
-                        "UPDATE wake_claims SET disposition='engaged',revision=revision+1,"
-                        "updated_at_ms=? WHERE claim_id=?",
-                        (self._now(assignment.updated_at_ms), assignment.assignment_id),
+                    WakeAssignment.update(
+                        db,
+                        where="assignment_id=?",
+                        parameters=(assignment.assignment_id,),
+                        lifecycle=EngagedAssignment.build(
+                            assignment.lifecycle.mode,
+                            assignment.lifecycle.execution_id,
+                            assignment.lifecycle.exact_target,
+                        ),
+                        revision=assignment.revision + 1,
+                        updated_at_ms=self._now(assignment.updated_at_ms),
                     )
             current = self.snapshot(execution_id)
             return Applied(
@@ -1133,15 +1048,13 @@ class MutationStore(CoordinationStore):
                 attempt.lifecycle.lease_expires_at_ms or 0,
                 self._now(attempt.updated_at_ms) + duration_ms,
             )
-            db.execute(
-                "UPDATE attempts SET lease_expires_at_ms=?,revision=revision+1,"
-                "updated_at_ms=? WHERE execution_id=? AND attempt_ordinal=?",
-                (
-                    expiry,
-                    self._now(attempt.updated_at_ms),
-                    fence.execution_id,
-                    fence.attempt_ordinal,
-                ),
+            AttemptRecord.update(
+                db,
+                where="execution_id=? AND attempt_ordinal=?",
+                parameters=(fence.execution_id, fence.attempt_ordinal),
+                lifecycle=replace(attempt.lifecycle, lease_expires_at_ms=expiry),
+                revision=attempt.revision + 1,
+                updated_at_ms=self._now(attempt.updated_at_ms),
             )
             after = self.snapshot(fence.execution_id)
             assert after.attempt is not None
@@ -1204,20 +1117,19 @@ class MutationStore(CoordinationStore):
             if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
                 raise RecoveryBlocked("final backend evidence forbids further phase or progress")
         now = self._now(attempt.updated_at_ms)
-        db.execute(
-            "UPDATE attempts SET phase=?,revision=revision+1,updated_at_ms=?,"
-            "last_progress_at_ms=?,backend_done=?,process_dead=?,reason_code=? "
-            "WHERE execution_id=? AND attempt_ordinal=?",
-            (
-                phase.declared_name,
-                now,
-                now if progress else attempt.last_progress_at_ms,
-                int(attempt.lifecycle.backend_done or backend_done),
-                int(attempt.lifecycle.process_dead or process_dead),
-                reason_code,
-                fence.execution_id,
-                fence.attempt_ordinal,
+        AttemptRecord.update(
+            db,
+            where="execution_id=? AND attempt_ordinal=?",
+            parameters=(fence.execution_id, fence.attempt_ordinal),
+            lifecycle=phase.load(
+                attempt.lifecycle.lease_expires_at_ms,
+                attempt.lifecycle.backend_done or backend_done,
+                attempt.lifecycle.process_dead or process_dead,
             ),
+            revision=attempt.revision + 1,
+            updated_at_ms=now,
+            last_progress_at_ms=now if progress else attempt.last_progress_at_ms,
+            reason_code=reason_code,
         )
         after = self.snapshot(fence.execution_id)
         assert after.attempt is not None
@@ -1352,17 +1264,13 @@ class MutationStore(CoordinationStore):
             ):
                 raise StaleRevision("connectivity or pointer revision changed")
             now = self._now(before.observed_at_ms if before else 0)
-            if before:
-                db.execute(
-                    "UPDATE connectivity SET owner_state=?,acp_client_state=?,"
-                    "revision=revision+1,observed_at_ms=? WHERE execution_id=?",
-                    (owner.value, acp_client.value, now, fence.execution_id),
-                )
-            else:
-                db.execute(
-                    "INSERT INTO connectivity VALUES (?,?,?,?,?)",
-                    (fence.execution_id, owner.value, acp_client.value, 1, now),
-                )
+            ConnectivityFacet(
+                fence.execution_id,
+                owner,
+                acp_client,
+                before.revision + 1 if before else 1,
+                now,
+            ).upsert(db)
             return Applied(self.snapshot(fence.execution_id))
 
     def append_recovery_audit(
@@ -1420,39 +1328,66 @@ class MutationStore(CoordinationStore):
                 raise IdentityConflict("silent completion requires settling phase")
             if snapshot.obligation is not None and not snapshot.obligation.lifecycle.retryable:
                 raise IdentityConflict("wire completion requires nonpublication obligation")
-            status, phase, disposition = "completed", "succeeded", "completed"
         else:
             authorized = retry_disposition_authorized(
                 execution, snapshot.replay, snapshot.obligation
             )
-            status = "deferred" if authorized else "failed"
-            phase = "attempt_failed"
-            disposition = status
         now = self._now(max(execution.updated_at_ms, attempt.updated_at_ms))
-        db.execute(
-            "UPDATE attempts SET phase=?,lease_expires_at_ms=NULL,"
-            "revision=revision+1,updated_at_ms=?,reason_code=? "
-            "WHERE execution_id=? AND attempt_ordinal=?",
-            (phase, now, reason_code, execution.execution_id, attempt.attempt_ordinal),
+        AttemptRecord.update(
+            db,
+            where="execution_id=? AND attempt_ordinal=?",
+            parameters=(execution.execution_id, attempt.attempt_ordinal),
+            lifecycle=SucceededAttempt() if success else AttemptFailedAttempt(),
+            revision=attempt.revision + 1,
+            updated_at_ms=now,
+            reason_code=reason_code,
         )
-        db.execute(
-            "UPDATE executions SET status=?,revision=revision+1,"
-            "updated_at_ms=?,reason_code=? WHERE execution_id=?",
-            (status, now, reason_code, execution.execution_id),
+        execution_state = (
+            CompletedExecution(attempt.attempt_ordinal)
+            if success
+            else (
+                DeferredExecution(attempt.attempt_ordinal)
+                if authorized
+                else FailedExecution(attempt.attempt_ordinal)
+            )
+        )
+        ExecutionRecord.update(
+            db,
+            where="execution_id=?",
+            parameters=(execution.execution_id,),
+            lifecycle=execution_state,
+            revision=execution.revision + 1,
+            updated_at_ms=now,
+            reason_code=reason_code,
         )
         if snapshot.obligation is not None:
             obligation = snapshot.obligation
-            target = "silent" if success else ("deferred" if authorized else "failed")
-            db.execute(
-                "UPDATE obligations SET state=?,revision=revision+1,"
-                "updated_at_ms=?,reason_code=? WHERE execution_id=?",
-                (target, self._now(obligation.updated_at_ms), reason_code, execution.execution_id),
+            response = (
+                SilentResponse()
+                if success
+                else (DeferredResponse() if authorized else FailedResponse())
+            )
+            ResponseObligation.update(
+                db,
+                where="execution_id=?",
+                parameters=(execution.execution_id,),
+                lifecycle=response,
+                revision=obligation.revision + 1,
+                updated_at_ms=self._now(obligation.updated_at_ms),
+                reason_code=reason_code,
             )
         for assignment in snapshot.assignments:
-            db.execute(
-                "UPDATE wake_claims SET disposition=?,revision=revision+1,"
-                "updated_at_ms=? WHERE claim_id=?",
-                (disposition, self._now(assignment.updated_at_ms), assignment.assignment_id),
+            WakeAssignment.update(
+                db,
+                where="assignment_id=?",
+                parameters=(assignment.assignment_id,),
+                lifecycle=execution_state.assignment_state().build(
+                    assignment.lifecycle.mode,
+                    assignment.lifecycle.execution_id,
+                    assignment.lifecycle.exact_target,
+                ),
+                revision=assignment.revision + 1,
+                updated_at_ms=self._now(assignment.updated_at_ms),
             )
         CurrentExecutions.update(
             db,
@@ -1721,16 +1656,18 @@ class RecoveryMonitorCapability:
                     )
             elif new_facts:
                 ReplayAssessments(execution_id, new_facts, False, True, 1).insert(db)
-            db.execute(
-                "UPDATE attempts SET process_dead=1,backend_done=?,revision=revision+1,"
-                "updated_at_ms=?,reason_code=? WHERE execution_id=? AND attempt_ordinal=?",
-                (
-                    int(attempt.lifecycle.backend_done or evidence.backend_done),
-                    now,
-                    evidence.reason_code,
-                    execution_id,
-                    ordinal,
+            AttemptRecord.update(
+                db,
+                where="execution_id=? AND attempt_ordinal=?",
+                parameters=(execution_id, ordinal),
+                lifecycle=replace(
+                    attempt.lifecycle,
+                    process_dead=True,
+                    backend_done=attempt.lifecycle.backend_done or evidence.backend_done,
                 ),
+                revision=attempt.revision + 1,
+                updated_at_ms=now,
+                reason_code=evidence.reason_code,
             )
             unresolved = snapshot.publication_intent is not None
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:

@@ -28,9 +28,16 @@ from pathlib import Path
 from typing import Any
 
 from .child_process import BoundedRun, ParentLifeline
-from .coordination import COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION
+from .coordination import (
+    COORDINATION_SCHEMA_VERSION,
+    COORDINATION_SNAPSHOT_VERSION,
+    ExecutionRecord,
+    OwnerGenerations,
+    SchemaMeta,
+)
 from .field_codec import FieldCodec
 from .recovery_projection import RecoveryRequest, read_recovery_projection
+from .typed_table import SQLiteJournalMode, SQLiteUserVersion
 
 _MAX_REQUEST = 1024
 _MAX_REPLY = 4096
@@ -129,49 +136,58 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
     ) as db:
         db.execute("PRAGMA query_only=ON")
         db.execute("PRAGMA busy_timeout=250")
-        if db.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
+        if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
+            SQLiteJournalMode("delete")
+        ]:
             raise GatewayUnavailableError("unsupported coordinator journal")
         db.execute("BEGIN")
         try:
-            if db.execute("PRAGMA user_version").fetchone()[0] != COORDINATION_SCHEMA_VERSION:
+            if SQLiteUserVersion.read(db.execute("PRAGMA user_version")) != [
+                SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
+            ]:
                 raise GatewayUnavailableError("unsupported coordinator schema")
-            meta = db.execute(
-                "SELECT schema_version,snapshot_version FROM schema_meta WHERE singleton=1"
-            ).fetchone()
-            if meta != (COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION):
+            if SchemaMeta.one(db, singleton=1) != SchemaMeta(
+                singleton=1,
+                schema_version=COORDINATION_SCHEMA_VERSION,
+                snapshot_version=COORDINATION_SNAPSHOT_VERSION,
+            ):
                 raise GatewayUnavailableError("unsupported coordinator snapshot")
-            # owner_thread has no v2 index: cap the entire registered-owner
+            # owner_thread has no index: cap the entire registered-owner
             # cardinality before the exact-match join can scan it.
-            owners = db.execute(
-                "SELECT owner_lookup FROM owner_generations LIMIT ?",
-                (_MAX_REGISTERED_OWNERS + 1,),
-            ).fetchall()
+            owners = OwnerGenerations.read(
+                db.execute(
+                    "SELECT * FROM owner_generations LIMIT ?",
+                    (_MAX_REGISTERED_OWNERS + 1,),
+                )
+            )
             if len(owners) > _MAX_REGISTERED_OWNERS:
                 raise GatewayUnavailableError("registered owner scan exceeds budget")
             # Exact current canonical name only. Aliases, claims of lookup, and
             # registration of a human participant are not accepted.
-            matches = db.execute(
-                "SELECT g.owner_lookup,g.owner_thread FROM owner_generations g "
-                "JOIN participants p ON p.participant_lookup=g.owner_lookup "
-                "WHERE g.owner_thread=? AND p.committed=1 LIMIT 2",
-                (requested,),
-            ).fetchall()
+            matches = OwnerGenerations.read(
+                db.execute(
+                    "SELECT g.* FROM owner_generations g "
+                    "JOIN participants p ON p.participant_lookup=g.owner_lookup "
+                    "WHERE g.owner_thread=? AND p.committed=1 LIMIT 2",
+                    (requested,),
+                )
+            )
             if len(matches) != 1:
                 raise GatewayUnavailableError("unknown or ambiguous owner")
-            owner_lookup, owner_thread = matches[0]
-            if not isinstance(owner_lookup, str) or owner_thread != requested:
+            owner = matches[0]
+            if owner.owner_thread != requested:
                 raise GatewayUnavailableError("invalid canonical owner")
-            # Index execution_owner_status_idx has owner_lookup as its first
-            # column. Bound even the frozen reader's latest-execution scan.
-            count = db.execute(
-                "SELECT execution_id FROM executions INDEXED BY execution_owner_status_idx "
-                "WHERE owner_lookup=? LIMIT ?",
-                (owner_lookup, _MAX_OWNER_EXECUTIONS + 1),
-            ).fetchall()
+            # The declared owner/status index bounds the frozen reader's scan.
+            count = ExecutionRecord.read(
+                db.execute(
+                    "SELECT * FROM executions WHERE owner_lookup=? LIMIT ?",
+                    (owner.owner_lookup, _MAX_OWNER_EXECUTIONS + 1),
+                )
+            )
             if len(count) > _MAX_OWNER_EXECUTIONS:
                 raise GatewayUnavailableError("owner projection exceeds bounded scan")
             result = read_recovery_projection(
-                database, owner_lookup=owner_lookup, owner_thread=owner_thread
+                database, owner_lookup=owner.owner_lookup, owner_thread=owner.owner_thread
             )
             encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
             if len(encoded) > _MAX_REPLY:

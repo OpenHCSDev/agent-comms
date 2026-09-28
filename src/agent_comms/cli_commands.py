@@ -603,3 +603,26 @@ class PollCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> Any:
         return ctx.views.poll(self.thread)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
+    help = "Inspect durable native compaction outcomes without replaying work"
+    thread: str = option("--thread")
+
+    def apply(self, ctx: Comms) -> Any:
+        from .compaction_journal import CompactionJournal
+        from .field_codec import FieldCodec
+
+        thread = ctx.registry.require(self.thread)
+        path = ctx.root / "compaction-commits.sqlite3"
+        if not thread.session_file or not path.exists():
+            return {"thread": thread.name, "attempts": []}
+        journal = CompactionJournal(path)
+        return {
+            "thread": thread.name,
+            "attempts": [
+                {"operation_id": row.operation_id, "state": FieldCodec.encode(row.state)}
+                for row in journal.selected_summaries(thread.session_file)
+            ],
+        }

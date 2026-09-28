@@ -340,13 +340,14 @@ class CompactionJournal:
                 selected = self._blocking_selected_summary(db, canonical, inputs)
                 if selected and (
                     len(selected) != 1
-                    or not selected[0].state.reservable_commit
                     or type(intent) is not dict
                     or intent.get("selectedSummaryOperationId") != selected[0].operation_id
                 ):
                     raise CompactionJournalError(
                         "Blocked selected summary; unrelated native commit forbidden"
                     )
+                if selected and not selected[0].state.reservable_commit:
+                    raise CompactionJournalError("Selected summary is not a commit reservation")
                 CompactionOperation(commit_id, canonical, payload, IntentOperation(), None).insert(
                     db
                 )
@@ -613,7 +614,8 @@ class CompactionJournal:
             for attempt in SelectedSummaryAttempt.select(
                 db, where="session_file=?", parameters=(canonical,)
             )
-            if not attempt.original_has_started(inputs.rows)
+            if not attempt.state.settled_without_original
+            and not attempt.original_has_started(inputs.rows)
         )
 
     def blocking_selected_summary(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
@@ -702,6 +704,36 @@ class CompactionJournal:
                 raise CompactionJournalError("Exact durable private raw prewrite marker required")
             yield
 
+    def refuse_selected_summary(self, operation_id: str, reason: str) -> None:
+        """Retain the observed native prestart failure without admitting any input."""
+        with self._transaction() as db:
+            row = SelectedSummaryAttempt.one(db, operation_id=operation_id)
+            if row is None:
+                raise CompactionJournalError("Selected summary refusal transition forbidden")
+            target = row.state.refuse(reason)
+            SelectedSummaryAttempt.update(
+                db, where="operation_id=?", parameters=(operation_id,), state=target
+            )
+
+    def retire_refused_summary(self, attempt: SelectedSummaryAttempt) -> None:
+        """Explicitly retire a known refusal without admitting its original input."""
+        target = attempt.state.manual_recovery()
+        with self._transaction() as db:
+            row = SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id)
+            if row != attempt:
+                raise CompactionJournalError("Native refusal changed before explicit retirement")
+            SelectedSummaryAttempt.update(
+                db, where="operation_id=?", parameters=(attempt.operation_id,), state=target
+            )
+
+    def selected_summaries(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
+        """Inspect every recorded result without exposing model or input content."""
+        canonical = str(Path(session_file).resolve(strict=True))
+        with self._transaction() as db:
+            return tuple(SelectedSummaryAttempt.select(
+                db, where="session_file=? ORDER BY rowid", parameters=(canonical,)
+            ))
+
     def mark_selected_summary_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""
         with self._transaction() as db:
@@ -773,6 +805,7 @@ class CompactionJournal:
         commit_id: str,
         *,
         admission: SelectedAdmissionIdentity | None = None,
+        state_type: type[LinkedSummary] = LinkedSummary,
     ) -> SelectedSummaryAdmission | None:
         """Settle only a reserved attempt after its exact native commit is durable.
 
@@ -783,7 +816,9 @@ class CompactionJournal:
         only after the native journal committed.
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """
-        target = LinkedSummary(commit_id)
+        target = state_type(commit_id)
+        if admission is not None and not target.original_eligible:
+            raise CompactionJournalError("Manual compaction cannot admit an original input")
         with self._transaction() as db:
             row = SelectedSummaryAttempt.one(db, operation_id=operation_id)
             commit = CompactionOperation.one(db, commit_id=commit_id)

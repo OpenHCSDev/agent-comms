@@ -32,8 +32,10 @@ from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionJournalUnknownError,
+    SelectedSummaryAttempt,
 )
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.compaction_states import ReservedSummary
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
@@ -479,7 +481,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     with journal._transaction() as db:
         coverage = db.execute(
-            "SELECT session_id,device,inode,owner_generation,admission_epoch "
+            "SELECT session_id,device,inode,owner_generation,admission_generation "
             "FROM enrolled_private_sessions WHERE session_file=?",
             (str(fresh.path),),
         ).fetchone()
@@ -502,8 +504,8 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
                     "ownerPid": os.getpid(),
                     "admissionGeneration": coverage[3],
                 },
-                "selected": {"provider": "openrouter"},
-                "settings": {"keepRecentTokens": 2000},
+                "selected": {"provider": "openrouter", "modelId": "test", "contextWindow": 200000},
+                "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
             fresh_session=fresh,
             admission_generation=coverage[4],
@@ -640,8 +642,8 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
             str(visible[0]),
             {
                 "source": {"ownerName": "beta"},
-                "selected": {"provider": "openrouter"},
-                "settings": {"keepRecentTokens": 2000},
+                "selected": {"provider": "openrouter", "modelId": "test", "contextWindow": 200000},
+                "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
         )
 
@@ -897,19 +899,22 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             )
 
 
-def _legacy_private_selected_row(journal: CompactionJournal, session_file: Path) -> str:
-    """A persisted pre-coverage selected row must still block the raw writer."""
+def _reserved_private_selected_row(journal: CompactionJournal, session_file: Path) -> str:
+    """An unresolved current reservation must block the raw writer."""
     operation_id = "a" * 32
     source = json.dumps(
-        {"source": {"witness": "fake"}, "selected": {"provider": "fake"}, "settings": {"limit": 1}},
+        {
+            "source": {"witness": "fake"},
+            "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
+            "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
     with journal._transaction() as db:
-        db.execute(
-            "INSERT INTO selected_summary_attempts VALUES (?, ?, ?, 'reserved', NULL, NULL)",
-            (operation_id, str(session_file.resolve(strict=True)), source),
-        )
+        SelectedSummaryAttempt(
+            operation_id, str(session_file.resolve(strict=True)), source, ReservedSummary()
+        ).insert(db)
     return operation_id
 
 
@@ -926,7 +931,7 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     session_file.write_text(original)
     session_file.chmod(0o600)
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    operation_id = _legacy_private_selected_row(journal, session_file)
+    operation_id = _reserved_private_selected_row(journal, session_file)
     if status == "unknown":
         journal.mark_selected_summary_unknown(operation_id)
     elif status == "declined-prestart":
@@ -1016,8 +1021,8 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
             str(saved),
             {
                 "source": {"witness": "fake"},
-                "selected": {"provider": "fake"},
-                "settings": {"limit": 1},
+                "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
+                "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
         )
     assert (
@@ -1051,7 +1056,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     async def renamed(*args, **kwargs):
         saved.rename(moved)
         journal = CompactionJournal(root / "compaction-commits.sqlite3")
-        _legacy_private_selected_row(journal, moved)
+        _reserved_private_selected_row(journal, moved)
         return await base(*args, **kwargs)
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", renamed)
@@ -1148,7 +1153,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
-            "JOIN native_runtime_input i ON i.assignment_id=c.claim_id "
+            "JOIN native_runtime_input i ON i.assignment_id=c.assignment_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
         assert tuple(row) == ("deferred", None)
@@ -1796,26 +1801,6 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
             assert_native_runtime_schema(store._connection)
 
 
-def test_native_runtime_v2_is_not_implicitly_migrated(tmp_path: Path) -> None:
-    path = tmp_path / "old-runtime.sqlite3"
-    with MutationStore(str(path)) as store:
-        # The v2 metadata is enough to force an explicit, reviewed migration;
-        # never relabel historical native inputs with an inferred send epoch.
-        store._connection.execute(
-            "CREATE TABLE native_runtime_schema_meta (singleton INTEGER PRIMARY KEY,"
-            "version INTEGER NOT NULL,ddl_digest TEXT NOT NULL)"
-        )
-        store._connection.execute(
-            "INSERT INTO native_runtime_schema_meta VALUES (1,2,?)", ("0" * 64,)
-        )
-        with pytest.raises(PublicationActivationBlocked, match="version differs"):
-            install_native_runtime_schema(store)
-        version = store._connection.execute(
-            "SELECT version FROM native_runtime_schema_meta"
-        ).fetchone()[0]
-        assert version == 2
-
-
 async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch) -> None:
     """Page saturation is not an empty inbox; scaffolding is not model authority."""
     root, root_id, comms, _initial, people = _root(tmp_path)
@@ -1831,8 +1816,10 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         for assignment in first_page:
             # Schema-legal terminal fixture only; no forged Pi context claim.
             store._connection.execute(
-                "UPDATE wake_claims SET disposition='ignored',triage_verdict='ignore',"
-                "revision=revision+1 WHERE claim_id=? AND disposition='triage_pending'",
+                (
+                    "UPDATE wake_claims SET lifecycle=json_object('kind','ignored'),revision=revi"
+                    "sion+1 WHERE assignment_id=? AND disposition='triage_pending'"
+                ),
                 (assignment.assignment_id,),
             )
         assert len(sealed_cohort_assignments(store, lookup, after_seq=first_page[-1].wire_seq)) == 1

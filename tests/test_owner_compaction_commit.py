@@ -106,7 +106,18 @@ def test_compaction_child_refuses_external_helper_before_execution(native, tmp_p
     assert not marker.exists()
 
 
-def test_native_file_operations_survive_journaled_commit(native):
+@pytest.mark.parametrize(
+    "details",
+    [
+        {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]},
+        {
+            "readFiles": [f"workspace/{'segment/' * 120}source{i:04}.py" for i in range(800)],
+            "modifiedFiles": ["src/b.py"],
+        },
+    ],
+    ids=["ordinary", "beyond-retired-count-metadata-and-request-caps"],
+)
+def test_native_file_operations_survive_journaled_commit(native, details):
     bridge, owner, owner_generation, witness = native
     source = bridge.capture_source(owner, owner_generation, witness)
     usage = {
@@ -126,14 +137,14 @@ def test_native_file_operations_survive_journaled_commit(native):
         42,
         source=source,
         details=FieldCodec.decode(
-            SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+            SummaryFiles, details
         ),
         usage=FieldCodec.decode(SummaryUsage, usage),
     )
     assert operation.state.declared_name == "committed"
     saved = entries(witness)[-1]
-    assert saved["details"]["readFiles"] == ["src/a.py"]
-    assert saved["details"]["modifiedFiles"] == ["src/b.py"]
+    assert saved["details"]["readFiles"] == details["readFiles"]
+    assert saved["details"]["modifiedFiles"] == details["modifiedFiles"]
     assert saved["usage"] == usage
     assert saved["details"]["agentCommsCommit"]["commitId"] == operation.commit_id
     # Pi's next preparation consumes the prior structured details, not just
@@ -161,7 +172,7 @@ console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
         timeout=10,
         text=True,
     )
-    assert json.loads(result.stdout) == {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+    assert json.loads(result.stdout) == details
 
 
 def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
@@ -549,7 +560,8 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.comms import Comms
 root = Path(sys.argv[1])
 mutation = sys.argv[2]
-lock_name = {'bus': 'bus.jsonl', 'input': 'input_dispositions.json', 'send': 'wire'}.get(mutation, 'registry.json')
+lock_name = {'bus': 'bus.jsonl', 'input': 'input_dispositions.json', 'send': 'wire'}.get(
+    mutation, 'registry.json')
 with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     try:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -558,7 +570,9 @@ with (root / ('.' + lock_name + '.lock')).open('ab') as lock:
     else:
         raise AssertionError('authority escaped before native write')
 if mutation == 'input':
-    InputDispositions(root / InputDispositions.filename).record('acp:late', seq=None, owner='owner', admission=int(sys.argv[3]), target='owner', text='late correction')
+    InputDispositions(root / InputDispositions.filename).record(
+        'acp:late', seq=None, owner='owner', admission=int(sys.argv[3]),
+        target='owner', text='late correction')
 else:
     registry = Registration(root / 'registry.json')
     if mutation == 'stop':
@@ -569,7 +583,8 @@ else:
         owner = registry.snapshot().threads['owner']
         registry.register(replace(owner, goal=Goal('new', 'new-goal')))
     elif mutation == 'bus':
-        MessageBus(root / 'bus.jsonl', registry).publisher.publish(Message(sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
+        MessageBus(root / 'bus.jsonl', registry).publisher.publish(Message(
+            sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
     else:
         Comms(root).messaging.send('owner', 'broadcast', 'late message')
 print('changed', flush=True)

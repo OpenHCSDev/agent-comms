@@ -173,3 +173,37 @@ UNKNOWN/reset proof remain open.
   handwritten schema/JSON codecs/mappers removed, public history shape retained.
   Durable parent one-shot must carry ALL journal states and exact sequences into
   goal_history_entry (contract in HANDOFF), never reset this file.
+- **Goal attempt/failure stores closed:** six declared table owners, no runtime
+  migration/handwritten schema/row mappers/positional writes. Existing generation,
+  reservation/attempt state drives storage; passive evidence excludes capability
+  tokens.72 bounded local checks pass. Durable carryover contract in HANDOFF;
+  no regrant/replay on reopen, parent owns one-shot conversion.
+
+- **Checkpoint/candidate closure:** private_bus_checkpoint.py and
+  wake_candidate_index.py now use declared rows and strict A13 boundaries.
+  Old candidate v1 upgrade and converter-only test deleted. Source seals/floor
+  and bounded WAL maintenance preserved; reset classifications in HANDOFF.
+  Core coordinator/cohort and recovery readers remain open; S12 not complete.
+
+- **Further caller closure:** six cohort table declarations and their readers,
+  foreground observer/coverage reads and recovery projection/gateway typed.
+  ExecutionAssignmentLink/ConnectivityFacet now sole row and domain owners.
+  Remaining: four core lifecycle owners and core raw mutations; parent history
+  notification-reader crossing requested. Full237 remains draft, not complete.
+
+## Source closure checkpoint (237)
+
+Foundation230 + caller closure237 now cover every unowned production SQLite table,
+mutation/read caller and raw-row mapper. Coordinator schema8 consolidates existing
+WakeAssignment/ExecutionRecord/AttemptRecord/ResponseObligation as table owners;
+no duplicate flat row class or compatibility mapper remains. Cohort, response,
+recovery, checkpoint, candidate, prompt/cursor, goal/todo/transcript/page readers
+use A13; notifications use a declared joined projection. The package-wide guard
+covers all src modules (A13 alone owns raw SQLite), including the external
+read-only OpenCode importer. Removed old lifecycle golden capture/tests.
+
+Full S12 remains **cutover/real-path acceptance pending**, owned by parent229:
+quiet runtime reset, durable one-shot preservation, current root access/floor,
+no replay of <=H/UNKNOWN and retained-session/native/RPC acceptance. Detailed exact
+files/tables and receipts are in evidence/round2-s12/HANDOFF.md. Never mark global
+completion from source tests. No runtime installation/reset was performed by S12.

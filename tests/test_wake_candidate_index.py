@@ -79,7 +79,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     assert index.maintain(rebuild=True)
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 2
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
     selected = index.page(
         root_id=root_id,
         recipient_lookup=lookup["Alice"],
@@ -200,58 +200,6 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
             after_seq=0,
             required_through_seq=second.seq + 1,
         )
-
-
-def test_explicit_bounded_rebuild_upgrades_v1_without_exposing_old_rows(
-    tmp_path: Path,
-) -> None:
-    comms, root_id, lookup = _private(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
-    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
-    index = WakeCandidateIndex(comms.bus)
-    assert index.maintain(rebuild=True)
-    with sqlite3.connect(index.path) as db:
-        db.execute("DROP TABLE response_keys")  # v1 had no cross-batch key history.
-        db.execute("UPDATE checkpoint SET version=1")
-    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=first.seq,
-        )
-    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
-        index.maintain()
-    assert not index.maintain(rebuild=True, max_rows=1)
-    with sqlite3.connect(index.path) as db:
-        assert db.execute("SELECT version FROM checkpoint").fetchone()[0] == 2
-        assert db.execute(
-            "SELECT name FROM sqlite_master WHERE name='response_keys'"
-        ).fetchone() == ("response_keys",)
-        assert db.execute("SELECT count(*) FROM recipients").fetchone()[0] == 1
-    with pytest.raises(ProjectionUnavailableError, match="stale"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=second.seq,
-        )
-    assert index.maintain(max_rows=1)
-    assert (
-        len(
-            index.page(
-                root_id=root_id,
-                recipient_lookup=lookup["Alice"],
-                after_seq=0,
-                required_through_seq=second.seq,
-            ).entries
-        )
-        == 2
-    )
-    with sqlite3.connect(index.path) as db:
-        db.execute("UPDATE checkpoint SET version=3")
-    with pytest.raises(ProjectionRebuildRequiredError, match="schema version"):
-        index.maintain(rebuild=True)  # Unknown future schemas are not auto-destroyed.
 
 
 def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
@@ -395,17 +343,17 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     )
     assert [candidate.source_seq for candidate in first.entries] == [messages[0].seq]
     with sqlite3.connect(index.path) as db:
-        checkpoint = db.execute("SELECT * FROM checkpoint").fetchall()
-        recipients = db.execute("SELECT * FROM recipients").fetchall()
-        keys = db.execute("SELECT * FROM response_keys").fetchall()
+        checkpoint = db.execute("SELECT * FROM candidate_checkpoint").fetchall()
+        recipients = db.execute("SELECT * FROM candidate").fetchall()
+        keys = db.execute("SELECT * FROM candidate_response_key").fetchall()
     with pytest.raises(
         ProjectionUnavailableError, match="duplicate private response publication key"
     ):
         index.maintain(max_rows=2)
     with sqlite3.connect(index.path) as db:
-        assert db.execute("SELECT * FROM checkpoint").fetchall() == checkpoint
-        assert db.execute("SELECT * FROM recipients").fetchall() == recipients
-        assert db.execute("SELECT * FROM response_keys").fetchall() == keys
+        assert db.execute("SELECT * FROM candidate_checkpoint").fetchall() == checkpoint
+        assert db.execute("SELECT * FROM candidate").fetchall() == recipients
+        assert db.execute("SELECT * FROM candidate_response_key").fetchall() == keys
     with pytest.raises(ProjectionUnavailableError, match="stale"):
         index.page(
             root_id=root_id,

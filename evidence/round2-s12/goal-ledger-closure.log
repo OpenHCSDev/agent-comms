@@ -1,0 +1,53 @@
+...............................EE
+==================================== ERRORS ====================================
+_ ERROR at setup of test_duplicate_callback_and_restart_preserve_failure_bytes _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-30/test_duplicate_callback_and_re0')
+
+    @pytest.fixture
+    def bound(tmp_path):
+        root = tmp_path / "private"
+        root.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(root)
+        goal = Goal("private goal prose", "goal", revision=2)
+>       owner = Thread(
+            "owner",
+            frozenset(),
+            "/private-worktree",
+            pid=123,
+            created_at=10.0,
+            goal=goal,
+            turn_generation=7,
+            last_finished_turn_id="a" * 32,
+        )
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+tests/test_goal_failure_observation.py:47: TypeError
+_____ ERROR at setup of test_mismatched_turn_lease_is_not_bound[mutation0] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s12-20260928/.artifacts/pytest/pytest-of-ts/pytest-30/test_mismatched_turn_lease_is_0')
+
+    @pytest.fixture
+    def bound(tmp_path):
+        root = tmp_path / "private"
+        root.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(root)
+        goal = Goal("private goal prose", "goal", revision=2)
+>       owner = Thread(
+            "owner",
+            frozenset(),
+            "/private-worktree",
+            pid=123,
+            created_at=10.0,
+            goal=goal,
+            turn_generation=7,
+            last_finished_turn_id="a" * 32,
+        )
+E       TypeError: Thread.__init__() got an unexpected keyword argument 'pid'
+
+tests/test_goal_failure_observation.py:47: TypeError
+=========================== short test summary info ============================
+ERROR tests/test_goal_failure_observation.py::test_duplicate_callback_and_restart_preserve_failure_bytes
+ERROR tests/test_goal_failure_observation.py::test_mismatched_turn_lease_is_not_bound[mutation0]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 2 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+31 passed, 2 errors in 2.80s

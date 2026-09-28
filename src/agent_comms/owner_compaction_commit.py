@@ -21,7 +21,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .backend import _session_revision
-from .bus_publication import unique_wire_object
 from .catalog_store import ChannelCatalog
 from .child_process import BoundedRun, TimedOutOutcome
 from .compaction_journal import (
@@ -34,7 +33,6 @@ from .compaction_states import CommittedNativeOutcome, NativeOutcome, UnknownNat
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .input_disposition import FutureInputQueue, InputDispositions
-from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
@@ -45,6 +43,7 @@ from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSumma
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .threads import Thread
+from .wire_log import WireLog
 
 
 class CompactionTransportUnknownError(RuntimeError):
@@ -159,34 +158,15 @@ class OwnerCompactionCommit:
             yield receipt, fd, (executor_fd, wire_fd, bus_fd, input_fd)
 
     @staticmethod
-    def _ingress_revision(path: Path, *, bus: bool = False, delivery=None) -> str:
+    def _ingress_revision(path: Path) -> str:
         try:
             info = path.lstat()
         except FileNotFoundError:
-            return hashlib.sha256(b"").hexdigest() if bus else "missing"
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > 256 * 1024**2:
-            raise RelationViolationError("Compaction ingress must be bounded regular storage")
-        raw = path.read_bytes()
-        selected = []
-        if bus and raw:
-            try:
-                if not raw.endswith(b"\n"):
-                    raise ValueError("Incomplete bus row")
-                previous = 0
-                for line in raw.splitlines():
-                    message = Message.from_wire(
-                        json.loads(line, object_pairs_hook=unique_wire_object)
-                    )
-                    if message.seq <= previous:
-                        raise ValueError("Bus sequence is not increasing")
-                    previous = message.seq
-                    if delivery is None or delivery.delivers(message.sender, message.target):
-                        selected.append(line)
-            except (ValueError, KeyError, TypeError, AttributeError) as error:
-                raise RelationViolationError("Invalid compaction ingress bus") from error
-        if bus:
-            return hashlib.sha256(b"\n".join(selected)).hexdigest()
-        digest = hashlib.sha256(raw).hexdigest()
+            return "missing"
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise RelationViolationError("Compaction ingress must be regular storage")
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
         return (
             f"{info.st_dev}:{info.st_ino}:{info.st_size}:"
             f"{info.st_mtime_ns}:{info.st_ctime_ns}:{digest}"
@@ -237,7 +217,7 @@ class OwnerCompactionCommit:
             receipt.turn_id,
             receipt.goal_id,
             receipt.goal_revision,
-            self._ingress_revision(self.root / "bus.jsonl", bus=True, delivery=delivery),
+            WireLog(self.root / "bus.jsonl").delivery_revision_unlocked(delivery),
             hashlib.sha256(
                 json.dumps(FieldCodec.encode(rows), sort_keys=True).encode()
             ).hexdigest(),
@@ -319,6 +299,7 @@ class OwnerCompactionCommit:
         )
         if not math.isfinite(timeout) or not 0 < timeout <= 30:
             raise ValueError("Compaction child deadline must be in (0, 30] seconds")
+        payload = json.dumps(request, ensure_ascii=False, allow_nan=False).encode("utf-8")
         try:
             result = BoundedRun.run_inherited(
                 (
@@ -337,8 +318,9 @@ class OwnerCompactionCommit:
                     str(self.helper),
                     str(self.package_dir),
                     str(fd),
+                    str(len(payload)),
                 ),
-                input=json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
+                input=payload,
                 pass_fds=tuple(dict.fromkeys((fd, *retained_fds))),
                 deadline=time.monotonic() + timeout,
             )
@@ -374,7 +356,7 @@ class OwnerCompactionCommit:
         timeout: float = 5,
     ) -> CompactionOperation:
         """Journal intent under authority, dispatch once, persist observed outcome."""
-        if len(summary.encode()) > 262144 or not 0 <= tokens_before <= 2**53 - 1:
+        if not summary.strip() or not 0 <= tokens_before <= 2**53 - 1:
             raise ValueError("Bounded native compaction payload required")
         # Preserve the summary/cut digest and bind fileOps/usage separately
         # through the native marker, writer CAS and exact-ID reconciliation.
@@ -442,9 +424,10 @@ class OwnerCompactionCommit:
                 source=FieldCodec.project(source, "journal"),
             )
             if selected_attempt is not None:
+                if not selected_attempt.state.reservable_commit:
+                    raise CompactionJournalError("Selected summary is not a commit reservation")
                 if (
                     self.journal.selected_summary(selected_attempt.operation_id) != selected_attempt
-                    or not selected_attempt.state.reservable_commit
                     or selected_attempt.session_file != witness.session_file
                 ):
                     raise CompactionJournalError(

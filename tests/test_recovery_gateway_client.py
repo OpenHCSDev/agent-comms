@@ -38,10 +38,12 @@ async def test_existing_gateway_restart_returns_only_redacted_owner_dto(root: Pa
         db.execute("INSERT INTO owner_generations VALUES ('a','Alice',1)")
         db.execute("INSERT INTO current_executions VALUES ('a',NULL,NULL,0)")
         db.execute(
-            "INSERT INTO executions "
-            "(execution_id,origin,status,exact_target,owner_thread,owner_lookup,revision,"
-            "current_attempt_ordinal,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-            "VALUES ('SECRET_EXECUTION','acp','pending',NULL,'Alice','a',1,NULL,2,NULL,1,1)"
+            (
+                "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                "ms) VALUES ('SECRET_EXECUTION','acp',json_object('kind','pending'),NULL,'Ali"
+                "ce','a',1,2,NULL,1,1)"
+            )
         )
     database = root / "coordination.sqlite3"
     initial = (database.stat().st_ino, database.stat().st_size, database.stat().st_mtime_ns)
