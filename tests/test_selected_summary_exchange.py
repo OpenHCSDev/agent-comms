@@ -310,18 +310,21 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 idle_timeout_seconds=5,
             )
             if provider_error:
+                from agent_comms.selected_pi_summary_rpc import SelectedSummaryFailed
+
                 with pytest.raises(
-                    SelectedChildUnknown, match="402: insufficient credits on configured model"
-                ):
+                    SelectedSummaryFailed, match="402: insufficient credits on configured model"
+                ) as failed:
                     await exchange
                 assert file.read_bytes() == before
-                assert len(journal.unresolved_selected_summary(str(file))) == 1
-                assert (
-                    journal.unresolved_selected_summary(str(file))[0].state.declared_name
-                    == "unknown"
-                )
-                assert not native_input_admitted(journal.path.parent, str(file))
-                assert persistent.proc is None
+                attempt = journal.selected_summary(failed.value.operation_id)
+                assert attempt.state.declared_name == "failed"
+                assert attempt.state.settled_without_original
+                assert not attempt.state.original_eligible
+                assert not journal.unresolved_selected_summary(str(file))
+                assert not journal.blocking_selected_summary(str(file))
+                assert persistent.proc.returncode is None
+                assert persistent.reopen_required is None
                 return
             result = await exchange
             assert "Synthetic summary" in result.summary.text
@@ -390,7 +393,7 @@ async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(t
 async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
     async with selected(tmp_path, "foreign-progress") as (run, persistent, journal, file, _):
         with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
-            await run(idle_timeout_seconds=.06)
+            await run(idle_timeout_seconds=0.06)
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
         assert persistent.proc is None
 
@@ -422,3 +425,59 @@ async def test_refusal_recovery_rechecks_exact_record_and_never_reattempts(tmp_p
         with pytest.raises(CompactionJournalError, match="changed"):
             journal.retire_refused_summary(attempt)
         assert journal.selected_summary(result.operation_id) == retired
+
+
+@pytest.mark.parametrize(
+    "mismatch", [None, "operation", "witness", "model", "settings", "missing", "reason"]
+)
+def test_failed_receipt_requires_exact_attestation(mismatch):
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+    from agent_comms.pi_summary_payloads import SelectedModel, SummaryFailedData
+    from agent_comms.selected_pi_summary_rpc import SelectedSummaryFailed, _summary_response
+
+    request = AgentCommsSummarizeCompaction(
+        id="selected",
+        version=1,
+        operation_id="a" * 32,
+        witness=NativeWitness("session", "/saved.jsonl", "leaf", "kept", "1:2:3:4:5"),
+        selected=SelectedModel("fixture", "fixture", 32768),
+        settings=PiCompactionSettings(2048, 1024),
+    )
+    data = request.to_rpc()
+    data.pop("id")
+    data.pop("type")
+    data.update(status="failed", reason="Provider rejected the summary")
+    if mismatch == "operation":
+        data["operationId"] = "b" * 32
+    elif mismatch == "witness":
+        data["witness"]["leafId"] = "different"
+    elif mismatch == "model":
+        data["selected"]["modelId"] = "other"
+    elif mismatch == "settings":
+        data["settings"]["reserveTokens"] += 1
+    elif mismatch == "missing":
+        del data["witness"]
+    elif mismatch == "reason":
+        data["reason"] = "control\x1bcharacter"
+    raw = (
+        json.dumps(
+            dict(
+                type="response",
+                id=request.id,
+                command=request.declared_name,
+                success=True,
+                data=data,
+            )
+        )
+        + "\n"
+    ).encode()
+    if mismatch is not None:
+        with pytest.raises(SelectedChildUnknown):
+            _summary_response(raw, request, 1200)
+    else:
+        receipt = _summary_response(raw, request, 1200)
+        assert isinstance(receipt, SummaryFailedData)
+        error = SelectedSummaryFailed(receipt)
+        assert error.operation_id == request.operation_id
+        assert error.reason == data["reason"]
