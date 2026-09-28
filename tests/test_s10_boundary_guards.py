@@ -1,4 +1,4 @@
-"""Permanent guards for the completed V1/V3 boundaries; V2 awaits A13."""
+"""Permanent guards for the completed S10 boundaries."""
 
 import ast
 from pathlib import Path
@@ -18,7 +18,7 @@ def test_s10_selected_transport_decodes_json_directly_through_a2():
             assert node.name not in {"from_wire", "from_arguments", "argument_names"}
         if isinstance(node, ast.Call) and ast.unparse(node.func) == "json.loads":
             assert ast.unparse(parents[node].func) == "FieldCodec.decode"
-    for declaration in (node for node in tree.body if isinstance(node, ast.ClassDef)):
+    for declaration in tree.body:
         for node in ast.walk(declaration):
             assert not (
                 isinstance(node, ast.Subscript)
