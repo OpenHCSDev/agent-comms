@@ -298,3 +298,14 @@ including no overlap, UNKNOWN non-replay, owner/origin/reservation fences and
 cancellation. Together all14 affected cases pass. No production changes.
 Persistent TMPDIR shortened to.artifacts/tmp after seven-digit test PID exceeded
 Unix socket length in prior test directory. Full combined suite still pending.
+
+## Removed saved-format and marker test paths
+
+Remainder-eleven15passed12failed2.82s. Deleted seven parametrized cases requiring
+retired split channels/saved_views file decoding and three legacy read-marker
+migration cases. Current catalog behavior already covered in test_channels;
+retained predicate/declaration/codec tests. Alias behavior now exercises canonical
+send_user_message and history/audience instead of deleted Publisher.publish.
+Current SavedView codec retains original_targets. All14 remaining affected cases
+pass (13 initial focused; corrected alias plus module3pass). Net78 test lines
+removed. Remainder continues through actual selected native execution.
