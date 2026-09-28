@@ -13,33 +13,30 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
-from .bus_route_counts import BusRouteCounts
-from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
-from .errors import (
-    RelationViolationError,
-    UnregisteredThreadError,
-)
+from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
+from .channel_targets import BuiltinChannel, is_channel_target
+from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .message_page import MessagePage
-from .messages import Message, MessageType
+from .messages import Message
 from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
     MessageDisplayScope,
     ViewUnread,
 )
-from .routing import DeliveryScope, PendingCounts
+from .routing import DeliveryMessage, DeliveryScope, PendingCounts
 from .store_files import (
     _atomic_write_text,
     _iter_jsonl_records,
     _store_lock,
     file_revision,
 )
-from .thread_identity import ThreadRole
 
 if TYPE_CHECKING:
     from .historical_views import HistorySource, HistoryView
     from .registration import Registration
+    from .registry_document import RegistrySnapshot
 
 from .private_registry_guard import PrivateRegistryGuard
 from .publisher import Publisher
@@ -296,8 +293,8 @@ class MessageBus:
             message.membership is None and not message.notice,
         )
 
-    def _delivery_scope(self, name: str) -> DeliveryScope:
-        snapshot = self._registry.snapshot()
+    def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None) -> DeliveryScope:
+        snapshot = snapshot or self._registry.snapshot()
         canonical = snapshot.aliases.get(name, name)
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
@@ -306,18 +303,31 @@ class MessageBus:
             thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
         )
 
+    def _delivery_decoder(self) -> Callable[[Mapping], DeliveryMessage]:
+        from functools import partial
+
+        return partial(
+            DeliveryMessage.from_wire, root_id=self.log.read_metadata_unlocked().wire_root_id
+        )
+
+    def _iter_delivery_messages_unlocked(self) -> Iterator[DeliveryMessage]:
+        decode = self._delivery_decoder()
+        for record, _ in _iter_jsonl_records(self.log.path):
+            yield decode(record)
+
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
-        delivery = self._delivery_scope(name)
-        name = delivery.actor
+        snapshot = self._registry.snapshot()
+        delivery = self._delivery_scope(name, snapshot)
         matches = self._scope_filter(delivery, target)
-        seen = self.reads.seen_sequences(name, self._registry.snapshot())
-        return [
-            message
-            for message in self.log.full_history()
-            if delivery.delivers(message.sender, message.target)
-            and matches(message)
-            and message.seq not in seen
-        ]
+        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        with self.log.locked():
+            return [
+                item.message
+                for item in self._iter_delivery_messages_unlocked()
+                if delivery.current(item, snapshot)
+                and matches(item.message)
+                and item.message.seq not in seen
+            ]
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
@@ -343,8 +353,28 @@ class MessageBus:
         return lambda message: delivery.conversation(message.sender, message.target) == peer
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
-        """Count one thread's unread messages by conversation in one log pass."""
-        delivery = self._delivery_scope(name)
+        return self._pending_projection([name])[name]
+
+    def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
+        return {
+            name: sum(counts.values()) for name, counts in self._pending_projection(names).items()
+        }
+
+    def _pending_projection(self, names: Sequence[str]) -> Mapping[str, Mapping[str, int]]:
+        """Capture one registry/read snapshot and sync the route index once."""
+        snapshot = self._registry.snapshot()
+        catalog = self._channels.read()
+        actors = {name: snapshot.aliases.get(name, name) for name in names}
+        deliveries = {}
+        channel_members: dict[str, set[str]] = {}
+        for actor in set(actors.values()):
+            if actor not in snapshot.threads:
+                raise UnregisteredThreadError(f"Thread {actor!r} is not registered.")
+            deliveries[actor] = DeliveryScope(
+                actor, snapshot.aliases, catalog.targets_for(snapshot.threads[actor].tags)
+            )
+            for target in deliveries[actor].channels:
+                channel_members.setdefault(target, set()).add(actor)
         revision = tuple(
             file_revision(path)
             for path in (
@@ -354,99 +384,71 @@ class MessageBus:
                 self.reads.path,
             )
         )
-        cached = self._pending_cache.get(name)
-        if cached is not None and cached.revision == revision and cached.delivery == delivery:
-            return dict(cached.counts)
-        seen = self.reads.seen_sequences(delivery.actor, self._registry.snapshot())
-        counts: dict[str, int] = {}
+        if all(
+            name in self._pending_cache
+            and self._pending_cache[name].revision == revision
+            and self._pending_cache[name].delivery == deliveries[actor]
+            for name, actor in actors.items()
+        ):
+            return {name: dict(self._pending_cache[name].counts) for name in names}
+        document = self.reads.read()
+        seen = {
+            actor: self.reads.seen_sequences(actor, snapshot, document=document)
+            for actor in deliveries
+        }
+        counts: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
+
+        def recipients(target: str):
+            direct = snapshot.aliases.get(target, target)
+            return channel_members.get(target, {direct} if direct in deliveries else set())
+
+        def add(actor: str, sender: str, target: str, count: int):
+            if count:
+                conversation = deliveries[actor].conversation(sender, target)
+                counts[actor][conversation] = counts[actor].get(conversation, 0) + count
+
+        indexed = False
         with self.log.locked():
             try:
-                with BusRouteCounts(self.log.path) as route_counts:
-                    if route_counts.sync(self._pending_route_fields):
-                        for target, sender, unread in route_counts.unseen_counts(seen):
-                            if delivery.delivers(sender, target):
-                                conversation = delivery.conversation(sender, target)
-                                counts[conversation] = counts.get(conversation, 0) + unread
-                        self._pending_cache[name] = PendingCounts(revision, delivery, counts)
-                        return dict(counts)
+                with BusRouteCounts(self.log.path) as index:
+                    if index.sync(self._delivery_decoder()):
+                        requests = []
+                        for route in index.routes():
+                            for actor in recipients(route.target):
+                                since = deliveries[actor].minimum_timestamp(
+                                    route.sender, route.target, route.sender_lookup, snapshot
+                                )
+                                if since is not None:
+                                    requests.append(
+                                        PendingRoute(
+                                            actor,
+                                            route.target,
+                                            route.sender,
+                                            route.sender_lookup,
+                                            since,
+                                        )
+                                    )
+                        for row in index.unseen_counts(
+                            requests,
+                            [ActorSeen(actor, sequences) for actor, sequences in seen.items()],
+                        ):
+                            add(row.actor, row.sender, row.target, row.count)
+                        indexed = True
             except (OSError, sqlite3.DatabaseError):
-                # The index is disposable; exact ledger membership still owns unread.
+                # A disposable index outage still uses exactly the same identity filter.
                 pass
-            for message in self.log._iter_log_unlocked():
-                if delivery.delivers(message.sender, message.target) and message.seq not in seen:
-                    conversation = delivery.conversation(message.sender, message.target)
-                    counts[conversation] = counts.get(conversation, 0) + 1
-        self._pending_cache[name] = PendingCounts(revision, delivery, counts)
-        return dict(counts)
-
-    @staticmethod
-    def _pending_route_fields(record: Mapping) -> tuple[int, str, str]:
-        """Validate ordinary wire routing fields without constructing a Message.
-
-        Rich records retain Message.from_wire's complete validation, including
-        mention offsets and claim-transition binding. An invalid plain row is
-        never silently skipped or treated as a zero pending count.
-        """
-        if any(key in record for key in ("membership", "mentions", "claim_transition")):
-            message = Message.from_wire(record)
-            return message.seq, message.sender, message.target
-        sender, target, body = record["from"], record["to"], record["text"]
-        seq = int(record.get("seq", 0))
-        MessageType(record["type"])
-        ThreadRole(record.get("sender_role", ThreadRole.AGENT.value))
-        if not isinstance(sender, str) or not sender:
-            raise RelationViolationError("Message sender cannot be empty.")
-        if not isinstance(target, str) or not target:
-            raise RelationViolationError("Message target cannot be empty.")
-        if not isinstance(body, str) or not body:
-            raise ValueError("Message body cannot be empty.")
-        if not BuiltinChannel.is_alias(target) and not is_channel_target(target):
-            if sender == target:
-                raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
-            allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-            if not set(target) <= allowed:
-                raise ValueError(f"Message target {target!r} is not a thread name or #channel.")
-        if target.startswith("#") and target != BuiltinChannel.ALL.value:
-            tag = target[1:]
-            if not tag or not set(tag) <= _TAG_CHARS:
-                raise ValueError(f"Channel {target!r} has an invalid tag.")
-        return seq, sender, target
-
-    def _iter_pending_routes_unlocked(self) -> Iterator[tuple[int, str, str]]:
-        for record, _ in _iter_jsonl_records(self.log.path):
-            yield self._pending_route_fields(record)
-
-    def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
-        """Count every requested inbox from one wire and read-ledger snapshot."""
-        snapshot = self._registry.snapshot()
-        catalog = self._channels.read()
-        document = self.reads.read()
-        actors = {name: snapshot.aliases.get(name, name) for name in names}
-        deliveries = {}
-        seen = {}
-        channel_members: dict[str, set[str]] = {}
-        for actor in set(actors.values()):
-            if actor not in snapshot.threads:
-                raise UnregisteredThreadError(f"Thread {actor!r} is not registered.")
-            owner = snapshot.threads[actor]
-            deliveries[actor] = DeliveryScope(
-                actor, snapshot.aliases, catalog.targets_for(owner.tags)
-            )
-            seen[actor] = self.reads.seen_sequences(actor, snapshot, document=document)
-            for target in deliveries[actor].channels:
-                channel_members.setdefault(target, set()).add(actor)
-        counts = dict.fromkeys(deliveries, 0)
-        with self.log.locked():
-            for sequence, raw_sender, target in self._iter_pending_routes_unlocked():
-                sender = snapshot.aliases.get(raw_sender, raw_sender)
-                direct = snapshot.aliases.get(target, target)
-                recipients = channel_members.get(
-                    target, {direct} if direct in deliveries else set()
-                )
-                for actor in recipients:
-                    if actor != sender and sequence not in seen[actor]:
-                        counts[actor] += 1
-        return {name: counts[actor] for name, actor in actors.items()}
+            if not indexed:
+                for item in self._iter_delivery_messages_unlocked():
+                    message = item.message
+                    for actor in recipients(message.target):
+                        if (
+                            deliveries[actor].current(item, snapshot)
+                            and message.seq not in seen[actor]
+                        ):
+                            add(actor, message.sender, message.target, 1)
+        for name, actor in actors.items():
+            self._pending_cache[name] = PendingCounts(revision, deliveries[actor], counts[actor])
+        return {name: dict(counts[actor]) for name, actor in actors.items()}
 
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""
