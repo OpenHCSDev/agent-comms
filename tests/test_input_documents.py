@@ -8,8 +8,15 @@ import pytest
 
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_attempt import StartedInput, UnknownInput
-from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_attempt import (
+    BoundUnknownInput,
+    InputAttempt,
+    MissingInput,
+    NotSentInput,
+    ReservedInput,
+    StartedInput,
+)
+from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.locked_store import LockedStore
 
 
@@ -51,7 +58,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     before = store.path.read_bytes()
     document = store.read()
     row = document.rows["acp:old"]
-    assert isinstance(row, UnknownInput) and not row.unattempted
+    assert isinstance(row, BoundUnknownInput) and not row.accepts_reservation
     assert row.reviewed_for_goal("goal")
     assert store.path.read_bytes() == before
     assert store._encode(document) == saved
@@ -93,7 +100,72 @@ def test_lost_durable_record_ack_retains_evidence_without_new_acceptance(tmp_pat
         store.record("bus:1", **args)
     reopened = InputDispositions(store.path)
     before = reopened.read().rows["bus:1"]
-    assert before.unattempted
+    assert before.accepts_reservation
     assert not reopened.record("bus:1", **args)
     assert reopened.read().rows["bus:1"] == before
-    assert before.native_id is None and not before.goal_reviews
+    assert not hasattr(before, "native_id") and not before.goal_reviews
+
+
+def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_path):
+    from dataclasses import fields
+
+    from agent_comms.thread_identity import ThreadIncarnation
+
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    missing = store.read().lookup("acp:missing")
+    assert isinstance(missing, MissingInput) and fields(missing) == ()
+    assert not missing.exists and not missing.accepts_reservation and not missing.has_started
+    assert not store.bind("acp:missing", admission=1, turn_id="t", native_id="a" * 32, text="text")
+    assert not store.read().all_started(("acp:missing",))
+    assert store.record(
+        "acp:input", seq=None, owner="owner", admission=4, target="owner", text="keep"
+    )
+    reserved = store.read().lookup("acp:input")
+    assert isinstance(reserved, ReservedInput) and reserved.exists and reserved.accepts_reservation
+    assert reserved.matches_owner(ThreadIncarnation("owner", 10.0))
+    # Existing input rows attest name/admission only, never a historical birth.
+    assert reserved.matches_owner(ThreadIncarnation("owner", 20.0))
+    assert not reserved.matches_owner(ThreadIncarnation("other", 10.0))
+    assert reserved.matches_admission(4) and not reserved.matches_admission(5)
+    for name in ("native_id", "turn_id", "sent_text"):
+        assert name not in {item.name for item in fields(reserved)}
+        assert not hasattr(reserved, name)
+    assert store.finish_unbound("acp:input")
+    unsent = store.read().lookup("acp:input")
+    assert isinstance(unsent, NotSentInput) and unsent.unresolved
+    assert not unsent.accepts_reservation
+    assert not store.bind("acp:input", admission=4, turn_id="new", native_id="b" * 32, text="keep")
+    assert unsent.public()["status"] == "not_sent"
+    assert "unknown" not in InputAttempt.names()
+    with pytest.raises(ValueError, match="document key"):
+        InputDocument(rows={"missing": missing})
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        {"turn_id": "turn"},
+        {"native_id": "a" * 32},
+        {"turn_id": "turn", "native_id": "a" * 32},
+        {"turn_id": "", "native_id": "a" * 32, "sent_text": "exact"},
+    ],
+)
+def test_incomplete_sent_evidence_is_rejected_without_overwriting_history(tmp_path, sent):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    row = ReservedInput("acp:x", None, "owner", 1, "owner", "text").stored_record()
+    row.update(sent)
+    saved = json.dumps(dict(version=1, rows={"acp:x": row}))
+    store.path.write_text(saved)
+    with pytest.raises(ValueError):
+        store.finish_unbound("acp:x")
+    assert store.path.read_text() == saved
+
+
+@pytest.mark.parametrize("native_id", ["invalid", "b" * 31])
+def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store.record("acp:x", seq=None, owner="owner", admission=1, target="owner", text="retained")
+    before = store.path.read_bytes()
+    with pytest.raises(ValueError, match="native input"):
+        store.bind("acp:x", admission=1, turn_id="turn", native_id=native_id, text="sent")
+    assert store.path.read_bytes() == before

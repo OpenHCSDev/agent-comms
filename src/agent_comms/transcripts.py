@@ -272,13 +272,13 @@ class Transcripts:
         bindings. A prompt prefix or a matching body alone is not evidence.
         No transcript, input disposition, delivery/read cursor, or model is changed.
         """
-        from .input_attempt import InputAttempt
+        from .input_attempt import SentInput
         from .input_disposition import InputDispositions
         from .routing import ScheduledTurn
 
         rows = InputDispositions(self.root / InputDispositions.filename).read().bound_bus_inputs()
         existing = self.routes.input_bindings()
-        groups: dict[str, list[InputAttempt]] = {}
+        groups: dict[str, list[SentInput]] = {}
         needed = {row.sequence for row in rows}
         envelopes: dict[int, Message] = {}
         aliases = self.registry.snapshot().aliases

@@ -15,11 +15,11 @@ from contextlib import closing
 from pathlib import Path
 
 from .backend import _session_revision
-from .native_runtime_input import NativeRuntimeInput
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDispositions
 from .native_entries import NativeEntry
 from .native_pi import NativeContextProof
+from .native_runtime_input import NativeRuntimeInput
 from .pi_payloads import TextContent
 from .private_sidecar import native_request_digest
 
@@ -52,7 +52,7 @@ def verify_continued_private_session(
         raise ValueError("Continued private history contains unresolved owner input")
     started = {}
     for row in rows.values():
-        if row.owner == owner and not row.unresolved:
+        if row.owner == owner and row.has_started:
             native_id = row.native_id
             if native_id in started:
                 raise ValueError("Continued private native start is ambiguous")
@@ -74,12 +74,9 @@ def verify_continued_private_session(
         started_row = started.get(native_id)
         if started_row is not None:
             text = started_row.sent_text
-            if (
-                type(text) is not str
-                or not started_row.turn_id
-                or message.content != (TextContent(text),)
-                or message.input_digest != native_request_digest(text)
-            ):
+            if message.content != (
+                TextContent(text),
+            ) or message.input_digest != native_request_digest(text):
                 raise ValueError("Continued private user differs from recorded native start")
         elif native_id in recorded:
             proof = recorded[native_id]
