@@ -32,13 +32,13 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         resource = WritableFileClaim("new/nested/file.py")
         committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
         assert not (work / "new").exists()
-        projection = Comms(root).bus.claim_projection()
+        projection = Comms(root).bus.log.claim_projection()
         assert projection[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
             c.messaging.send_message("b", "#team", "Competing create", claims=[resource])
         c.messaging.send_message("a", "#team", "Release unused creation", releases=["new/nested/file.py"])
         c.messaging.send_message("b", "#team", "New owner", claims=[resource])
-        assert c.bus.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
+        assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
 
 def test_create_claim_preserves_physical_worktree_scope(tmp_path):

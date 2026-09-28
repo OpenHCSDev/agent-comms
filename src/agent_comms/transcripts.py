@@ -561,7 +561,7 @@ class Transcripts:
         }
         for row in rows:
             groups.setdefault(row["native_id"], []).append(row)
-        with self.bus.full_history_snapshot() as (_, messages):
+        with self.bus.log.full_history_snapshot() as (_, messages):
             for message in messages:
                 if message.seq in needed:
                     envelopes[message.seq] = message

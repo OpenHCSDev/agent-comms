@@ -99,7 +99,7 @@ def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monke
     def forbidden_scan():
         raise AssertionError("mounted snapshot reparsed historical bus rows")
 
-    monkeypatch.setattr(fresh.bus, "_iter_log_unlocked", forbidden_scan)
+    monkeypatch.setattr(fresh.bus.log, '_iter_log_unlocked', forbidden_scan)
     assert fresh.views.coordination_snapshot() == expected
 
     wired.messaging.send("PR111", "#base", "new channel activity")
@@ -112,7 +112,7 @@ def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(w
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")
     assert set(wired.views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
-    bus_path = wired.bus._path
+    bus_path = wired.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
     replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
     os.replace(replacement, bus_path)
@@ -137,7 +137,7 @@ def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
     wired.messaging.send("PR111", "fixer", "first")
     wired.messaging.send("PR111", "fixer", "second")
     assert _listed(wired)["fixer"] == 2
-    bus_path = wired.bus._path
+    bus_path = wired.bus.log.path
     rows = bus_path.read_bytes().splitlines(keepends=True)
     replacement = bus_path.with_name("replacement.jsonl")
     replacement.write_bytes(rows[1])
@@ -149,7 +149,7 @@ def test_route_projection_detects_rewrite_before_append(wired):
     wired.threads.register(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
     wired.messaging.send("PR111", "fixer", "first")
     assert _listed(wired)["fixer"] == 1
-    bus_path = wired.bus._path
+    bus_path = wired.bus.log.path
     row = json.loads(bus_path.read_text())
     row["to"] = "third"
     bus_path.write_text(json.dumps(row) + "\n")
@@ -192,7 +192,7 @@ def test_invalid_wire_rows_fail_closed_like_existing_pending_count(wired, change
         "ts": 1.0,
     }
     row.update(change)
-    with wired.bus._path.open("ab") as bus:
+    with wired.bus.log.path.open("ab") as bus:
         bus.write((json.dumps(row) + "\n").encode())
     with pytest.raises((ValueError, KeyError, TypeError)):
         wired.bus.pending_count("fixer")

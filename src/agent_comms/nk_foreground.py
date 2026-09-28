@@ -100,8 +100,8 @@ def reserve_foreground_owner(
     worktree = root / "work"
     _private_session_dir(worktree)
     comms = Comms(root)
-    with _store_lock(comms.bus._path):
-        marker = comms.bus._private_marker_unlocked()
+    with comms.bus.log.locked():
+        marker = comms.bus.log._private_marker_unlocked()
     if marker["wire_root_id"] != wire_root_id:
         raise RelationViolationError("Private wire root changed before owner reservation")
     owner = Thread(name, tags, str(worktree), pid=os.getpid(), task=task)

@@ -229,7 +229,7 @@ class TestConcurrentWire:
 class TestCrashRecovery:
     def test_message_bus_ignores_then_quarantines_truncated_tail(self, wired: Any) -> None:
         wired.messaging.send("PR111", "#all", "complete")
-        with open(wired.bus._path, "ab") as output:
+        with open(wired.bus.log.path, "ab") as output:
             output.write(b'{"seq": 2, "from": "broken"')
 
         assert [message.body for message in wired.views.full_history()] == ["complete"]
@@ -238,7 +238,7 @@ class TestCrashRecovery:
         messages = list(wired.views.full_history())
         assert [message.body for message in messages] == ["complete", "after recovery"]
         assert [message.seq for message in messages] == [1, 2]
-        assert (wired.bus._path.parent / "bus.jsonl.corrupt").exists()
+        assert (wired.bus.log.path.parent / "bus.jsonl.corrupt").exists()
 
     def test_activity_log_recovers_from_truncated_tail(self, wired: Any) -> None:
         wired.agents.set_activity("PR111", ActivityState.THINKING, "first")

@@ -95,7 +95,7 @@ class ChannelManagement:
             awareness.scope_changed(
                 owner,
                 admission=snapshot.admission_generations[owner.name],
-                high_water=self.bus.latest_sequence(),
+                high_water=self.bus.log.latest_sequence(),
                 channels=self.catalog.targets_for(owner.tags),
             )
 
@@ -118,7 +118,7 @@ class ChannelManagement:
                     before, after = channel.matches(thread.tags), channel.matches(updated.tags)
                     if before != after:
                         change = MembershipChange.JOINED if after else MembershipChange.LEFT
-                        self.bus.publish(
+                        self.bus.publisher.publish(
                             Message(
                                 thread.name,
                                 channel.name,

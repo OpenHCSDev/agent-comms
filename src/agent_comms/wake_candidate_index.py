@@ -143,10 +143,10 @@ class WakeCandidateIndex:
     """
 
     def __init__(self, bus: MessageBus):
-        if type(bus) is not MessageBus or bus._path.name != "bus.jsonl":
+        if type(bus) is not MessageBus or bus.log.path.name != "bus.jsonl":
             raise TypeError("candidate index requires the canonical bus")
         self.bus = bus
-        self.path = bus._path.with_name("wake_candidates.sqlite3")
+        self.path = bus.log.path.with_name("wake_candidates.sqlite3")
 
     @staticmethod
     def _tail(stream: Any, offset: int) -> str:
@@ -348,7 +348,7 @@ class WakeCandidateIndex:
     def _source_end(self, stream: Any, next_offset: int) -> tuple[os.stat_result, str]:
         """Reject path replacement before committing an index checkpoint."""
         after = os.fstat(stream.fileno())
-        current_path = self.bus._path.stat()
+        current_path = self.bus.log.path.stat()
         if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
             raise ProjectionRebuildRequiredError("candidate bus was replaced")
         return after, self._tail(stream, next_offset)
@@ -394,9 +394,9 @@ class WakeCandidateIndex:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
         try:
-            marker = self.bus._private_marker_unlocked()
+            marker = self.bus.log._private_marker_unlocked()
             root_id = str(marker["wire_root_id"])
-            with self.bus._path.open("rb") as stream:
+            with self.bus.log.path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
                     # Only explicit bounded rebuild may discard old v1 derived
@@ -454,13 +454,13 @@ class WakeCandidateIndex:
     def _verified_checkpoint(self, root_id: str) -> int:
         """Check one WAL checkpoint against its bounded source prefix-tail witness."""
         try:
-            marker = self.bus._private_marker_unlocked()
+            marker = self.bus.log._private_marker_unlocked()
             if marker["wire_root_id"] != root_id:
                 raise ProjectionRebuildRequiredError("candidate private root changed")
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
                 db.execute("BEGIN")
-                with self.bus._path.open("rb") as stream:
+                with self.bus.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     offset, last_seq = self._checkpoint_start(
                         db, stream, stat, root_id, rebuild=False
@@ -510,7 +510,7 @@ class WakeCandidateIndex:
                 "candidate catch-up requires an exact append hint and bootstrap choice"
             )
         self._validate_limits(max_rows, max_bytes)
-        if self.bus._private_marker_unlocked()["wire_root_id"] != hint.root_id:
+        if self.bus.log._private_marker_unlocked()["wire_root_id"] != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         if self.path.exists():
             prior = self._verified_checkpoint(hint.root_id)
@@ -578,7 +578,7 @@ class WakeCandidateIndex:
                     or checkpoint[5] < required_through_seq
                 ):
                     raise ProjectionUnavailableError("candidate projection is stale or unrelated")
-                with self.bus._path.open("rb") as stream:
+                with self.bus.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     if stat.st_size:
                         stream.seek(-1, os.SEEK_END)

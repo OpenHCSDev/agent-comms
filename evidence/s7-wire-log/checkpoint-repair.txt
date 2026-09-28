@@ -1,0 +1,61 @@
+..F.................................                                     [100%]
+=================================== FAILURES ===================================
+____________ test_claim_and_keyed_response_append_share_certificate ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint-repair/test_claim_and_keyed_response_0')
+
+    def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+        resource = tmp_path / "owned.py"
+        resource.write_text("owned\n")
+        initial = comms.messaging.send_initial_cohort("sender", "Alice", "task")
+        claim = comms.messaging.send_message("sender", "Alice", "claim", MessageType.HANDOFF, claims=["owned.py"])
+        assert claim.claim_transition is not None
+        assert comms.bus.log.claim_projection()[str(resource)].owner == "sender"
+        response_bus = MessageBus(comms.bus.log.path, comms.registry, private_response_writes=True)
+        expected = Message("Alice", "sender", "done", MessageType.INFO)
+        key = canonical_publication_key("execution-1", expected.target)
+        response = response_bus.publisher.publish_keyed_response(
+            PublicationIntent(
+                execution_id="execution-1",
+                sender=expected.sender,
+                exact_target=expected.target,
+                message_type=expected.type,
+                notice=expected.notice,
+                timestamp=expected.timestamp,
+                payload=expected.body,
+                payload_digest=hashlib.sha256(expected.body.encode()).hexdigest(),
+                publication_key=key,
+                expected_message_id=expected.message_id,
+            )
+        )
+        assert response.seq == claim.seq + 1
+        with _store_lock(comms.bus.log.path):
+            marker = comms.bus.log._private_marker_unlocked()
+>           witness = checkpoint.verify_private_bus_checkpoint_unlocked(comms.bus, marker)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+bus = <agent_comms.message_bus.MessageBus object at 0x7f83bc88e2c0>
+marker = {'last_seq': 3, 'writer_protocol_version': 1, 'wire_root_id': '92441c27c0bf4f6b907d63bd40eff773', 'claim_envelopes_version': 1, ...}
+
+    def verify_private_bus_checkpoint_unlocked(
+        bus: WireLog, marker: Mapping[str, int | str]
+    ) -> PrefixWitness:
+        """Check an exact revision or cold-validate every old byte on a changed revision.
+    
+        Caller holds the bus lock and has fsynced the bus inode and directory.
+        """
+>       path = _path(bus.path)
+                     ^^^^^^^^
+E       AttributeError: 'MessageBus' object has no attribute 'path'
+
+src/agent_comms/private_bus_checkpoint.py:462: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_private_bus_checkpoint.py::test_claim_and_keyed_response_append_share_certificate
+1 failed, 35 passed, 1 deselected in 5.34s

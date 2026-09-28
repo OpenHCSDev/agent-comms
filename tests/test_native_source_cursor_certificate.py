@@ -44,7 +44,7 @@ def _fresh(tmp_path: Path, count: int = 2):
         comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="fake/fake"))
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.messaging.initialize_private_claim_protocol()
-    install_private_bus_checkpoint(comms.bus)  # Strictly fresh-root opt-in.
+    install_private_bus_checkpoint(comms.bus.log)  # Strictly fresh-root opt-in.
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -80,7 +80,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     # Do not accept, inject, acknowledge, or replay those unrelated sources.
     for n in range(1001):
         comms.messaging.send_initial_cohort("sender", "other001", f"unrelated-{n}:" + "x" * 8400)
-    assert comms.bus._path.stat().st_size > 8 * 1024 * 1024
+    assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
     second = await runtime.run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -132,7 +132,7 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     source = _seal(comms, root, root_id, "#team", "@alpha selected")
-    frozen = comms.bus.read_initial_cohort(root_id, source.seq)
+    frozen = comms.bus.log.read_initial_cohort(root_id, source.seq)
     assert len(frozen.audience.recipients) == recipients
     start = time.perf_counter()
     turn = await runtime.run_one_sealed_claim(

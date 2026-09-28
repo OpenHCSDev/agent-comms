@@ -1,0 +1,52 @@
+{
+  "bus_members": {
+    "_assert_private_directory": "log._assert_private_directory",
+    "_claim_projection_unlocked": "log._claim_projection_unlocked",
+    "claim_projection": "log.claim_projection",
+    "_private_marker_unlocked": "log._private_marker_unlocked",
+    "_verified_private_rows_unlocked": "log._verified_private_rows_unlocked",
+    "_append_private_unlocked": "log._append_private_unlocked",
+    "read_initial_cohort": "log.read_initial_cohort",
+    "_keyed_receipt_unlocked": "log._keyed_receipt_unlocked",
+    "read_keyed_response": "log.read_keyed_response",
+    "_public_page_record": "log._public_page_record",
+    "_record_snapshot": "log._record_snapshot",
+    "full_history_snapshot": "log.full_history_snapshot",
+    "_receipt_offsets": "log._receipt_offsets",
+    "message_by_id": "log.message_by_id",
+    "total_messages": "log.total_messages",
+    "latest_sequence": "log.latest_sequence",
+    "_iter_log_unlocked": "log._iter_log_unlocked",
+    "_max_sequence_unlocked": "log._max_sequence_unlocked",
+    "_last_row_sequence_unlocked": "log._last_row_sequence_unlocked",
+    "_read_last_sequence": "log._read_last_sequence",
+    "assert_legacy_rewrite_allowed": "log.assert_legacy_rewrite_allowed",
+    "_assert_no_private_authority_unlocked": "log._assert_no_private_authority_unlocked",
+    "_validate_publish_request": "publisher._validate_publish_request",
+    "_prepare_message_unlocked": "publisher._prepare_message_unlocked",
+    "publish": "publisher.publish",
+    "publish_ordinary": "publisher.publish_ordinary",
+    "initialize_private_protocol": "publisher.initialize_private_protocol",
+    "initialize_private_claim_protocol": "publisher.initialize_private_claim_protocol",
+    "publish_claim_envelope": "publisher.publish_claim_envelope",
+    "publish_initial_cohort": "publisher.publish_initial_cohort",
+    "publish_keyed_response": "publisher.publish_keyed_response",
+    "_publish_keyed_response_unlocked": "publisher._publish_keyed_response_unlocked",
+    "_path": "log.path",
+    "_private_response_writes": "publisher._private_response_writes",
+    "_private_initial_writes": "publisher._private_initial_writes",
+    "_private_claim_writes": "publisher._private_claim_writes",
+    "full_history": "log.full_history",
+    "_load_log": "log.full_history"
+  },
+  "removed": [
+    "send",
+    "_next_seq",
+    "_load_log_unlocked",
+    "_publish_legacy"
+  ],
+  "classes": {
+    "log": "wire_log.WireLog",
+    "publisher": "publisher.Publisher"
+  }
+}

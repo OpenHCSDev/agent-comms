@@ -127,14 +127,14 @@ class SelectedWritePlans:
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
         with _store_lock(self.comms._wire_lock_path):
-            with _store_lock(self.comms.bus._path):
-                marker = self.comms.bus._private_marker_unlocked()
+            with self.comms.bus.log.locked():
+                marker = self.comms.bus.log._private_marker_unlocked()
             if marker["wire_root_id"] != self.root_id or marker.get("claim_envelopes_version") != 1:
                 raise IdentityConflict("Selected write requires matching private claim root")
             owner, epoch = self.comms.registry.live_owner_with_admission(owner_name)
             if owner.pid != os.getpid() or owner.active_turn is not None:
                 raise IdentityConflict("Selected write owner is not idle in this process")
-            initial = self.comms.bus.read_initial_cohort(self.root_id, source_seq)
+            initial = self.comms.bus.log.read_initial_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = stable_thread_lookup(owner.created_at)

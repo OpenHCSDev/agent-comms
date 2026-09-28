@@ -29,7 +29,6 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
     binding_store_path,
@@ -43,6 +42,7 @@ from agent_comms.native_source_cursor import (
 )
 from agent_comms.proven_source_coverage import read_proven_source_coverage
 from agent_comms.threads import Thread
+from agent_comms.wire_log import WireLog
 
 
 @pytest.fixture
@@ -72,7 +72,7 @@ def _root(tmp_path: Path):
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
-    initial = comms.bus.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -368,7 +368,7 @@ def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path,
         comms.messaging.send_initial_cohort("sender", "alpha", f"Additional source {index}")
     lookup = stable_thread_lookup(people[1].created_at)
     scanned = 0
-    original_rows = MessageBus._verified_private_rows_unlocked
+    original_rows = WireLog._verified_private_rows_unlocked
 
     def observed_rows(self, marker):
         nonlocal scanned
@@ -376,7 +376,7 @@ def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path,
             scanned += 1
             yield row
 
-    monkeypatch.setattr(MessageBus, "_verified_private_rows_unlocked", observed_rows)
+    monkeypatch.setattr(WireLog, '_verified_private_rows_unlocked', observed_rows)
     with (
         MutationStore(str(root / "coordination.sqlite3")) as store,
         pytest.raises(IdentityConflict, match="bounded private initial scan"),

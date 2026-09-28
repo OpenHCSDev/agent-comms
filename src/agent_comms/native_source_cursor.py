@@ -23,7 +23,6 @@ from .historical_native_inputs import HistoricalNativeInput, read_historical_nat
 from .message_bus import MessageBus
 from .private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from .proven_source_coverage import ProvenSourceCoverage, read_proven_source_coverage
-from .store_files import _store_lock
 from .threads import Thread
 
 # The old-root canonical bus read still has an 8 MiB / 1,000-row ceiling.
@@ -35,10 +34,10 @@ _MAX_SOURCE_BYTES = 8 * 1024 * 1024
 
 def _source_witness_unlocked(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
     """Recheck exact certified revision, or hash a bounded legacy bus."""
-    marker = bus._private_marker_unlocked()
+    marker = bus.log._private_marker_unlocked()
     if marker.get("checkpoint_version") == 1:
-        return verify_private_bus_checkpoint_unlocked(bus, marker)
-    descriptor = os.open(bus._path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        return verify_private_bus_checkpoint_unlocked(bus.log, marker)
+    descriptor = os.open(bus.log.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_SOURCE_BYTES:
@@ -53,10 +52,8 @@ def _source_witness_unlocked(bus: MessageBus) -> PrefixWitness | tuple[int, int,
 
 
 def _source_witness(bus: MessageBus) -> PrefixWitness | tuple[int, int, int, str]:
-    certified = bus._path.with_name("private_bus_checkpoint.sqlite3").exists()
-    with _store_lock(
-        bus._path, blocking=False, max_bus_bytes=None if certified else _MAX_SOURCE_BYTES
-    ):
+    certified = bus.log.path.with_name("private_bus_checkpoint.sqlite3").exists()
+    with bus.log.locked(blocking=False, max_bus_bytes=None if certified else _MAX_SOURCE_BYTES):
         return _source_witness_unlocked(bus)
 
 
@@ -259,7 +256,7 @@ def advance_current_native_cursor(
     # receipt identities again inside its live-owner fence.
     prefix_evidence = _prefix_evidence(store, wire_root_id, lookup, coverage)
     with _response_boundary(bus, blocking=False) as registry, store._transaction() as db:
-        marker = bus._private_marker_unlocked()
+        marker = bus.log._private_marker_unlocked()
         if _source_witness_unlocked(bus) != source_witness:
             raise IdentityConflict("current cursor canonical source changed before commit")
         actual = registry.threads.get(owner.name)
@@ -436,7 +433,7 @@ def read_current_native_cursor(
     if type(bus) is not MessageBus or type(store) is not MutationStore:
         raise ValueError("current native cursor needs actual private stores")
     with _response_boundary(bus, blocking=False) as registry:
-        marker = bus._private_marker_unlocked()
+        marker = bus.log._private_marker_unlocked()
         actual = registry.threads.get(owner_name)
         status = registry.statuses.get(owner_name)
         epoch = registry.admission_generations.get(owner_name)
@@ -528,7 +525,7 @@ def read_current_native_cursor(
         current = registry.threads.get(owner_name)
         status = registry.statuses.get(owner_name)
         if (
-            bus._private_marker_unlocked()["wire_root_id"] != wire_root_id
+            bus.log._private_marker_unlocked()["wire_root_id"] != wire_root_id
             or current is None
             or status is None
             or not status.active

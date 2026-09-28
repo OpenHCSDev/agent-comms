@@ -69,6 +69,6 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
             )
             assert committed.claim_transition is not None
             assert not hasattr(committed.claim_transition, "wake_claim_id")
-            projection = comms.bus.claim_projection()
+            projection = comms.bus.log.claim_projection()
             assert projection[str(resource)].owner == "Bob"
             assert resource.read_text() == "value = 1\n"
