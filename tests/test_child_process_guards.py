@@ -40,3 +40,16 @@ def test_detached_control_has_no_bare_pid_api() -> None:
         if isinstance(method, ast.FunctionDef) and method.name == "attach"
     )
     assert ast.unparse(attach.args.args[1].annotation) == "ProcessIdentity"
+
+
+def test_backend_and_input_callers_cannot_reintroduce_local_supervision() -> None:
+    package = Path(child_process.__file__).parent
+    for name in ('backend.py', 'turn_inputs.py'):
+        tree = ast.parse((package / name).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                assert node.name not in {'_terminate_process', '_close_child_stdin'}
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                assert node.func.attr not in {'create_subprocess_exec', 'Popen', 'killpg', 'kill'}
+                if isinstance(node.func.value, ast.Name):
+                    assert node.func.value.id != 'signal'
