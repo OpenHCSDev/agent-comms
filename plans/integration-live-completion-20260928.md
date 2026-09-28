@@ -4,10 +4,10 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core46b729cf (277 canonical config/rejection +future queue,
-276 provider feedback +278 production wake bootstrap), Toad08d464bf (127 T4 and
-50 browser), Textual16ede007, native5fde.
-The immutable runtime-private-config-20260928 is live. Four idle owners restarted;
+Latest installed pair: core451cc423 (280 wake visibility,283 proof decoding,
+284 canonical native framing, plus277/276/278), Toadb472e487 (128 attention,
+127 T4 and50 browser), Textualc9743801 (8 editor lifetime), native5fde.
+The immutable runtime-native-framing-20260928 is live. Four idle owners restarted;
 no store reset, session loss or input replay. Restart the user's Toad to load the
 new imports. Combined local checks38 passed; installed native wake/restart and
 feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
@@ -16,6 +16,10 @@ diagnostic155 received exact reply156 LIVE_BUS_CONFIG_OK from nra-architecture
 through the actual bus/restarted owner/configured provider, then returned idle.
 Latest pair passes six installed native config/rejection checks and the full
 installed native queue/reattach/DM/channel/stopped-owner UI pilot.
+New shipping batch:11 installed real drain/schema tests,2 mounted warning/recovery
+pilots with the merged framework,2 installed proof/reopen cases, then9 installed
+native cases including a2.1MB record, cancellation and EOF. All pass. All runtime
+stores and durable histories remain intact; executed activation operators deleted.
 
 ## Current shipping batch
 
@@ -63,8 +67,9 @@ installed native queue/reattach/DM/channel/stopped-owner UI pilot.
 - [x] Boyle: production bootstrap and a native regression that relies on
   that bootstrap instead of manually provisioning its own private-wake schemas.
   PR278 merged and installed; fresh and base-only native send/restart passed.
-- [ ] Boyle: expose failed background drains through existing typed activity and
-  diagnostics, so an actual wake failure cannot remain silently Ready.
+- [x] Boyle: expose failed background drains through existing typed activity and
+  diagnostics. Core280/Toad128 merged and installed: owner-scoped deduplicated
+  warnings survive ACP Ready and clear on recovery; actual schema failures tested.
 - [x] Wegener: fix return-message152 native rejection and private future queue.
   PR277 merged/installed: nested private launch overwrote canonical config with
   credential-free settings, causing No API key found for openai-codex. Preserves
@@ -103,13 +108,27 @@ installed native queue/reattach/DM/channel/stopped-owner UI pilot.
   Carver now owns Conversation/blocks/Agent lifecycle and the observed Question
   disconnect/mount race in127; merged and installed, full native pilot passes.
   Noether now owns App TabOrder/clipboard; Tesla owns116 resource integration.
+- [x] Parent: merge Textual8 editor state lifetime after focused307/full3515
+  framework acceptance; pin/install mainc9743801. No pending framework dependency.
 - [ ] Parent: finish actual remaining original/round-two plan acceptance and
   deletion audit against current source; stale reports are not current blockers
   and do not establish completion. Keep explicit requirement/evidence mapping.
   Dalton audit281:19 current guards pass, retired names absent, executed operators
-  deleted. Dalton owns remaining proof-journal decoder; Wegener assigned fixed
-  native RPC reader limit after its provider probe. Historical benchmarks and
-  universal size requirements remain unproven, not silently marked complete.
+  deleted. Proof decoder283 and fixed RPC ceiling284 now merged and live; old
+  decoder/limit deleted. Durable proof format unchanged,148 retained contexts
+  independently verified. Historical benchmarks and universal size requirements
+  remain unproven, not silently marked complete.
+- [ ] Boyle: execute S7 three real pollers at50/100/150 threads, send p50/p99 and
+  actual lock timings, replace obsolete benchmark APIs and retain honest baseline
+  comparison limits; draft285.
+- [ ] Dalton: finish nominal tool request/behavior/catalog ownership in tools.py;
+  remove central handler roster, parameter-kind dispatch and repeated raw decoding.
+- [ ] Wegener: finish tracked native turn lifecycle ownership using existing
+  PiEvent/dispatch authorities, deleting manual duplicated event handling.
+- [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
+  run completed35.94s; its payload lacks detector coverage counts, so it is not
+  claimed as complete-detector/zero-debt proof. Domain review rejected schema-index
+  ordering as a false-positive mirror; actual tool declaration duplication assigned.
 
 ## Quiet runtime cutover
 

@@ -11,10 +11,10 @@ dependencies = [
 
 [tool.uv]
 package = false
-# This stack owns its core pin, including Toad's transitive requirement.
-override-dependencies = ["agent-comms[acp]"]
+# This stack owns the paired core and framework pins, including Toad's requirements.
+override-dependencies = ["agent-comms[acp]", "textual[syntax]==8.2.8"]
 
 [tool.uv.sources]
-agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "46b729cf16812620cf9d419aa30d95450a87687e" }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "08d464bff64e055708a3e09f5fab2b25af548aef" }
-textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "16ede007c34bec893b2dbedb3999223381129678" }
+agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "451cc42328fa747ebdb585f4f3a1a3d95a23affa" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "b472e487d69c600490609fec7163376e30b1b5d1" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "c9743801c98dc570f82f82e25915ecce89800f4b" }
