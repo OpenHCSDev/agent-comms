@@ -17,8 +17,8 @@ No feature is complete merely because a draft exists or a PR was merged.
   update on merged272; return complete published heads to parent and Carver.
   Parent has integrated core85363055 (declared requests, current callers,
   declaration-owned display errors with structured input status). All35 focused
-  checks pass; aggregate coverage threshold alone returned exit1. Dalton is
-  finishing actual-path receipts and related caller corrections.
+  checks pass; aggregate coverage threshold alone returned exit1. Final T2
+  receipts are retained by merged deployment275.
 - [x] Carver: integrate Toad120/121/123/124 in own persistent integration tree;
   resolve overlapping declarations with T2, test installed UI/native behavior.
 - [x] Parent: integrate final T2 and paired core270, review and merge the completed
@@ -36,12 +36,39 @@ No feature is complete merely because a draft exists or a PR was merged.
   One prompt encountered provider WebSocket1011; explicit user retry succeeded.
   Dalton owns clearer typed provider-error feedback. No automatic input replay.
 - [ ] Parent: reconcile source PRs, publish actual live state and cleanup artifacts.
+  Deployment275 merged;262 closed through ancestry;53 closed as implemented by
+  120/125.122 retains only formatting/receipts plus one test expectation, assigned
+  to Carver to preserve in T4 before closing.
+
+## Actual live failures discovered after activation
+
+- [x] Repair missing live private-wake schemas. The live coordinator had only
+  base tables; native fixtures had installed the missing tables themselves.
+  Eleven declared tables installed with existing owners, no records deleted and
+  no message resent. Original151 woke domain-mapping, which restarted architecture
+  and published replies152/153. This proves that original delivery completed.
+- [ ] Boyle: fix production bootstrap and a native regression that relies on
+  that bootstrap instead of manually provisioning its own private-wake schemas.
+- [ ] Wegener: diagnose/fix return-message152 native rejection. Current code
+  discards Pi's actual prompt rejection behind a generic unavailable error.
+  No automatic retry of this uncertain attempt. Also owns the two private future
+  queue regressions previously listed as parent-owned.
+- [ ] Parent: install merged274 retained-private-history proof fix. It passed
+  four installed actual native reset cases in Wegener's tree. Fresh immutable
+  runtime-private-proof-candidate-20260928 is staged; its matching installed
+  four-case run is underway in a short durable test path. First local run failed
+  before exercising the code because its Unix socket path was too long.
+- [ ] Dalton: improve typed provider transport feedback using actual1011 and
+  upstream-connection-failure evidence. User's explicit retry worked; no global
+  transport setting changed and no failed prompt was automatically resent.
 
 ## Parallel remaining work
 
 - [ ] Wegener: replace obsolete fake-owner native integration fixture with actual
   pinned native host path and prove ordinary/private one-original admission,
-  correction/queued input/refusal without replay. Own test/host files only.
+  correction/queued input/refusal without replay.274 merged actual fixtures and
+  retained-proof production fix; remaining private queue/native rejection code
+  explicitly belongs to Wegener now.
 - [ ] Tesla: establish116 ownership first, then finish an independent substantive
   workspace/resource implementation slice (or take over only if unowned). Use110
   measurements, preserve operational ACP/editor state, coordinate with Carver.
