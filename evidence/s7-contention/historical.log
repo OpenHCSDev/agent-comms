@@ -1,0 +1,3 @@
+{"threads": 50, "policy": "ForcedExclusiveReads", "send": {"count": 200, "p50_ms": 172.3161319969222, "p99_ms": 312.5516119907843, "max_ms": 325.54809500288684, "total_ms": 34510.26393797656}, "scratch_bytes": 4144377, "failed_polls": 0}
+{"threads": 100, "policy": "ForcedExclusiveReads", "send": {"count": 200, "p50_ms": 306.5520509990165, "p99_ms": 506.97510699683335, "max_ms": 593.4545980126131, "total_ms": 60538.894518016605}, "scratch_bytes": 8029971, "failed_polls": 0}
+{"threads": 150, "policy": "ForcedExclusiveReads", "send": {"count": 200, "p50_ms": 424.48000400327146, "p99_ms": 757.9101960000116, "max_ms": 830.8875340007944, "total_ms": 85042.23282105522}, "scratch_bytes": 11926795, "failed_polls": 0}
