@@ -1,0 +1,6 @@
+Resolved 1 package in 2ms
+Prepared 1 package in 12ms
+Uninstalled 1 package in 0.74ms
+Installed 1 package in 5ms
+ - agent-comms==0.1.0 (from file:///home/ts/wt/comms-observable-drain-failure-20260928)
+ + agent-comms==0.1.0 (from file:///home/ts/wt/comms-observable-drain-failure-20260928/.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl)

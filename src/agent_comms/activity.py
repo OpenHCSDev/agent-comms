@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import time
+from abc import abstractmethod
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .store_files import (
@@ -19,6 +21,7 @@ from .store_files import (
     _store_lock,
     file_revision,
 )
+from .thread_identity import OwnerIdentity
 from .thread_presentation import ThreadPresentation
 
 
@@ -40,6 +43,35 @@ class ActivityState(Enum):
         return ThreadPresentation(title, "⌛", summary, busy=True)
 
 
+@dataclass(frozen=True)
+class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
+    """An owner's observed failure, never delivery or retry authority."""
+
+    owner: OwnerIdentity
+    error_type: str
+    reason: str
+
+    @property
+    @abstractmethod
+    def recovery(self) -> str: ...
+
+    @property
+    def summary(self) -> str:
+        return f"Inbox unavailable · {self.error_type}: {self.reason} · {self.recovery}"
+
+
+class UnavailableDrainDiagnostic(DrainDiagnostic):
+    @property
+    def recovery(self) -> str:
+        return "Waiting for recovery"
+
+
+class StoppedDrainDiagnostic(DrainDiagnostic):
+    @property
+    def recovery(self) -> str:
+        return "Drain stopped; fix the error and restart the owner"
+
+
 @dataclass(frozen=True, slots=True)
 class Activity:
     """Declares one thread's current activity (what it is doing right now).
@@ -55,6 +87,20 @@ class Activity:
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
     )
+
+    diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
+
+    def for_owner(self, owner: OwnerIdentity) -> Activity:
+        if self.diagnostic is not None and self.diagnostic.owner != owner:
+            return replace(self, diagnostic=None)
+        return self
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        if self.diagnostic is not None:
+            return ThreadPresentation(
+                title, "!", self.diagnostic.summary, busy=self.state.busy, attention=True
+            )
+        return self.state.presentation(title, self.detail)
 
     def __post_init__(self) -> None:
         if not self.thread:
@@ -100,7 +146,11 @@ class ActivityLog:
         latest = self._latest_events().get(thread)
         if latest is None:
             return Activity(thread=thread, state=ActivityState.IDLE)
-        if not active and time.time() - latest.timestamp > self._stale_after:
+        if (
+            latest.diagnostic is None
+            and not active
+            and time.time() - latest.timestamp > self._stale_after
+        ):
             return Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)
         return latest
 
@@ -111,7 +161,9 @@ class ActivityLog:
         return {
             thread: (
                 activity
-                if thread in active or now - activity.timestamp <= self._stale_after
+                if activity.diagnostic is not None
+                or thread in active
+                or now - activity.timestamp <= self._stale_after
                 else Activity(thread=thread, state=ActivityState.IDLE, timestamp=activity.timestamp)
             )
             for thread, activity in result.items()
