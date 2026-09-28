@@ -194,6 +194,13 @@ def test_native_startup_metadata_uses_existing_entry_family():
     assert not second.matches_startup(("test", "local"), "low")
     assert NativeEntry.from_wire(model) == first
     assert NativeEntry.from_wire(thinking) == second
+    session_parent = "98765432-abcd-4567-8123-0123456789ab"
+    rooted = StartupMetadataEntry.read_startup(
+        json.dumps({**model, "parentId": session_parent}).encode()
+    )
+    assert rooted.parent_id == session_parent
+    with pytest.raises(ValueError):
+        StartupMetadataEntry.read_startup(json.dumps({**model, "id": session_parent}).encode())
     assert isinstance(NativeEntry.from_wire({"type": "future"}), UnknownEntry)
     # Native evidence is fail closed even though history can display opaque entries.
     for row in (model, thinking):
