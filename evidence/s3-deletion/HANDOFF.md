@@ -4,7 +4,7 @@ Owner: Pascal. Branch `codex/refactor-s3-deletion-20260928`, persistent `/home/t
 
 ## Source and state
 
-Based on main `326a04b` (PR163), including `829ce55` TurnRunner/OwnedTurn. PR159 was handed off first; this branch changes only the S3 surface and current consumers. Full working source is in this PR; no installed-runtime claim.
+Based on main `e98ffb5` (PR164), including PR163 and `829ce55` TurnRunner/OwnedTurn. Clean rebase preserved parent backend/ResponsePolicy deletions. PR159 was handed off first; this branch changes only the S3 surface and current consumers. Full working source is in this PR; no installed-runtime claim.
 
 ## Deleted mechanisms
 
@@ -20,7 +20,7 @@ SQLite decoders build lifecycle objects once; mutation, cohort, publication, adm
 
 Only explicit `snapshot_*` codec fields preserve the existing external snapshot schema; they do not expose the removed internal API. Current SQLite values, schema and stored history remain unchanged/readable. Capture tests pin persisted names/edges and roundtrip tests cover the current state API. No obsolete-client coexistence fixture or gate.
 
-Current TurnRunner/OwnedTurn has no removed state-API calls and required no edits. Current Toad live-pins/export-caller source audit found no calls to the deleted APIs. Parent's concurrent backend/ResponsePolicy deletion is disjoint except three existing ResponsePolicy constants in tests/test_wake.py; S3 changes in that file only migrate wake states/assertions.
+Current TurnRunner/OwnedTurn has no removed state-API calls and required no edits. Current Toad live-pins/export-caller source audit found no calls to the deleted APIs. Parent's PR164 backend/ResponsePolicy deletion is included. The shared tests/test_wake.py now contains both current response-policy constructors and nominal wake-state assertions; no compatibility names survived.
 
 ## Local acceptance
 
@@ -30,6 +30,7 @@ Integration venv `/home/ts/wt/comms-refactor-integration-20260927/.venv`, `PYTHO
 - `runtime2.txt`:114 passed. Coordinated runtime, native failure recovery, admission verifier/baseline, ACP selected write, ordinary N/K delivery, FieldCodec. Verifies actual composed local runtime with offline provider fixture and strict nominal class-reference boundary.
 - `seams.txt`:158 passed,7 skipped. Store rerun after removing verdict duplicate, foreground/NK child processes, wake candidate indexes, native prompt binding/native Pi tests. Skips are existing opt-in native/environment checks; no paid provider execution.
 - Foreground fixtures migrated to current saved model selection, actual packaged coding extension bytes, and Response/ContextCommitted observations; provider boundary remains fake. The child process, bus/SQLite path, custody/uncertainty and nonreplay checks are real.
+- `rebase164.txt`:49 passed after merging current main. Wake/response-policy/nominal socket and live-turn observations plus the two-recipient offline native runtime path.
 - Ruff on changed Python files and `git diff --check` pass.
 
 Failed/intermediate evidence is retained as gzip logs, with authored migration scripts. These were source-directed transformations where NRA DSL native equivalence was not established; passing tests are the behavior evidence. Architecture scan coverage is recorded separately below.
@@ -39,3 +40,9 @@ Failed/intermediate evidence is retained as gzip logs, with authored migration s
 No known S3 implementation blocker. CI deferred by owner. Parent integrates and activates; installed current-provider/UI acceptance remains parent-owned and is not claimed by these local checks. Existing unproduced historical durable phase names remain part of actual persisted data, not an old-client interface.
 
 Exact changed production/test paths: [changed-files.txt](changed-files.txt).
+
+## NRA coverage and proof limits
+
+`nra-complete.json`: uncached `exact_compact_global`,79 analyzed detectors,0 omitted,complete;0 reported findings. Explicit context root `src/agent_comms`, report targets coordination/store/cohort/response/runtime/recovery projection and claim/execution/attempt/obligation states. One parser/analysis worker,140s internal budget/165s shell bound;23s actual. Scan predates only the clean parent PR164 rebase (whose49 seam tests pass). Earlier default20s deadline and partial43/79 cache results are preserved and are not counted as complete. No native codemod equivalence claim.
+
+All owned test/NRA processes exited before disposable fixture/cache cleanup. Retained evidence includes failed logs, current reports, the scan coverage and authored transformation scripts; owned bulky caches/fixture directories were removed. No worktree, user history or live data was deleted.
