@@ -1,0 +1,46 @@
+..........F
+=================================== FAILURES ===================================
+___________ test_real_idle_owner_is_replaced_without_losing_session ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owner-graceful-restart-20260928/.test-work/restart-detail/test_real_idle_owner_is_replac0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f631c1c7d40>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
+    async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monkeypatch):
+        from agent_comms.runtime import socket_path
+    
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        session = tmp_path / "session.jsonl"
+        session.write_text("")
+        comms = wire(tmp_path / "wire")
+        comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+        owner = comms.owners.ensure_owner("worker", agent_bin="/bin/echo")
+    
+        async def ready(pid):
+            async with asyncio.timeout(10):
+                while not socket_path(comms.root, pid).exists():
+                    assert comms.owners._process_alive(pid)
+                    await asyncio.sleep(0.05)
+    
+        try:
+>           await ready(owner.pid)
+
+tests/test_restart.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pid = 2731476
+
+    async def ready(pid):
+        async with asyncio.timeout(10):
+            while not socket_path(comms.root, pid).exists():
+>               assert comms.owners._process_alive(pid)
+E               assert False
+E                +  where False = <function OwnerLifecycle._process_alive at 0x7f631c473ab0>(2731476)
+E                +    where <function OwnerLifecycle._process_alive at 0x7f631c473ab0> = <agent_comms.owner_lifecycle.OwnerLifecycle object at 0x7f631b264f50>._process_alive
+E                +      where <agent_comms.owner_lifecycle.OwnerLifecycle object at 0x7f631b264f50> = <agent_comms.comms.Comms object at 0x7f631c035310>.owners
+
+tests/test_restart.py:230: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_restart.py::test_real_idle_owner_is_replaced_without_losing_session
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 10 passed in 1.62s

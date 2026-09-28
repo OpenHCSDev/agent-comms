@@ -1,0 +1,21 @@
+{
+  "starts": [
+    {
+      "thread": "agent-comms-ux",
+      "pid": 2720512,
+      "launched": true
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "pid": 2720513,
+      "launched": true
+    }
+  ],
+  "ready": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true
+  },
+  "bus_seq": 56,
+  "roster_count": 103,
+  "runtime": "runtime-bus-compaction-20260928"
+}

@@ -369,6 +369,7 @@ class OwnerLifecycle:
         ]
         if alive:
             with _store_lock(self._wire_lock_path):
+                signal_targets = []
                 for thread, epoch in alive:
                     if expected_incarnations is not None:
                         stop_snapshot = self.registry.snapshot()
@@ -380,15 +381,22 @@ class OwnerLifecycle:
                             or not stop_snapshot.statuses[thread.name].stopped
                             or stop_snapshot.admission_generations.get(thread.name)
                             != stop_epochs[thread.name]
+                        ) and not self._released_same_owner(
+                            stop_snapshot, thread, stop_epochs[thread.name]
                         ):
                             raise RelationViolationError("Fenced owner changed after signal.")
                     else:
                         self._require_same_stop_owner(thread, epoch)
+                    if self._wait_for_owner_exit(thread.pid, 0):
+                        continue
                     if not self._is_local_participant(thread, wait=False):
+                        if self._wait_for_owner_exit(thread.pid, 0):
+                            continue
                         raise RelationViolationError(
                             f"Refusing to signal unverifiable process {thread.pid}."
                         )
-                for thread, _epoch in alive:
+                    signal_targets.append(thread)
+                for thread in signal_targets:
                     with suppress(ProcessLookupError):
                         self._signal_local_owner(thread.pid, signal.SIGKILL)
             remaining = [
@@ -411,11 +419,14 @@ class OwnerLifecycle:
                         != (thread.pid, thread.created_at)
                         or not final.statuses[thread.name].stopped
                         or final.admission_generations.get(thread.name) != stop_epochs[thread.name]
-                        or self._process_alive(thread.pid)
+                    ) and not self._released_same_owner(
+                        final, thread, stop_epochs[thread.name]
                     ):
                         raise RelationViolationError(
-                            "Fenced owner changed or survived after signal."
+                            "Fenced owner changed after signal."
                         )
+                    if self._process_alive(thread.pid):
+                        raise RelationViolationError("Fenced owner survived after signal.")
                 elif not self._released_same_owner(final, thread, epoch):
                     self._require_same_stop_owner(thread, epoch)
             if expected_incarnations is None:
@@ -615,12 +626,15 @@ class OwnerLifecycle:
             return
         with _store_lock(self._wire_lock_path):
             self._require_same_stop_owner(thread, epoch)
-            if not self._is_local_participant(thread, wait=False):
-                raise RelationViolationError(
-                    f"Refusing to signal unverifiable process {thread.pid} for {name!r}."
-                )
-            with suppress(ProcessLookupError):
-                self._signal_local_owner(thread.pid, signal.SIGKILL)
+            if not self._wait_for_owner_exit(thread.pid, 0):
+                if not self._is_local_participant(thread, wait=False):
+                    if not self._wait_for_owner_exit(thread.pid, 0):
+                        raise RelationViolationError(
+                            f"Refusing to signal unverifiable process {thread.pid} for {name!r}."
+                        )
+                else:
+                    with suppress(ProcessLookupError):
+                        self._signal_local_owner(thread.pid, signal.SIGKILL)
         if not self._wait_for_owner_exit(thread.pid, 1.0):
             raise RuntimeError(f"Process did not stop: {self._stop_failure_probe(thread.pid)}")
         self._finish_stopped_owner(thread, epoch)
@@ -659,6 +673,11 @@ class OwnerLifecycle:
 
     def _require_same_stop_owner(self, thread: Thread, epoch: int) -> None:
         snapshot = self.registry.snapshot()
+        # Voluntary release advances admission and marks STOPPED before Python
+        # finishes shutting down. Its exact receipt preserves the signaled
+        # incarnation; it does not prove OS exit or authorize a replacement PID.
+        if self._released_same_owner(snapshot, thread, epoch):
+            return
         current = snapshot.threads.get(thread.name)
         if (
             current is None

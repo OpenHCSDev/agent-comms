@@ -1,0 +1,18 @@
+{
+  "runtime": "runtime-bus-compaction-20260928",
+  "source_seq": 57,
+  "reply_seq": 58,
+  "elapsed": 15.69117021560669,
+  "native_tools": [
+    {
+      "name": "read",
+      "error": false
+    },
+    {
+      "name": "bash",
+      "error": false
+    }
+  ],
+  "verified_success": true,
+  "current_bus_seq": 58
+}
