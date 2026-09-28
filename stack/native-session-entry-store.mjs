@@ -1,5 +1,5 @@
 /** Native session history storage. JSONL is authority; SQLite contains rebuildable selectors only. */
-import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync } from 'node:fs';
+import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -20,6 +20,7 @@ export class EntryMetadata {
         this.length = length;
         this.role = entry.message?.role ?? null;
         this.inputId = entry.message?.inputId ?? null;
+        this.inputDigest = entry.message?.inputDigest ?? null;
         this.commitId = entry.details?.agentCommsCommit?.commitId ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
         this.model = entry.type === 'model_change'
@@ -103,16 +104,21 @@ export class EntryStore {
             if (keeping) yield this.get(meta.id);
         }
     }
-    *trackedInputs() {
-        for (const meta of this.metadataEntries()) if (meta.inputId !== null) yield this.get(meta.id);
+    *trackedMetadata() {
+        for (const meta of this.metadataEntries()) if (meta.inputId !== null) yield meta;
     }
-    trackedInput(inputId) {
+    trackedInputMetadata(inputId) {
         let found;
-        for (const entry of this.trackedInputs()) if (entry.message.inputId === inputId) {
+        for (const meta of this.trackedMetadata()) if (meta.inputId === inputId) {
             if (found) throw new Error('Duplicate native input ID in session');
-            found = entry;
+            found = meta;
         }
         return found;
+    }
+    *trackedInputs() { for (const meta of this.trackedMetadata()) yield this.get(meta.id); }
+    trackedInput(inputId) {
+        const meta = this.trackedInputMetadata(inputId);
+        return meta ? this.get(meta.id) : undefined;
     }
     *commits(commitId) {
         for (const meta of this.metadataEntries()) if (meta.commitId === commitId) yield this.get(meta.id);
@@ -171,8 +177,6 @@ export class DiskEntryStore extends EntryStore {
     #extent = 0;
     #sequence = 0;
     #metadata;
-    #directory;
-    #onExit;
     #insert;
     constructor(file, { indexDirectory = process.env.AGENT_COMMS_SESSION_INDEX_DIR ?? join(homedir(), '.cache', 'agent-comms', 'session-indexes') } = {}) {
         super();
@@ -183,16 +187,17 @@ export class DiskEntryStore extends EntryStore {
         try {
             this.#fd = openSync(this.file, 'r');
             this.#db = new DatabaseSync(index);
-            this.#db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA mmap_size=0;');
-            this.#directory = directory;
-            this.#onExit = () => this.close();
-            process.once('exit', this.#onExit);
+            this.#db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA mmap_size=0; PRAGMA locking_mode=EXCLUSIVE;');
             this.#db.exec(`CREATE TABLE entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
                 input_id TEXT, commit_id TEXT, selectors TEXT NOT NULL);
                 CREATE INDEX entry_parent ON entries(parent);
                 CREATE INDEX entry_input ON entries(input_id);
                 CREATE INDEX entry_commit ON entries(commit_id);`);
+            // SQLite has initialized and owns an exclusive open inode. Derived pages
+            // live on persistent disk, but no pathname survives reader exit or SIGKILL.
+            unlinkSync(index);
+            rmSync(directory, {recursive:true});
             this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
             this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?,?)');
             this.refresh();
@@ -217,8 +222,14 @@ export class DiskEntryStore extends EntryStore {
             SELECT e.id,e.parent,e.sequence,e.selectors FROM entries e JOIN path p ON e.id=p.parent)
             SELECT selectors FROM path ORDER BY sequence`).iterate(leafId)) yield EntryMetadata.fromIndex(row);
     }
-    *trackedInputs() {
-        for (const row of this.#db.prepare('SELECT id FROM entries WHERE input_id IS NOT NULL ORDER BY sequence').iterate()) yield this.get(row.id);
+    *trackedMetadata() {
+        for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE input_id IS NOT NULL ORDER BY sequence').iterate())
+            yield EntryMetadata.fromIndex(row);
+    }
+    trackedInputMetadata(inputId) {
+        const rows = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? LIMIT 2').all(inputId);
+        if (rows.length > 1) throw new Error('Duplicate native input ID in session');
+        return EntryMetadata.fromIndex(rows[0]);
     }
     *commits(commitId) {
         for (const row of this.#db.prepare('SELECT id FROM entries WHERE commit_id=? ORDER BY sequence').iterate(commitId)) yield this.get(row.id);
@@ -323,10 +334,6 @@ export class DiskEntryStore extends EntryStore {
     }
     close() {
         this.#db?.close(); this.#db = undefined;
-        if (this.#onExit) process.removeListener('exit', this.#onExit);
-        this.#onExit = undefined;
-        if (this.#directory) rmSync(this.#directory, { recursive: true, force: true });
-        this.#directory = undefined;
         if (this.#fd !== undefined) { closeSync(this.#fd); this.#fd = undefined; }
     }
 }

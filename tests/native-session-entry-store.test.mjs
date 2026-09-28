@@ -18,7 +18,7 @@ function fixture(rows) {
 test('both stores preserve branch context, settings, archived input and commit identity',()=>{
     const rows = [
         {type:'model_change',id:'model',parentId:null,provider:'test',modelId:'model'},
-        {...entry('a','model'),message:{role:'user',content:'original',inputId:'tracked'}},
+        {...entry('a','model'),message:{role:'user',content:'original',inputId:'tracked',inputDigest:'digest'}},
         entry('b','a'), entry('sibling','a'),
         {type:'compaction',id:'compact',parentId:'b',firstKeptEntryId:'b',summary:'summary',details:{agentCommsCommit:{commitId:'commit'}}},
         entry('c','compact'),
@@ -32,6 +32,8 @@ test('both stores preserve branch context, settings, archived input and commit i
             assert.deepEqual([...store.contextEntries('sibling')].map(e=>e.id),['model','a','sibling']);
             assert.deepEqual(store.contextSettings('c').model,{provider:'test',modelId:'model'});
             assert.equal(store.trackedInput('tracked').id,'a');
+            assert.equal(store.trackedInputMetadata('tracked').inputDigest,'digest');
+            assert.equal([...store.trackedMetadata()][0].id,'a');
             assert.equal([...store.commits('commit')][0].id,'compact');
             assert.deepEqual([...store.entries()],rows);
         }
