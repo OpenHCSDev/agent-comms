@@ -11,9 +11,9 @@ proposals in the first deletion ledger are replaced by round-two hard cutover.
 | S12 / A13 | Cicero (01a0e872-6998-7790-8839-227803a44a1f) | refactor/round2-s12-typed-tables; new table owner first; wait for Pascal before touching his native evidence callers | Pending actual changes |
 | R0 | Copernicus (01a0e872-69dc-7143-8692-7950ea46f2bd) | refactor/round2-r0-debt-ratchet; tools/workflow/script tests only | Pending actual changes |
 | L0A channel/catalog/tools | Darwin (01a0e526-04a9-7981-bbb1-f152b3a9edf5) | Existing B2 branch, one owner; no permanent converters in src | Pending actual changes |
-| PF3/response authority/typed claims | Pascal (01a0e525-90a4-77e2-80df-703f622e20f5) | Existing B3/B4 branch; current assignments finish before S12 caller adoption | Pending actual changes |
+| PF3/response authority/typed claims | Pascal (01a0e525-90a4-77e2-80df-703f622e20f5) | Existing B3/B4 branch; current assignments finish before S12 caller adoption | [Comms226](https://github.com/OpenHCSDev/agent-comms/pull/226), draft with code and local evidence |
 | L0B and remaining L0A closure | Parent | refactor/canonical-bus-retirement-20260928; includes source audit, D22 tool, read API cleanup; no duplicate L0B agent | Pending local acceptance |
-| R1 | Parent until NRA ownership check completes | NRA repo; check existing PR8 and claims before assigning an implementation agent | Not yet assigned to a worker |
+| R1 | Nietzsche (01a0e874-0617-7a91-a702-0bc90325b53d) | NRA ~/wt/nra-refactor2-r1-20260928; existing PR8 is dispatch-lead work, current wire NRA owners stopped; inspect claims before edits | Pending actual changes |
 | S10 | Parent holds next assignment | Start after Pascal hands off native files; V2 requires A13, child adoption requires A12 | Not started |
 | S9 / A14 | Parent holds next assignment | Independent K1/K2/K5/K6 after step1; K3 requires A13, K4 requires A12 | Not started |
 
