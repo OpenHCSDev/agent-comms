@@ -65,7 +65,9 @@ def main():
                     print(json.dumps(observation), flush=True)
                     output.write_text(json.dumps(report, indent=2) + "\n")
                     previous = states
-                if states.get(NAMES[0]) == "Responded" and states.get(NAMES[1]) == "Checked — no response":
+                # The explicit @mention selects UX. Other channel members are
+                # unmentioned observers and need not get a model assignment.
+                if states.get(NAMES[0]) == "Responded":
                     break
                 time.sleep(.2)
             else:
