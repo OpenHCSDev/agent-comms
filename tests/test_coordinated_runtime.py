@@ -94,7 +94,10 @@ def _root(
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread("sender", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread(
+            "sender", frozenset(), str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
         Thread(
             "alpha",
             frozenset({"team"}),
