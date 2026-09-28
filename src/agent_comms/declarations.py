@@ -2231,15 +2231,15 @@ class DeliveryScope:
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)
 
-    def delivers(self, message: Message) -> bool:
-        return self.canonical(message.sender) != self.actor and (
-            message.target in self.channels or self.canonical(message.target) == self.actor
+    def delivers(self, sender: str, target: str) -> bool:
+        return self.canonical(sender) != self.actor and (
+            target in self.channels or self.canonical(target) == self.actor
         )
 
-    def conversation(self, message: Message) -> str:
-        if is_channel_target(message.target):
-            return message.target
-        sender, target = self.canonical(message.sender), self.canonical(message.target)
+    def conversation(self, sender: str, target: str) -> str:
+        if is_channel_target(target):
+            return target
+        sender, target = self.canonical(sender), self.canonical(target)
         return sender if target == self.actor else target
 
 
@@ -3517,7 +3517,9 @@ class MessageBus:
             return [
                 message
                 for message in self._load_log()
-                if delivery.delivers(message) and matches(message) and message.seq not in seen
+                if delivery.delivers(message.sender, message.target)
+                and matches(message)
+                and message.seq not in seen
             ]
         markers = self._read_markers()
         global_read = markers.get(name, 0)
@@ -3526,12 +3528,14 @@ class MessageBus:
                 msg
                 for msg in self._iter_log_unlocked()
                 if msg.seq > global_read
-                and delivery.delivers(msg)
+                and delivery.delivers(msg.sender, msg.target)
                 and matches(msg)
                 and msg.seq
                 > max(
                     global_read,
-                    markers.get(self._marker_key(name, delivery.conversation(msg)), 0),
+                    markers.get(
+                        self._marker_key(name, delivery.conversation(msg.sender, msg.target)), 0
+                    ),
                 )
             ]
 
@@ -3556,7 +3560,7 @@ class MessageBus:
             targets = self._channels.history_targets(target)
             return lambda message: targets is None or message.target in targets
         peer = self._registry.require(target).name
-        return lambda message: delivery.conversation(message) == peer
+        return lambda message: delivery.conversation(message.sender, message.target) == peer
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         """Count one thread's unread messages by conversation in one log pass."""
@@ -3574,12 +3578,30 @@ class MessageBus:
             cached = self._pending_cache.get(name)
             if cached is not None and cached.revision == revision and cached.delivery == delivery:
                 return dict(cached.counts)
+            seen = self.reads.seen_sequences(delivery.actor, self._registry.snapshot())
             counts: dict[str, int] = {}
-            for message in self.inbox(name):
-                conversation = delivery.conversation(message)
-                counts[conversation] = counts.get(conversation, 0) + 1
+            with _store_lock(self._path):
+                try:
+                    with BusRouteCounts(self._path) as route_counts:
+                        if route_counts.sync(self._pending_route_fields):
+                            for target, sender, unread in route_counts.unseen_counts(seen):
+                                if delivery.delivers(sender, target):
+                                    conversation = delivery.conversation(sender, target)
+                                    counts[conversation] = counts.get(conversation, 0) + unread
+                            self._pending_cache[name] = PendingCounts(revision, delivery, counts)
+                            return dict(counts)
+                except (OSError, sqlite3.DatabaseError):
+                    # The index is disposable; exact ledger membership still owns unread.
+                    pass
+                for message in self._iter_log_unlocked():
+                    if (
+                        delivery.delivers(message.sender, message.target)
+                        and message.seq not in seen
+                    ):
+                        conversation = delivery.conversation(message.sender, message.target)
+                        counts[conversation] = counts.get(conversation, 0) + 1
             self._pending_cache[name] = PendingCounts(revision, delivery, counts)
-            return counts
+            return dict(counts)
         revision = tuple(
             file_revision(path)
             for path in (
@@ -3600,21 +3622,9 @@ class MessageBus:
                 with BusRouteCounts(self._path) as route_counts:
                     if route_counts.sync(self._pending_route_fields):
                         for target, raw_sender in route_counts.routes():
-                            sender = delivery.canonical(raw_sender)
-                            if sender == delivery.actor or not (
-                                target in delivery.channels
-                                or delivery.canonical(target) == delivery.actor
-                            ):
+                            if not delivery.delivers(raw_sender, target):
                                 continue
-                            scope = (
-                                target
-                                if is_channel_target(target)
-                                else (
-                                    sender
-                                    if delivery.canonical(target) == delivery.actor
-                                    else delivery.canonical(target)
-                                )
-                            )
+                            scope = delivery.conversation(raw_sender, target)
                             cutoff = max(
                                 global_read,
                                 markers.get(self._marker_key(delivery.actor, scope), 0),
@@ -3628,9 +3638,11 @@ class MessageBus:
                 # The JSONL bus remains authoritative if its disposable index fails.
                 pass
             for message in self._iter_log_unlocked():
-                if message.seq <= global_read or not delivery.delivers(message):
+                if message.seq <= global_read or not delivery.delivers(
+                    message.sender, message.target
+                ):
                     continue
-                scope = delivery.conversation(message)
+                scope = delivery.conversation(message.sender, message.target)
                 if message.seq <= max(
                     global_read,
                     markers.get(self._marker_key(delivery.actor, scope), 0),
@@ -3857,17 +3869,21 @@ class MessageBus:
             for msg in self._iter_log_unlocked():
                 if (
                     msg.seq > global_read
-                    and delivery.delivers(msg)
+                    and delivery.delivers(msg.sender, msg.target)
                     and matches(msg)
                     and msg.seq
                     > max(
                         global_read,
-                        markers.get(self._marker_key(name, delivery.conversation(msg)), 0),
+                        markers.get(
+                            self._marker_key(name, delivery.conversation(msg.sender, msg.target)), 0
+                        ),
                     )
                 ):
                     count += 1
                     latest = msg.seq
-                    scoped[self._marker_key(name, delivery.conversation(msg))] = msg.seq
+                    scoped[
+                        self._marker_key(name, delivery.conversation(msg.sender, msg.target))
+                    ] = msg.seq
         if not count:
             return 0
         self._write_markers({name: latest} if target is None else scoped)
@@ -3913,7 +3929,7 @@ class MessageBus:
         thread = self._registry.require(name)
         delivery = self._delivery_scope(thread.name)
         return self._history_page(
-            delivery.delivers,
+            lambda message: delivery.delivers(message.sender, message.target),
             before=None,
             after=after,
             limit=limit,
