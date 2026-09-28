@@ -125,6 +125,36 @@ def test_corrupt_or_redirected_journal_cannot_assert_context(tmp_path: Path, dam
         NativeContextProof.read_evidence(session, INPUT_ID)
 
 
+
+def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_facts(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_pi import NativeContextJournal
+
+    session = _evidence(tmp_path)
+    journal = Path(str(session) + ".input-proof")
+    original = journal.read_bytes()
+    row = json.loads(original)
+    decoded = FieldCodec.decode(NativeContextJournal, row)
+    assert FieldCodec.encode(decoded) == row
+    assert decoded.at(session) == NativeContextProof.read_evidence(session, INPUT_ID)
+    for changed in (
+        {**row, "schema": True},
+        {**row, "schema": 2},
+        {**row, "type": "input_committed"},
+        {**row, "requestGeneration": True},
+        {**row, "requestGeneration": 0},
+        {**row, "inputId": "not-an-input"},
+        {**row, "llmContextDigest": "not-a-digest"},
+        {**row, "extra": "not-native"},
+        {key: value for key, value in row.items() if key != "schema"},
+    ):
+        journal.write_text(json.dumps(changed) + "\n")
+        with pytest.raises(NativePiUnavailable):
+            NativeContextProof.read_evidence(session, INPUT_ID)
+    journal.write_bytes(original)
+    assert NativeContextProof.read_evidence(session, INPUT_ID) == decoded.at(session)
+    assert journal.read_bytes() == original
+
 def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_path: Path) -> None:
     session = _evidence(tmp_path)
     data = session.read_text()
@@ -1180,6 +1210,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert reopened.text == "X"
             assert reopened.context.input_id == "b" * 32
             assert reopened.context.session_file == result.context.session_file
+            assert NativeContextProof.read_evidence(
+                result.context.session_file, INPUT_ID, request_generation=1
+            ) == result.context
             assert calls == ["/v1/chat/completions"] * 2
             proofs = [json.loads(line) for line in proof_files[0].read_text().splitlines()]
             assert [(row["inputId"], row["requestGeneration"]) for row in proofs] == [
