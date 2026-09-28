@@ -99,6 +99,7 @@ class MessageBus:
 
         from .catalog_store import ChannelCatalog
         from .historical_views import HistorySource
+        from .transcript_routes import TranscriptRoutes
 
         source_root = source_root.resolve()
         if source_root == self.log.path.parent.resolve():
@@ -118,7 +119,6 @@ class MessageBus:
                         "bus.jsonl",
                         "registry.json",
                         ChannelCatalog.filename,
-                        "transcript_routes.json",
                         "bus_meta.json",
                     )
                 ]
@@ -126,6 +126,7 @@ class MessageBus:
                 for path in paths:
                     if path.exists():
                         shutil.copy2(path, stage / path.name)
+                TranscriptRoutes(source_root).snapshot(stage)
                 if revisions != tuple(file_revision(path) for path in paths):
                     raise ValueError("Historical source changed during snapshot; retry")
                 bus_info = paths[0].stat() if paths[0].exists() else None
