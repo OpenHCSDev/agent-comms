@@ -1,11 +1,11 @@
-"""Declared extension decoding is strict and shares its owner with consumers."""
+from agent_comms.acp_failure import ACPFailure
 
+"""Declared extension decoding is strict and shares its owner with consumers."""
 import pytest
 
 from agent_comms.acp_extension import (
     AgentCommsUpdate,
     AvailableQueueProjection,
-    BackendDeliveryFailure,
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
     CompactionPublishedUpdate,
@@ -21,6 +21,8 @@ from agent_comms.acp_extension import (
     QueueChangedUpdate,
     QueueItem,
     QueueScope,
+    RequestFailedUpdate,
+    SelectedWriteAcceptedUpdate,
     TextRouteUpdate,
     TranscriptChangedUpdate,
     TranscriptSnapshotUpdate,
@@ -30,6 +32,7 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
+from agent_comms.acp_failure import BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.compaction_states import CompactionPublishedMetadata
 from agent_comms.pi_payloads import McpLiveReceipt
@@ -41,6 +44,8 @@ def test_declared_family_roundtrip_and_strict_boundary():
     owner = OwnerIdentity(ThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)
     samples = (
+        RequestFailedUpdate(ACPFailure.from_error(-32603, "The usage limit has been reached")),
+        SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(
                 CursorScope("pilot", "a" * 32, owner, 123), 1, UnavailableCursorObservation()
@@ -86,3 +91,35 @@ def test_declared_family_roundtrip_and_strict_boundary():
     ):
         with pytest.raises(ValueError):
             decode_updates(invalid)
+
+
+def test_request_family_strict_boundary():
+    from agent_comms.acp_extension import (
+        ClearQueueRequest,
+        CommsRequest,
+        CompactRequest,
+        QueuePromptRequest,
+        SelectedWriteRequest,
+        SendNowRequest,
+        SteerPromptRequest,
+        decode_request,
+        encode_request,
+    )
+
+    samples = (
+        QueuePromptRequest("queue", True),
+        SteerPromptRequest("steer", False),
+        CompactRequest("focus"),
+        ClearQueueRequest(),
+        SendNowRequest(),
+        SelectedWriteRequest(1, "message", "/file", "bytes"),
+    )
+    assert {type(value) for value in samples} == set(CommsRequest.members_with(CommsRequest))
+    for value in samples:
+        assert decode_request(encode_request(value)) == value
+    for value in (
+        {"agentComms": {"clearQueue": True}},
+        {"agentComms": {"request": {"kind": "compact", "unknown": True}}},
+    ):
+        with pytest.raises(ValueError):
+            decode_request(value)

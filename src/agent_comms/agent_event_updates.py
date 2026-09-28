@@ -18,15 +18,16 @@ from acp.schema import (
 from . import agent_events as events
 from . import backend
 from .acp_extension import (
-    BackendDeliveryFailure,
     CompactionChangedUpdate,
     GoalChangedUpdate,
     InputFailedUpdate,
     McpClientReceiptUpdate,
+    RequestFailedUpdate,
     TextRouteUpdate,
     TurnSettledUpdate,
     encode_updates,
 )
+from .acp_failure import ACPFailure
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
@@ -203,19 +204,29 @@ class AcpEventConsumer(MroDispatch):
         client = self.client
         text = str(event.text or "Backend failed")
         self.agent.turns.emitted_errors[session_id] = text
+        failure = ACPFailure.from_error(-32603, text)
+        original_keys = self.agent.inputs.turn_original_input_keys.get(session_id, ())
+        rows = self.agent.inputs.dispositions.read().rows
+        observed = [rows[key] for key in original_keys if key in rows]
+        if observed and len({type(row) for row in observed}) == 1:
+            from dataclasses import replace
+
+            failure = replace(failure, input_state=type(observed[0]))
         failed_input = None
         input_text = self.agent.inputs.turn_input_text.get(session_id)
         if input_text and not self.agent.inputs.dispositions.read().all_started(
             self.agent.inputs.turn_original_input_keys.get(session_id, ())
         ):
-            failed_input = InputFailedUpdate(input_text, BackendDeliveryFailure(text))
+            failed_input = InputFailedUpdate(input_text, failure)
         await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=f"[agent error] {text}"),
+                content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TextRouteUpdate(None), *((failed_input,) if failed_input else ())
+                    TextRouteUpdate(None),
+                    RequestFailedUpdate(failure),
+                    *((failed_input,) if failed_input else ()),
                 ),
             ),
         )

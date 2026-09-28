@@ -29,6 +29,8 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import McpClientReceiptUpdate, TurnStartedUpdate, TurnSettledUpdate, decode_updates
+from agent_comms.field_codec import FieldCodec
 from agent_comms.comms import wire
 from agent_comms.runtime import RuntimeProxy
 
@@ -359,7 +361,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         "update": update.model_dump(by_alias=True, exclude_none=True),
                     }
                     updates.append(row)
-                    if "mcpClient" in row["update"].get("_meta", {}).get("agentComms", {}):
+                    if any(isinstance(fact, McpClientReceiptUpdate) for fact in decode_updates(update.field_meta)):
                         receipt_seen.set()
 
             class Attachment:
@@ -367,17 +369,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     nonlocal attachment_turn
                     if observer:
                         await observer.session_update(session_id=session_id, update=update)
-                    meta = update.get("_meta", {}).get("agentComms", {})
-                    if meta.get("turnStarted") and meta.get("turnId"):
-                        attachment_turn = meta["turnId"]
-                    if (
-                        meta.get("turnSettled")
-                        and attachment_turn
-                        and meta.get("turnId") == attachment_turn
-                    ):
-                        # Ignore the initial idle replay during subscribe. Only
-                        # the actual prompt's UI drain permits attachment close.
-                        attachment_settled.set()
+                    for fact in decode_updates(update.get("_meta")):
+                        if isinstance(fact, TurnStartedUpdate):
+                            attachment_turn = fact.turn_id
+                        if isinstance(fact, TurnSettledUpdate) and attachment_turn == fact.turn_id:
+                            attachment_settled.set()
 
                 async def request_permission(self, **kwargs):
                     permissions.append(kwargs)
@@ -474,17 +470,17 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 active, receipts = None, []
                 for row in updates:
                     assert row["sessionId"] == "project"
-                    meta = row["update"].get("_meta", {}).get("agentComms", {})
-                    if meta.get("turnStarted"):
-                        active = meta["turnId"]
-                    if "mcpClient" in meta:
-                        assert active and meta["turnId"] == active
-                        receipts.append(meta["mcpClient"])
-                    if meta.get("turnSettled"):
-                        assert meta["turnId"] == active
-                        active = None
+                    for fact in decode_updates(row["update"].get("_meta")):
+                        if isinstance(fact, TurnStartedUpdate):
+                            active = fact.turn_id
+                        if isinstance(fact, McpClientReceiptUpdate):
+                            assert active and fact.turn_id == active
+                            receipts.append(fact.receipt)
+                        if isinstance(fact, TurnSettledUpdate):
+                            assert fact.turn_id == active
+                            active = None
                 assert active is None and len(receipts) == 1, updates
-                assert receipts[0]["servers"] == [
+                assert [FieldCodec.encode(server) for server in receipts[0].servers] == [
                     {
                         "id": "fixture",
                         "scope": "project",

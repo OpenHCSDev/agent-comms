@@ -25,7 +25,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
 from acp.schema import (
@@ -43,6 +43,7 @@ from . import agent_events as events
 from . import manual_compaction_bridge
 from .acp_extension import (
     CompactionCommittedUpdate,
+    CompactRequest,
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
@@ -199,94 +200,68 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return await self.sessions.load_session(cwd, session_id, mcp_servers, **kwargs)
 
     async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
-        instructions = self._manual_compaction_instructions(prompt, kwargs)
-        if instructions is not None:
-            # Idle owner bridge alone owns the lock and the one-POST budget.
-            if session_id in self.sessions.proxies:
-                result = await self.sessions.proxies[session_id].request(
-                    "compact", instructions=instructions
-                )
-            else:
-                result = await manual_compaction_bridge.compact_context(
-                    self.turns, session_id, instructions
-                )
-            if not isinstance(result, dict) or result.get("ok") is not True:
-                reason = (
-                    result.get("error") if isinstance(result, dict) else None
-                ) or "Compaction failed or is uncertain; not retried."
-                raise RequestError(-32603, str(reason), {"reason": str(reason)})
-            return PromptResponse(
-                stop_reason="end_turn",
-                field_meta=encode_updates(
-                    CompactionCommittedUpdate(result["commitId"], result["summary"])
-                ),
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+
+        try:
+            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+        except (ValueError, TypeError) as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
+        # Literal /compact is the external ACP text command; ours uses a record.
+        text = self._prompt_text(prompt).strip()
+        if re.match(r"^/compact(?:\s|$)", text):
+            self._require_compaction_text(prompt)
+            request = CompactRequest(text[len("/compact") :].strip())
+        return await AcpRequestConsumer(self, session_id, prompt).run(request)
+
+    async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
+        # Idle owner bridge alone owns the lock and the one-POST budget.
+        if session_id in self.sessions.proxies:
+            result = await self.sessions.proxies[session_id].request(
+                "compact", instructions=instructions
             )
-        meta = kwargs.get("_meta") or kwargs.get("field_meta") or {}
-        # The ACP SDK expands _meta entries into handler keyword arguments.
-        options = kwargs.get("agentComms") or meta.get("agentComms", {})
-        if not isinstance(options, dict):
-            raise RequestError.invalid_params({"reason": "agentComms metadata must be an object"})
-        meta = {**meta, "agentComms": options}
-        delivery = options.get("delivery", "queue")
-        if not isinstance(delivery, str) or delivery not in {"queue", "steer"}:
-            raise RequestError.invalid_params({"reason": "delivery must be queue or steer"})
-        if "userText" in options and type(options["userText"]) is not str:
-            raise RequestError.invalid_params({"reason": "userText must be a string"})
-        display_text = options.get("userText") or self._prompt_text(prompt)
-        defer_display = options.get("deferDisplay") is True
-        if "selectedExistingFileWrite" in options:
-            request = options["selectedExistingFileWrite"]
-            if (
-                type(request) is not dict
-                or set(request) != {"sourceSeq", "sourceMessageId", "resource", "contents"}
-                or type(request["sourceSeq"]) is not int
-                or any(
-                    type(request[key]) is not str
-                    for key in ("sourceMessageId", "resource", "contents")
-                )
-                or prompt
-                or set(options) != {"selectedExistingFileWrite"}
-            ):
-                raise RequestError.invalid_params(
-                    {"reason": "Selected write requires exact metadata and no prompt"}
-                )
-            if session_id in self.sessions.proxies:
-                result = await self.sessions.proxies[session_id].request(
-                    "prompt", meta=meta, prompt=[]
-                )
-                return PromptResponse.model_validate(result)
-            owner = self.sessions.require(session_id)
-            root_id = self._private_nk_marker()
-            controller = self._runtime.controller.get()
-            if controller is None or (
-                controller is UNBOUND_CONTROLLER and self.sessions.client is None
-            ):
-                raise RequestError.invalid_params(
-                    {"reason": "Selected write requires attached ACP controller"}
-                )
-            receipt = SelectedWritePlans(self._comms, root_id).submit(
-                owner_name=owner,
-                source_seq=request["sourceSeq"],
-                source_message_id=request["sourceMessageId"],
-                resource=request["resource"],
-                contents=request["contents"],
+        else:
+            result = await manual_compaction_bridge.compact_context(
+                self.turns, session_id, instructions
             )
-            attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
-            self._selected_write_controllers[(owner, request["sourceSeq"])] = (
-                str(receipt["operationId"]),
-                attached,
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            reason = (
+                result.get("error") if isinstance(result, dict) else None
+            ) or "Compaction failed or is uncertain; not retried."
+            raise RequestError(-32603, str(reason), {"reason": str(reason)})
+        return PromptResponse(
+            stop_reason="end_turn",
+            field_meta=encode_updates(
+                CompactionCommittedUpdate(result["commitId"], result["summary"])
+            ),
+        )
+
+    async def _selected_write_request(self, session_id: str, request) -> PromptResponse:
+        owner = self.sessions.require(session_id)
+        root_id = self._private_nk_marker()
+        controller = self._runtime.controller.get()
+        if controller is None or (
+            controller is UNBOUND_CONTROLLER and self.sessions.client is None
+        ):
+            raise RequestError.invalid_params(
+                {"reason": "Selected write requires attached ACP controller"}
             )
-            return PromptResponse(
-                stop_reason="end_turn", field_meta={"agentComms": {"selectedWrite": receipt}}
-            )
-        if options.get("clearQueue") is True:
-            # Attachment-only clients clear the owner's queue through the
-            # existing prompt channel; no turn is launched.
-            if session_id in self.sessions.proxies:
-                await self.sessions.proxies[session_id].request("clear_queue")
-            else:
-                await self.inputs.clear_queued_inputs(session_id)
-            return PromptResponse(stop_reason="end_turn")
+        receipt = SelectedWritePlans(self._comms, root_id).submit(
+            owner_name=owner,
+            source_seq=request.source_seq,
+            source_message_id=request.source_message_id,
+            resource=request.resource,
+            contents=request.contents,
+        )
+        attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
+        self._selected_write_controllers[(owner, request.source_seq)] = (
+            receipt.operation_id,
+            attached,
+        )
+        return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(receipt))
+
+    async def _prompt_request(self, session_id: str, prompt: list[Any], request) -> PromptResponse:
+        display_text = request.user_text or self._prompt_text(prompt)
         try:
             images = self._prompt_images(prompt)
         except ValueError as error:
@@ -295,23 +270,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
-        if session_id in self.sessions.proxies:
-            result = await self.sessions.proxies[session_id].request(
-                "prompt",
-                meta=meta,
-                prompt=[
-                    (
-                        block
-                        if isinstance(block, dict)
-                        else block.model_dump(by_alias=True, exclude_none=True)
-                    )
-                    for block in prompt
-                ],
-            )
-            return PromptResponse.model_validate(result)
-        if options.get("sendNow") is True:
-            self.inputs.send_now(session_id)
-            return PromptResponse(stop_reason="end_turn")
         text = self._prompt_text(prompt)
         if (
             (session_id in self.turns.active_turns or session_id in self.turns.turn_tasks)
@@ -322,8 +280,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 session_id,
                 text=text,
                 display_text=display_text,
-                delivery=delivery,
-                defer_display=defer_display,
+                delivery=request.delivery,
+                defer_display=request.defer_display,
                 images=images,
             )
         async with self.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
@@ -338,7 +296,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
             try:
                 return await self.turns.prompt_owned(
-                    session_id, prompt, display_text=display_text if defer_display else None
+                    session_id, prompt, display_text=display_text if request.defer_display else None
                 )
             finally:
                 if context is not None:
@@ -362,37 +320,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return prompt_images(prompt)
 
     @staticmethod
-    def _manual_compaction_instructions(prompt: list[Any], kwargs: dict[str, Any]) -> str | None:
-        # Toad sends one blank text block with _meta.agentComms.compact;
-        # other ACP clients can send literal /compact. Never flatten images.
-        metadata = kwargs.get("agentComms")
-        if metadata is None:
-            container = kwargs.get("field_meta") or kwargs.get("_meta") or {}
-            metadata = container.get("agentComms") if isinstance(container, dict) else None
-        has_metadata_command = isinstance(metadata, dict) and "compact" in metadata
-        text = CommsAgent._prompt_text(prompt).strip()
-        if not has_metadata_command and re.match(r"^/compact(?:\s|$)", text) is None:
-            return None
+    def _require_compaction_text(prompt: list[Any]) -> None:
         if len(prompt) != 1:
             raise RequestError.invalid_params({"reason": "/compact requires one text block."})
         block = prompt[0]
         kind = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
         if kind != "text":
             raise RequestError.invalid_params({"reason": "/compact requires text only."})
-        if has_metadata_command:
-            if text:
-                raise RequestError.invalid_params(
-                    {"reason": "Compaction metadata requires a blank text block."}
-                )
-            value = cast(dict[str, Any], metadata)["compact"]
-            if value is not None and not isinstance(value, str):
-                raise RequestError.invalid_params({"reason": "Invalid compaction instructions."})
-            instructions = (value or "").strip()
-        else:
-            instructions = text[len("/compact") :].strip()
-        if len(instructions) > 2000:
-            raise RequestError.invalid_params({"reason": "Compaction instructions are too long."})
-        return instructions
 
     async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
@@ -656,8 +590,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             result = await self.turns.run_selected(session_id, execution)
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
-            # input. Extend only an existing current epoch or an all-N prefix;
-            # old-epoch Pi evidence cannot initialize this cursor on reconnect.
+            # input. Extend only an existing current generation or an all-N prefix;
+            # old-generation Pi evidence cannot initialize this cursor on reconnect.
             try:
                 with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
                     person = store.participant(stable_thread_lookup(owner.created_at))

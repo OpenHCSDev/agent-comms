@@ -8,11 +8,12 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
-from agent_comms.transcript_events import TranscriptEvent, TranscriptCodec, ToolEndTranscript
+from agent_comms.transcript_events import ToolEndTranscript, TranscriptCodec, TranscriptEvent
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -124,8 +125,6 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
     assert saved.diff == live.diff
 
     class Client:
-        transcript_snapshots = False
-
         def __init__(self):
             self.updates = []
 
@@ -141,15 +140,9 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
     assert resource["text"] == patch
     assert resource["uri"].endswith("edit%2F1")
     await agent.sessions.transcript.replay("worker", "worker", client)
-    assert client.updates[-1]["content"] == live_content
-    client.transcript_snapshots = True
-    await agent.sessions.transcript.replay("worker", "worker", client)
-    snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert TranscriptCodec.decode(TranscriptEvent, snapshot[0]).diff == live.diff
-    client.transcript_snapshots = False
-    await agent.sessions.transcript.replay("worker", "worker", client, snapshots=True)
-    snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
-    assert TranscriptCodec.decode(TranscriptEvent, snapshot[0]).diff == live.diff
+    (snapshot,) = decode_updates(client.updates[-1]["_meta"])
+    assert isinstance(snapshot, TranscriptSnapshotUpdate)
+    assert snapshot.page.events[0].diff == live.diff
 
 
 def test_plain_tool_result_keeps_text_content():

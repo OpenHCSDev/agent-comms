@@ -15,6 +15,8 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms import pi_events as pi
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (McpClientReceiptUpdate, TurnStartedUpdate, TurnSettledUpdate, decode_updates)
+from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
@@ -33,15 +35,16 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
             updates.append(kwargs)
 
     observer = Observer()
-    receipt = {"inputId": "a" * 32}  # Backend validation is tested separately.
+    receipt = McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
     event = ae.McpLiveStatus(receipt)
     try:
         owner.turns.active_turns["session-1"] = "turn-1"
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         assert len(updates) == 1
         assert updates[0]["session_id"] == "session-1"
-        meta = updates[0]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]
-        assert meta == {"turnId": "turn-1", "mcpClient": receipt}
+        assert decode_updates(updates[0]["update"].field_meta) == (
+            McpClientReceiptUpdate("turn-1", receipt),
+        )
         owner.turns.active_turns.pop("session-1")  # Settled: no receipt may escape.
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         owner.turns.active_turns["session-1"] = "turn-2"
@@ -53,7 +56,7 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
         await owner._emit_event("session-1", event, observer, turn_id="turn-2")
         assert len(updates) == 2
         assert (
-            updates[-1]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]["turnId"]
+            decode_updates(updates[-1]["update"].field_meta)[0].turn_id
             == "turn-2"
         )
     finally:
@@ -141,7 +144,7 @@ async def collect_backend(program, cwd, controller):
 
 
 async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path / "wire"))
+    agent = canonical_agent(wire(tmp_path / "wire"))
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     session_id = "project"
     turn = "turn-1"
@@ -227,7 +230,7 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
             method="setStatus", status_key="pi-mcp/live-v1", status_text=claim
         )
 
-    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) == valid
+    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) == FieldCodec.decode(McpLiveReceipt, valid)
     assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), "b" * 32) is None
     assert (
         backend._pi_mcp_live_receipt(
@@ -570,29 +573,28 @@ input.on('line', async line => {{
         rendered = [update.model_dump(by_alias=True, exclude_none=True) for update in updates]
         active_turn = None
         receipt_turns = []
-        for row in rendered:
-            meta = row.get("_meta", {}).get("agentComms", {})
-            if meta.get("turnStarted"):
-                assert active_turn is None
-                active_turn = meta["turnId"]
-            if "mcpClient" in meta:
-                assert active_turn is not None
-                assert meta["turnId"] == active_turn
-                assert active_turn not in receipt_turns  # Exactly once, before settlement.
-                receipt_turns.append(active_turn)
-            if meta.get("turnSettled"):
-                assert meta["turnId"] == active_turn
-                active_turn = None
+        receipts = []
+        for update in updates:
+            for fact in decode_updates(update.field_meta):
+                if isinstance(fact, TurnStartedUpdate):
+                    assert active_turn is None
+                    active_turn = fact.turn_id
+                if isinstance(fact, McpClientReceiptUpdate):
+                    assert active_turn is not None and fact.turn_id == active_turn
+                    assert active_turn not in receipt_turns
+                    receipt_turns.append(active_turn)
+                    receipts.append(fact.receipt)
+                if isinstance(fact, TurnSettledUpdate):
+                    assert fact.turn_id == active_turn
+                    active_turn = None
         assert active_turn is None
         assert len(receipt_turns) == 2 and len(set(receipt_turns)) == 2
-        receipts = [row.get("_meta", {}).get("agentComms", {}).get("mcpClient") for row in rendered]
-        receipts = [receipt for receipt in receipts if receipt is not None]
         assert len(receipts) == 2
         assert all(
-            receipt["version"] == 1
-            and receipt["source"] == "pi-mcp-client"
-            and receipt["lifetime"] == "turn"
-            and receipt["servers"][0]["state"] == "ready"
+            receipt.version == 1
+            and receipt.source == "pi-mcp-client"
+            and receipt.lifetime == "turn"
+            and receipt.servers[0].state.declared_name == "ready"
             for receipt in receipts
         )
         if has_controller:

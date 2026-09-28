@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import ClassVar
 
+from .acp_failure import ACPFailure, DeliveryFailure
 from .agent_events import CompactionEvent, CompactionProgress
 from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
@@ -58,21 +59,6 @@ class TextRouteUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class TranscriptChangedUpdate(AgentCommsUpdate):
     cursor: TranscriptCursor | None
-
-
-class DeliveryFailure(DeclaredFamily, affix="Failure"):
-    @property
-    @abstractmethod
-    def description(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class BackendDeliveryFailure(DeliveryFailure):
-    message: str
-
-    @property
-    def description(self) -> str:
-        return self.message
 
 
 @dataclass(frozen=True)
@@ -383,3 +369,98 @@ class CompactionPublishedUpdate(AgentCommsUpdate):
 class McpClientReceiptUpdate(AgentCommsUpdate):
     turn_id: str
     receipt: McpLiveReceipt
+
+
+class CommsRequest(DeclaredFamily, affix="Request"):
+    """One owner command decoded at ACP ingress, never a bag of control flags."""
+
+    @property
+    def draft_text(self) -> str | None:
+        return None
+
+
+@dataclass(frozen=True)
+class PromptRequest(CommsRequest):
+    user_text: str | None = None
+    defer_display: bool = False
+
+    @property
+    def draft_text(self) -> str | None:
+        return self.user_text
+
+    @property
+    @abstractmethod
+    def delivery(self) -> str: ...
+
+
+class QueuePromptRequest(PromptRequest):
+    @property
+    def delivery(self) -> str:
+        return "queue"
+
+
+class SteerPromptRequest(PromptRequest):
+    @property
+    def delivery(self) -> str:
+        return "steer"
+
+
+@dataclass(frozen=True)
+class ClearQueueRequest(CommsRequest):
+    pass
+
+
+@dataclass(frozen=True)
+class SendNowRequest(CommsRequest):
+    pass
+
+
+@dataclass(frozen=True)
+class CompactRequest(CommsRequest):
+    instructions: str | None = None
+
+    def __post_init__(self):
+        if self.instructions is not None and len(self.instructions.strip()) > 2000:
+            raise ValueError("Compaction instructions are too long")
+
+
+@dataclass(frozen=True)
+class SelectedWriteRequest(CommsRequest):
+    source_seq: int
+    source_message_id: str
+    resource: str
+    contents: str
+
+    def __post_init__(self):
+        if self.source_seq <= 0 or not self.source_message_id or not self.resource:
+            raise ValueError("Selected write requires actual source and resource identity")
+
+
+@dataclass(frozen=True)
+class SelectedWriteAcceptedUpdate(AgentCommsUpdate):
+    operation_id: str
+    source_seq: int
+    claim_id: str
+
+
+def encode_request(request: CommsRequest) -> dict:
+    return {"agentComms": {"request": FieldCodec.encode(request)}}
+
+
+def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+    """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+    if metadata is None:
+        metadata = {}
+    if not isinstance(metadata, dict):
+        raise ValueError("ACP metadata must be an object")
+    extension = expanded.get("agentComms", metadata.get("agentComms"))
+    if extension is None:
+        return QueuePromptRequest()
+    if not isinstance(extension, dict) or set(extension) != {"request"}:
+        raise ValueError("Comms metadata requires one declared request")
+    return FieldCodec.decode(CommsRequest, extension["request"])
+
+
+@dataclass(frozen=True)
+class RequestFailedUpdate(AgentCommsUpdate):
+    failure: ACPFailure

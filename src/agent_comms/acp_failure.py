@@ -2,6 +2,7 @@
 
 This is observation only. No failure object grants a retry or changes a ledger.
 """
+
 from __future__ import annotations
 
 import json
@@ -10,10 +11,23 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
-from .turn_failure import PromptSendFailed, PrestartCompactionFailed, TurnFailure
+from .input_attempt import InputAttempt
+from .turn_failure import PrestartCompactionFailed, PromptSendFailed, TurnFailure
 
 
 class DeliveryFailure(DeclaredFamily, affix="Failure"):
+    @property
+    def title(self) -> str:
+        return "Delivery unconfirmed"
+
+    @property
+    def action(self) -> str:
+        return "Inspect the input delivery status before deciding whether to send again."
+
+    @property
+    def input_disposition(self) -> str:
+        return "Unconfirmed — input not retried"
+
     @property
     @abstractmethod
     def description(self) -> str: ...
@@ -33,14 +47,28 @@ class ACPFailure(DeliveryFailure):
     code: int | None
     detail: str
     failure: TurnFailure
+    input_state: type[InputAttempt] | None = None
 
     @property
     def description(self) -> str:
         return self.detail
 
     @property
+    def feedback(self) -> str:
+        return f"{self.detail}\n{self.input_disposition}\n{self.action}"
+
+    @property
     def input_disposition(self) -> str:
-        return "UNKNOWN — input not retried" if self.failure.input_uncertain else "Unconfirmed — input not retried"
+        if self.input_state is not None:
+            return (
+                self.input_state.declared_name.replace("_", " ").capitalize()
+                + " — input not retried"
+            )
+        return (
+            "UNKNOWN — input not retried"
+            if self.failure.input_uncertain
+            else "Unconfirmed — input not retried"
+        )
 
     @property
     @abstractmethod
@@ -53,10 +81,26 @@ class ACPFailure(DeliveryFailure):
     @classmethod
     def from_error(cls, code: int | None, message: str, data: object = None) -> ACPFailure:
         detail = _error_detail(data) or message or "ACP request failed"
-        uncertain = bool(re.search(r"outcome uncertain|input not retried|original remains unbound", detail, re.I))
+        uncertain = bool(
+            re.search(r"outcome uncertain|input not retried|original remains unbound", detail, re.I)
+        )
         failure = PrestartCompactionFailed(detail) if uncertain else PromptSendFailed(detail)
-        owner = ProviderQuotaFailure if re.search(r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests", detail, re.I) else RequestACPFailure
-        return owner(code, detail, failure)
+        owner = (
+            ProviderQuotaFailure
+            if re.search(
+                r"usage limit|quota|insufficient credits|credit balance|"
+                r"rate.limit|too many requests",
+                detail,
+                re.I,
+            )
+            else RequestACPFailure
+        )
+        state = None
+        if isinstance(data, dict):
+            status = data.get("inputStatus")
+            if isinstance(status, str):
+                state = InputAttempt.decode(status)
+        return owner(code, detail, failure, state)
 
 
 class RequestACPFailure(ACPFailure):
@@ -72,7 +116,10 @@ class ProviderQuotaFailure(ACPFailure):
 
     @property
     def action(self) -> str:
-        return "Wait for the provider limit to reset or restore credits, then inspect input delivery before any explicit resend."
+        return (
+            "Wait for the provider limit to reset or restore credits, "
+            "then inspect input delivery before any explicit resend."
+        )
 
 
 def _error_detail(data: object) -> str | None:
@@ -91,7 +138,11 @@ def _error_detail(data: object) -> str | None:
             # Prefer concrete reasons over an enclosing "Internal error".
             for key in ("details", "reason", "detail", "error", "data", "message"):
                 item = value.get(key)
-                if isinstance(item, str) and item.strip() and item.strip().casefold() not in {"internal error", "internal server error"}:
+                if (
+                    isinstance(item, str)
+                    and item.strip()
+                    and item.strip().casefold() not in {"internal error", "internal server error"}
+                ):
                     try:
                         nested = json.loads(item)
                     except (ValueError, TypeError):

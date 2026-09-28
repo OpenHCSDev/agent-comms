@@ -16,6 +16,12 @@ import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (
+    SelectedWriteAcceptedUpdate,
+    SelectedWriteRequest,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_initials
@@ -126,30 +132,21 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             _accept_visible_initials(
                 bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
             )
-        options = {
-            "selectedExistingFileWrite": {
-                "sourceSeq": message.seq,
-                "sourceMessageId": message.message_id,
-                "resource": str(resource),
-                "contents": "after selected\n",
-            }
-        }
+        request = SelectedWriteRequest(
+            message.seq, message.message_id, str(resource), "after selected\n"
+        )
+        options = encode_request(request)
         # Public ACP prompt metadata is an operator intent with no text/model turn.
         with pytest.raises(IdentityConflict):
-            await agent.prompt("alpha", [], field_meta={"agentComms": options})
+            await agent.prompt("alpha", [], field_meta=options)
         assert resource.read_bytes() == b"before\n"
         with pytest.raises(IdentityConflict, match="source identity changed"):
             await agent.prompt(
                 "beta",
                 [],
-                field_meta={
-                    "agentComms": {
-                        "selectedExistingFileWrite": {
-                            **options["selectedExistingFileWrite"],
-                            "sourceMessageId": "wrong",
-                        }
-                    }
-                },
+                field_meta=encode_request(
+                    SelectedWriteRequest(message.seq, "wrong", str(resource), "after selected\n")
+                ),
             )
         with pytest.raises(IdentityConflict, match="matching private claim root"):
             SelectedWritePlans(comms, "foreign-root").submit(
@@ -170,7 +167,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             with monkeypatch.context() as fault:
                 fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
                 with pytest.raises(OSError, match="ambiguous parent fsync"):
-                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                    await agent.prompt("beta", [], field_meta=options)
             assert (root / "selected-write-plans").is_dir()
             assert not list((root / "selected-write-plans").glob("*.json"))
         if scenario == "commit_unknown":
@@ -184,23 +181,23 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             with monkeypatch.context() as fault:
                 fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
                 with pytest.raises(OSError, match="ambiguous"):
-                    await agent.prompt("beta", [], field_meta={"agentComms": options})
+                    await agent.prompt("beta", [], field_meta=options)
             with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
-                await agent.prompt("beta", [], field_meta={"agentComms": options})
+                await agent.prompt("beta", [], field_meta=options)
             assert resource.read_bytes() == b"before\n"
             assert len(list((root / "selected-write-plans").glob("*.json"))) == 1
             await agent.shutdown()
             return
-        response = await agent.prompt("beta", [], field_meta={"agentComms": options})
-        receipt = response.field_meta["agentComms"]["selectedWrite"]
-        assert receipt["status"] == "accepted_not_applied"
+        response = await agent.prompt("beta", [], field_meta=options)
+        (receipt,) = decode_updates(response.field_meta)
+        assert isinstance(receipt, SelectedWriteAcceptedUpdate)
         assert resource.read_bytes() == b"before\n"
         if scenario == "older_claims":
             assert message.seq > 100
             await agent.shutdown()
             return
         with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
-            await agent.prompt("beta", [], field_meta={"agentComms": options})
+            await agent.prompt("beta", [], field_meta=options)
         monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
         monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
         fake, calls = _fake_model(
@@ -231,9 +228,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert await agent._drain_private_nk("beta", root_id) == 1
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
         claim = Comms(root).bus.log.claim_projection()[str(resource)]
-        assert (
-            claim.admission is not None and claim.admission.operation_id == receipt["operationId"]
-        )
+        assert claim.admission is not None and claim.admission.operation_id == receipt.operation_id
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
         assert await agent._drain_private_nk("beta", root_id) == 0
@@ -357,19 +352,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 _accept_visible_initials(
                     bus, root_id, store, stable_thread_lookup(61003.0), 0, owner_name="beta"
                 )
-            options = {
-                "selectedExistingFileWrite": {
-                    "sourceSeq": message.seq,
-                    "sourceMessageId": message.message_id,
-                    "resource": str(resource),
-                    "contents": "after second pid\n",
-                }
-            }
-            response = await attached.prompt("beta", [], field_meta={"agentComms": options})
-            assert (
-                response.field_meta["agentComms"]["selectedWrite"]["status"]
-                == "accepted_not_applied"
+            options = encode_request(
+                SelectedWriteRequest(
+                    message.seq, message.message_id, str(resource), "after second pid\n"
+                )
             )
+            response = await attached.prompt("beta", [], field_meta=options)
+            (receipt,) = decode_updates(response.field_meta)
+            assert isinstance(receipt, SelectedWriteAcceptedUpdate)
             assert resource.read_bytes() == b"before\n"
             (base / "dispatch").touch()
             result = event("terminal")

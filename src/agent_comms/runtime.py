@@ -264,22 +264,14 @@ class RuntimeProxy:
         self.agent = agent
         self.session_id = session_id
         self.path = path
-        comms = getattr(agent, "_comms", None)
-        if comms is None:
-            root = getattr(agent, "_coordination_root", None)
-            if root is None:
-                raise ValueError("Runtime proxy needs a coordination root.")
-            from .comms import wire
-
-            comms = wire(root)
-        self._comms = comms
+        self._comms = agent._comms
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
         self._closed = False
         self._controller_token: str | None = None
         self._permission_tasks: dict[str, asyncio.Task[None]] = {}
         try:
-            thread = comms.registry.require(session_id)
+            thread = self._comms.registry.require(session_id)
         except ValueError:
             self._identity: float | None = None
         else:

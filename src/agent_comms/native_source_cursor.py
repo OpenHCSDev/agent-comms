@@ -2,7 +2,7 @@
 
 A cursor is published only from a live native proof already committed in SQL,
 corroborated against the prelaunch binding and native journal. No historical
-input is promoted when an owner restarts: a new admission epoch starts at zero.
+input is promoted when an owner restarts: a new admission generation starts at zero.
 No consumer may skip a selected claim or retry an uncertain input from this
 projection. The authoritative sealed claims still drive execution.
 """
@@ -187,7 +187,7 @@ def advance_current_native_cursor(
 
     The caller supplies only the input freshly completed in this turn, or None
     for no-wake/absent-audience progress. Historical proofs from another owner
-    epoch cannot initialize or advance a new current cursor. The bus snapshot
+    generation cannot initialize or advance a new current cursor. The bus snapshot
     is bounded and read-only; the final owner and SQL witnesses are rechecked
     under canonical wire→bus→registry→SQL locks before one monotonic row write.
     """
@@ -268,9 +268,9 @@ def advance_current_native_cursor(
         ):
             raise IdentityConflict("current cursor would change owner or regress")
         # Checking only the newest proof could borrow a prior owner's
-        # historical selected input as a bridge across a new admission epoch.
+        # historical selected input as a bridge across a new admission generation.
         # Every selected source in this covered prefix must belong to this
-        # live owner generation and admission epoch, including triage+FULL.
+        # live owner generation and admission generation, including triage+FULL.
         if not _same_generation_prefix(
             db,
             prefix_evidence,
@@ -295,7 +295,7 @@ def advance_current_native_cursor(
                 raise IdentityConflict("current cursor native proof belongs to another owner")
             # A fresh result may advance the injected sequence. Otherwise the
             # existing exact input must already have been accepted in THIS
-            # admission epoch. No old journal proof can initialize a new one.
+            # admission generation. No old journal proof can initialize a new one.
             if prior is None or injected_seq > prior.injected_seq:
                 if proof.input_id != committed_input_id:
                     return prior  # Historical proof is not this live turn.
@@ -380,7 +380,7 @@ def read_current_native_cursor(
     wire_root_id: str,
     owner_name: str,
 ) -> CurrentNativeCursor | None:
-    """Read only THIS active owner epoch; never reconstruct a new cursor from history.
+    """Read only THIS active owner generation; never reconstruct a new cursor from history.
 
     Reconnect after owner replacement sees None even when old SQL/journal rows
     remain available for inspection. The returned cursor is informational and
@@ -458,8 +458,8 @@ def read_current_native_cursor(
             cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
         ):
             raise IdentityConflict("current native cursor exceeds canonical source proof")
-        # A cursor from an older implementation may point at a current-epoch
-        # *last* input while silently spanning a selected gen1/old-epoch input.
+        # A cursor from an older implementation may point at a current-generation
+        # *last* input while silently spanning a selected gen1/old-generation input.
         # Reopen must reject the whole persisted prefix, not bless that row.
         prefix_evidence = _prefix_evidence(
             store, wire_root_id, lookup, coverage, through_seq=cursor.covered_seq

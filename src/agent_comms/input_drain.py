@@ -179,6 +179,8 @@ class InputDrain(FutureInputQueue):
         text: str | None,
         input_id: str | None = None,
         queued_item: QueuedInput | None = None,
+        *,
+        client: Any = None,
     ) -> None:
         scope = self.queue_binding(session_id)
         if (
@@ -192,7 +194,7 @@ class InputDrain(FutureInputQueue):
         if scope is not None:
             revision = self.queue_revisions.get(session_id, 0) + 1
             self.queue_revisions[session_id] = revision
-        await self.runtime.session_update(
+        await (client or self.runtime).session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",

@@ -12,13 +12,21 @@ from acp.schema import ImageContentBlock
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from delivery_owner_fixture import canonical_agent
+from agent_comms.acp_extension import (
+    InputDeliveryChangedUpdate,
+    QueueChangedUpdate,
+    QueuePromptRequest,
+    SteerPromptRequest,
+    TurnStartedUpdate,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.comms import wire
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
 from agent_comms.runtime import RuntimeProxy, socket_path
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
-
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
 IMAGE = {"type": "image", "data": PNG, "mimeType": "image/png"}
 
@@ -31,11 +39,7 @@ def test_standard_acp_image_and_legacy_resource_are_decoded():
         [
             {
                 "type": "resource",
-                "resource": {
-                    "uri": "file:///image.png",
-                    "blob": PNG,
-                    "mimeType": "image/png",
-                },
+                "resource": {"uri": "file:///image.png", "blob": PNG, "mimeType": "image/png"},
             }
         ]
     ) == (ImageInput(PNG, "image/png"),)
@@ -83,7 +87,6 @@ async def test_initial_and_image_only_prompts_reach_backend(tmp_path, monkeypatc
     try:
         await agent.prompt("project", [{"type": "text", "text": text}, IMAGE])
         assert received == [ImageInput(PNG, "image/png")]
-        assert agent.sessions.metadata("project")["agentComms"]["imagePrompts"] is True
     finally:
         await agent.shutdown()
 
@@ -94,7 +97,7 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
     agent = await make_agent(tmp_path, monkeypatch)
     started = asyncio.Event()
     received = asyncio.Event()
-    commands, updates = [], []
+    commands, updates = ([], [])
 
     class Client:
         async def session_update(self, **kwargs):
@@ -117,7 +120,7 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
         await agent.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],
-            field_meta={"agentComms": {"userText": reference, "deferDisplay": True}},
+            field_meta=encode_request(QueuePromptRequest(reference, True)),
         )
         await asyncio.wait_for(received.wait(), 3)
         assert commands[0]["images"] == [IMAGE]
@@ -125,9 +128,10 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
         await agent.cancel("project")
         await turn
         assert any(
-            [item["text"] for item in update.get("_meta", {}).get("agentComms", {})
-             .get("queueState", {}).get("restored", [])] == [reference]
+            [item.text for item in fact.projection.restored] == [reference]
             for update in updates
+            for fact in decode_updates(update.get("_meta"))
+            if isinstance(fact, QueueChangedUpdate)
         )
     finally:
         await agent.shutdown()
@@ -138,10 +142,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = canonical_agent(
-        comms,
-        agent_bin="pi-image-stub",
-        agent_args=["--model", "test/model"],
-        runtime_enabled=True,
+        comms, agent_bin="pi-image-stub", agent_args=["--model", "test/model"], runtime_enabled=True
     )
     client = canonical_agent(comms)
     await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
@@ -157,34 +158,32 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
     try:
         await proxy.subscribe()
         client.sessions.proxies["project"] = proxy
-        client.sessions.proxy_image_support["project"] = True
         turn = asyncio.create_task(owner.prompt("project", [{"type": "text", "text": "first"}]))
         await asyncio.wait_for(started.wait(), 3)
         reference = "What is this? @/private/clipboard-image.png"
         result = await client.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],
-            field_meta={
-                "agentComms": {
-                    "userText": reference,
-                    "deferDisplay": True,
-                    "delivery": "steer",
-                }
-            },
+            field_meta=encode_request(SteerPromptRequest(reference, True)),
         )
-        assert result.field_meta["agentComms"]["inputDisposition"]["delivery"] == "steer"
-        input_id = result.field_meta["agentComms"]["inputDisposition"]["inputId"]
+        input_id = next(
+            f.input_id
+            for f in decode_updates(result.field_meta)
+            if isinstance(f, InputDeliveryChangedUpdate)
+        )
         pending = owner.inputs.queued_inputs["project"][input_id]
         assert pending.text == reference and pending.images == (ImageInput(PNG, "image/png"),)
         assert owner.inputs.dispositions.read().rows["acp:" + input_id].declared_name == "unknown"
         await client.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],
-            field_meta={"agentComms": {"userText": reference, "deferDisplay": True}},
+            field_meta=encode_request(QueuePromptRequest(reference, True)),
         )
         assert any(
-            item.text == reference and item.echo
-            for item in owner.inputs.queued_inputs["project"].values()
+            (
+                item.text == reference and item.echo
+                for item in owner.inputs.queued_inputs["project"].values()
+            )
         )
         await owner.cancel("project")
         await turn
@@ -200,21 +199,9 @@ async def test_failed_image_child_never_exposes_encoded_attachment(tmp_path, mon
     stub = tmp_path / "pi-image-stub"
     stub.write_text(
         f"#!{sys.executable}\n"
-        + """
-import json, sys
-for line in sys.stdin:
-    command = json.loads(line)
-    if command['type'] == 'get_state':
-        print(json.dumps({'type': 'response', 'id': command['id'],
-            'command': 'get_state', 'success': True,
-            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),
-            flush=True)
-    elif command['type'] == 'prompt':
-        sys.stderr.write(json.dumps(command))
-        sys.exit(7)
-"""
+        + "\nimport json, sys\nfor line in sys.stdin:\n    command = json.loads(line)\n    if command['type'] == 'get_state':\n        print(json.dumps({'type': 'response', 'id': command['id'],\n            'command': 'get_state', 'success': True,\n            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),\n            flush=True)\n    elif command['type'] == 'prompt':\n        sys.stderr.write(json.dumps(command))\n        sys.exit(7)\n"
     )
-    stub.chmod(0o755)
+    stub.chmod(493)
     events = [
         event
         async for event in backend.stream_agent_events(
@@ -228,7 +215,6 @@ for line in sys.stdin:
     assert events[-1].ok is False
     assert events[-1].diagnostic["exit_code"] == 7
     assert PNG not in repr(events)
-
     agent = await make_agent(tmp_path / "acp", monkeypatch)
     agent.turns.agent_bin = str(stub)
     updates = []
@@ -250,26 +236,9 @@ async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_pa
     stub = tmp_path / "pi-image-stub"
     stub.write_text(
         f"#!{sys.executable}\n"
-        + """
-import json, sys
-for line in sys.stdin:
-    command = json.loads(line)
-    if command['type'] == 'get_state':
-        print(json.dumps({'type': 'response', 'id': command['id'],
-            'command': 'get_state', 'success': True,
-            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),
-            flush=True)
-    elif command['type'] == 'prompt' and 'images' not in command:
-        print(json.dumps({'type': 'response', 'id': command['id'],
-            'command': 'prompt', 'success': True}), flush=True)
-        print(json.dumps({'type': 'message_start', 'message': {'role': 'user',
-            'content': command['message'], 'inputId': command['inputId']}}), flush=True)
-    elif command['type'] == 'prompt':
-        sys.stderr.write(json.dumps(command))
-        sys.exit(7)
-"""
+        + "\nimport json, sys\nfor line in sys.stdin:\n    command = json.loads(line)\n    if command['type'] == 'get_state':\n        print(json.dumps({'type': 'response', 'id': command['id'],\n            'command': 'get_state', 'success': True,\n            'data': {'nativeInputProofCapability': 'pi-native-input-v1-live-only'}}),\n            flush=True)\n    elif command['type'] == 'prompt' and 'images' not in command:\n        print(json.dumps({'type': 'response', 'id': command['id'],\n            'command': 'prompt', 'success': True}), flush=True)\n        print(json.dumps({'type': 'message_start', 'message': {'role': 'user',\n            'content': command['message'], 'inputId': command['inputId']}}), flush=True)\n    elif command['type'] == 'prompt':\n        sys.stderr.write(json.dumps(command))\n        sys.exit(7)\n"
     )
-    stub.chmod(0o755)
+    stub.chmod(493)
     queue = asyncio.Queue()
     queue.put_nowait(
         {"type": "prompt", "message": "User follow-up:\ninspect image", "images": [IMAGE]}
@@ -277,17 +246,12 @@ for line in sys.stdin:
     events = [
         event
         async for event in backend.stream_agent_events(
-            str(stub),
-            ["--model", "test/model"],
-            "first",
-            str(tmp_path),
-            steering_queue=queue,
+            str(stub), ["--model", "test/model"], "first", str(tmp_path), steering_queue=queue
         )
     ]
     assert events[-1].ok is False
     assert events[-1].diagnostic["exit_code"] == 7
     assert PNG not in repr(events)
-
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     agent = canonical_agent(
         wire(tmp_path / "acp-wire"), agent_bin=str(stub), agent_args=["--model", "test/model"]
@@ -300,7 +264,7 @@ for line in sys.stdin:
         async def session_update(self, **kwargs):
             update = kwargs["update"].model_dump(by_alias=True, exclude_none=True)
             updates.append(update)
-            if update.get("_meta", {}).get("agentComms", {}).get("turnStarted"):
+            if any(isinstance(f, TurnStartedUpdate) for f in decode_updates(update.get("_meta"))):
                 started.set()
 
     agent.on_connect(Client())
@@ -314,15 +278,13 @@ for line in sys.stdin:
         await agent.shutdown()
 
 
-async def test_legacy_owner_and_relay_fail_explicitly(tmp_path, monkeypatch):
+async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypatch):
     agent = await make_agent(tmp_path, monkeypatch)
     try:
         with pytest.raises(RequestError):
             await agent.prompt("project", [{"type": "text", "text": "#all look"}, IMAGE])
         assert not agent._comms.views.full_history()
-        agent.sessions.proxies["project"] = object()
-        with pytest.raises(RequestError):
-            await agent.prompt("project", [IMAGE])
+
     finally:
         agent.sessions.proxies.clear()
         await agent.shutdown()
@@ -334,29 +296,9 @@ async def test_rpc_prompt_serializes_images_unchanged(tmp_path):
     stub = tmp_path / "pi-image-stub"
     stub.write_text(
         f"#!{sys.executable}\n"
-        + f"""
-import json, pathlib, sys
-state = json.loads(sys.stdin.readline())
-print(json.dumps({{'type': 'response', 'command': 'get_state', 'id': state['id'],
-                  'success': True, 'data': {{'nativeInputProofCapability':
-                  'pi-native-input-v1-live-only'}}}}), flush=True)
-command = json.loads(sys.stdin.readline())
-assert command['type'] == 'prompt'
-pathlib.Path({str(captured)!r}).write_text(json.dumps(command))
-print(json.dumps({{'type': 'response', 'id': command['id'],
-                  'command': 'prompt', 'success': True}}), flush=True)
-print(json.dumps({{'type': 'message_start', 'message': {{'role': 'user',
-                  'content': command['message'], 'inputId': command['inputId']}}}}), flush=True)
-print(json.dumps({{'type': 'message_end', 'message': {{'role': 'assistant',
-                  'stopReason': 'stop'}}}}), flush=True)
-print(json.dumps({{'type': 'agent_settled'}}), flush=True)
-sys.stdin.readline()  # postturn get_state
-sys.stdin.readline()  # get_session_stats
-print(json.dumps({{'type': 'response', 'command': 'get_session_stats',
-                  'success': True, 'data': {{}}}}), flush=True)
-"""
+        + f"\nimport json, pathlib, sys\nstate = json.loads(sys.stdin.readline())\nprint(json.dumps({{'type': 'response', 'command': 'get_state', 'id': state['id'],\n                  'success': True, 'data': {{'nativeInputProofCapability':\n                  'pi-native-input-v1-live-only'}}}}), flush=True)\ncommand = json.loads(sys.stdin.readline())\nassert command['type'] == 'prompt'\npathlib.Path({str(captured)!r}).write_text(json.dumps(command))\nprint(json.dumps({{'type': 'response', 'id': command['id'],\n                  'command': 'prompt', 'success': True}}), flush=True)\nprint(json.dumps({{'type': 'message_start', 'message': {{'role': 'user',\n                  'content': command['message'], 'inputId': command['inputId']}}}}), flush=True)\nprint(json.dumps({{'type': 'message_end', 'message': {{'role': 'assistant',\n                  'stopReason': 'stop'}}}}), flush=True)\nprint(json.dumps({{'type': 'agent_settled'}}), flush=True)\nsys.stdin.readline()  # postturn get_state\nsys.stdin.readline()  # get_session_stats\nprint(json.dumps({{'type': 'response', 'command': 'get_session_stats',\n                  'success': True, 'data': {{}}}}), flush=True)\n"
     )
-    stub.chmod(0o755)
+    stub.chmod(493)
     events = [
         event
         async for event in backend.stream_agent_events(

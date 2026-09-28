@@ -17,6 +17,10 @@ import stat
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .acp_extension import SelectedWriteAcceptedUpdate
 
 from .bus_publication import stable_thread_lookup
 from .comms import Comms
@@ -113,7 +117,7 @@ class SelectedWritePlans:
         source_message_id: str,
         resource: str,
         contents: str,
-    ) -> dict[str, object]:
+    ) -> SelectedWriteAcceptedUpdate:
         """Persist exactly one predispatch operator intent; no native/model call."""
         if (
             type(source_message_id) is not str
@@ -189,12 +193,9 @@ class SelectedWritePlans:
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.
                 raise
-            return {
-                "status": "accepted_not_applied",
-                "operationId": operation_id,
-                "sourceSeq": source_seq,
-                "claimId": selected[0].assignment_id,
-            }
+            from .acp_extension import SelectedWriteAcceptedUpdate
+
+            return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
 
     def load(
         self, assignment: WakeAssignment, owner: Thread, admission_generation: int

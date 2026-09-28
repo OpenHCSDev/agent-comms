@@ -1,3 +1,5 @@
+from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
+
 """Provider-free read-only preparation from the exact disposable Pi tree."""
 
 import asyncio
@@ -1024,15 +1026,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             assert bridge.journal.pending_publications(str(session)) == ()
             assert comms.registry.require("project").goal.id == "goal-e2e"
         publications = [
-            event.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
+            fact.publication
             for event in received
+            for fact in decode_updates(event.get("_meta"))
+            if isinstance(fact, CompactionPublishedUpdate)
         ]
-        publications = [event for event in publications if event is not None]
-        assert [event["commitId"] for event in publications] == commit_ids
+        assert [event.commit_id for event in publications] == commit_ids
         assert len(set(commit_ids)) == 3
-        assert all(
-            set(event) == {"commitId", "entryId", "revision", "leafId"} for event in publications
-        )
         assert "Synthetic round" not in json.dumps(received)
         bus = root / "bus.jsonl"
         assert not bus.exists() or b"Synthetic round" not in bus.read_bytes()

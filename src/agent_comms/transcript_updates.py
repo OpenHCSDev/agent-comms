@@ -1,9 +1,4 @@
-"""Typed ACP replay boundary for existing saved-history projections.
-
-Snapshot clients receive typed saved presentation facts. Standard ACP text
-clients receive each fact's declared replay update; silent presentation facts
-do not enter the live event stream.
-"""
+"""Typed live ACP text and unconditional saved-history snapshot publication."""
 
 from __future__ import annotations
 
@@ -12,7 +7,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
+from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
     TextRouteUpdate,
@@ -30,27 +25,6 @@ from .runtime import RuntimeServer
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     @abstractmethod
     async def publish(self, session_id: str, client: Any) -> None: ...
-
-
-@dataclass(frozen=True, kw_only=True)
-class IgnoredTranscriptUpdate(TranscriptUpdate):
-    async def publish(self, session_id: str, client: Any) -> None:
-        pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class UserTranscriptUpdate(TranscriptUpdate):
-    text: str = ""
-
-    async def publish(self, session_id: str, client: Any) -> None:
-        if self.text:
-            await client.session_update(
-                session_id=session_id,
-                update=UserMessageChunk(
-                    session_update="user_message_chunk",
-                    content=TextContentBlock(type="text", text=self.text),
-                ),
-            )
 
 
 @dataclass(frozen=True, kw_only=True)
