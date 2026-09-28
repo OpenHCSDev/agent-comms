@@ -33,8 +33,15 @@ class RegistrationChange:
     def needs_maintenance_admission(self) -> bool:
         return self.thread.role.executable and (
             self.new_owner
-            or (self.previous is None and self.thread.pid > 0 and self.status.active)
-            or (self.previous is not None and self.previous.pid != self.thread.pid)
+            or (
+                self.previous is None
+                and self.thread.process_identity is not None
+                and self.status.active
+            )
+            or (
+                self.previous is not None
+                and self.previous.process_identity != self.thread.process_identity
+            )
             or (
                 self.previous_status is not None
                 and not self.previous_status.active
@@ -48,7 +55,7 @@ class RegistrationChange:
         return previous is not None and (
             self.new_owner
             or previous.created_at != thread.created_at
-            or previous.pid != thread.pid
+            or previous.process_identity != thread.process_identity
             or previous.session_file != thread.session_file
             or previous.worktree != thread.worktree
             or previous.role != thread.role
@@ -174,7 +181,7 @@ class RegistryDocument:
         if (
             previous is None
             or new_owner
-            or previous.pid != thread.pid
+            or previous.process_identity != thread.process_identity
             or previous.role != thread.role
             or (previous_status is not None and previous_status.changes_owner(status))
         ):
@@ -210,7 +217,7 @@ class RegistryDocument:
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread, pid=0, active_turn=None))
+            additions.append(replace(thread, process_identity=None, active_turn=None))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
         aliases = {

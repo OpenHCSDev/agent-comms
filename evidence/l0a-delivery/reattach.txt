@@ -1,0 +1,164 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-l0a-incarnation-delivery-20260928
+configfile: pyproject.toml
+plugins: platformdirs-4.12.0, asyncio-1.4.0, xdist-3.8.0, cov-7.1.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_detached_owner.py F                                           [100%]
+
+=================================== FAILURES ===================================
+____ test_new_thread_survives_client_loss_and_reattaches_without_duplicate _____
+
+fut = <coroutine object Event.wait at 0x7f44ced77d80>, timeout = 10
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+/usr/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f44ceddc440 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+/usr/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-l0a-incarnation-delivery-20260928/.artifacts/reattach-tests/test_new_thread_survives_clien0')
+
+    @pytest.mark.skipif(os.name == "nt", reason="Named FIFO fixture requires POSIX")
+    async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        gate = tmp_path / "gate"
+        os.mkfifo(gate)
+        program = tmp_path / "slow backend.py"
+        program.write_text(
+            "print('TURN_STARTED', flush=True)\n"
+            f"with open({str(gate)!r}, 'rb') as gate: gate.read(1)\n"
+            "print('TURN_FINISHED', flush=True)\n"
+        )
+        comms = wire(tmp_path / "wire")
+        first = CommsClient(comms, agent_bin=sys.executable, agent_args=[str(program)])
+        second, third = CommsClient(comms), CommsClient(comms)
+        started, settled = asyncio.Event(), asyncio.Event()
+    
+        class Client:
+            async def session_update(self, session_id, update):
+                if "TURN_STARTED" in update.get("content", {}).get("text", ""):
+                    started.set()
+                if update.get("_meta", {}).get("agentComms", {}).get("turnSettled"):
+                    settled.set()
+    
+        first.on_connect(Client())
+        second.on_connect(Client())
+        response = await first.new_session(str(project))
+        name = response.session_id
+        owner = comms.registry.require(name).pid
+        assert owner != os.getpid() and os.getpgid(owner) == owner
+        turn = asyncio.create_task(first.prompt(name, [{"type": "text", "text": "work"}]))
+        try:
+>           await asyncio.wait_for(started.wait(), 10)
+
+tests/test_detached_owner.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f44cedcc480>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+/usr/lib/python3.14/asyncio/timeouts.py:115: TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_detached_owner.py::test_new_thread_survives_client_loss_and_reattaches_without_duplicate
+============================== 1 failed in 11.66s ==============================
