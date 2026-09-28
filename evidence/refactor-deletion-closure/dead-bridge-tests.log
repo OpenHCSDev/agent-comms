@@ -1,0 +1,21 @@
+...............F..............................                           [100%]
+=================================== FAILURES ===================================
+________ test_existing_stored_route_wins_and_plain_pages_never_scan_bus ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/deletion-tmp/pytest-of-ts/pytest-0/test_existing_stored_route_win0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f8540dca8d0>
+
+    def test_existing_stored_route_wins_and_plain_pages_never_scan_bus(tmp_path, monkeypatch):
+        comms, session = _case(tmp_path)
+        message = comms.messaging.send_message("peer", "owner", "hello")
+        _session(session, _entry(message))
+        comms.transcripts.routes.record(
+>           str(session), ("input",), __import__("agent_comms").TurnRouting((message,), None)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        )
+E       AttributeError: module 'agent_comms' has no attribute 'TurnRouting'
+
+tests/test_transcript_legacy_integration.py:134: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_transcript_legacy_integration.py::test_existing_stored_route_wins_and_plain_pages_never_scan_bus
+1 failed, 45 passed in 12.83s
