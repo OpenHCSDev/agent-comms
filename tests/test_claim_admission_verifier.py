@@ -69,8 +69,8 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             alice_lookup = stable_thread_lookup(comms.registry.require("Alice").created_at)
             bob_lookup = stable_thread_lookup(comms.registry.require("Bob").created_at)
             assert sealed_cohort_assignments(store, bob_lookup) == ()
-            claim = sealed_cohort_assignments(store, alice_lookup)[0]
-            assert type(claim.lifecycle) is FullPendingAssignment
+            assignment = sealed_cohort_assignments(store, alice_lookup)[0]
+            assert type(assignment.lifecycle) is FullPendingAssignment
             owner, admission_generation = comms.registry.live_owner_with_admission("Alice")
             owner, admission_generation = comms.registry.lease_live_turn_with_admission(
                 owner, "selected-turn", expected_generation=admission_generation
@@ -83,7 +83,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 alice_lookup,
                 owner.name,
                 1,
-                assignment_ids=(claim.assignment_id,),
+                assignment_ids=(assignment.assignment_id,),
                 exact_target="#team",
             )
             snapshot = store.snapshot(execution_id)
@@ -99,12 +99,12 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             )
-            engaged = store.assignment(claim.assignment_id)
+            engaged = store.assignment(assignment.assignment_id)
             admission = WakeAdmission(
                 wire_root_id=root_id,
                 source_seq=message.seq,
                 source_message_id=message.message_id,
-                wake_assignment_id=claim.assignment_id,
+                wake_assignment_id=assignment.assignment_id,
                 wake_revision=engaged.revision,
                 recipient_lookup=alice_lookup,
                 execution_id=execution_id,

@@ -201,7 +201,7 @@ class OwnedTurn:
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
-        self.turn_claim = self.runner.comms.agents.begin_turn(
+        self.turn_lease = self.runner.comms.agents.begin_turn(
             self.thread_name, self.turn_id, self.task[:80], self.routing
         )
         self.turn_admission = self.runner.comms.registry.snapshot().admission_generations[
@@ -827,7 +827,7 @@ class OwnedTurn:
             self.session_id,
             self.thread_name,
             self.turn_id,
-            self.turn_claim,
+            self.turn_lease,
             stream_settled=self.progress.settled,
             terminal_fence=self.progress.terminal_fence,
         )

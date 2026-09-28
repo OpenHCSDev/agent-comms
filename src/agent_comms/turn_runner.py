@@ -20,6 +20,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .goal_actions import (
     EditGoalAction,
@@ -55,7 +56,6 @@ from .transcript_updates import StartedTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
 
-GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
@@ -186,7 +186,9 @@ class TurnRunner:
                 )
             else:
                 turn_id = uuid4().hex
-                turn_claim = self.comms.agents.begin_turn(thread_name, turn_id, "Waiting for replies")
+                turn_lease = self.comms.agents.begin_turn(
+                    thread_name, turn_id, "Waiting for replies"
+                )
                 self.active_turns[session_id] = turn_id
                 try:
                     await self.effects._emit_event(
@@ -195,7 +197,7 @@ class TurnRunner:
                     await self.inputs.drain_inbox(session_id)
                     await self.collect_replies(session_id, thread_name, sent_seq)
                 finally:
-                    await self.settle_turn(session_id, thread_name, turn_id, turn_claim)
+                    await self.settle_turn(session_id, thread_name, turn_id, turn_lease)
             self.effects._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -377,10 +379,10 @@ class TurnRunner:
         session_id: str,
         thread_name: str,
         turn_id: str,
-        claim: TurnLeaseFence,
+        lease: TurnLeaseFence,
     ) -> FinishedTurnFence | None:
         """Clear only this turn; waiter release follows committed terminal output."""
-        fence = self.comms.agents.finish_turn(claim)
+        fence = self.comms.agents.finish_turn(lease)
         if self.active_turns.get(session_id) == turn_id:
             self.active_turns.pop(session_id, None)
         return fence
@@ -390,7 +392,7 @@ class TurnRunner:
         session_id: str,
         thread_name: str,
         turn_id: str,
-        claim: TurnLeaseFence,
+        lease: TurnLeaseFence,
         *,
         stream_settled: bool = False,
         terminal_fence: FinishedTurnFence | None = None,
@@ -405,7 +407,7 @@ class TurnRunner:
         if task is not None and self.turn_tasks.get(session_id) is task:
             self.turn_tasks.pop(session_id, None)
         if not stream_settled:
-            terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, claim)
+            terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, lease)
         try:
             if not stream_settled:
                 await self.effects._emit_event(session_id, events.TurnSettled(turn_id))
@@ -753,4 +755,4 @@ def parse_target(text: str) -> tuple[str, str]:
         channel = parts[0].rstrip("@#")
         if channel and len(parts) == 2 and parts[1].strip():
             return f"#{channel}", parts[1].strip()
-    return GLOBAL_TARGET, stripped
+    return BuiltinChannel.ALL.value, stripped

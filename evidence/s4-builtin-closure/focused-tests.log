@@ -1,0 +1,90 @@
+......FF................................................................ [ 71%]
+.............................                                            [100%]
+=================================== FAILURES ===================================
+______ TestParticipantActivity.test_activity_trail_thinking_working_idle _______
+
+self = <test_agent_loop.TestParticipantActivity object at 0x7fd2c48c07d0>
+tmp_path = PosixPath('/home/ts/wt/comms-s4-builtin-channel-closure-20260928/.artifacts/tests/pytest-of-ts/pytest-0/test_activity_trail_thinking_w0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd2c45075f0>
+
+    async def test_activity_trail_thinking_working_idle(self, tmp_path, monkeypatch):
+        from agent_comms.activity import ActivityState
+    
+        root = tmp_path / "wire"
+        stub = _echo_stub(tmp_path, "on-it")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    
+        participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+        participant.start()
+        comms.messaging.send("human", "bot", "fix the flake")
+        await participant._tick("bot")
+    
+>       states = [e.state.value for e in comms.agents.activity._load() if e.thread == "bot"]
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ActivityLog' object has no attribute '_load'
+
+/home/ts/wt/comms-s4-builtin-channel-closure-20260928/tests/test_agent_loop.py:156: AttributeError
+----------------------------- Captured stdout call -----------------------------
+participant 'bot' live on wire /home/ts/wt/comms-s4-builtin-channel-closure-20260928/.artifacts/tests/pytest-of-ts/pytest-0/test_activity_trail_thinking_w0/wire (backend: /home/ts/wt/comms-s4-builtin-channel-closure-20260928/.artifacts/tests/pytest-of-ts/pytest-0/test_activity_trail_thinking_w0/echo-agent, tags: [])
+__________ TestParticipantActivity.test_working_activity_on_tool_use ___________
+
+self = <test_agent_loop.TestParticipantActivity object at 0x7fd2c48c0b90>
+tmp_path = PosixPath('/home/ts/wt/comms-s4-builtin-channel-closure-20260928/.artifacts/tests/pytest-of-ts/pytest-0/test_working_activity_on_tool_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd2c4553410>
+
+    async def test_working_activity_on_tool_use(self, tmp_path, monkeypatch):
+    
+        root = tmp_path / "wire"
+        rpc_lines = "\n".join(
+            [
+                '{"type":"tool_execution_start","toolCallId":"t1","toolName":"bash","args":{"command":"pwd"}}',
+                '{"type":"tool_execution_end","toolCallId":"t1","toolName":"bash","result":{"content":[]},"isError":false}',
+                '{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}',
+                '{"type":"agent_settled"}',
+            ]
+        )
+        stub = tmp_path / "pi-bot"
+        stub.write_text(
+            f"#!{sys.executable}\nimport json, sys\n"
+            "state = json.loads(sys.stdin.readline())\n"
+            "print(json.dumps({'type': 'response', 'command': 'get_state', 'id': state['id'], "
+            "'success': True, 'data': {'nativeInputProofCapability': "
+            "'pi-native-input-v1-live-only'}}), flush=True)\n"
+            "prompt = json.loads(sys.stdin.readline())\n"
+            "print(json.dumps({'type': 'response', 'command': 'prompt', 'id': prompt['id'], "
+            "'success': True}), flush=True)\n"
+            "print(json.dumps({'type': 'message_start', 'message': {'role': 'user', "
+            "'content': prompt['message'], 'inputId': prompt['inputId']}}), flush=True)\n"
+            f"for event in {rpc_lines.splitlines()!r}: print(event, flush=True)\n"
+            "sys.stdin.readline()  # postturn get_state\n"
+            "sys.stdin.readline()  # get_session_stats\n"
+            "print(json.dumps({'type': 'response', 'command': 'get_session_stats', "
+            "'success': True, 'data': {'contextUsage': {}}}), flush=True)\n"
+        )
+        stub.chmod(0o755)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "bot")
+        monkeypatch.chdir(tmp_path)
+        comms = wire(root)
+        comms.threads.register(Thread(name="human", tags=frozenset(), worktree=str(tmp_path)))
+        comms.threads.register(Thread(name="bot", tags=frozenset(), worktree=str(tmp_path)))
+    
+        participant = Participant(root=root, agent_bin=str(stub), agent_args=[])
+        participant.start()
+        comms.messaging.send("human", "bot", "check cwd")
+        await participant._tick("bot")
+    
+>       states = [(e.state.value, e.detail) for e in comms.agents.activity._load() if e.thread == "bot"]
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ActivityLog' object has no attribute '_load'
+
+/home/ts/wt/comms-s4-builtin-channel-closure-20260928/tests/test_agent_loop.py:201: AttributeError
+----------------------------- Captured stdout call -----------------------------
+participant 'bot' live on wire /home/ts/wt/comms-s4-builtin-channel-closure-20260928/.artifacts/tests/pytest-of-ts/pytest-0/test_working_activity_on_tool_0/wire (backend: /home/ts/wt/comms-s4-builtin-channel-closure-20260928/.artifacts/tests/pytest-of-ts/pytest-0/test_working_activity_on_tool_0/pi-bot, tags: [])
+=========================== short test summary info ============================
+FAILED tests/test_agent_loop.py::TestParticipantActivity::test_activity_trail_thinking_working_idle
+FAILED tests/test_agent_loop.py::TestParticipantActivity::test_working_activity_on_tool_use
+2 failed, 99 passed in 6.32s

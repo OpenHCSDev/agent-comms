@@ -1,0 +1,52 @@
+{
+  "base": "83b4f8d",
+  "source": "bd10486",
+  "files": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "syntax": "parsed",
+      "string_literals_unchanged": true
+    }
+  ],
+  "meaning": "Source syntax and unchanged literal spellings, not runtime equivalence proof."
+}

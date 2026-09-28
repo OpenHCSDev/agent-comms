@@ -13,6 +13,7 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
+from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
@@ -199,7 +200,7 @@ def publish_selected_resource_claim(
                 raise IdentityConflict("Wake claim operation was already consumed")
         target = initial.message.sender
         if target == owner.name:
-            target = "#all"
+            target = BuiltinChannel.ALL.value
         committed = bus.publisher.publish_claim_envelope(
             Message(owner.name, target, "Resource claim admitted", MessageType.INFO, notice=True),
             worktree=Path(owner.worktree),
@@ -241,7 +242,11 @@ def release_selected_resources(
         if any(projection.get(assignment.resource) != assignment for assignment in claims):
             raise IdentityConflict("Coding claim changed before release")
         if claims:
-            target = initial.message.sender if initial.message.sender != owner.name else "#all"
+            target = (
+                initial.message.sender
+                if initial.message.sender != owner.name
+                else BuiltinChannel.ALL.value
+            )
             bus.publisher.publish_claim_envelope(
                 Message(
                     owner.name,

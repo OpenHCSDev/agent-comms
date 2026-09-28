@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms import Registration
-from agent_comms.channel_targets import GLOBAL_CHANNEL
+from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.messages import Message, MessageType
@@ -39,7 +39,7 @@ class TestChannelTargets:
         assert message.target == "#ci"
 
     def test_message_to_global_channel_is_valid(self):
-        message = Message(sender="a", target=GLOBAL_CHANNEL, body="x", type=MessageType.INFO)
+        message = Message(sender="a", target=BuiltinChannel.ALL.value, body="x", type=MessageType.INFO)
         assert message.target == "#all"
 
     def test_rejects_bad_channel_characters(self):

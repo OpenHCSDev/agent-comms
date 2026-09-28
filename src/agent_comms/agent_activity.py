@@ -45,11 +45,11 @@ class AgentActivity:
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
     ) -> TurnLeaseFence:
         with _store_lock(self._wire_lock_path):
-            claimed, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
-            lease = claimed.turn_lease
+            leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
+            lease = leased.turn_lease
             assert lease is not None
             try:
-                self.activity.emit(Activity(claimed.name, ActivityState.THINKING, detail))
+                self.activity.emit(Activity(leased.name, ActivityState.THINKING, detail))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise

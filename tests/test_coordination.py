@@ -105,7 +105,7 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
     )
 
 
-def claim():
+def assignment():
     return WakeAssignment(
         assignment_id="claim-1",
         recipient="worker",
@@ -154,17 +154,17 @@ def snapshot(
             (
                 (
                     replace(
-                        claim(),
+                        assignment(),
                         lifecycle=AssignmentState.decode(record.lifecycle.declared_name).load(
-                            claim().lifecycle.mode,
-                            claim().lifecycle.verdict,
-                            claim().lifecycle.execution_id,
-                            claim().lifecycle.exact_target,
+                            assignment().lifecycle.mode,
+                            assignment().lifecycle.verdict,
+                            assignment().lifecycle.execution_id,
+                            assignment().lifecycle.exact_target,
                         ),
                     )
                     if type(record.lifecycle)
                     in {DeferredExecution, CompletedExecution, FailedExecution}
-                    else claim()
+                    else assignment()
                 ),
             )
             if record.origin is ExecutionOrigin.WIRE
@@ -439,18 +439,18 @@ def test_wire_claim_obligation_and_publication_contract():
     with pytest.raises(IntegrityViolationError, match="ordered claims"):
         replace(valid, links=(ExecutionAssignmentLink("other", "claim-1", 0),))
     with pytest.raises(IntegrityViolationError):
-        replace(valid, assignments=(replace(claim(), recipient_lookup="other"),))
+        replace(valid, assignments=(replace(assignment(), recipient_lookup="other"),))
     with pytest.raises(IntegrityViolationError, match="disposition"):
         replace(
             valid,
             assignments=(
                 replace(
-                    claim(),
+                    assignment(),
                     lifecycle=CompletedAssignment.load(
-                        claim().lifecycle.mode,
-                        claim().lifecycle.verdict,
-                        claim().lifecycle.execution_id,
-                        claim().lifecycle.exact_target,
+                        assignment().lifecycle.mode,
+                        assignment().lifecycle.verdict,
+                        assignment().lifecycle.execution_id,
+                        assignment().lifecycle.exact_target,
                     ),
                 ),
             ),
@@ -506,7 +506,7 @@ def test_wire_claim_obligation_and_publication_contract():
 
 
 def test_claim_replay_obligation_relations_remain_authoritative():
-    c = claim()
+    c = assignment()
     assert assignment_transition_allowed(
         c,
         replace(
@@ -1734,14 +1734,14 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
             attempt=None,
             assignments=(
                 replace(
-                    claim(),
+                    assignment(),
                     assignment_id="a",
                     recipient_lookup="p",
-                    lifecycle=type(claim().lifecycle).load(
-                        claim().lifecycle.mode,
-                        claim().lifecycle.verdict,
+                    lifecycle=type(assignment().lifecycle).load(
+                        assignment().lifecycle.mode,
+                        assignment().lifecycle.verdict,
                         "e",
-                        claim().lifecycle.exact_target,
+                        assignment().lifecycle.exact_target,
                     ),
                 ),
             ),

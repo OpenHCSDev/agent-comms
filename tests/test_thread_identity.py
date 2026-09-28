@@ -29,9 +29,9 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     identity = before.owner_identity("owner")
     registry.register(replace(owner, title="new metadata"))
     registry.heartbeat("owner")
-    claimed, generation = registry.lease_local_turn("owner", "turn")
+    leased, generation = registry.lease_local_turn("owner", "turn")
     assert generation == identity.generation
-    assert claimed.turn_identity == TurnIdentity(identity.incarnation, 1)
+    assert leased.turn_identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
     assert registry.snapshot().admission_generations == before.admission_generations
     assert registry.release_turn(registry.require("owner").turn_lease)[0]
@@ -117,13 +117,13 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
 
 def test_saved_registry_roundtrip_preserves_identity_and_removes_dead_turn_roster(tmp_path):
     registry = registry_with_owner(tmp_path)
-    claimed, generation = registry.lease_local_turn("owner", "old")
+    leased, generation = registry.lease_local_turn("owner", "old")
     raw = json.loads(registry.store.path.read_text())
     raw["turn_epochs"] = {"owner": generation}
     registry.store.path.write_text(json.dumps(raw))
     reopened = Registration(registry.store.path)
-    assert reopened.live_owner_with_generation("owner") == (claimed, generation)
-    assert reopened.require("owner").incarnation == claimed.incarnation
+    assert reopened.live_owner_with_generation("owner") == (leased, generation)
+    assert reopened.require("owner").incarnation == leased.incarnation
     reopened.release_turn(reopened.require("owner").turn_lease)[0]
     persisted = json.loads(registry.store.path.read_text())
     assert not {"owner_generations", "owner_generation_counter"} & persisted.keys()
