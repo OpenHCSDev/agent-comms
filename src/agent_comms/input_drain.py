@@ -32,7 +32,7 @@ from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
-from .store_files import _store_lock
+from .store_files import _store_lock, file_revision
 from .threads import Thread
 from .wire_watch import open_wire_watcher
 
@@ -89,6 +89,9 @@ class InputDrain(FutureInputQueue):
         self.closing = False
         self.inbox_cursors: dict[str, int] = {}
         self.wake_tasks: dict[str, asyncio.Task[None]] = {}
+        # Only a completed, quiescent observation can suppress another scan.
+        # These revisions never authorize delivery, acceptance or a native send.
+        self._idle_private_revisions: dict[str, tuple] = {}
 
     def initialize_session_delivery(
         self, session_id: str, thread: Thread, *, fresh: bool, private: bool
@@ -357,11 +360,42 @@ class InputDrain(FutureInputQueue):
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
             return await self.drain_owned_inbox(session_id)
 
+    def _private_observation_revision(self, session_id: str, root_id: str) -> tuple:
+        """Cheap source revisions; never a receipt, cursor, or owner authority."""
+        return (
+            root_id,
+            self.effects._private_nk_native_package,
+            self.auto_wake,
+            self.sessions.runtime_enabled,
+            self.sessions.bindings.get(session_id),
+            session_id in self.backend_inboxes,
+            session_id in self.effects.turns.active_turns,
+            session_id in self.effects.turns.turn_tasks,
+            file_revision(self.comms.bus.log.path),
+            file_revision(self.comms.registry.store.path),
+            file_revision(self.comms.root / ".registry-owner-guard"),
+            file_revision(self.comms.root / "coordination.sqlite3"),
+        )
+
+    async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
+        # The caller still validates the current private marker each time. The
+        # ordinary loop still synchronizes configuration and schedules goals.
+        before = self._private_observation_revision(session_id, root_id)
+        if self._idle_private_revisions.get(session_id) == before:
+            return 0
+        self._idle_private_revisions.pop(session_id, None)
+        result = await self.effects._drain_private_nk(session_id, root_id)
+        # Never absorb a message/owner/recovery change during a suspended read,
+        # or skip queued independent work after a completed native turn.
+        if result == 0 and before == self._private_observation_revision(session_id, root_id):
+            self._idle_private_revisions[session_id] = before
+        return result
+
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The legacy ACP display cursor/ACK/steer path is not a native input
         # receipt. Never let it consume an explicitly cut-over private bus.
         if private_root := self.effects._private_nk_marker():
-            return await self.effects._drain_private_nk(session_id, private_root)
+            return await self._drain_private_if_changed(session_id, private_root)
         if self.effects._private_nk_native_package is not None:
             raise PublicationActivationBlocked("configured private N/K ACP has no durable marker")
         thread_name = await self.sessions.sync_identity(session_id)
@@ -384,7 +418,7 @@ class InputDrain(FutureInputQueue):
         # the first classification but before this page was read. Reclassify
         # before touching delivery cursors, input dispositions or legacy ACK.
         if private_root := self.effects._private_nk_marker():
-            return await self.effects._drain_private_nk(session_id, private_root)
+            return await self._drain_private_if_changed(session_id, private_root)
         incoming_messages = page.messages if page else ()
         for message in incoming_messages:
             admitted = True
@@ -789,6 +823,7 @@ class InputDrain(FutureInputQueue):
     async def close(self) -> None:
         tasks = tuple(self.drain_tasks.values())
         self.drain_tasks.clear()
+        self._idle_private_revisions.clear()
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

@@ -32,7 +32,7 @@ from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import ExecutionOrigin, OwnerFence, WakeAssignment
-from .coordination_cohort import _assert_schema, accept_initial_cohort, sealed_cohort_assignments
+from .coordination_cohort import _assert_schema, accept_initial_cohort, next_sealed_assignment
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
@@ -494,33 +494,11 @@ class SelectedExecution:
             _require_owner(
                 self.store, self.lookup, self.owner, self.participant.participant_generation
             )
-        # A saturated page of already settled claims is not proof that there is
-        # no later selected work. Scan a bounded number of sealed pages, then
-        # require an explicit cursor rather than reporting a false empty inbox.
-        cursor = self.after_seq
-        self.assignment = None
-        for _ in range(10):
-            selected = sealed_cohort_assignments(
-                self.store, self.lookup, after_seq=cursor, limit=100
-            )
-            self.assignment = next(
-                (
-                    assignment
-                    for assignment in selected
-                    if assignment.recipient == self.owner.name
-                    and (assignment.lifecycle.triage_pending or assignment.lifecycle.full_pending)
-                ),
-                None,
-            )
-            if self.assignment is not None:
-                break
-            if len(selected) < 100:
-                return False
-            cursor = selected[-1].wire_seq
+        self.assignment = next_sealed_assignment(
+            self.store, self.lookup, self.owner.name, after_seq=self.after_seq
+        )
         if self.assignment is None:
-            raise IdentityConflict(
-                f"sealed claim scan exhausted; retry explicitly with after_seq={cursor}"
-            )
+            return False
         if self.participant.pointer.execution_id is not None:
             raise StaleFence(
                 "selected owner has an unresolved execution; new claims remain pending"
