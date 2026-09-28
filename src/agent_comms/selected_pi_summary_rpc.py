@@ -67,6 +67,21 @@ def _summary_response(
             # Observation only: do not issue an original-input admission or
             # clear the reservation from an RPC response alone.
             return SelectedSummaryResult(request["operationId"], None, data["reason"])
+        if data["status"] == "unknown":
+            if set(data) == {"version", "status", "operationId"}:
+                raise SelectedChildUnknown(
+                    "Selected summary outcome is uncertain; native child supplied no failure detail"
+                )
+            if (
+                set(data) != {"version", "status", "operationId", "reason"}
+                or type(data["reason"]) is not str
+                or not 0 < len(data["reason"]) <= 1024
+                or any(ord(char) < 32 or ord(char) == 127 for char in data["reason"])
+            ):
+                raise ValueError("Invalid selected summary failure detail")
+            raise SelectedChildUnknown(
+                f"Selected summary failed: {data['reason']} (outcome uncertain; input not retried)"
+            )
         if (
             set(data)
             != {"version", "status", "operationId", "witness", "selected", "settings", "result"}
@@ -106,7 +121,7 @@ def _summary_response(
             request["operationId"], NativeSummary(result["summary"], details, result["usage"])
         )
     except (ValueError, TypeError, KeyError) as error:
-        raise SelectedChildUnknown("Selected summary response is uncertain") from error
+        raise SelectedChildUnknown(f"Selected summary response is uncertain: {error}") from error
 
 
 @dataclass
@@ -197,7 +212,15 @@ class SelectedSummarySlot:
                         await persistent.close()
                 if isinstance(error, (asyncio.CancelledError, SelectedChildUnknown)):
                     raise
-                raise SelectedChildUnknown("Selected summary transport uncertain") from error
+                if isinstance(error, TimeoutError):
+                    raise SelectedChildUnknown(
+                        f"Selected summary timed out after {timeout_seconds:g} seconds; "
+                        "outcome uncertain, input not retried"
+                    ) from error
+                raise SelectedChildUnknown(
+                    f"Selected summary transport uncertain: {type(error).__name__}: "
+                    f"{str(error)[:1024]}"
+                ) from error
 
     async def exchange_fake_rpc(
         self,
