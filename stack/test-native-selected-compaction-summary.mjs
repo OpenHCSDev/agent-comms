@@ -39,6 +39,7 @@ const preparation=prepareCompaction(manager.getBranch(),settings);
 const witness=manager.captureCompactionWitness(preparation.firstKeptEntryId);
 const model={provider:'fake',id:'fake',api:'openai-completions',contextWindow:10000,maxTokens:1000};
 let mode='success',release,callCount=0,blockHooks=false;
+if(process.env.PR95_PROVIDER_ERROR === '1') mode='error-stop';
 const runner={hasHandlers:()=>blockHooks};
 const catalog=process.env.PR95_DECLINE_SUMMARY === '1' ? [] : [model];
 const session={sessionManager:manager,sessionFile:manager.getSessionFile(),sessionId:manager.getSessionId(),
@@ -75,7 +76,10 @@ const session={sessionManager:manager,sessionFile:manager.getSessionFile(),sessi
         }
         const text=mode==='large'?'z'.repeat(270000):'Synthetic summary';
         const final={role:'assistant',content:[{type:'text',text}],
-          stopReason:mode==='error-stop'?'error':'stop',usage};
+          stopReason:mode.startsWith('error-')?'error':'stop',usage,
+          ...(mode.startsWith('error-') ? {errorMessage:mode==='error-long'?'x'.repeat(2000)
+            : mode==='error-control'?'402: insufficient\\ncredits\\u001b'
+            : '402: insufficient credits on configured model'} : {})};
         const abort=()=>{const error={...final,stopReason:'aborted'};
           events.push({type:'error',reason:'aborted',error});events.end(error)};
         if(options.signal.aborted && !['malformed','iterator-throw','rejecting-result','rejecting-terminal'].includes(mode)) return abort();
@@ -93,7 +97,7 @@ const session={sessionManager:manager,sessionFile:manager.getSessionFile(),sessi
         events.push({type:'text_delta',contentIndex:0,delta:text,partial:final});
         if(options.signal.aborted && !['malformed','iterator-throw','rejecting-result','rejecting-terminal'].includes(mode)) return abort();
         process.stderr.write('TERMINAL '+mode+'\\n');
-        events.push(mode==='error-stop'
+        events.push(mode.startsWith('error-')
           ? {type:'error',reason:'error',error:final}
           : {type:'done',reason:'stop',message:final});
         events.end(final);
@@ -167,11 +171,13 @@ void runRpcMode(host);
   await request({id:'large-mode',type:'set_steering_mode',mode:'large'});
   const largeId='d'.repeat(32);
   assert.deepEqual((await request({id:'large',...base,operationId:largeId})).data,
-    {version:1,status:'unknown',operationId:largeId});
+    {version:1,status:'unknown',operationId:largeId,
+      reason:'Selected summary stream exceeded its output limit or contained unsupported events'});
   await request({id:'slow-mode',type:'set_steering_mode',mode:'slow-large'});
   const slowId='5'.repeat(32);
   assert.deepEqual((await request({id:'slow-large',...base,operationId:slowId})).data,
-    {version:1,status:'unknown',operationId:slowId});
+    {version:1,status:'unknown',operationId:slowId,
+      reason:'Selected summary stream exceeded its output limit or contained unsupported events'});
   if(!stderr.includes('EARLY_ABORT')) await Promise.race([
     new Promise(resolve=>child.stderr.once('data',resolve)),
     new Promise((_,reject)=>setTimeout(()=>reject(Error('missing early abort')),3000)),
@@ -180,14 +186,22 @@ void runRpcMode(host);
   await request({id:'error-mode',type:'set_steering_mode',mode:'error-stop'});
   const stopId='e'.repeat(32);
   assert.deepEqual((await request({id:'stop',...base,operationId:stopId})).data,
-    {version:1,status:'unknown',operationId:stopId});
+    {version:1,status:'unknown',operationId:stopId,reason:'402: insufficient credits on configured model'});
+  for(const [mode,id,reason] of [
+      ['error-long','b'.repeat(32),'x'.repeat(1024)],
+      ['error-control','0'.repeat(32),'402: insufficient credits']]) {
+    await request({id:mode,type:'set_steering_mode',mode});
+    assert.deepEqual((await request({id:mode+'-result',...base,operationId:id})).data,
+      {version:1,status:'unknown',operationId:id,reason});
+  }
   await request({id:'hold-mode',type:'set_auto_retry',enabled:true});
   const holdId='f'.repeat(32);
+  const beforeHold=calls();
   const holding=request({id:'holding',...base,operationId:holdId});
   const waitForCall=()=>new Promise((resolve,reject)=>{
-    if(calls()>beforeHook+2) return resolve();
+    if(calls()>beforeHold) return resolve();
     const timer=setTimeout(()=>{child.stderr.off('data',seen);reject(Error('held fake stream did not start'))},3000);
-    const seen=()=>{if(calls()>beforeHook+2){clearTimeout(timer);child.stderr.off('data',seen);resolve()}};
+    const seen=()=>{if(calls()>beforeHold){clearTimeout(timer);child.stderr.off('data',seen);resolve()}};
     child.stderr.on('data',seen);
   });
   await waitForCall();
@@ -204,13 +218,14 @@ void runRpcMode(host);
   assert.equal((await request({id:'state-during',type:'get_state'})).data.isCompacting,true);
   const canceled=await request({id:'cancel-hold',type:'agent_comms_cancel_summary',version:1,operationId:holdId});
   assert.deepEqual(canceled.data,{version:1,status:'unknown',operationId:holdId});
-  assert.deepEqual((await holding).data,{version:1,status:'unknown',operationId:holdId});
+  assert.deepEqual((await holding).data,{version:1,status:'unknown',operationId:holdId,
+    reason:'Selected summary provider stopped: aborted'});
   assert.equal((await request({id:'state-after',type:'get_state'})).data.isCompacting,false);
   assert.deepEqual(readFileSync(sessionFile),before,'cancel did not write');
   await request({id:'hook-drift-mode',type:'set_steering_mode',mode:'hook-drift'});
   const hookDrift='2'.repeat(32);
   assert.deepEqual((await request({id:'hook-drift',...base,operationId:hookDrift})).data,
-    {version:1,status:'unknown',operationId:hookDrift});
+    {version:1,status:'unknown',operationId:hookDrift,reason:'Summary completion invalid or state changed'});
   await request({id:'hook-restore',type:'set_follow_up_mode',mode:'none'});
   // The consumer may see malformed events or throw before the producer's
   // terminal. Neither permits mutation while the pinned EventStream.result()
@@ -225,7 +240,9 @@ void runRpcMode(host);
     const denied=await request({id:`mutation-${kind}`,type:'set_steering_mode',mode:'success'});
     assert.equal(denied.success,false);
     assert.match(denied.error,/summary in flight/);
-    assert.deepEqual((await outstanding).data,{version:1,status:'unknown',operationId});
+    assert.deepEqual((await outstanding).data,{version:1,status:'unknown',operationId,
+      reason:kind==='malformed'?'Selected summary stream exceeded its output limit or contained unsupported events'
+        : 'fake iterator failure'});
     assert.ok(Date.now()-started>=200,`${kind}: consumer failure released slot before producer terminal`);
     assert.deepEqual(readFileSync(sessionFile),before,`${kind} never wrote session`);
   }
@@ -308,7 +325,8 @@ void runRpcMode(host);
     assert.equal((await send({id:'state-held',type:'get_state'})).data.isCompacting,true);
     assert.equal((await send({id:'mutation-held',type:'prompt',message:'never'})).success,false);
     const result=await pending;
-    assert.deepEqual(result.data,{version:1,status:'unknown',operationId:timedId});
+    assert.deepEqual(result.data,{version:1,status:'unknown',operationId:timedId,
+      reason:'Selected summary exceeded its 0.035 second deadline'});
     assert.ok(Date.now()-startedAt>=200,'noncooperative stream exceeds cooperative timer');
     assert.equal((timedStderr.match(/CALL /g)||[]).length,1);
     assert.deepEqual(readFileSync(tf.sessionFile),snapshot);
@@ -361,7 +379,7 @@ void runRpcMode(host);
     bad.kill('SIGKILL'); // disposable exact test child, not a production retirement claim
     await new Promise(resolve=>bad.on('exit',resolve));
   }
-  console.log(JSON.stringify({ok:true,cases:42,calls:calls(),longCalls,largerCalls,sourceCalls}));
+  console.log(JSON.stringify({ok:true,cases:44,calls:calls(),longCalls,largerCalls,sourceCalls}));
   }
 } finally {
   if (!integrated) rmSync(patched,{force:true});
