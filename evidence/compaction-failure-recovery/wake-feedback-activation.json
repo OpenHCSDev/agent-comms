@@ -1,0 +1,42 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-wake-feedback-20260928",
+  "core": "76855582f4facbdb7cf333ee42f9c42414ef6a1b",
+  "toad": "c3f7b632afce677b66d280ca29531e7879a66236",
+  "state_reset": false,
+  "input_replay": false,
+  "before_links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-private-proof-candidate-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-private-proof-candidate-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-private-proof-candidate-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-private-proof-candidate-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-private-proof-candidate-20260928/bin/agent-comms-nk-foreground"
+  },
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2014825,
+      "pid": 2059770
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2014830,
+      "pid": 2059792
+    },
+    {
+      "thread": "nra-architecture",
+      "previous_pid": 2014832,
+      "pid": 2059793
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "previous_pid": 2014840,
+      "pid": 2059800
+    }
+  ],
+  "verified": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true,
+    "nra-architecture": true,
+    "nra-domain-mapping": true
+  }
+}

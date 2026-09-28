@@ -4,6 +4,14 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
+Latest installed pair: core76855582 (276 provider feedback +278 production wake
+bootstrap), Toadc3f7b632 (50 authenticated browser), Textual16ede007, native5fde.
+The immutable runtime-wake-feedback-20260928 is live. Four idle owners restarted;
+no store reset, session loss or input replay. Restart the user's Toad to load the
+new imports. Combined local checks38 passed; installed native wake/restart and
+feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
+The existing failed return152 is still uncertain and is not retried.
+
 ## Current shipping batch
 
 - [x] Comms272: nominal compaction failure/recovery, typed input states, codec
@@ -47,8 +55,11 @@ No feature is complete merely because a draft exists or a PR was merged.
   Eleven declared tables installed with existing owners, no records deleted and
   no message resent. Original151 woke domain-mapping, which restarted architecture
   and published replies152/153. This proves that original delivery completed.
-- [ ] Boyle: fix production bootstrap and a native regression that relies on
+- [x] Boyle: production bootstrap and a native regression that relies on
   that bootstrap instead of manually provisioning its own private-wake schemas.
+  PR278 merged and installed; fresh and base-only native send/restart passed.
+- [ ] Boyle: expose failed background drains through existing typed activity and
+  diagnostics, so an actual wake failure cannot remain silently Ready.
 - [ ] Wegener: diagnose/fix return-message152 native rejection. Current code
   discards Pi's actual prompt rejection behind a generic unavailable error.
   No automatic retry of this uncertain attempt. Also owns the two private future
@@ -59,11 +70,11 @@ No feature is complete merely because a draft exists or a PR was merged.
   four-case run passed63.46s. Four idle owners restarted with their retained
   settings/sessions and verified sockets; no state reset or replay. First local run failed
   before exercising the code because its Unix socket path was too long.
-- [ ] Dalton: improve typed provider transport feedback using actual1011 and
+- [x] Dalton: improve typed provider transport feedback using actual1011 and
   upstream-connection-failure evidence. User's explicit retry worked; no global
   transport setting changed and no failed prompt was automatically resent.
-  PR27664f65a9d ready:35 focused+12 ACP checks, actual native WebSocket1011
-  and mounted Toad failure rendering pass. Parent integrates and deploys next.
+  PR276 merged and installed:35 focused+12 ACP checks, actual native WebSocket1011
+  and mounted Toad failure rendering pass. Parent's installed combined path also passes.
 
 ## Parallel remaining work
 
@@ -78,12 +89,14 @@ No feature is complete merely because a draft exists or a PR was merged.
   Completed independent slice126: demand-built session panels, installed64-tab
   and actual terminal checks, editor/undo/shell continuity. Continues116 global
   presentation bounds and actual ACP retention; original claim remains recorded.
-- [ ] Noether: establish50 ownership, finish authenticated loopback browser path
-  in own worktree and verify actual serving/authentication. No external exposure.
+- [x] Noether: finish50 authenticated loopback browser path. Merged and installed;
+  actual Chromium/ACP initialization/keyboard/authentication/streamed downloads pass.
+  No external exposure and no model-turn claim from the browser-only acceptance.
 - [ ] After T2/T3/T5/T6 merge, remeasure and finish T4 as specified: nominal
   turn owner, block navigation, TabOrder and clipboard families, no mixin carving.
   Carver now owns Conversation/blocks/Agent lifecycle and the observed Question
-  disconnect/mount race. Parent owns App TabOrder/clipboard; Tesla owns116.
+  disconnect/mount race in127; its native full-turn timeout remains owned.
+  Noether now owns App TabOrder/clipboard; Tesla owns116 resource integration.
 - [ ] Parent: finish actual remaining original/round-two plan acceptance and
   deletion audit against current source; stale reports are not current blockers
   and do not establish completion. Keep explicit requirement/evidence mapping.
