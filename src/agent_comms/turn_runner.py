@@ -35,8 +35,8 @@ from .goal_attempts import (
     Generation,
     GoalAttemptError,
     GoalAttemptStore,
-    StaleAttempt,
-    UnresolvedAttempt,
+    StaleAttemptError,
+    UnresolvedAttemptError,
 )
 from .goal_presentation import GoalExecution
 from .goals import Goal
@@ -514,7 +514,7 @@ class TurnRunner:
                 admission = self.comms.registry.snapshot().admission_generations[thread.name]
                 with _store_lock(self.comms._wire_lock_path):
                     self.ready_goal_grant_locked(thread, admission, store, generation)
-            except StaleAttempt:
+            except StaleAttemptError:
                 return
             except GoalAttemptError:
                 self.comms.goals.block_goal_after_failed_turn(
@@ -555,10 +555,10 @@ class TurnRunner:
             or not current.goal.state.active
             or current.goal.id != generation.goal_id
         ):
-            raise StaleAttempt("The executing goal owner changed before READY recovery.")
+            raise StaleAttemptError("The executing goal owner changed before READY recovery.")
         try:
             return store.ready_grant(generation.goal_id, generation.number)
-        except UnresolvedAttempt:
+        except UnresolvedAttemptError:
             store.recover_unreserved_ready(generation.goal_id, generation.number)
             return store.ready_grant(generation.goal_id, generation.number)
 

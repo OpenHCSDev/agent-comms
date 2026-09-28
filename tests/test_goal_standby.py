@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, StaleAttempt
+from agent_comms.goal_attempts import GoalAttemptStore, StaleAttemptError
 from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.input_drain import InputDrain
@@ -41,7 +41,9 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
     comms.agents.begin_turn("child", "child-review-in-flight")
     comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
     store = agent.turns.open_goal_store()
-    goal = comms.goals.update_goal("parent", SetGoalAction(text="Review @child work"), owner_store=store)
+    goal = comms.goals.update_goal(
+        "parent", SetGoalAction(text="Review @child work"), owner_store=store
+    )
     report = next(tool for tool in TOOLS if tool.name == "comms_goal")
     calls = []
     updates = []
@@ -120,7 +122,9 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
             await agent.inputs.run_owned_input("parent", "parent", "New owner instruction")
         else:
             comms.registry.rename("child", "renamed-child")
-            message = comms.messaging.send_message("renamed-child", "parent", "Implementation ready")
+            message = comms.messaging.send_message(
+                "renamed-child", "parent", "Implementation ready"
+            )
             if wake == "revoked":
                 monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
             await agent.inputs.drain_inbox("parent")
@@ -161,7 +165,10 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
         owner = replace(owner, pid=owner.pid + 1)
     old_grant = store.ready_grant(goal.id, 1)
     try:
-        with _store_lock(comms._wire_lock_path), pytest.raises(StaleAttempt, match="owner changed"):
+        with (
+            _store_lock(comms._wire_lock_path),
+            pytest.raises(StaleAttemptError, match="owner changed"),
+        ):
             agent.turns.ready_goal_grant_locked(
                 owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
             )
@@ -175,7 +182,9 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
     comms.threads.register(Thread("parent", frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError, match="wait_for"):
-        comms.goals.update_goal("parent", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+        comms.goals.update_goal(
+            "parent", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+        )
     comms.goals.update_goal("parent", PausedGoalAction(), actor=OwnerInvocable)
     comms.goals.update_goal("parent", EditGoalAction(text="Edited @mention"))
     assert comms.goals.goal_pause("parent").source.declared_name == "owner"

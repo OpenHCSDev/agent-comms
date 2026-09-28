@@ -8,6 +8,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
@@ -45,7 +46,7 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
         assert goal["status"] == "active"
         assert comms.registry.require(session).goal.id == goal["id"]
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(goal["id"])
-        assert generation is not None and generation.state == "ready"
+        assert generation is not None and generation.lifecycle == ReadyGeneration()
         assert owner.turns.goal_store.ready_grant(goal["id"], generation.number)
         assert session in wakes
     finally:
@@ -71,7 +72,11 @@ async def test_explicit_retry_recovers_registry_goal_missing_ledger(tmp_path, mo
         assert result["goal"]["id"] == legacy.id
         assert result["goal"]["status"] == "active"
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(legacy.id)
-        assert generation is not None and generation.state == "ready" and generation.number == 2
+        assert (
+            generation is not None
+            and generation.lifecycle == ReadyGeneration()
+            and generation.number == 2
+        )
         assert owner.turns.goal_store.ready_grant(legacy.id, generation.number)
         assert session in wakes
     finally:
