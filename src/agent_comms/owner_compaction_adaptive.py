@@ -48,7 +48,7 @@ async def maybe_compact_owner_turn(
     original_input_key: str,
     persistent: PersistentPiSession,
     *,
-    summary_strategy: (Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]] | None) = None,
+    summary_strategy: Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]] | None = None,
     input_text: str | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
     future_queue: FutureInputQueue | None = None,
@@ -60,6 +60,7 @@ async def maybe_compact_owner_turn(
     that one row and rechecks every ingress revision at native commit.
     """
     owner, owner_generation = registry.live_owner_with_generation(thread_name)
+    selected_native = summary_strategy is None
     if (
         owner.active_turn is None
         or owner.active_turn.id != turn_id
@@ -67,17 +68,20 @@ async def maybe_compact_owner_turn(
         or not owner.model
         or runtime_info is None
         or runtime_info.model != owner.model
-        or type(runtime_info.context_used) is not int
         or type(runtime_info.context_size) is not int
-        or not 0 <= runtime_info.context_used <= 2**53 - 1
         or not 0 < runtime_info.context_size <= 2**53 - 1
         or "/" not in owner.model
     ):
+        if selected_native:
+            raise PiSettingsEvidenceError("Selected native context must be prepared before input")
         return False
     assert runtime_info is not None
-    assert runtime_info.context_used is not None
     assert runtime_info.context_size is not None
     context_used = runtime_info.context_used
+    if not selected_native and (
+        type(context_used) is not int or not 0 <= context_used <= 2**53 - 1
+    ):
+        return False
     context_window = runtime_info.context_size
     provider, model_id = owner.model.split("/", 1)
     if not provider or not model_id:
@@ -118,12 +122,11 @@ async def maybe_compact_owner_turn(
             return True
         return False
 
-    selected_native = summary_strategy is None
     if selected_native:
         if input_text is None or on_admission is None:
             raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
         if persistent.proc is None:
-            return False
+            raise PiSettingsEvidenceError("Selected native session must be prepared before input")
     elif configuration_unbound():
         return False
 
@@ -135,7 +138,6 @@ async def maybe_compact_owner_turn(
                 expected_package=package,
                 provider=provider,
                 model_id=model_id,
-                context_tokens=context_used,
                 context_window=context_window,
             )
         if configuration_unbound():

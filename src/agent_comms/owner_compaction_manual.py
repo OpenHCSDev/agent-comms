@@ -42,13 +42,12 @@ class ManualSelectedSummary(NativeSummary):
 async def compact_manual_owner(
     runner, session_id: str, thread_name: str, info, instructions: str | None
 ):
-    persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
-    if persistent is None or persistent.proc is None:
-        raise ValueError("Canonical manual compaction requires the current selected native session")
     owner, generation = runner.comms.registry.live_owner_with_generation(thread_name)
     if owner.session_file is None or owner.active_turn is None or not owner.model:
         raise ValueError("Manual compaction requires the active owner and saved native session")
-    if info is None or info.context_used is None or info.context_size is None:
+    info = await runner.prepare_selected_session(session_id, owner)
+    persistent: PersistentPiSession = runner.persistent_backends[session_id]
+    if info.context_size is None:
         raise ValueError("Selected native context usage is unavailable")
     provider, model = owner.model.split("/", 1)
     package = runner.effects._private_nk_native_package
@@ -83,7 +82,6 @@ async def compact_manual_owner(
             expected_package=Path(package),
             provider=provider,
             model_id=model,
-            context_tokens=info.context_used,
             context_window=info.context_size,
         )
 

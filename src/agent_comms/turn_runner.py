@@ -50,6 +50,7 @@ from .runtime import (
     RuntimeServer,
     SocketClient,
 )
+from .runtime_info import AgentRuntimeInfo
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock
 from .threads import Thread
@@ -145,6 +146,43 @@ class TurnRunner:
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
         self.inputs = inputs
+
+    def native_arguments(self, thread: Thread) -> list[str]:
+        return backend.args_for_thinking_level(
+            backend.args_for_model(self.agent_args, thread.model), thread.thinking_level
+        )
+
+    def native_environment(self, thread: Thread, worktree: str) -> dict[str, str]:
+        return {
+            "AGENT_COMMS_THREAD": thread.name,
+            "PI_AGENT_ID": thread.name,
+            "AGENT_COMMS_ROOT": str(self.comms.root),
+            "PI_PARENT_ID": thread.parent or "",
+            "AGENT_COMMS_MANAGED": "1",
+            "PI_WORKTREE": worktree,
+        }
+
+    async def prepare_selected_session(self, session_id: str, thread: Thread) -> AgentRuntimeInfo:
+        from .native_session_prepare import NativeSessionPreparation
+
+        if thread.session_file is None:
+            raise ValueError("Native preparation requires a saved session")
+        state = await NativeSessionPreparation.open(
+            self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),
+            self.agent_bin,
+            self.native_arguments(thread),
+            worktree=thread.worktree,
+            environment=self.native_environment(thread, thread.worktree),
+            session_file=thread.session_file,
+        )
+        if state.model is None or state.model.display_name != thread.model:
+            raise ValueError("Prepared native model does not match the owner selection")
+        return AgentRuntimeInfo(
+            thread=thread.name,
+            model=state.model.display_name,
+            session_name=state.session_name,
+            context_size=state.model.context_window,
+        )
 
     async def prompt_owned(
         self, session_id: str, prompt: list[Any], *, display_text: str | None = None
