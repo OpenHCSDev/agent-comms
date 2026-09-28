@@ -68,7 +68,7 @@ class TestEndToEndLifecycle:
         session = tmp_path / "session.json"
         session.write_text("{}")
         run_python(
-            "import json\nfrom agent_comms import current_thread\nfrom agent_comms.comms import wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'name': c.registry.require('PR111').name}))",
+            "import json\nfrom agent_comms.comms import wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'name': c.registry.require('PR111').name}))",
             thread="PR111",
             parent="",
             root=root,
@@ -120,7 +120,7 @@ class TestEndToEndLifecycle:
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
-            "import json\nfrom agent_comms import current_thread\nfrom agent_comms.comms import wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'ok': 'kid' in str(c.registry.all_threads())}))",
+            "import json\nfrom agent_comms.comms import wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'ok': 'kid' in str(c.registry.all_threads())}))",
             thread="kid",
             parent="PR111",
             root=root,
@@ -205,31 +205,11 @@ class TestEndToEndLifecycle:
         cli(root, "register", "--name", "cli-agent", "--worktree", str(tmp_path))
         cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "from the cli side")
 
-        # ACP prompt drains it as agent message chunks.
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-
-        agent.sessions.client = FakeClient()
-
-        async def prompt_flow() -> None:
-            await agent.prompt(
-                session_id="proj", prompt=[{"type": "text", "text": "!relay checking inbox"}]
-            )
-
-        asyncio.run(prompt_flow())
-        incoming = [
-            update
-            for update in sent
-            if "incoming" in (update.field_meta or {}).get("agentComms", {})
+        # Both adapters project the same canonical source. Notification/native
+        # consumption is tested by the dedicated ACP owner-path tests.
+        assert [m.body for m in comms.views.dm_history("cli-agent", "proj")] == [
+            "from the cli side"
         ]
-        assert len(incoming) == 1
-        assert "from the cli side" in incoming[0].content.text
-        # The ACP prompt itself was broadcast and is visible on the CLI side.
-        inbox = cli(root, "inbox", "--thread", "cli-agent")
-        assert [m["text"] for m in inbox["messages"]] == ["checking inbox"]
         # And the CLI side can reply, visible in the thread's DM history.
         cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "roger")
         dm = [m.body for m in wire(root).views.dm_history("cli-agent", "proj")]

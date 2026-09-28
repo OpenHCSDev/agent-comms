@@ -9,7 +9,7 @@ import os
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -50,7 +50,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     tmp_path, monkeypatch
 ):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)

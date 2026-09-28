@@ -12,6 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 from agent_comms.threads import Thread
 from test_selected_owner_compaction_integration import owner_fixture
@@ -103,30 +104,31 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             return result
 
         monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", summary_with_queue)
-        spawn = asyncio.create_subprocess_exec
+        managed = NativePiRpcLaunch.managed
 
-        async def offline_spawn(program, *args, **kwargs):
-            if program == launcher:
-                kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
-                return await spawn(
+        def offline_launch(command, arguments, **kwargs):
+            # Preserve production attestation and session arguments; run the
+            # prepared native SDK/RPC with its network-prohibited local model.
+            launch = managed(command, arguments, **kwargs)
+            return replace(
+                launch,
+                argv=(
                     "node",
-                    str(
-                        Path(__file__).resolve().parents[1]
-                        / "stack/test-native-selected-owner-host.mjs"
-                    ),
-                    *args,
-                    **kwargs,
-                )
-            return await spawn(program, *args, **kwargs)
+                    str(Path(__file__).resolve().parents[1]
+                        / "stack/test-native-selected-owner-host.mjs"),
+                    "--session", launch.session_file,
+                ),
+                env=dict(launch.env, PR95_OWNER_FIXTURE_ROOT=str(tmp_path)),
+            )
 
-        monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+        monkeypatch.setattr(NativePiRpcLaunch, "managed", offline_launch)
         try:
             async with asyncio.timeout(35):
                 await agent.prompt("proj", [{"type": "text", "text": "Original after summary"}])
             rows = agent.inputs.dispositions.read().rows
             own = [row for row in rows.values() if row.owner == "proj"]
             assert len(own) == 2
-            assert all(row.declared_name == "started" for row in own), own
+            assert all(row.declared_name == "started" for row in own), (own, updates)
             assert len({row.native_id for row in own}) == 2
             journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
             assert len(operations) == 1

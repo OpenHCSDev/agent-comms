@@ -10,7 +10,7 @@ import pytest
 from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
@@ -20,7 +20,7 @@ from agent_comms.input_disposition import InputDispositions
 async def owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     updates = []
@@ -107,7 +107,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             public_id, command = await queue_followup(agent, kwargs)
         observed.update(goal=goal, public_id=public_id)
         with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
-            assert allowed is (None if queued_before_activation else True)
+            assert allowed is (not queued_before_activation)
         if queued_before_activation:
             yield ae.InputRefused(id=public_id)
         else:
