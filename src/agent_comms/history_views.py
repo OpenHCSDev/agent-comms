@@ -162,7 +162,8 @@ class HistoryViews:
             return tuple(connection.execute(
                 "SELECT w.*, EXISTS (SELECT 1 FROM native_runtime_inputs n "
                 "WHERE n.claim_id=w.claim_id AND n.stage='triage' AND n.verdict IS NULL) "
-                "AS triage_inflight FROM wake_claims w "
+                "AS triage_inflight, c.execution_id AS current_execution_id FROM wake_claims w "
+                "LEFT JOIN current_executions c ON c.owner_lookup=w.recipient_lookup "
                 f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
                 + (" LIMIT ?" if limit else ""),
                 (*parameters, limit) if limit else parameters,
@@ -194,6 +195,11 @@ class HistoryViews:
                 owner_active=owner is not None,
                 current_turn=current_turn,
                 triage_inflight=bool(row["triage_inflight"]),
+                blocked_by_prior=bool(
+                    row["current_execution_id"] is not None
+                    and row["current_execution_id"] != assignment.lifecycle.execution_id
+                ),
+                prior_turn_active=bool(owner is not None and owner.active_turn is not None),
             )
 
     @staticmethod

@@ -43,13 +43,18 @@ async def main():
             await until(lambda: len(app.screen.query(CommsChatView))>0)
             chat=app.screen.query_one(CommsChatView)
             await until(lambda: chat._history_initialized and not chat._refresh_lock.locked())
-            body='New independent installed Toad feedback check (not a retry of message71) for the Comms UX owner: reply TOAD_FEEDBACK_SECOND_CHECK_OK in this channel. No tools or file edits. PR95 owner: this is outside your task; ignore it.'
+            from uuid import uuid4
+            probe_id = uuid4().hex[:8]
+            previous_ids = {m.message_id for m, _ in chat._history}
+            body=f'Independent UI check {probe_id} for the Comms UX owner: reply TOAD_FEEDBACK_SECOND_CHECK_OK in this channel. No tools or file edits. PR95 owner: this is outside your task; ignore it.'
             print('SENDING FRESH UI CHECK',flush=True)
             await chat.submit_input(messages.UserInputSubmitted(body))
             print('SEND AND PAINT RETURNED',flush=True)
-            await until(lambda:any(m.body==body for m,_ in chat._history))
-            message=next(m for m,_ in chat._history if m.body==body)
+            await until(lambda:any(m.body==body and m.message_id not in previous_ids for m,_ in chat._history))
+            message=next(m for m,_ in chat._history if m.body==body and m.message_id not in previous_ids)
             report['sequence']=message.seq
+            report['message_id']=message.message_id
+            report['probe_id']=probe_id
             channel_mode=app.current_mode
             dm_checked=False
             last=None
@@ -58,7 +63,7 @@ async def main():
                 if card is not None:
                     feedback=card.query_one(MessageNotifications)
                     summary=str(feedback.title)
-                    statuses={v.thread.name:v.presentation.summary for v in w.views.thread_views() if v.thread.name in ('agent-comms-ux','pr95-selected-pi-summary-owner')}
+                    statuses={v.thread.name:v.presentation.summary for v in await asyncio.to_thread(w.views.thread_views) if v.thread.name in ('agent-comms-ux','pr95-selected-pi-summary-owner')}
                     observation={'summary':summary,'thread_status':statuses}
                     if observation!=last:
                         report['observations'].append({'seconds':round(time.monotonic()-started,2),**observation})
@@ -67,6 +72,7 @@ async def main():
                         await app.open_comms_session(owner_mode=original_mode,project_path=Path(owner.worktree),me='user',target=owner.name,kind='dm')
                         await until(lambda:app.screen.query_one(CommsChatView).kind=='dm')
                         dm=app.screen.query_one(CommsChatView)
+                        await until(lambda:bool(dm.query(ObservedThreadActivity)))
                         observed=dm.query_one(ObservedThreadActivity)
                         await until(lambda:observed.presentation is not None and observed.presentation.busy,timeout=10)
                         report['dm_status_during_channel_turn']=observed.presentation.summary
