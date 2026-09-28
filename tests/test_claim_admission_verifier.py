@@ -14,6 +14,7 @@ from agent_comms import claim_admission
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.claim_admission import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -49,7 +50,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.threads.register(
                 Thread(
-                    name, frozenset({"team"}), str(worktree), pid=os.getpid(), created_at=created
+                    name,
+                    frozenset({"team"}),
+                    str(worktree),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                    created_at=created,
                 )
             )
         root_id = comms.messaging.initialize_private_initial_protocol()

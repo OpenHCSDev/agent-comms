@@ -18,6 +18,7 @@ from agent_comms import cohort_foreground as foreground
 from agent_comms import cohort_send
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -62,7 +63,11 @@ def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
     return root, comms.messaging.initialize_private_initial_protocol(), comms
 
 
@@ -347,7 +352,14 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         resource.write_bytes(b"unchanged\n")
         root, root_id, comms = _wire(base)
         comms.messaging.initialize_private_claim_protocol()
-        comms.threads.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "beta",
+                frozenset({"team"}),
+                str(base),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
@@ -449,7 +461,14 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
         base = Path(dirname)
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
-        comms.threads.register(Thread("beta", frozenset(), str(base), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "beta",
+                frozenset(),
+                str(base),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -748,7 +767,11 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
 def test_sender_is_enabled_on_an_initialized_private_root() -> None:
     with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
         root, root_id, comms = _wire(Path(dirname))
-        comms.threads.register(Thread("beta", frozenset(), dirname, pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "beta", frozenset(), dirname, process_identity=ProcessIdentity.capture(os.getpid())
+            )
+        )
         sequence, message_id = cohort_send.publish_one(
             root,
             wire_root_id=root_id,

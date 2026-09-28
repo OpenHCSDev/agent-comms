@@ -15,6 +15,7 @@ from agent_comms.bus_publication import (
     public_envelope_digest,
     stable_thread_lookup,
 )
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import canonical_publication_key
@@ -47,7 +48,13 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
         comms.threads.register(
-            Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), created_at=identity)
+            Thread(
+                name,
+                frozenset({"team"}),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                created_at=identity,
+            )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = {name: stable_thread_lookup(identity) for name, identity in created.items()}
@@ -282,7 +289,8 @@ def _replace_rows(comms: Comms, rows: list[dict]) -> None:
 def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
@@ -314,7 +322,8 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     public = {key: value for key, value in rows[1].items() if key != PRIVATE_WIRE_FIELD}
@@ -347,7 +356,8 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3, 4)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        for number in (1, 2, 3, 4)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     for row in rows[1:3]:

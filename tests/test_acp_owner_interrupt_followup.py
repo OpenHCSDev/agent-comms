@@ -10,14 +10,43 @@ import pytest
 from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
     SetGoalAction,
+    StandbyGoalAction,
 )
-from test_goal_direct_interrupt import _owner
+from agent_comms.threads import Thread
+from test_acp_private_nk_delivery import _session
+from test_acp_private_nk_delivery import tmp_path as private_root_fixture
+
+tmp_path = private_root_fixture
+
+
+async def _owner(tmp_path, monkeypatch, *, standby=False):
+    """Bind the existing canonical owner; no deleted direct-interrupt fixture."""
+    comms, agent, _ = _session(tmp_path)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+    for name in ("outsider", "dependency"):
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+    goal = comms.goals.update_goal("beta", SetGoalAction(text="Wait for the dependency"))
+    if standby:
+        comms.agents.begin_turn("dependency", "dependency-turn")
+        comms.goals.update_goal(
+            "beta",
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)),
+        )
+    return comms, agent, "beta", goal
 
 
 @pytest.mark.parametrize(

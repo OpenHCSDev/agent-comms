@@ -13,6 +13,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import coordination_cohort as cohort
 from agent_comms.bus_publication import CommittedInitial, stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -34,14 +35,21 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     for number in range(recipients):
         comms.threads.register(
             Thread(
                 f"member{number:03}",
                 frozenset({"team"}),
                 str(tmp_path),
-                pid=os.getpid(),
+                process_identity=ProcessIdentity.capture(os.getpid()),
                 model="openai-codex/gpt-6-sol",
             )
         )
@@ -105,7 +113,9 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
 ) -> None:
     comms, store, _index, root_id = _root(tmp_path)
     try:
-        message = comms.messaging.send_initial_cohort("sender", "#team", "@member000 @member001 act")
+        message = comms.messaging.send_initial_cohort(
+            "sender", "#team", "@member000 @member001 act"
+        )
         initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.register_participant(

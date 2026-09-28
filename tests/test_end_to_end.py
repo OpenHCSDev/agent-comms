@@ -89,7 +89,7 @@ class TestEndToEndLifecycle:
                 worktree=parent.worktree,
                 parent=parent.parent,
                 task=parent.task,
-                pid=parent.pid,
+                process_identity=parent.process_identity,
                 session_file=str(session),
             )
         )
@@ -111,12 +111,12 @@ class TestEndToEndLifecycle:
         # The child was launched in the parent's worktree and registered.
         detail = cli(root, "thread", "--name", "kid")
         assert detail["parent"] == "PR111" and detail["task"] == "review the diff"
-        assert detail["pid"] > 0
+        assert detail["process_identity"]["pid"] > 0
         # This test manually drives the participant below. Stop the persistent
         # fork owner first; the runtime suite exercises its automatic delivery.
         cli(root, "stop", "--name", "kid")
         assert comms.registry.status("kid").declared_name == "stopped"
-        assert not socket_path(root, detail["pid"]).exists()
+        assert not socket_path(root, detail["process_identity"]["pid"]).exists()
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
