@@ -110,6 +110,6 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path)
     assert [item["type"] for item in writes] == ["get_state"]
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT COUNT(*) FROM native_runtime_inputs").fetchone()[0]
+            store._connection.execute("SELECT COUNT(*) FROM native_runtime_input").fetchone()[0]
             == 1
         )

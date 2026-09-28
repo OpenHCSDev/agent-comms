@@ -154,9 +154,6 @@ class SessionLifecycle:
         self, thread: Thread, session_id: str, *, fresh: bool, private: bool
     ) -> None:
         self.bindings[session_id] = thread.name
-        self.effects.inputs.initialize_session_delivery(
-            session_id, thread, fresh=fresh, private=private
-        )
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree
         if self.runtime_enabled:

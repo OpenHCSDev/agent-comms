@@ -1,0 +1,46 @@
+.F...............                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_reset_rebuild_and_reopen_never_readmit_old_pending_input[True] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/round2-tests/pytest-of-ts/pytest-8/test_reset_rebuild_and_reopen_1')
+certified = True
+
+    @pytest.mark.parametrize("certified", [False, True])
+    def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path, certified):
+        comms, old_store, root_id, lookups = _root(tmp_path)
+        old = comms.messaging.send_user_message("bob", "old pending input", worktree=str(tmp_path))
+        accept_initial_cohort(comms.bus, root_id, old.seq, old_store)
+        assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1
+        old_store.close()
+        # Preserve the actual old receipt database for history; rebuild only runtime.
+        (comms.root / "coordination.sqlite").rename(comms.root / "prior-runtime.sqlite")
+        if certified:
+>           comms.messaging.initialize_private_claim_protocol()
+
+tests/test_cutover_admission.py:31: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:110: in initialize_private_claim_protocol
+    return self.bus.publisher.initialize_private_claim_protocol()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/publisher.py:211: in initialize_private_claim_protocol
+    return self.log.enable_claim_gate_unlocked()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f8fbfbe0190>
+
+    def enable_claim_gate_unlocked(self) -> str:
+        if self.path.name != "bus.jsonl":
+            raise RelationViolationError("Claim envelope publication requires the canonical bus.")
+        metadata = self._private_marker_unlocked()
+        root_id = metadata.root_id
+        if metadata.claims:
+            return root_id
+        if metadata.last_seq or (self.path.exists() and self.path.stat().st_size):
+>           raise RelationViolationError("Claim read barrier requires an empty private bus.")
+E           agent_comms.errors.RelationViolationError: Claim read barrier requires an empty private bus.
+
+src/agent_comms/wire_log.py:706: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_cutover_admission.py::test_reset_rebuild_and_reopen_never_readmit_old_pending_input[True]
+1 failed, 16 passed in 3.19s

@@ -45,7 +45,7 @@ from .store_files import (
 )
 
 if TYPE_CHECKING:
-    from .coordination import PublicationIntent
+    from .coordination import PublicationIntents
     from .registration import Registration
 
 from .catalog_store import ChannelCatalog
@@ -142,74 +142,61 @@ class Publisher:
             mentions=ThreadMention.find(message.body, resolve_mention),
         )
 
-    def publish(self, message: Message) -> Message:
-        """Commit an ordinary row; refuse legacy appends after private cutover."""
-        from .active_route import guard_legacy_root_write
-
-        with guard_legacy_root_write(self.log.path.parent):
-            if message.claim_transition is not None:
-                raise RelationViolationError("Claim envelopes require the gated private sender.")
-            sender, target = self._validate_publish_request(message)
-            with self.log.locked():
-                sequence = self.log.next_legacy_sequence_unlocked()
-                stored = self._prepare_message_unlocked(
-                    message, sender=sender, target=target, sequence=sequence
-                )
-                self.log.append_legacy_unlocked(stored)
-            return stored
-
     def publish_ordinary(
         self, message: Message, *, _human_origin: HumanOrigin | None = None
     ) -> Message:
-        """Ordinary Comms send on either a legacy or explicitly marked private root.
+        """Publish through the canonical audience/decision writer.
 
-        A private marker is never installed here and an old public row is never
-        retroactively assigned an audience. Only the private-aware writer uses
-        this entry point: direct legacy ``publish`` still refuses cutover. A
-        typed local USER origin is valid only at the explicit human operation;
-        generic private publication still rejects USER senders.
-        The caller retains the ordinary Comms wire lock throughout publication.
+        A truly fresh root is initialized once under the bus lock. Existing
+        unmarked data requires the explicit archival cutover; a send never
+        rewrites history or falls back to an uncoordinated append.
         """
+        from .active_route import guard_original_root_write
+
         if _human_origin is not None and type(_human_origin) is not HumanOrigin:
             raise RelationViolationError("Human origin must be a typed local USER identity.")
-        with self.log.locked():
-            if self.log.read_metadata_unlocked().private:
-                # Exact marker/root/private-registry validation and frozen N/K
-                # decisions remain owned by the existing private publisher.
-                return self.publish_initial_cohort(
-                    message, _bus_locked=True, _human_origin=_human_origin
-                )
-        # Legacy publish rechecks its barrier under its own lock: if a fresh-root
-        # cutover raced the dispatch, it refuses rather than appending a legacy row.
-        return self.publish(message)
+        with guard_original_root_write(self.log.path.parent), self.log.locked():
+            self._validate_publish_request(message)
+            if not self.log.read_metadata_unlocked().private:
+                self._initialize_private_protocol_unlocked()
+                if self._private_claim_writes:
+                    self.log.enable_claim_gate_unlocked()
+            return self.publish_initial_cohort(
+                message, _bus_locked=True, _human_origin=_human_origin
+            )
 
     def initialize_private_protocol(self) -> str:
         """Marker issuer for a NEW, isolated bus root only.
 
-        Operational old-writer quiescence remains required for any future live
-        cutover; this issuer refuses a legacy log rather than guessing it.
+        Existing unmarked logs require an explicit offline rewrite. This issuer
+        creates a protocol marker only for an empty root.
         """
         if self._private_initial_writes is not True:
             raise RelationViolationError("Private initial publication is disabled.")
         self.log.path.parent.mkdir(parents=True, exist_ok=True)
         with self.log.locked():
-            self.log.require_fresh_private_root_unlocked()
-            root_id = uuid.uuid4().hex
-            from .private_registry_guard import PrivateRegistryGuard
+            return self._initialize_private_protocol_unlocked()
 
-            # Total order: caller's wire lock, bus lock, registry lock. The
-            # durable PENDING guard precedes marker visibility; a failed
-            # marker/directory fsync cannot leave a usable registry witness.
-            if self._registry.store.path.parent != self.log.path.parent:
-                raise RelationViolationError("Private registry must share the bus root")
-            with _store_lock(self._registry.store.path):
-                guard = PrivateRegistryGuard(self._registry.store.path, root_id)
-                guard.create_pending()
-                self.log.write_metadata_unlocked(
-                    WireMetadata(last_seq=0, writer_protocol_version=1, wire_root_id=root_id)
-                )
-                guard.commit_initial()
-                return root_id
+    def _initialize_private_protocol_unlocked(self) -> str:
+        if self._private_initial_writes is not True:
+            raise RelationViolationError("Private initial publication is disabled.")
+        self.log.require_fresh_private_root_unlocked()
+        root_id = uuid.uuid4().hex
+        from .private_registry_guard import PrivateRegistryGuard
+
+        # Total order: caller's wire lock, bus lock, registry lock. The
+        # durable PENDING guard precedes marker visibility; a failed
+        # marker/directory fsync cannot leave a usable registry witness.
+        if self._registry.store.path.parent != self.log.path.parent:
+            raise RelationViolationError("Private registry must share the bus root")
+        with _store_lock(self._registry.store.path):
+            guard = PrivateRegistryGuard(self._registry.store.path, root_id)
+            guard.create_pending()
+            self.log.write_metadata_unlocked(
+                WireMetadata(last_seq=0, writer_protocol_version=1, wire_root_id=root_id)
+            )
+            guard.commit_initial()
+            return root_id
 
     def initialize_private_claim_protocol(self) -> str:
         """Claim gate for a NEW marked root, before ANY bus message exists.
@@ -391,21 +378,18 @@ class Publisher:
                 raise RelationViolationError("A saved/aggregate view is not routable.")
             target = BuiltinChannel.canonical(message.target)
             if not is_channel_target(target):
-                if snapshot.aliases.get(target, target) != target:
-                    raise RelationViolationError(
-                        "Initial direct aliases need a stable send binding."
-                    )
-                if (
-                    target not in snapshot.threads
-                    or not snapshot.threads[target].role.executable
-                    or not snapshot.statuses[target].visible
-                ):
-                    raise RelationViolationError(
-                        "Initial direct target must be a visible executable."
-                    )
+                # Bind the alias in this guarded publication snapshot. The
+                # envelope and frozen audience carry its canonical incarnation.
+                target = snapshot.aliases.get(target, target)
+                recipient = snapshot.threads.get(target)
+                if recipient is None or not snapshot.statuses[target].visible:
+                    raise RelationViolationError("Initial direct target must be visible.")
                 if target == sender:
                     raise RelationViolationError("A thread cannot message itself.")
-                names = [target]
+                names = [target] if recipient.role.executable else []
+                if not recipient.role.executable:
+                    # A human DM is displayed, never admitted as agent work.
+                    message = replace(message, notice=True)
             else:
                 channel = catalog.resolve(target)
                 names = [
@@ -513,7 +497,7 @@ class Publisher:
                     ) from error
             return stored
 
-    def publish_keyed_response(self, intent: PublicationIntent) -> Message:
+    def publish_keyed_response(self, intent: PublicationIntents) -> Message:
         """Default-OFF fsynced append; runtime owner fencing needs a coordinator."""
         if self._private_response_writes is not True:
             raise RelationViolationError("Private response publication is disabled.")
@@ -521,7 +505,7 @@ class Publisher:
             return self._publish_keyed_response_unlocked(intent)
 
     def _publish_keyed_response_unlocked(
-        self, intent: PublicationIntent, *, registry_snapshot: RegistrySnapshot | None = None
+        self, intent: PublicationIntents, *, registry_snapshot: RegistrySnapshot | None = None
     ) -> Message:
         """Internal append with bus lock; a supplied registry snapshot stays locked."""
         from .audience_manifest import MAX_WIRE_SEQ

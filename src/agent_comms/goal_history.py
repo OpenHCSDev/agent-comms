@@ -8,35 +8,45 @@ snapshots can change without erasing this journal.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
 from .field_codec import FieldCodec
 from .goals import Goal
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 
 class GoalHistoryError(RuntimeError):
     """Goal history could not be durably written or reconciled."""
 
 
-@dataclass(frozen=True, slots=True)
-class GoalHistoryEntry:
-    sequence: int
+@dataclass(frozen=True)
+class GoalHistoryEntry(TypedTable):
+    sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
     before: Goal | None
     after: Goal | None
+    owner_created_at: float = field(kw_only=True, metadata={"history_exclude": True})
+    state: Literal["pending", "committed", "aborted", "uncertain"] = field(
+        kw_only=True, metadata={"history_exclude": True}
+    )
+    indexes = (Index(("owner_created_at", "sequence")),)
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
+        # Preserve nested Goal family tags while projecting only public entry fields.
+        return {
+            item.name: FieldCodec.encode(getattr(self, item.name))
+            for item in fields(self)
+            if not item.metadata.get("history_exclude")
+        }
 
 
 class GoalHistoryStore:
@@ -93,47 +103,20 @@ class GoalHistoryStore:
         try:
             with closing(self._connect()) as connection:
                 connection.execute("BEGIN IMMEDIATE")
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS metadata "
-                    "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS entries ("
-                    "sequence INTEGER PRIMARY KEY, owner_created_at REAL NOT NULL, "
-                    "kind TEXT NOT NULL CHECK(kind IN ('transition','baseline','observed_gap')), "
-                    "state TEXT NOT NULL "
-                    "CHECK(state IN ('pending','committed','aborted','uncertain')), "
-                    "observed_at REAL NOT NULL, before_goal TEXT, after_goal TEXT)"
-                )
-                connection.execute(
-                    "CREATE INDEX IF NOT EXISTS entries_owner_sequence "
-                    "ON entries(owner_created_at,sequence)"
-                )
-                version = connection.execute(
-                    "SELECT value FROM metadata WHERE key='schema_version'"
-                ).fetchone()
-                if version is None:
+                actual = SQLiteSchemaObject.read(
                     connection.execute(
-                        "INSERT INTO metadata(key,value) VALUES('schema_version','1')"
+                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
+                        "AND name NOT LIKE 'sqlite_%'"
                     )
-                elif version != ("1",):
-                    raise GoalHistoryError("Unsupported goal history schema.")
+                )
+                if not actual:
+                    GoalHistoryEntry.create(connection)
+                elif {row.name: row.sql for row in actual} != GoalHistoryEntry.schema_objects():
+                    raise GoalHistoryError("Goal history requires the one-shot durable cutover.")
                 connection.commit()
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history initialization is uncertain.") from error
-
-    @staticmethod
-    def _encode(goal: Goal | None) -> str | None:
-        return json.dumps(FieldCodec.encode(goal), sort_keys=True) if goal is not None else None
-
-    @staticmethod
-    def _decode(raw: str | None) -> Goal | None:
-        try:
-            value = json.loads(raw) if raw is not None else None
-            return FieldCodec.decode(Goal, value) if value is not None else None
-        except (TypeError, ValueError) as error:
-            raise GoalHistoryError("Goal history contains an invalid goal snapshot.") from error
 
     @contextmanager
     def _transaction(self) -> Iterator[sqlite3.Connection]:
@@ -156,19 +139,15 @@ class GoalHistoryStore:
         after: Goal | None,
     ) -> int:
         with self._transaction() as connection:
-            cursor = connection.execute(
-                "INSERT INTO entries"
-                "(owner_created_at,kind,state,observed_at,before_goal,after_goal) "
-                "VALUES(?,?,?,?,?,?)",
-                (
-                    owner_created_at,
-                    kind,
-                    state,
-                    time.time(),
-                    self._encode(before),
-                    self._encode(after),
-                ),
-            )
+            cursor = GoalHistoryEntry(
+                None,
+                kind,
+                time.time(),
+                before,
+                after,
+                owner_created_at=owner_created_at,
+                state=state,
+            ).insert(connection)
             sequence = cursor.lastrowid
             if sequence is None:
                 raise GoalHistoryError("Goal history insert returned no sequence.")
@@ -178,9 +157,11 @@ class GoalHistoryStore:
         self, sequence: int, state: Literal["committed", "aborted", "uncertain"]
     ) -> None:
         with self._transaction() as connection:
-            connection.execute(
-                "UPDATE entries SET state=? WHERE sequence=? AND state='pending'",
-                (state, sequence),
+            GoalHistoryEntry.update(
+                connection,
+                where="sequence=? AND state='pending'",
+                parameters=(sequence,),
+                state=state,
             )
 
     def _sync_visible_registry(self) -> None:
@@ -197,42 +178,39 @@ class GoalHistoryStore:
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 
-    def _rows(self, owner_created_at: float) -> list[tuple]:
+    def _rows(self, owner_created_at: float) -> list[GoalHistoryEntry]:
         try:
             with closing(self._connect()) as connection:
-                return connection.execute(
-                    "SELECT sequence,kind,state,observed_at,before_goal,after_goal "
-                    "FROM entries WHERE owner_created_at=? ORDER BY sequence",
-                    (owner_created_at,),
-                ).fetchall()
-        except sqlite3.Error as error:
+                return GoalHistoryEntry.select(
+                    connection,
+                    where="owner_created_at=?",
+                    parameters=(owner_created_at,),
+                    order_by=("sequence",),
+                )
+        except (sqlite3.Error, ValueError, TypeError) as error:
             raise GoalHistoryError("Cannot read goal history.") from error
 
     def observe(self, owner_created_at: float, current: Goal | None) -> None:
-        """Reconcile uncertain writes and label any old-writer gap truthfully."""
-        rows = self._rows(owner_created_at)
-        for sequence, _kind, state, _observed_at, before_raw, after_raw in rows:
-            if state != "pending":
+        """Reconcile uncertain writes and label unjournaled changes truthfully."""
+        for row in self._rows(owner_created_at):
+            if row.state != "pending":
                 continue
-            before, after = self._decode(before_raw), self._decode(after_raw)
-            if current == after:
+            if current == row.after:
                 self._sync_visible_registry()
-                self._set_state(sequence, "committed")
-            elif current == before:
-                self._set_state(sequence, "aborted")
+                self._set_state(row.sequence, "committed")
+            elif current == row.before:
+                self._set_state(row.sequence, "aborted")
             else:
-                # An older writer may have advanced the registry without this
-                # journal. The intent cannot be called committed or aborted.
-                self._set_state(sequence, "uncertain")
-        committed = [row for row in self._rows(owner_created_at) if row[2] == "committed"]
+                # A changed registry is not evidence that this intent committed.
+                self._set_state(row.sequence, "uncertain")
+        committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
         if not committed:
             if current is not None:
                 self._insert(owner_created_at, "baseline", "committed", None, current)
             return
-        last = self._decode(committed[-1][5])
+        last = committed[-1].after
         if last != current:
-            # Known endpoints, unknown intervening revisions. Never claim the
-            # old writer's intermediate edits or timing as recorded history.
+            # Known endpoints do not manufacture unobserved revisions or timing.
             self._insert(owner_created_at, "observed_gap", "committed", last, current)
 
     def begin(self, owner_created_at: float, before: Goal | None, after: Goal | None) -> int:
@@ -246,17 +224,16 @@ class GoalHistoryStore:
         self, owner_created_at: float, current: Goal | None, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         self.observe(owner_created_at, current)
-        entries: list[GoalHistoryEntry] = []
-        for sequence, kind, state, observed_at, before_raw, after_raw in self._rows(
-            owner_created_at
-        ):
-            if state != "committed":
-                continue
-            before, after = self._decode(before_raw), self._decode(after_raw)
-            if goal_id is not None and goal_id not in {
-                before.id if before is not None else None,
-                after.id if after is not None else None,
-            }:
-                continue
-            entries.append(GoalHistoryEntry(sequence, kind, observed_at, before, after))
-        return tuple(entries)
+        return tuple(
+            row
+            for row in self._rows(owner_created_at)
+            if row.state == "committed"
+            and (
+                goal_id is None
+                or goal_id
+                in {
+                    row.before.id if row.before is not None else None,
+                    row.after.id if row.after is not None else None,
+                }
+            )
+        )

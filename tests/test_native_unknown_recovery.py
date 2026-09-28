@@ -178,7 +178,9 @@ def test_abandon_refuses_live_native_process(released_unknown):
             child.wait(timeout=5)
 
 
-@pytest.mark.parametrize("damage", ["missing", "wrong-pid", "wrong-identity", "wrong-epoch"])
+@pytest.mark.parametrize(
+    "damage", ["missing", "wrong-pid", "wrong-start-time", "wrong-identity", "wrong-epoch"]
+)
 def test_abandon_requires_real_release(released_unknown, damage):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
@@ -188,10 +190,10 @@ def test_abandon_requires_real_release(released_unknown, damage):
         receipts.clear()
     elif damage == "wrong-pid":
         receipts["beta"]["thread"]["process_identity"]["pid"] += 1
+    elif damage == "wrong-start-time":
+        receipts["beta"]["thread"]["process_identity"]["start_time"] += 1
     elif damage == "wrong-identity":
-        owner = receipts["beta"]["thread"]
-        owner["created_at"] += 1
-        receipts["beta"]["thread"] = owner
+        receipts["beta"]["thread"]["created_at"] += 1
     else:
         receipts["beta"]["after"] = receipts["beta"]["before"]
     path.write_text(json.dumps(receipts))

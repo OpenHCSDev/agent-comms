@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
+from abc import abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import Any, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
 from .messages import Message
 from .pi_payloads import PiMessage, PiPayload
+from .pi_rpc import unique_fields
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
@@ -28,6 +31,7 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     opaque: ClassVar[bool] = False
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+    timestamp: str | None = None
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
 
@@ -202,10 +206,56 @@ class UnknownEntry(NativeEntry):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ModelChangeEntry(NativeEntry):
+class StartupMetadataEntry(NativeEntry):
+    """Native metadata with strict evidence decoding for startup attestation."""
+
+    @classmethod
+    def read_startup(cls, raw: bytes) -> StartupMetadataEntry:
+        value = json.loads(raw, object_pairs_hook=unique_fields)
+        entry = cls.from_wire(value)
+        # Display readers can project external entries; authority readers require
+        # the entire declared record, with no omitted or unrepresented fields.
+        names = {f.metadata.get("wire_name", f.name) for f in fields(entry) if f.init}
+        if set(value) != names | {entry.wire_tag}:
+            raise ValueError("Native startup metadata fields are incomplete or unexpected")
+        if (
+            entry.id is None
+            or re.fullmatch(r"[0-9a-f]{8}", entry.id) is None
+            or not entry.timestamp
+            or (
+                entry.parent_id is not None
+                and re.fullmatch(r"[0-9a-f]{8}", entry.parent_id) is None
+            )
+        ):
+            raise ValueError("Native startup metadata identity is invalid")
+        return entry
+
+    @classmethod
+    def wire_member(cls, value):
+        # Unknown saved entries are displayable, but never startup authority.
+        return cls.decode(value.get(cls.wire_tag))
+
+    @abstractmethod
+    def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
+        """Whether this metadata records the configured startup selection."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ModelChangeEntry(StartupMetadataEntry):
     provider: str
     model_id: str = field(metadata={"wire_name": "modelId"})
 
     @property
     def model_choice(self) -> tuple[str, str] | None:
         return (self.provider, self.model_id) if self.provider and self.model_id else None
+
+    def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
+        return self.model_choice == model
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThinkingLevelChangeEntry(StartupMetadataEntry):
+    thinking_level: str = field(metadata={"wire_name": "thinkingLevel"})
+
+    def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
+        return self.thinking_level == thinking_level

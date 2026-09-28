@@ -20,6 +20,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from . import pi_events as pi
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .goal_actions import (
@@ -248,9 +249,12 @@ class TurnRunner:
             if name != thread_name and activity.state.busy:
                 return True
         if sent_seq:
-            markers = self.comms.bus._read_markers()
-            for name, marker in markers.items():
-                if name != thread_name and marker >= sent_seq:
+            snapshot = self.comms.registry.snapshot()
+            document = self.comms.bus.reads.read()
+            for name in snapshot.threads:
+                if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(
+                    name, snapshot, document=document
+                ):
                     return True
         return False
 
@@ -279,35 +283,35 @@ class TurnRunner:
         session_id: str,
         turn_id: str,
         controller: Any,
-        request: dict[str, Any],
-    ) -> dict[str, Any] | None:
+        request: pi.ExtensionUiRequest,
+    ) -> pi.ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
 
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
         if self.active_turns.get(session_id) != turn_id or controller is None:
-            return None
-        title, method = request.get("title"), request.get("method")
-        if type(title) is not str or not title or len(title) > 160:
-            return None
+            return pi.CancelledUiChoice()
+        title, method = request.title, request.method
+        if title is None or not title or len(title) > 160:
+            return pi.CancelledUiChoice()
         choices: dict[str, str] = {}
         if method == "confirm":
-            body = request.get("message")
-            if type(body) is not str or len(body) > 8192:
-                return None
+            body = request.message
+            if body is None or len(body) > 8192:
+                return pi.CancelledUiChoice()
             options = [
                 PermissionOption(option_id="allow-once", name="Allow once", kind="allow_once"),
                 PermissionOption(option_id="deny", name="Deny", kind="reject_once"),
             ]
         elif method == "select":
-            values = request.get("options")
+            values = request.options
             if (
-                type(values) is not list
+                values is None
                 or not 1 <= len(values) <= 8
-                or any(type(item) is not str or not item or len(item) > 100 for item in values)
+                or any(not item or len(item) > 100 for item in values)
             ):
-                return None
+                return pi.CancelledUiChoice()
             choices = {f"choice-{index}": value for index, value in enumerate(values)}
             options = [
                 PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
@@ -316,9 +320,9 @@ class TurnRunner:
             options.append(PermissionOption(option_id="deny", name="Cancel", kind="reject_once"))
             body = "Select one Pi extension option for this turn only."
         else:
-            return None
+            return pi.CancelledUiChoice()
         tool_call = ToolCallUpdate(
-            tool_call_id=f"pi-ui-{turn_id}-{request['id']}",
+            tool_call_id=f"pi-ui-{turn_id}-{request.id}",
             kind="other",
             title=title,
             content=[
@@ -341,7 +345,7 @@ class TurnRunner:
                     },
                 )
                 if not isinstance(reply, dict):
-                    return None
+                    return pi.CancelledUiChoice()
                 outcome = reply
             elif controller is self.sessions.client:
                 response = await asyncio.wait_for(
@@ -354,25 +358,25 @@ class TurnRunner:
                     by_alias=True, exclude_none=True
                 )
             else:
-                return None
+                return pi.CancelledUiChoice()
         except Exception:
             # An ACP controller exception is denial, never a raw error in Pi
             # RPC/model output or a reason to resend an uncertain MCP call.
-            return None
+            return pi.CancelledUiChoice()
         if self.active_turns.get(session_id) != turn_id:
-            return None
+            return pi.CancelledUiChoice()
         if isinstance(controller, SocketClient) and not self.runtime.is_controller(
             session_id, controller
         ):
-            return None
+            return pi.CancelledUiChoice()
         selected = outcome.get("optionId")
         if outcome.get("outcome") != "selected" or type(selected) is not str:
-            return None
+            return pi.CancelledUiChoice()
         if method == "confirm":
-            return {"confirmed": selected == "allow-once"}
+            return pi.ConfirmedUiChoice(selected == "allow-once")
         if selected in choices:
-            return {"value": choices[selected]}
-        return None
+            return pi.ValueUiChoice(choices[selected])
+        return pi.CancelledUiChoice()
 
     def finish_turn_stream(
         self,
@@ -459,32 +463,8 @@ class TurnRunner:
         if (wake := self.inputs.wake_tasks.get(session_id)) is not None and not wake.done():
             return
         thread = self.comms.registry.require(self.sessions.require(session_id))
-        if pending := self.inputs.pending_turns.get(session_id):
-            fresh = [
-                turn
-                for turn in pending
-                if turn.still_current_interrupt(thread.goal)
-                and (
-                    turn.direct_interrupt_goal_id is None
-                    or (
-                        (
-                            row := self.inputs.dispositions.read().rows.get(
-                                turn.direct_interrupt_input_key or ""
-                            )
-                        )
-                        is not None
-                        and row.unresolved
-                        and row.native_id is None
-                    )
-                )
-            ]
-            for turn in pending:
-                if turn not in fresh:
-                    self.inputs.forget_direct_interrupt(session_id, turn)
-            if fresh:
-                self.inputs.pending_turns[session_id] = fresh
-                return
-            self.inputs.pending_turns.pop(session_id, None)
+        if self.inputs.pending_turns.get(session_id):
+            return
         if thread.pid != os.getpid() or not self.comms.registry.status(thread.name).running:
             return
         goal = thread.goal
@@ -673,7 +653,9 @@ class TurnRunner:
         return resumed
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = self.comms.goals.goal_changed(thread_name, self.goal_execution_signatures.get(session_id))
+        event = self.comms.goals.goal_changed(
+            thread_name, self.goal_execution_signatures.get(session_id)
+        )
         if event is None:
             return
         await self.effects._emit_event(session_id, event)
@@ -694,11 +676,6 @@ class TurnRunner:
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
         dependency_wait_id: str | None = None,
-        direct_interrupt_goal_id: str | None = None,
-        direct_interrupt_goal_revision: int | None = None,
-        direct_interrupt_wait_id: str | None = None,
-        direct_interrupt_input_key: str | None = None,
-        direct_interrupt_ticket: str | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn
 
@@ -716,11 +693,6 @@ class TurnRunner:
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
             dependency_wait_id=dependency_wait_id,
-            direct_interrupt_goal_id=direct_interrupt_goal_id,
-            direct_interrupt_goal_revision=direct_interrupt_goal_revision,
-            direct_interrupt_wait_id=direct_interrupt_wait_id,
-            direct_interrupt_input_key=direct_interrupt_input_key,
-            direct_interrupt_ticket=direct_interrupt_ticket,
         ).run()
 
     async def close(self) -> None:

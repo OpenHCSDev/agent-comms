@@ -1,0 +1,32 @@
+...........F
+=================================== FAILURES ===================================
+________ test_abandon_requires_real_release[admitted-unknown-wrong-pid] ________
+
+released_unknown = (<ForkProcess name='ForkProcess-12' pid=160402 parent=160199 stopped exitcode=0>, <Event at 0x7f292707f200 set>, Posix...66b2eaf', 'wirev1e293ad4e649b5998185baa0dbaee22be072021c4777b675bbd0f3f8231b92662', '3051c43a47ee4cd67a4048f99ed46a6a')
+damage = 'wrong-pid'
+
+    @pytest.mark.parametrize("damage", ["missing", "wrong-pid", "wrong-identity", "wrong-epoch"])
+    def test_abandon_requires_real_release(released_unknown, damage):
+        process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
+        leave(process, exit_allowed)
+        path = root / "owner_release_receipts.json"
+        receipts = json.loads(path.read_text())
+        if damage == "missing":
+            receipts.clear()
+        elif damage == "wrong-pid":
+            receipts["beta"]["thread"]["process_identity"]["pid"] += 1
+        elif damage == "wrong-identity":
+            receipts["beta"]["thread"]["created_at"] += 1
+        else:
+            receipts["beta"]["after"] = receipts["beta"]["before"]
+        path.write_text(json.dumps(receipts))
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+>           with pytest.raises(RecoveryBlocked):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE RecoveryBlocked
+
+tests/test_native_unknown_recovery.py:179: Failed
+=========================== short test summary info ============================
+FAILED tests/test_native_unknown_recovery.py::test_abandon_requires_real_release[admitted-unknown-wrong-pid]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 11 passed in 4.03s

@@ -74,6 +74,7 @@ Every shard bounded at 45/60 seconds. Receipts kept, including failed attempts.
 | tool-claims.log | coding, native tool lifecycle, socket broker | 59 passed |
 | acp-recovery.log | ACP private selected paths + native UNKNOWN recovery | 47 passed |
 | claim-publication.log | full envelope integration, claim baseline, checkpoint after typed caller migration | 58 passed |
+| deletion-guards.log | permanent retired-interface AST and required-owner/path guards | 3 passed |
 | actual-native-four-tools.log | real prepared Pi SelectedExecution; local deterministic read/edit/write/bash; response+release | 1 passed |
 
 Rows overlap: these are receipts, not a unique-suite total.
@@ -87,8 +88,8 @@ Cases: `test_native_pi.py::test_copied_cli_private_policy_allows_one_local_http_
 and `test_selected_execution_native.py`. Test servers run on 127.0.0.1 with disposable
 fixture credentials/model config; never route to the real paid provider.
 
-`deletion-receipt.json`: current source/tests contain none of the four replaced
-interfaces. `CHANGED-FILES.txt` lists exact production/test paths.
+`deletion-receipt.json`: no current production definitions/imports/callers of the
+four replaced interfaces. Tests mention retired names only in the guard denylist. `CHANGED-FILES.txt` lists exact production/test paths.
 `changed-path-lint.log` passes. Broader lint retains existing unrelated warnings in
 coordination_store.py, claim_admission.py and the interrupted-writer fixture; no
 blanket repository-lint claim. No changed-line lint warning remains.
@@ -108,3 +109,24 @@ No known source blocker in assigned PF3/B3/B4. Parent must integrate the narrow
 publisher/messaging claim hunks with its separate bus work and run installed
 acceptance. Darwin's channel/catalog/tools.py changes were not edited. Actual
 provider/runtime deployment and pins remain parent-owned. No new scope inferred.
+
+## Round2 rules and change accounting
+
+Read `plans/refactor2/00-RULES.md` and canonical published S10 scope. No converter,
+compatibility reader or alternate format introduced. Permanent AST/API deletion
+guards pass 3/3. Whole merged-tree testing and quiet installation remain parent-owned.
+
+Against assigned main224 base a10655d: production **157 added /185 deleted**; tests
+**425 added /119 deleted**. Net test growth replaces fixture-only authority with
+real lease witnesses, covers rejection behavior, and adds required deletion guards.
+Existing behavior tests migrated; no removed wrapper tests retained.
+
+Store classification: coordinator attempts/runtime inputs/receipts, checkpoint
+indexes and selected-write plans are runtime/derived; their stored schemas are
+unchanged here, and parent owns round2 reset at quiet install. Wire, goal history
+and owner decisions are durable and unchanged. External Pi session/settings/RPC
+contracts remain intact. This branch performs no data rewrite or live cutover.
+
+Next assignment S10 remains incomplete: V1 broker A2 decoding and V3 nominal UI
+choice can start after this PR lands; V2 waits Cicero A13/NativeRuntimeInput and
+native child adoption waits Lovelace A12. No duplicate abstractions will be built.

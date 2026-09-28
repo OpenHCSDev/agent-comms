@@ -249,6 +249,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
 def replacement_release(root):
     from dataclasses import replace
 
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
     comms = Comms(root)

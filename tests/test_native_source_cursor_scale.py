@@ -158,7 +158,7 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         )
 
 
-async def test_legacy_cross_generation_cursor_reopen_denied_without_mutating_sql(
+async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql(
     tmp_path, monkeypatch
 ):
     root, root_id, comms, _first, people = _root(tmp_path)
@@ -187,8 +187,10 @@ async def test_legacy_cross_generation_cursor_reopen_denied_without_mutating_sql
         root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()
     assert second is not None and second.cursor_status == "blocked_gap"
-    # Represent a supported legacy persisted row from the old cursor writer:
-    # latest input is gen2, but its covered prefix includes old gen1 seq1.
+    # Forge current generation identity while borrowing the previous owner's
+    # source coverage. Reopening must reject it without repairing or replaying it.
+    from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         proof = NativeRuntimeInput.one(store._connection, input_id=second.input_id)
         assert proof is not None

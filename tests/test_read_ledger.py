@@ -91,7 +91,13 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
         [
             sys.executable,
             "-c",
-            "\nimport os, sys\nfrom agent_comms.comms import wire\ncomms = wire(sys.argv[1])\npage = comms.views.dm_display_page('alice', worktree=sys.argv[1])\ncomms.views.mark_dm_view_read('alice', worktree=sys.argv[1], through=page.newest_seq, expected_display_basis=page.display_basis)\nos._exit(9)\n",
+            "import os, sys\n"
+            "from agent_comms.comms import wire\n"
+            "comms = wire(sys.argv[1])\n"
+            "page = comms.views.dm_display_page('alice', worktree=sys.argv[1])\n"
+            "comms.views.mark_dm_view_read('alice', worktree=sys.argv[1], "
+            "through=page.newest_seq, expected_display_basis=page.display_basis)\n"
+            "os._exit(9)\n",
             str(tmp_path),
         ],
         timeout=15,
@@ -99,12 +105,13 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     assert child.returncode == 9
     comms = wire(tmp_path)
     assert comms.bus.pending_count(viewer, "alice") == 0
-    prior = comms.registry.require("alice")
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
-    comms.threads.register(replace(prior, created_at=prior.created_at + 1))
+    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
     assert old.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
     assert comms.bus.pending_count(viewer, "alice") == 1
+    assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
 
 
 @pytest.mark.parametrize("seed", [7, 31, 99])
@@ -162,17 +169,16 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
 
 
 def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
-    import json
-
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    message = comms.messaging.send_message("alice", "#team", "painted")
+    comms.messaging.send_message("alice", "#team", "painted")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
     )
     replacement = tmp_path / "replacement.jsonl"
-    replacement.write_text(json.dumps(replace(message, body="never painted").to_wire()) + "\n")
+    replacement.write_bytes(comms.bus.log.path.read_bytes())
+    replacement.chmod(0o600)
     replacement.replace(comms.bus.log.path)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
     assert not comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())

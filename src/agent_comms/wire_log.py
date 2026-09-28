@@ -29,18 +29,16 @@ from .errors import (
 from .field_codec import FieldCodec
 from .messages import Message
 from .store_files import (
-    _append_jsonl,
     _atomic_write_text,
     _iter_jsonl_records,
     _iter_jsonl_stream,
-    _repair_trailing_jsonl,
     _store_lock,
     file_revision,
 )
 from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
-    from .coordination import PublicationIntent
+    from .coordination import PublicationIntents
 
 
 class WireLog:
@@ -179,6 +177,13 @@ class WireLog:
                     public_envelope_digest(public)
                     previous_sequence = existing.seq
                     if not has_private_wire_fields(record):
+                        if (
+                            existing.claim_transition is None
+                            and existing.seq > metadata.admission_after_seq
+                        ):
+                            raise RelationViolationError(
+                                "Unattested public initial exceeds the retained history boundary."
+                            )
                         if on_row is not None:
                             on_row(offset, line, existing, None, None)
                         yield existing, None, None
@@ -249,6 +254,7 @@ class WireLog:
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
+        metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
             raise RelationViolationError("Private bus row exceeds the byte limit.")
@@ -322,16 +328,16 @@ class WireLog:
             return matched
 
     def _keyed_receipt_unlocked(
-        self, intent: PublicationIntent
+        self, intent: PublicationIntents
     ) -> tuple[Message | None, int, WireMetadata]:
         """Read the whole owner-only bus before trusting an exact keyed receipt.
 
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
-        from .coordination import PublicationIntent
+        from .coordination import PublicationIntents
 
-        if type(intent) is not PublicationIntent:
-            raise TypeError("Keyed response requires a validated PublicationIntent.")
+        if type(intent) is not PublicationIntents:
+            raise TypeError("Keyed response requires a validated PublicationIntents.")
         metadata = self._private_marker_unlocked()
         matched: Message | None = None
         previous_sequence = 0
@@ -356,18 +362,24 @@ class WireLog:
                 raise RelationViolationError("Response publication intent conflicts.")
         return matched, previous_sequence, metadata
 
-    def read_keyed_response(self, intent: PublicationIntent) -> Message | None:
+    def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact receipt resolution; never append or repair an absent row."""
         with _store_lock(self.path):
             matched, _, _ = self._keyed_receipt_unlocked(intent)
             return matched
 
     @staticmethod
-    def _public_page_record(record: Mapping, raw_size: int) -> tuple[Message, int]:
+    def _public_page_record(
+        record: Mapping, raw_size: int, metadata: WireMetadata
+    ) -> tuple[Message, int]:
         """Charge public page budgets for public bytes, never private sidebands."""
         message = Message.from_wire(record)
         if has_private_wire_fields(record):
             return message, len(json.dumps(message.to_wire()).encode()) + 1
+        if message.claim_transition is None and message.seq > metadata.admission_after_seq:
+            raise RelationViolationError(
+                "Unattested public initial exceeds the retained history boundary."
+            )
         return message, raw_size
 
     @contextmanager
@@ -376,20 +388,21 @@ class WireLog:
     ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
         """Fixed opened-inode/byte boundary with public page-size accounting.
 
-        Display-only callers do not use the sequence watermark. Skipping its
-        missing-metadata fallback avoids a full log scan while their short
-        cross-store wire lock is held; ``through=0`` then means unrequested.
-        Export/history retain the default authoritative watermark behavior.
+        Display-only callers do not request a sequence watermark. Every stored
+        source has the current marker; history never repairs an absent marker.
         """
         with _store_lock(self.path):
+            metadata = (
+                self._private_marker_unlocked()
+                if self.path.exists() or self.metadata_path.exists()
+                else WireMetadata()
+            )
             if need_sequence and self.claim_gate_enabled():
                 # Metadata reserves a sequence BEFORE the append. A failed
                 # append must never surface as a committed message watermark.
                 through = self._max_sequence_unlocked()
             else:
-                through = self.read_metadata_unlocked().last_seq if need_sequence else 0
-                if need_sequence and not through and self.path.exists():
-                    through = self._max_sequence_unlocked()
+                through = metadata.last_seq if need_sequence else 0
             try:
                 stream: BinaryIO | None = self.path.open("rb")
             except FileNotFoundError:
@@ -400,7 +413,7 @@ class WireLog:
         try:
             records = (
                 (
-                    self._public_page_record(record, size)
+                    self._public_page_record(record, size, metadata)
                     for record, size in _iter_jsonl_stream(
                         stream, boundary=boundary, label="wire snapshot"
                     )
@@ -462,12 +475,13 @@ class WireLog:
         with _store_lock(self.path):
             if self.claim_gate_enabled():
                 return self._max_sequence_unlocked()
-            sequence = self.read_metadata_unlocked().last_seq
-            return sequence if sequence else self._max_sequence_unlocked()
+            return self.read_metadata_unlocked().last_seq
 
     def _iter_log_unlocked(self) -> Iterator[Message]:
-        for record, _ in _iter_jsonl_records(self.path):
-            yield Message.from_wire(record)
+        if self.path.exists():
+            marker = self._private_marker_unlocked()
+            for message, _receipt, _initial in self._verified_private_rows_unlocked(marker):
+                yield message
 
     def _max_sequence_unlocked(self) -> int:
         return max(
@@ -509,45 +523,8 @@ class WireLog:
         except (ValueError, UnicodeError) as error:
             raise RelationViolationError("Malformed last bus row blocks publication.") from error
 
-    def assert_legacy_rewrite_allowed(self) -> None:
-        """Reject a deletion before registry state changes if private proof may exist."""
-        with _store_lock(self.path):
-            self._assert_no_private_authority_unlocked()
 
-    def _assert_no_private_authority_unlocked(self) -> None:
-        if self.read_metadata_unlocked().private:
-            raise RelationViolationError("Private bus protocol blocks legacy deletion.")
-        if not self.path.exists():
-            return
-        with self.path.open("rb") as records:
-            if records.seek(0, os.SEEK_END):
-                records.seek(-1, os.SEEK_END)
-                if records.read(1) != b"\n":
-                    raise RelationViolationError("Incomplete bus row blocks legacy deletion.")
-        for record, _ in _iter_jsonl_records(self.path):
-            if has_private_wire_fields(record):
-                raise RelationViolationError("Private bus authority blocks legacy deletion.")
 
-    def remove_legacy_threads(self, names: frozenset[str]) -> int:
-        with _store_lock(self.path):
-            self._assert_no_private_authority_unlocked()
-            messages = list(self._iter_log_unlocked())
-            retained = [
-                message
-                for message in messages
-                if message.sender not in names and message.target not in names
-            ]
-            high_water = max(
-                self.read_metadata_unlocked().last_seq,
-                max((message.seq for message in messages), default=0),
-            )
-            self.write_metadata_unlocked(WireMetadata(last_seq=high_water))
-            _atomic_write_text(
-                self.path,
-                "".join(f"{json.dumps(message.to_wire())}\n" for message in retained),
-            )
-
-        return len(messages) - len(retained)
 
     def claim_gate_enabled(self) -> bool:
         # _store_lock is also used for registry, channels, and marker files.
@@ -658,7 +635,7 @@ class WireLog:
         try:
             data = json.loads(self.metadata_path.read_text(), object_pairs_hook=unique_wire_object)
         except FileNotFoundError as error:
-            if required or self.metadata_path.is_symlink():
+            if required or self.metadata_path.is_symlink() or self.path.exists():
                 raise RelationViolationError(
                     "Bus protocol marker is missing or redirected."
                 ) from error
@@ -676,21 +653,12 @@ class WireLog:
             raise RelationViolationError(f"Bus protocol marker is invalid: {error}") from error
 
     def write_metadata_unlocked(self, metadata: WireMetadata) -> None:
-        from .store_files import _atomic_write_text
 
         _atomic_write_text(
             self.metadata_path, json.dumps(FieldCodec.encode(metadata), indent=2), fsync_parent=True
         )
 
-    def next_legacy_sequence_unlocked(self) -> int:
-        if self.read_metadata_unlocked().private:
-            raise RelationViolationError("Legacy append is unavailable after private cutover.")
-        _repair_trailing_jsonl(self.path)
-        return max(self.read_metadata_unlocked().last_seq, self._last_row_sequence_unlocked()) + 1
 
-    def append_legacy_unlocked(self, message: Message) -> None:
-        self.write_metadata_unlocked(WireMetadata(last_seq=message.seq))
-        _append_jsonl(self.path, message.to_wire())
 
     def require_fresh_private_root_unlocked(self) -> None:
         self._assert_private_directory()
@@ -701,7 +669,10 @@ class WireLog:
         if any(
             path.exists() or path.is_symlink() for path in (self.metadata_path, self.path, repair)
         ):
-            raise RelationViolationError("Private marker issuer requires a fresh bus root.")
+            raise RelationViolationError(
+                "Existing unmarked bus data is read-only until its history is rewritten "
+                "into the current source format."
+            )
 
     def enable_claim_gate_unlocked(self) -> str:
         if self.path.name != "bus.jsonl":

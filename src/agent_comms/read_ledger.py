@@ -28,14 +28,11 @@ class ReadDocument:
     messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
-    migrated: bool = False
     notice: str | None = None
 
 
 class ReadLedger(LockedStore[ReadDocument]):
     filename = "read_ledger.json"
-    legacy_filename = "read_markers.json"
-    legacy_transcript_filename = "thread_read_markers.json"
 
     @property
     def record_type(self) -> type[ReadDocument]:
@@ -77,9 +74,7 @@ class ReadLedger(LockedStore[ReadDocument]):
 
     @staticmethod
     def _key(viewer: str, created_at: float, conversation: Conversation) -> str:
-        return json.dumps(
-            [viewer, created_at, conversation.to_wire()], separators=(",", ":")
-        )
+        return json.dumps([viewer, created_at, conversation.to_wire()], separators=(",", ":"))
 
     def capture(
         self,
@@ -126,52 +121,22 @@ class ReadLedger(LockedStore[ReadDocument]):
 
         self.update(advance)
 
-    def seen_sequences(self, viewer: str, snapshot: RegistrySnapshot) -> frozenset[int]:
+    def seen_sequences(
+        self, viewer: str, snapshot: RegistrySnapshot, *, document: ReadDocument | None = None
+    ) -> frozenset[int]:
         viewer = snapshot.aliases.get(viewer, viewer)
         thread = snapshot.threads[viewer]
         seen: set[int] = set()
-        document = self.read()
+        document = self.read() if document is None else document
         if document.bus_identity != self.bus_identity(self.path.with_name("bus.jsonl")):
             return frozenset()
         for key, sequences in document.messages.items():
             name, created, raw = json.loads(key)
-            if name == viewer and created == thread.created_at:
+            if snapshot.aliases.get(name, name) == viewer and created == thread.created_at:
                 conversation = Conversation.from_wire(raw)
                 if conversation.current(snapshot):
                     seen.update(sequences)
         return frozenset(seen)
-
-    def migrate(self) -> None:
-        """Retire ambiguous legacy read facts without affecting executor cursors.
-
-        Even view2/exact watermarks may come from a bounded last page. Without
-        retained displayed membership no positive legacy marker is unambiguous.
-        The conservative conversion therefore carries no positive read facts.
-        Old files remain inert for humans; the bus still owns executor delivery.
-        """
-        if self.read().migrated:
-            return
-        legacy = self.path.with_name(self.legacy_filename)
-        raw = json.loads(legacy.read_text()) if legacy.exists() else {}
-        reset = bool(raw) or self.path.with_name(self.legacy_transcript_filename).exists()
-
-        def convert(document: ReadDocument) -> ReadDocument:
-            if document.migrated:
-                return document
-            notice = (
-                "Read positions were reset where old markers did not prove displayed messages; "
-                "reopen those conversations to review them."
-                if reset
-                else None
-            )
-            return replace(
-                document,
-                migrated=True,
-                notice=notice,
-                bus_identity=self.bus_identity(self.path.with_name("bus.jsonl")),
-            )
-
-        self.update(convert)
 
     @staticmethod
     def _transcript_key(viewer: str, source: str, inode: int) -> str:

@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .active_route import guard_legacy_root_write
+from .active_route import guard_original_root_write
 from .catalog_store import ChannelCatalog
 from .registration import Registration
 
@@ -101,7 +101,7 @@ class ChannelManagement:
     ) -> Thread:
         for tag in add | remove:
             Tag(tag)
-        with guard_legacy_root_write(self.root), _store_lock(self._wire_lock_path):
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             self._require_available_new_tags(add)
             thread = self.registry.require(name)
             previous_channels = self.catalog.read().views(self.registry.all_threads())

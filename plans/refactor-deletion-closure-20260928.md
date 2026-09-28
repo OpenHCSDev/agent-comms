@@ -44,6 +44,15 @@ These are landed implementation batches, not a claim of global zero debt.
 | PF4 route observation |214 +Toad103 | Removed observation-time Comms construction and hidden UI polling. |
 | PF5 history scope/index |211 | Removed per-row scope rebuilding and obsolete callback plumbing. |
 
+## Round-two extension
+
+The owner added plans/refactor2 and approved D22 on 2026-09-28. Canonical
+rules/scopes/assignments are now docs/refactor/round2 (PR227). Those rules
+supersede permanent archival converters suggested below: rewrite durable
+history once in place, reset declared runtime stores at quiet installation,
+and remove all old readers plus executed one-shot tools. Original closure
+remains required.
+
 ## Remaining deletion assignments
 
 Every row has an owner. A PR marked pending is NOT yet published; replace it
@@ -51,11 +60,11 @@ with its real number as soon as working source is committed and published.
 
 | Batch | Owner / worktree | PR and state | Required closure |
 | --- | --- | --- | --- |
-| B1 canonical bus execution / S2,S4,S7,R3,R7 | Parent; persistent integration tree | Pending; follows B2 writer caller | Delete public Publisher.publish, old append/sequence and InputDrain ACK/steer execution fallback; remove mark_view_read forwarding. Stage canonical roots through existing cutover owners, preserve original source/history and unresolved input provenance; no UNKNOWN replay. |
-| B2 channel/catalog compatibility / S4,R2 | Darwin; ~/wt/comms-channel-deletion-closure-20260928 | Pending; implementation assigned | Migrate saved union audiences/preferences/history into current owners, retire their active creation/routing, delete Channel.aggregate_target/members_for. Migrate update_tags to canonical publisher. Paired Toad callers belong to this batch. |
-| B3 native evidence and response authority / PF3,S3,R7 | Pascal; ~/wt/comms-pf3-deletion-closure-20260928 | Pending; implementation assigned | Delete _read_native_context_evidence after moving validation to NativeContextProof and migrating five current callers. Delete response-owner fixture bypass and optional authority forms; fixtures provide real witnesses. |
-| B4 typed file-claim callers / S5 | Pascal; same authority PR as B3 | Pending; implementation assigned | Move internal callers to ExistingFileClaim/WritableFileClaim; delete normalize_existing_file and raw internal coercion adapters; parse external paths once. |
-| B5 disconnected bridges / S7,R6 | Parent; ~/wt/comms-acp-saved-session-startup-20260928 | In implementation; refactor/retired-bridges-deletion-20260928 | Delete ordinary_delivery_bridge.py, transcript_route_legacy.py and their exclusive tests; preserve existing saved files and current native route/delivery owners. Fix remaining test caller of removed package export. |
+| B1 canonical bus execution / S2,S4,S7,R3,R7 | Parent; persistent integration tree | Draft PR229; follows B2 writer caller; D22 approved | Delete public Publisher.publish, old append/sequence and InputDrain ACK/steer execution fallback; remove mark_view_read forwarding. Stage canonical roots through existing cutover owners, preserve original source/history and unresolved input provenance; no UNKNOWN replay. |
+| B2 channel/catalog compatibility / S4,R2 | Darwin; ~/wt/comms-channel-deletion-closure-20260928 | Comms231 and Toad106 merged; quiet installation and tool deletion pending | Migrate saved union audiences/preferences/history into current owners, retire their active creation/routing, delete Channel.aggregate_target/members_for. Migrate update_tags to canonical publisher. Paired Toad callers belong to this batch. |
+| B3 native evidence and response authority / PF3,S3,R7 | Pascal; ~/wt/comms-pf3-deletion-closure-20260928 | PR226 merged; installation pending quiet step | Delete _read_native_context_evidence after moving validation to NativeContextProof and migrating five current callers. Delete response-owner fixture bypass and optional authority forms; fixtures provide real witnesses. |
+| B4 typed file-claim callers / S5 | Pascal; same authority PR as B3 | PR226 merged; installation pending quiet step | Move internal callers to ExistingFileClaim/WritableFileClaim; delete normalize_existing_file and raw internal coercion adapters; parse external paths once. |
+| B5 disconnected bridges / S7,R6 | Parent; ~/wt/comms-acp-saved-session-startup-20260928 | PR225 merged and installed; local checks and installed read-only DM acceptance passed | Delete ordinary_delivery_bridge.py, transcript_route_legacy.py and their exclusive tests; preserve existing saved files and current native route/delivery owners. Fix remaining test caller of removed package export. |
 
 B2 lands its publisher caller migration before B1 removes the old writer.
 B3/B4 can land independently of B2. Parent serializes integration and activation.
@@ -88,3 +97,147 @@ Close each row only after its concrete obsolete names/implementations are absent
 all current callers use the actual owner, saved data is preserved when affected,
 local and installed-path evidence passes, and its PR is merged and installed.
 Line deletion counts are evidence of removal, not proof of correct ownership.
+
+## Current integration receipt
+
+PR229 rebased onto main including231. Public writer/drain and duplicate scalar
+read stores are removed. Current channel/read-ledger/idle suite: 35 passed,
+6.63s (evidence/round2-l0/channel-current-contracts.log). Retained channel race
+tests use the canonical writer and actual human provenance. Deleted only old
+public-tail and missing-marker repair assertions. No live installation yet.
+D22 history rewrite, old reader removal, admission floor across runtime reset,
+and remaining current callers still belong to229/235. Round-two detailed
+assignments are in docs/refactor/round2/04-DISPATCH.md.
+
+## Admission authority and actual native path
+
+The current marker now requires admission_after_seq, separate from native proof.
+Cohort acceptance, foreground selection, ACP scheduling, resource claims and
+optional awareness honor it. Current source proof starts empty after the floor;
+rebuilding an index cannot invent a native receipt. 46 focused checks passed,
+including real SQLite reset/reopen and certified/plain source. Three additional
+checks passed using prepared real Pi, loopback provider and actual read/edit/
+write/bash tools, with a retained old pending source excluded and only fresh
+input executed. No live owners were changed. UNKNOWN-specific cutover and full
+D22 durable rewrite remain open, along with full installed acceptance.
+
+Final claim-admission guard and actual native rerun: 4 passed in3.70s. The
+intermediate rerun failed before launch because Ruff removed an imported pytest
+fixture; explicit fixture binding fixed it. Both receipts retained.
+
+## D22 current history source preview
+
+One-shot tools/cutover/wire_history.py stages current Message rows and current
+WireMetadata, retaining message IDs/order/body/private evidence. Existing public
+rows are retained history only at/below admission_after_seq; no N/K is invented.
+New unattested rows above the floor are refused. Missing markers are no longer
+repaired or treated as another runtime source format.
+
+ArchivedAccess/WritableAccess share the existing declaration family/codec; central
+append refuses an archive before reserving a sequence. attach_history uses the
+same marker format and recreates the guard for the copied registry. The one-shot
+tool alone reads saved source_bus_meta.json; that alias is gone from runtime.
+
+Actual saved-source staging/certification verified all IDs: current snapshot97,
+prior private snapshot20, original history8400. Archived sources refuse append
+and preserve their bytes. Source files/live owners were untouched. Superseded
+owned previews removed (8.1MB); current candidates remain under the worktree.
+Receipts: d22-wire-preview.json, d22-saved-wire-acceptance.json.
+
+106 retained browsing/admission checks passed; one new test initially compared
+a send API ID to a Message. Corrected API assertion and reran admission family:
+4 passed. Current indexed pages/channel checks:17 passed. Deleted obsolete
+zero-sequence/nonmonotonic/public-tail reader tests and duplicate internal oracle;
+kept real bounded page and damaged-cache behavior. Full integrated suite and
+quiet installation remain open. Next: registry/goal durable rewrite, runtime
+UNKNOWN preservation, removal of supervised_cutover and remaining old callers,
+then coordinated affected-path installation.
+
+## Current integration: route retirement and L0A
+
+PR235 is merged into the PR229 branch (not main or the installed runtime).
+Removed supervised_cutover.py (641 production lines), route rotation/withdrawal,
+WireLog old-root rewrite/purge entrypoints, and their exclusive tests. The original
+root write fence remains named guard_original_root_write. Process inventory is
+a one-shot tool under tools/cutover.
+
+Route/admission/loader focused acceptance: 25 passed. The combined DM shard
+exposed three real same-name incarnation unread-count failures; Copernicus owns
+BusRouteCounts A13 migration plus DeliveryScope and pending/inbox callers. No
+assertions were weakened. The fsync test now injects the syscall failure only
+into the read-ledger store, so a bus checkpoint cache miss cannot redirect the
+failure into a different durability boundary. Its unchanged-ledger assertion passes.
+
+NRA R1 is installed from merged PR9 in ~/wt/nra-installed-main-20260928; real
+CLI scanned 193 files with 81/81 detectors and no omissions. PR234 reports 552
+net production lines removed with native four-tool acceptance; PR236 reports
+107 passed/2 skipped. A12 cancellation/launch fixes belong to Lovelace, and
+NativeRuntimeInput/startup declarations to Cicero/Pascal. These branches and
+the D22 data rewrite are not yet installed.
+
+## Combined S13/S10 and durable conversion rehearsal
+
+Integrated PR232 through5d2935f and PR234 through9b75660 into parent229.
+Kept S13's newer child supervisor, tests and handoff when S10's older cherry-picked
+A12 foundation collided; removed the obsolete InputDrain observation-interval
+import. Three parent fixture families now bind actual process birth identities.
+
+- Child-process and process-inventory integration:20 passed (real child trees,
+  repeated cancellation, inherited descriptors/deadline, owner-death cleanup).
+- Actual Pi post-admission-floor read/edit/write/bash execution:1 passed in3.49s
+  with loopback-only model responses, actual native CLI/tools, no paid provider.
+- Route/native-input/admission integration:49 passed,1 skipped. Unit boundary
+  cases in that shard do not substitute for the actual Pi execution above.
+- One-shot registry_history.py staged all four actual retained registry sources.
+  Live104threads/18goals/2history entries; prior root104/20/456; archived sources
+  104/20 and7/1. Compared all durable Thread fields, aliases, generation maps
+  including tombstones, goal content/revisions/states, journal sequence/identity/
+  outcomes and metadata. All current records decode and SQLite integrity passes.
+  Process identities/active turns are cleared only in candidates; raw evidence
+  and original journals are retained. Five archived pauses lack provenance;
+  preserve their prior protected-pause behavior and record the missing evidence.
+
+Receipts: evidence/round2-l0/d22-registry-acceptance.json and the child/native/
+entrypoint integration logs. Final cutover, history manifest refresh, runtime
+UNKNOWN preservation, remaining source/caller closure, integration of236/237
+and installed acceptance remain open. No source/live store was rewritten.
+
+Current queue metadata now emits only queueBinding/queueState; removed the old
+queue/restored projections and their unused emitter argument.12 exact-ID queue
+contract cases pass. Paired Toad107 old-key reader removal belongs toCopernicus.
+Complete newly uncovered L0 ownership is recorded in round2/04-DISPATCH.md;
+Nietzsche's new goal-state batch needs a code-bearing PR before assignment is
+considered published. Full required guard collection is not yet green: one stale
+helper import is assigned toLovelace. The independent debt ratchet passes.
+
+Further integration at9ff1161:2379463a44 +234947ab28 +2361e46842 merged
+into229.14focused combined cases pass, including actualpostfloor4tools.
+Production source+5837/-7504; fullsuite andinstalledacceptance remainopen.
+Nietzsche now owns complete goal/input/cursor retirement, including the three
+input_disposition/input_attempt/goal_management files formerly parent-owned.
+Parent retains final data conversion, runtime/queue integration andactivation.
+
+## Incarnation and alias integration
+
+Integrated Copernicus PR238 (branch fix/l0a-incarnation-delivery, published6c1a8ae)
+into229. Same-name sender/recipient history no longer becomes new inbox work.
+Parent fixed the remaining rename/read dependency: aliases resolve within the
+current snapshot, then the recorded creation identity must match. New direct
+messages bind alias targets to canonical recipients under the publisher's guarded
+snapshot before freezing audience; no unstable alias identity is published.
+
+Read/history/rename shard:41 passed; the two additional ACP rename cases initially
+failed on obsolete fixture pid=, then passed with real process identities. The
+three original DM incarnation assertions are unchanged. Source replacement test
+now replaces the bus inode with valid canonical bytes, preserving the intended
+read-evidence invalidation test rather than forging an invalid public envelope.
+
+Actual-root rehearsal (tools/cutover/current_root.py) staged102current messages,
+104threads and8UNKNOWN ACP inputs; reopened through current Comms, rebuilt the
+candidate index and fresh coordinator, and produced zero new assignments/native
+coverage. Input dispositions remain identical. Old coordinator/prompt-binding/
+compaction SQLite snapshots are retained as evidence, not active stores. There
+were no bus-sequence UNKNOWN InputAttempt rows in this actual snapshot; do not
+claim an actual-data refusal test for that absent case. Synthetic admission-floor
+coverage separately tests old bus rows. Full attached-history/durable-route/goal
+authority staging and quiet installed acceptance remain open.
