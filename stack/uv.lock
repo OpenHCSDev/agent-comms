@@ -3,7 +3,10 @@ revision = 3
 requires-python = ">=3.14"
 
 [manifest]
-overrides = [{ name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=46b729cf16812620cf9d419aa30d95450a87687e" }]
+overrides = [
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=451cc42328fa747ebdb585f4f3a1a3d95a23affa" },
+    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=c9743801c98dc570f82f82e25915ecce89800f4b" },
+]
 
 [[package]]
 name = "agent-client-protocol"
@@ -20,7 +23,7 @@ wheels = [
 [[package]]
 name = "agent-comms"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=46b729cf16812620cf9d419aa30d95450a87687e#46b729cf16812620cf9d419aa30d95450a87687e" }
+source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=451cc42328fa747ebdb585f4f3a1a3d95a23affa#451cc42328fa747ebdb585f4f3a1a3d95a23affa" }
 dependencies = [
     { name = "metaclass-registry" },
 ]
@@ -42,9 +45,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=46b729cf16812620cf9d419aa30d95450a87687e" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=08d464bff64e055708a3e09f5fab2b25af548aef" },
-    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=16ede007c34bec893b2dbedb3999223381129678" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=451cc42328fa747ebdb585f4f3a1a3d95a23affa" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=b472e487d69c600490609fec7163376e30b1b5d1" },
+    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=c9743801c98dc570f82f82e25915ecce89800f4b" },
 ]
 
 [[package]]
@@ -190,7 +193,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=08d464bff64e055708a3e09f5fab2b25af548aef#08d464bff64e055708a3e09f5fab2b25af548aef" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=b472e487d69c600490609fec7163376e30b1b5d1#b472e487d69c600490609fec7163376e30b1b5d1" }
 dependencies = [
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },
@@ -814,7 +817,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?rev=16ede007c34bec893b2dbedb3999223381129678#16ede007c34bec893b2dbedb3999223381129678" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?rev=c9743801c98dc570f82f82e25915ecce89800f4b#c9743801c98dc570f82f82e25915ecce89800f4b" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -849,7 +852,7 @@ name = "textual-diff-view"
 version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "textual" },
+    { name = "textual", extra = ["syntax"] },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/55/bb5d51487b195bee04c71d42bc5b3e6bca0ba9477cf9b6f12c7f498a0bd7/textual_diff_view-0.1.5.tar.gz", hash = "sha256:e28151c45d4207fb7b50b57fce2bc249e880c2a496b21bf7d8560a92e59caecb", size = 38405, upload-time = "2026-04-30T08:43:12.809Z" }
 wheels = [
@@ -865,7 +868,7 @@ dependencies = [
     { name = "aiohttp-jinja2" },
     { name = "jinja2" },
     { name = "rich" },
-    { name = "textual" },
+    { name = "textual", extra = ["syntax"] },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c2/7e/62fecc552853ec6a178cb1faa2d6f73b34d5512924770e7b08b58ff14148/textual_serve-1.1.3.tar.gz", hash = "sha256:f8f636ae2f5fd651b79d965473c3e9383d3521cdf896f9bc289709185da3f683", size = 448340, upload-time = "2025-11-01T16:22:36.723Z" }
 wheels = [
