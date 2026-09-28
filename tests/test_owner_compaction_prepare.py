@@ -18,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend, owner_compaction_runtime
-from delivery_owner_fixture import canonical_agent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import AttachedChild, Platform, ProcessIdentity
 from agent_comms.comms import Comms, wire
@@ -32,6 +31,7 @@ from agent_comms.owner_compaction_runtime import compact_owner_once
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(

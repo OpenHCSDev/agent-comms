@@ -63,3 +63,24 @@ final annotation-aware source measurements and tests follow in this PR.
 
 The original first/adaptive retained source is read only; native indexes are
 owned beneath this worktree. This package is not deployed.
+
+## Final native route and concrete source evidence
+
+Actual retained first/adaptive source, read only: final annotation-aware cut
+39387bytes/18messages and split=true. Full47999byte annotation projection plus
+15200byte generated summary produces103493byte context against191712byte
+policy budget. Parent separately passed actual137MB cold manual+adaptive ACP
+sends using the905f package and a substantial summary.
+
+stack/test-native-committed-context.mjs exercises real native compact() and
+localhost SSE, all-prefix/history source coverage,500 complete file paths,
+15259byte generated responses, actual save/reopen and SessionContext.restore.
+Whole-turn:1request,66320byte context; split:2requests,104876byte context.
+Both ReadyContext,191712byte budget, no paid calls/no repeated fit attempt.
+
+Remaining direct native fixture APIs now use EntryStore and explicit selected
+model. The obsolete raw array fixture is deleted; its120000byte assistant tail
+is represented as three40000byte atomic messages with the same total source,
+allowing a legal bounded suffix while preserving the large-prefix obligation.
+Original broad caller shard hit its60s bound after36passes and is not claimed
+green. Focused completion receipts are recorded alongside it.
