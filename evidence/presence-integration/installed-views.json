@@ -1,0 +1,59 @@
+{
+  "processes": [
+    {
+      "tool": "comms_tags",
+      "arguments": {
+        "action": "create",
+        "name": "api"
+      },
+      "exit_code": 0
+    },
+    {
+      "tool": "comms_tags",
+      "arguments": {
+        "action": "create",
+        "name": "ui"
+      },
+      "exit_code": 0
+    },
+    {
+      "tool": "comms_set_view",
+      "arguments": {
+        "name": "work",
+        "kind": "activity",
+        "match": "all_of",
+        "tags": "ui,api"
+      },
+      "exit_code": 0
+    },
+    {
+      "tool": "comms_channels",
+      "arguments": {},
+      "exit_code": 0
+    },
+    {
+      "tool": "comms_tags",
+      "arguments": {
+        "action": "rename",
+        "name": "ui",
+        "new_name": "docs"
+      },
+      "exit_code": 0
+    },
+    {
+      "tool": "comms_delete_view",
+      "arguments": {
+        "name": "work"
+      },
+      "exit_code": 0
+    },
+    {
+      "tool": "comms_channels",
+      "arguments": {},
+      "exit_code": 0
+    }
+  ],
+  "saved_format_preserved": true,
+  "typed_filter_after_reopen": true,
+  "no_bus_messages": true
+}

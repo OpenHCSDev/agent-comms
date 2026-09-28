@@ -1,5 +1,12 @@
 # Push-at-wake context with selected N/K resource admission
 
+> Deployment update, 2026-09-28: the managed N/K bus, channel coding, saved
+> history and default adaptive compaction are now installed and exercised on
+> their actual user paths. See the [current stack guide](../../stack/README.md).
+> The implementation-stage status statements below are historical; they do
+> not describe the current installation or establish completion of untested
+> limits. Original input/claim authority and no-replay requirements still apply.
+
 Status: **draft integration, not production activation or file-write authority**. This combines the proposed prompt-injected harness with the selected-wake/resource-claim work already on PR #17. The agent should *learn* current work and ownership from an authoritative projection at wake, without remembering an `accept_work` command. Durable receipt checks remain the authority at a mutation boundary; injected words do not grant a model turn, a claim, a response route, or a file write. No live provider is needed for implementation or tests.
 
 ## Current PR implementation (narrow)

@@ -1,5 +1,12 @@
 # Ordinary sends into private N/K (incremental implementation)
 
+> Deployment update, 2026-09-28: the managed N/K bus, channel coding, saved
+> history and default adaptive compaction are now installed and exercised on
+> their actual user paths. See the [current stack guide](../stack/README.md).
+> The implementation-stage status statements below are historical; they do
+> not describe the current installation or establish completion of untested
+> limits. Original input/claim authority and no-replay requirements still apply.
+
 On an **explicitly initialized private root**, the ordinary `comms_send` tool
 now reaches the existing full-N/K publisher through `Comms.send_message` and
 `MessageBus.publish_ordinary`. The source row contains its frozen audience and
