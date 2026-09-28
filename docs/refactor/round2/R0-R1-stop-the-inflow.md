@@ -4,6 +4,17 @@
 
 **Heads:** `agent-comms` `15a4d00`, NRA `1119ca6`. **Rules:** [00-RULES.md](00-RULES.md). **Step 1**, colliding with nothing.
 
+### T4 addition: independent class sizes
+
+The same installed ratchet now derives `ClassSize` from its owning declaration.
+Each existing class has its own lexical line-span delta, including decorators;
+another class shrinking cannot cancel its growth. Full source inventories retain
+unique qualified-name baselines across file moves and distinguish duplicate names
+by their path. New owners report a null baseline until their first merge; deletions
+report zero size. No fixed cap, allowlist, copied script or new required CI gate.
+The workflow supplies current main as base. TR0 owns this addition; T4 decomposition
+still follows its assigned surface ordering.
+
 ---
 
 ## R0: the required check
