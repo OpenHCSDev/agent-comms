@@ -19,6 +19,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.claim_states import CompletedClaim, FailedClaim, IgnoredClaim, TriagePendingClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.compaction_journal import (
     CompactionJournal,
@@ -30,7 +31,6 @@ from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
 )
-from agent_comms.coordination import ClaimDisposition, WakeMode
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import (
@@ -47,6 +47,7 @@ from agent_comms.operations import Comms
 from agent_comms.registration import Registration
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
+from agent_comms.wake_policy import PassiveWake
 
 
 @pytest.fixture
@@ -292,7 +293,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     alpha = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
-    assert alpha is not None and alpha.disposition is ClaimDisposition.IGNORED
+    assert alpha is not None and alpha.disposition is IgnoredClaim
     assert len(alpha_calls) == 1
     assert "── comms: 1 selected ──" in alpha_calls[0][1]
     assert f'"source_seq":{initial.message.seq}' in alpha_calls[0][1]
@@ -317,7 +318,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     beta = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )
-    assert beta is not None and beta.disposition is ClaimDisposition.COMPLETED
+    assert beta is not None and beta.disposition is CompletedClaim
     assert beta.exact_target == "#team" and beta.response_message_id
     assert len(beta_calls) == 2
     assert "engage only if this concerns your assigned task" in beta_calls[0][1]
@@ -451,7 +452,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
         native_package=tmp_path,
         fresh_private_enrollment=True,
     )
-    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert result is not None and result.disposition is CompletedClaim
     fresh = result.fresh_session
     assert fresh is not None and len(calls) == 1
     assert fresh.path.parent == root / "native-sessions" / stable_thread_lookup(
@@ -518,7 +519,7 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
         fresh_private_enrollment=True,
         selected_thinking_level="high",
     )
-    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert result is not None and result.disposition is CompletedClaim
     assert len(calls) == 1 and len(witnessed) == 1
     assert witnessed[0][:2] == (result.fresh_session.device, result.fresh_session.inode)
     assert result.fresh_session.selected_thinking_level == "high"
@@ -838,7 +839,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )
-    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert result is not None and result.disposition is CompletedClaim
     assert len(calls) == 2
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         rows = read_historical_native_inputs(
@@ -1170,7 +1171,7 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
     outcome = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
-    assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
+    assert outcome is not None and outcome.disposition is IgnoredClaim
     assert len(calls) == 1
 
 
@@ -1359,7 +1360,7 @@ async def test_owner_epoch_denies_revival_without_blocking_another_owner(
         result = await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         )
-        assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+        assert result is not None and result.disposition is CompletedClaim
         assert len(calls) == 1
         assert len(comms.bus.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
@@ -1423,7 +1424,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
         result = await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         )
-        assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+        assert result is not None and result.disposition is CompletedClaim
         assert comms.registry.require("gamma").active_turn is None
         assert len(comms.bus.dm_history("sender", "gamma")) == 2
     assert len(calls) == 1
@@ -1496,7 +1497,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         for worker in workers:
             worker.join(timeout=4)
     assert workers and all(not worker.is_alive() for worker in workers)
-    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert result is not None and result.disposition is CompletedClaim
     assert stopped.is_set() and not comms.registry.status("beta").active
     assert len(comms.bus.dm_history("sender", "beta")) == 2
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -1691,7 +1692,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )
-    assert result is not None and result.disposition is ClaimDisposition.COMPLETED
+    assert result is not None and result.disposition is CompletedClaim
     assert len(calls) == 1
 
 
@@ -1786,7 +1787,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     outcome = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     )
-    assert outcome is not None and outcome.disposition is ClaimDisposition.IGNORED
+    assert outcome is not None and outcome.disposition is IgnoredClaim
     # The earlier selected rows lack native proof. Under xdist pressure the
     # best-effort 250 ms canonical scan may instead be unavailable; neither
     # status may advance a cursor or retry the current original.
@@ -1827,7 +1828,7 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     )
-    assert result.disposition is ClaimDisposition.COMPLETED
+    assert result.disposition is CompletedClaim
     assert selections == [("openai-codex", "gpt-6-sol", "high")] * 2
     assert len(calls) == 2
 
@@ -1848,7 +1849,7 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
     assert comms.registry.require("beta").active_turn is None
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         pending = sealed_cohort_claims(store, stable_thread_lookup(owner.created_at))
-        assert pending[0].disposition is ClaimDisposition.TRIAGE_PENDING
+        assert pending[0].disposition is TriagePendingClaim
 
 
 @pytest.mark.parametrize("direct", [True, False])
@@ -1883,12 +1884,12 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert "The usage limit has been reached" in notice.body
     assert "No automatic retry" in notice.body
     notice_initial = comms.bus.read_initial_cohort(root_id, notice.seq)
-    assert all(decision.wake_mode is WakeMode.PASSIVE for decision in notice_initial.decisions)
+    assert all(decision.wake_mode == PassiveWake() for decision in notice_initial.decisions)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[2].created_at)
         assert store.participant(lookup).pointer.execution_id is None
         claim = sealed_cohort_claims(store, lookup)[0]
-        assert claim.disposition is ClaimDisposition.FAILED
+        assert type(claim.lifecycle) is FailedClaim
     diagnostics = list((root / "diagnostics").glob("*.json"))
     assert len(diagnostics) == 1
     assert json.loads(diagnostics[0].read_text())["sequences"] == [initial.message.seq]
@@ -1907,7 +1908,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     )
-    assert result.disposition is ClaimDisposition.COMPLETED
+    assert result.disposition is CompletedClaim
     assert len(calls) == before + 1
 
 
@@ -1932,7 +1933,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     )
-    assert result.disposition is ClaimDisposition.COMPLETED
+    assert result.disposition is CompletedClaim
     assert len(calls) == 2
     for _input_id, prompt in calls:
         context = json.loads(

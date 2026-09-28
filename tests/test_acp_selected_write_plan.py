@@ -367,7 +367,9 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             owner = Comms(root).claim_projection()[str(resource)]
             assert owner.owner == "beta" and owner.admission is not None
             with MutationStore(str(root / "coordination.sqlite3")) as store:
-                assert store.claim(owner.admission.wake_claim_id).disposition.value == "completed"
+                assert (
+                    type(store.claim(owner.admission.wake_claim_id).lifecycle).value == "completed"
+                )
                 assert (
                     store._connection.execute(
                         "SELECT COUNT(*) FROM native_runtime_inputs"

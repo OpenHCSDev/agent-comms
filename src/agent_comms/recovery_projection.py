@@ -17,19 +17,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .attempt_states import AttemptState
 from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
     ACPClientConnectivity,
-    AttemptPhase,
     ExecutionOrigin,
-    ExecutionStatus,
-    ObligationState,
     OwnerConnectivity,
-    RecoveryKind,
 )
+from .execution_states import ExecutionState
 from .field_codec import FieldCodec
 from .obligation_states import ResponseState
+from .recovery_states import RecoveryCondition
 
 # All fields returned to a caller are enumerated below. In particular, never
 # serialize RecoverySnapshot.to_primitive(): it includes a publication key.
@@ -62,7 +61,7 @@ class RecoveryRequest:
 @dataclass(frozen=True, slots=True)
 class ProjectedAttempt(ProjectionRecord):
     ordinal: int
-    phase: AttemptPhase
+    phase: type[AttemptState]
     backend_done: bool = field(metadata={"wire_name": "backendDone"})
     # Verified exit of this attempt's Pi RPC child; NOT registry-owner death.
     backend_process_exited: bool = field(metadata={"wire_name": "backendProcessExited"})
@@ -74,7 +73,7 @@ class ProjectedAttempt(ProjectionRecord):
 @dataclass(frozen=True, slots=True)
 class ProjectedExecution(ProjectionRecord):
     # A single owner-scoped selected execution, not an unbounded history list.
-    status: ExecutionStatus
+    status: type[ExecutionState]
     origin: ExecutionOrigin
     is_current: bool = field(metadata={"wire_name": "isCurrent"})
     attempt: ProjectedAttempt | None
@@ -90,7 +89,7 @@ class ProjectedExecution(ProjectionRecord):
 
 @dataclass(frozen=True, slots=True)
 class ProjectedRecovery(ProjectionRecord):
-    kind: RecoveryKind
+    kind: type[RecoveryCondition]
     attempt: int
     elapsed_ms: int = field(metadata={"wire_name": "elapsedMs"})
     observed_at_ms: int = field(metadata={"wire_name": "observedAtMs"})
@@ -257,7 +256,7 @@ def _read_in_transaction(
             retry,
         ) = selected
         origin = ExecutionOrigin(origin_text)
-        status = ExecutionStatus(status_text)
+        status = ExecutionState.decode(status_text)
         if not _sqlite_integer(receipts, minimum=0, maximum=1) or not _sqlite_integer(
             retry, minimum=0, maximum=1
         ):
@@ -269,24 +268,24 @@ def _read_in_transaction(
         if attempt_ordinal is not None and not _sqlite_integer(attempt_ordinal, minimum=1):
             return UnavailableRecoveryProjection("invalid_store")
         is_current = execution_id == pointer[0] and ordinal == pointer[1]
-        if (pointer[0] is not None and not is_current) or (
-            is_current and not status.declaration.active
-        ):
+        if (pointer[0] is not None and not is_current) or (is_current and not status.active):
             return UnavailableRecoveryProjection("invalid_store")
         if attempt_ordinal is not None:
             if not _sqlite_integer(done, minimum=0, maximum=1) or not _sqlite_integer(
                 dead, minimum=0, maximum=1
             ):
                 return UnavailableRecoveryProjection("invalid_store")
-            attempt = ProjectedAttempt(attempt_ordinal, AttemptPhase(phase), done == 1, dead == 1)
+            attempt = ProjectedAttempt(
+                attempt_ordinal, AttemptState.decode(phase), done == 1, dead == 1
+            )
         else:
             attempt = None
         publication: str | None
         if origin is ExecutionOrigin.WIRE:
             if obligation is None or (obligation == "published") != (receipts == 1):
                 return UnavailableRecoveryProjection("invalid_store")
-            state = ObligationState(obligation)
-            publication = state.declaration.publication()
+            state = ResponseState.decode(obligation)
+            publication = state.publication()
         else:
             if obligation is not None or receipts != 0:
                 return UnavailableRecoveryProjection("invalid_store")
@@ -297,9 +296,9 @@ def _read_in_transaction(
             is_current,
             attempt,
             retry == 1
-            and status.declaration.retry
+            and status.retry
             and attempt is not None
-            and attempt.phase.declaration.failed
+            and attempt.phase.failed
             and attempt.backend_done
             and attempt.backend_process_exited
             and not is_current,
@@ -318,7 +317,9 @@ def _read_in_transaction(
                 and _sqlite_integer(audit[3], minimum=0)
             ):
                 return UnavailableRecoveryProjection("invalid_store")
-            last_recovery = ProjectedRecovery(RecoveryKind(audit[0]), audit[1], audit[2], audit[3])
+            last_recovery = ProjectedRecovery(
+                RecoveryCondition.decode(audit[0]), audit[1], audit[2], audit[3]
+            )
         facet = connection.execute(
             "SELECT owner_state, acp_client_state, observed_at_ms FROM connectivity "
             "WHERE execution_id = ?",

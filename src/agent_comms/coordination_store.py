@@ -18,6 +18,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Generic, TypeVar
 
+from .attempt_states import AttemptState
+from .claim_states import ClaimState
 from .coordination import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -25,9 +27,7 @@ from .coordination import (
     POLICY_VERSION,
     RESOLVER_VERSION,
     ACPClientConnectivity,
-    AttemptPhase,
     AttemptRecord,
-    ClaimDisposition,
     ConnectivityFacet,
     CoordinationError,
     CoordinationStore,
@@ -35,27 +35,27 @@ from .coordination import (
     ExecutionClaimLink,
     ExecutionOrigin,
     ExecutionRecord,
-    ExecutionStatus,
     IntegrityViolationError,
     MessageAudience,
-    ObligationState,
     OwnerConnectivity,
     OwnerFence,
     PublicationIntent,
     PublicationReceipt,
     RecoveryAudit,
-    RecoveryKind,
     RecoverySnapshot,
     ReplayAssessment,
     ReplayFact,
     ResponseObligation,
     TriageVerdict,
     WakeClaim,
-    WakeMode,
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
 from .declarations import MessageType
+from .execution_states import ExecutionState, QueuedExecution
+from .obligation_states import ResponseState
+from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
+from .wake_policy import WakePolicy
 
 T = TypeVar("T")
 INITIAL_LEASE_POLICY_VERSION = "initial-lease-v1"
@@ -293,17 +293,18 @@ def _claim(row: sqlite3.Row) -> WakeClaim:
         recipient_lookup=row["recipient_lookup"],
         wire_seq=row["wire_seq"],
         message_id=row["message_id"],
-        exact_target=row["exact_target"],
         audience=MessageAudience(row["audience"]),
-        wake_mode=WakeMode(row["wake_mode"]),
-        triage_verdict=(TriageVerdict(row["triage_verdict"]) if row["triage_verdict"] else None),
-        disposition=ClaimDisposition(row["disposition"]),
         accepted_at_ms=row["accepted_at_ms"],
         updated_at_ms=row["updated_at_ms"],
         revision=row["revision"],
         resolver_version=row["resolver_version"],
         policy_version=row["policy_version"],
-        execution_id=row["execution_id"],
+        lifecycle=ClaimState.decode(row["disposition"]).load(
+            WakePolicy.decode(row["wake_mode"])(),
+            TriageVerdict(row["triage_verdict"]) if row["triage_verdict"] else None,
+            row["execution_id"],
+            row["exact_target"],
+        ),
     )
 
 
@@ -311,16 +312,15 @@ def _execution(row: sqlite3.Row) -> ExecutionRecord:
     return ExecutionRecord(
         execution_id=row["execution_id"],
         origin=ExecutionOrigin(row["origin"]),
-        status=ExecutionStatus(row["status"]),
         owner_thread=row["owner_thread"],
         owner_lookup=row["owner_lookup"],
         revision=row["revision"],
-        current_attempt_ordinal=row["current_attempt_ordinal"],
         max_attempts=row["max_attempts"],
         reason_code=row["reason_code"],
         created_at_ms=row["created_at_ms"],
         updated_at_ms=row["updated_at_ms"],
         exact_target=row["exact_target"],
+        lifecycle=ExecutionState.decode(row["status"]).load(row["current_attempt_ordinal"]),
     )
 
 
@@ -332,15 +332,14 @@ def _attempt(row: sqlite3.Row) -> AttemptRecord:
         owner_thread=row["owner_thread"],
         owner_generation=row["owner_generation"],
         owner_token_digest=row["owner_token_digest"],
-        phase=AttemptPhase(row["phase"]),
         revision=row["revision"],
-        lease_expires_at_ms=row["lease_expires_at_ms"],
         last_progress_at_ms=row["last_progress_at_ms"],
-        backend_done=bool(row["backend_done"]),
-        process_dead=bool(row["process_dead"]),
         reason_code=row["reason_code"],
         created_at_ms=row["created_at_ms"],
         updated_at_ms=row["updated_at_ms"],
+        lifecycle=AttemptState.decode(row["phase"]).load(
+            row["lease_expires_at_ms"], bool(row["backend_done"]), bool(row["process_dead"])
+        ),
     )
 
 
@@ -548,11 +547,11 @@ class MutationStore(CoordinationStore):
     def accept_claim(self, claim: WakeClaim) -> Applied[WakeClaim] | AlreadyApplied[WakeClaim]:
         if (
             claim.revision != 1
-            or claim.execution_id is not None
-            or claim.exact_target is not None
+            or claim.lifecycle.execution_id is not None
+            or claim.lifecycle.exact_target is not None
             or claim.updated_at_ms != claim.accepted_at_ms
-            or claim.triage_verdict is not None
-            or claim.lifecycle.declared_name != claim.lifecycle.mode.initial_disposition()
+            or claim.lifecycle.verdict is not None
+            or type(claim.lifecycle) is not claim.lifecycle.mode.initial_state()
             or claim.resolver_version != RESOLVER_VERSION
             or claim.policy_version != POLICY_VERSION
         ):
@@ -571,12 +570,13 @@ class MutationStore(CoordinationStore):
                     "wire_seq",
                     "message_id",
                     "audience",
-                    "wake_mode",
                     "resolver_version",
                     "policy_version",
                     "accepted_at_ms",
                 )
-                if any(getattr(current, name) != getattr(claim, name) for name in immutable):
+                if current.lifecycle.mode != claim.lifecycle.mode or any(
+                    getattr(current, name) != getattr(claim, name) for name in immutable
+                ):
                     raise IdentityConflict("accepted claim identity conflicts")
                 return AlreadyApplied(current)
             db.execute(
@@ -592,9 +592,9 @@ class MutationStore(CoordinationStore):
                     claim.message_id,
                     None,
                     claim.audience.value,
-                    claim.wake_mode.value,
-                    claim.triage_verdict.value if claim.triage_verdict else None,
-                    claim.disposition.value,
+                    claim.lifecycle.mode.declared_name,
+                    claim.lifecycle.verdict if claim.lifecycle.verdict else None,
+                    claim.lifecycle.declared_name,
                     claim.resolver_version,
                     claim.policy_version,
                     claim.accepted_at_ms,
@@ -608,34 +608,37 @@ class MutationStore(CoordinationStore):
     def transition_preengagement(
         self,
         claim_id: str,
-        disposition: ClaimDisposition,
+        disposition: type[ClaimState],
         *,
         expected_revision: int,
         verdict: TriageVerdict | None = None,
     ) -> Applied[WakeClaim]:
-        disposition = ClaimDisposition(disposition)
         with self._transaction() as db:
             current = self.claim(claim_id)
             if current.revision != expected_revision:
                 raise StaleRevision("claim revision changed")
             if (
-                current.execution_id is not None
-                or not disposition.declaration.preengagement_target
-                or disposition.declaration not in current.lifecycle.successors()
+                current.lifecycle.execution_id is not None
+                or not disposition.preengagement_target
+                or disposition not in current.lifecycle.successors()
             ):
                 raise IdentityConflict("preengagement transition is not declared")
             after = replace(
                 current,
-                disposition=disposition,
-                triage_verdict=verdict,
                 updated_at_ms=self._now(current.updated_at_ms),
                 revision=current.revision + 1,
+                lifecycle=disposition.load(
+                    current.lifecycle.mode,
+                    verdict,
+                    current.lifecycle.execution_id,
+                    current.lifecycle.exact_target,
+                ),
             )
             db.execute(
                 "UPDATE wake_claims SET disposition=?,triage_verdict=?,updated_at_ms=?,"
                 "revision=? WHERE claim_id=? AND revision=?",
                 (
-                    disposition.value,
+                    disposition.declared_name,
                     verdict.value if verdict else None,
                     after.updated_at_ms,
                     after.revision,
@@ -657,7 +660,7 @@ class MutationStore(CoordinationStore):
         execution = _execution(row)
         attempt_row = db.execute(
             "SELECT * FROM attempts WHERE execution_id=? AND attempt_ordinal=?",
-            (execution_id, execution.current_attempt_ordinal),
+            (execution_id, execution.lifecycle.current_attempt_ordinal),
         ).fetchone()
         attempt = _attempt(attempt_row) if attempt_row else None
         links = tuple(
@@ -685,13 +688,13 @@ class MutationStore(CoordinationStore):
             ResponseObligation(
                 execution_id=execution_id,
                 exact_target=obligation_row["exact_target"],
-                state=ObligationState(obligation_row["state"]),
                 reason_code=obligation_row["reason_code"],
                 created_at_ms=obligation_row["created_at_ms"],
                 updated_at_ms=obligation_row["updated_at_ms"],
                 revision=obligation_row["revision"],
-                receipt_message_id=obligation_row["receipt_message_id"],
-                receipt_seq=obligation_row["receipt_seq"],
+                lifecycle=ResponseState.decode(obligation_row["state"]).load(
+                    obligation_row["receipt_message_id"], obligation_row["receipt_seq"]
+                ),
             )
             if obligation_row
             else None
@@ -752,7 +755,7 @@ class MutationStore(CoordinationStore):
         audit = (
             RecoveryAudit(
                 execution_id,
-                RecoveryKind(audit_row["kind"]),
+                RecoveryCondition.decode(audit_row["kind"]),
                 audit_row["reason_code"],
                 audit_row["sanitized_detail"],
                 audit_row["attempt"],
@@ -826,7 +829,7 @@ class MutationStore(CoordinationStore):
                 (
                     execution_id,
                     origin.value,
-                    ExecutionStatus.QUEUED.value,
+                    QueuedExecution.declared_name,
                     exact_target,
                     owner_thread,
                     owner_lookup,
@@ -839,7 +842,7 @@ class MutationStore(CoordinationStore):
                 claim = self.claim(claim_id)
                 if (
                     claim.recipient_lookup != owner_lookup
-                    or claim.execution_id is not None
+                    or claim.lifecycle.execution_id is not None
                     or not claim.lifecycle.engageable
                 ):
                     raise IdentityConflict("claim cannot engage this execution")
@@ -957,8 +960,8 @@ class MutationStore(CoordinationStore):
             execution = snapshot.execution
             ordinal = (
                 1
-                if execution.current_attempt_ordinal is None
-                else execution.current_attempt_ordinal + 1
+                if execution.lifecycle.current_attempt_ordinal is None
+                else execution.lifecycle.current_attempt_ordinal + 1
             )
             # Replay identity is immutable creation identity, NEVER mutable phase,
             # lease, replay, claims, obligation, pointer or CAS revisions.
@@ -1109,10 +1112,11 @@ class MutationStore(CoordinationStore):
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if attempt.process_dead:
+            if attempt.lifecycle.process_dead:
                 raise RecoveryBlocked("a dead Pi RPC subprocess cannot renew its live lease")
             expiry = max(
-                attempt.lease_expires_at_ms or 0, self._now(attempt.updated_at_ms) + duration_ms
+                attempt.lifecycle.lease_expires_at_ms or 0,
+                self._now(attempt.updated_at_ms) + duration_ms,
             )
             db.execute(
                 "UPDATE attempts SET lease_expires_at_ms=?,revision=revision+1,"
@@ -1131,7 +1135,7 @@ class MutationStore(CoordinationStore):
     def advance_attempt(
         self,
         fence: OwnerFence,
-        phase: AttemptPhase,
+        phase: type[AttemptState],
         *,
         expected_pointer_revision: int,
         backend_done: bool = False,
@@ -1139,29 +1143,25 @@ class MutationStore(CoordinationStore):
         progress: bool = False,
         reason_code: str | None = None,
     ) -> Applied[StartResult]:
-        phase = AttemptPhase(phase)
         _bounded_reason(reason_code)
         if any(type(value) is not bool for value in (backend_done, process_dead, progress)):
             raise ValueError("attempt finality and progress must be booleans")
-        if phase.declaration.terminal:
+        if phase.terminal:
             raise IdentityConflict("terminal phases require atomic settlement")
         with self._transaction() as db:
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if (
-                phase.declaration is not type(attempt.lifecycle)
-                and phase.declaration not in attempt.lifecycle.successors()
-            ):
+            if phase is not type(attempt.lifecycle) and phase not in attempt.lifecycle.successors():
                 raise IdentityConflict("attempt phase edge is not declared")
-            if attempt.process_dead or attempt.backend_done:
+            if attempt.lifecycle.process_dead or attempt.lifecycle.backend_done:
                 # Once either finality fact is recorded, the backend cannot
                 # emit another phase or progress observation.  The other fact
                 # may arrive later on the SAME phase before atomic settlement.
-                new_final_fact = (backend_done and not attempt.backend_done) or (
-                    process_dead and not attempt.process_dead
+                new_final_fact = (backend_done and not attempt.lifecycle.backend_done) or (
+                    process_dead and not attempt.lifecycle.process_dead
                 )
-                if phase != attempt.phase or progress or not new_final_fact:
+                if phase != type(attempt.lifecycle) or progress or not new_final_fact:
                     raise RecoveryBlocked(
                         "final backend evidence forbids further phase or progress"
                     )
@@ -1171,11 +1171,11 @@ class MutationStore(CoordinationStore):
                 "last_progress_at_ms=?,backend_done=?,process_dead=?,reason_code=? "
                 "WHERE execution_id=? AND attempt_ordinal=?",
                 (
-                    phase.value,
+                    phase.declared_name,
                     now,
                     now if progress else attempt.last_progress_at_ms,
-                    int(attempt.backend_done or backend_done),
-                    int(attempt.process_dead or process_dead),
+                    int(attempt.lifecycle.backend_done or backend_done),
+                    int(attempt.lifecycle.process_dead or process_dead),
                     reason_code,
                     fence.execution_id,
                     fence.attempt_ordinal,
@@ -1280,12 +1280,11 @@ class MutationStore(CoordinationStore):
         fence: OwnerFence,
         *,
         expected_pointer_revision: int,
-        kind: RecoveryKind,
+        kind: type[RecoveryCondition],
         reason_code: str,
         sanitized_detail: str | None = None,
         elapsed_ms: int = 0,
     ) -> Applied[RecoverySnapshot]:
-        kind = RecoveryKind(kind)
         _bounded_reason(reason_code)
         if (
             reason_code is None
@@ -1297,13 +1296,13 @@ class MutationStore(CoordinationStore):
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            kind.declaration.validate_audit(snapshot, attempt)
+            kind.validate_audit(snapshot, attempt)
             db.execute(
                 "INSERT INTO recovery_audit(execution_id,kind,reason_code,"
                 "sanitized_detail,attempt,elapsed_ms,observed_at_ms) VALUES (?,?,?,?,?,?,?)",
                 (
                     fence.execution_id,
-                    kind.value,
+                    kind.declared_name,
                     reason_code,
                     sanitized_detail,
                     attempt.attempt_ordinal,
@@ -1327,7 +1326,7 @@ class MutationStore(CoordinationStore):
         if (
             attempt is None
             or not snapshot.is_current
-            or not (attempt.backend_done and attempt.process_dead)
+            or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
         ):
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
         if success:
@@ -1598,7 +1597,7 @@ class RecoveryMonitorCapability:
                 "UPDATE attempts SET process_dead=1,backend_done=?,revision=revision+1,"
                 "updated_at_ms=?,reason_code=? WHERE execution_id=? AND attempt_ordinal=?",
                 (
-                    int(attempt.backend_done or evidence.backend_done),
+                    int(attempt.lifecycle.backend_done or evidence.backend_done),
                     now,
                     evidence.reason_code,
                     execution_id,
@@ -1606,26 +1605,22 @@ class RecoveryMonitorCapability:
                 ),
             )
             unresolved = snapshot.publication_intent is not None
-            if (attempt.backend_done or evidence.backend_done) and not unresolved:
+            if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
                 settled = store._settle(
                     store.snapshot(execution_id),
                     success=False,
                     reason_code=evidence.reason_code,
                 )
-                kind = (
-                    RecoveryKind.DEFERRED
-                    if settled.execution.lifecycle.retry
-                    else RecoveryKind.FAILED
-                )
+                kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
                 db.execute(
                     "INSERT INTO recovery_audit(execution_id,kind,reason_code,"
                     "sanitized_detail,attempt,elapsed_ms,observed_at_ms) "
                     "VALUES (?,?,?,NULL,?,0,?)",
-                    (execution_id, kind.value, evidence.reason_code, ordinal, now),
+                    (execution_id, kind.declared_name, evidence.reason_code, ordinal, now),
                 )
                 return Applied(store.snapshot(execution_id))
             # Death and genuinely observed backend completion commit even when
             # publication remains unresolved.  Neither state clears the pointer.
-        if unresolved and (attempt.backend_done or evidence.backend_done):
+        if unresolved and (attempt.lifecycle.backend_done or evidence.backend_done):
             raise PublicationUncertain("frozen publication requires bus-keyed receipt")
         raise RecoveryBlocked("process death alone is not backend-final proof")

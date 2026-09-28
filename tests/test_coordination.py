@@ -10,24 +10,26 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from agent_comms.attempt_states import (
+    AbortingAttempt,
+    AttemptFailedAttempt,
+    AttemptState,
+    PromptStartingAttempt,
+    RetryingAttempt,
+    SucceededAttempt,
+)
+from agent_comms.claim_states import ClaimState, CompletedClaim, DeferredClaim, EngagedClaim
 from agent_comms.coordination import (
-    ACTIVE_ATTEMPT_PHASES,
-    ATTEMPT_PHASE_TRANSITIONS,
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
-    EXECUTION_STATUS_TRANSITIONS,
-    AttemptPhase,
     AttemptRecord,
-    ClaimDisposition,
     CoordinationStore,
     CurrentExecutionPointer,
     ExecutionClaimLink,
     ExecutionOrigin,
     ExecutionRecord,
-    ExecutionStatus,
     IntegrityViolationError,
     MessageAudience,
-    ObligationState,
     OwnerFence,
     PublicationIntent,
     PublicationReceipt,
@@ -37,7 +39,6 @@ from agent_comms.coordination import (
     ResponseObligation,
     SchemaVersionError,
     WakeClaim,
-    WakeMode,
     attempt_phase_transition_allowed,
     attempt_retry_identity_allowed,
     canonical_publication_key,
@@ -47,26 +48,40 @@ from agent_comms.coordination import (
     replay_transition_allowed,
 )
 from agent_comms.declarations import Message, MessageType
+from agent_comms.execution_states import (
+    ActiveExecution,
+    CompletedExecution,
+    DeferredExecution,
+    ExecutionState,
+    FailedExecution,
+    PendingExecution,
+)
+from agent_comms.obligation_states import (
+    DeferredResponse,
+    PendingResponse,
+    PublishedResponse,
+    SilentResponse,
+)
+from agent_comms.wake_policy import FullWake
 
 
-def execution(*, status=ExecutionStatus.PENDING, ordinal=None, origin=ExecutionOrigin.ACP):
+def execution(*, status=PendingExecution, ordinal=None, origin=ExecutionOrigin.ACP):
     return ExecutionRecord(
         execution_id="execution-1",
         origin=origin,
-        status=status,
         owner_thread="worker",
         owner_lookup="owner-1",
         revision=1,
-        current_attempt_ordinal=ordinal,
         max_attempts=3,
         reason_code=None,
         created_at_ms=100,
         updated_at_ms=100,
         exact_target="requester" if origin is ExecutionOrigin.WIRE else None,
+        lifecycle=status.load(ordinal),
     )
 
 
-def attempt(*, ordinal=1, phase=AttemptPhase.PROMPT_STARTING, generation=1, done=False, dead=False):
+def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False, dead=False):
     return AttemptRecord(
         execution_id="execution-1",
         attempt_ordinal=ordinal,
@@ -74,15 +89,12 @@ def attempt(*, ordinal=1, phase=AttemptPhase.PROMPT_STARTING, generation=1, done
         owner_thread="worker",
         owner_generation=generation,
         owner_token_digest=f"digest-{generation}",
-        phase=phase,
         revision=1,
-        lease_expires_at_ms=None if phase not in ACTIVE_ATTEMPT_PHASES else 500,
         last_progress_at_ms=None,
-        backend_done=done,
-        process_dead=dead,
         reason_code=None,
         created_at_ms=100,
         updated_at_ms=100,
+        lifecycle=phase.load(None if phase.terminal else 500, done, dead),
     )
 
 
@@ -93,29 +105,23 @@ def claim():
         recipient_lookup="owner-1",
         wire_seq=2,
         message_id="message-1",
-        exact_target="requester",
         audience=MessageAudience.DIRECT,
-        wake_mode=WakeMode.FULL,
-        triage_verdict=None,
-        disposition=ClaimDisposition.ENGAGED,
         accepted_at_ms=100,
         updated_at_ms=100,
         revision=1,
-        execution_id="execution-1",
+        lifecycle=EngagedClaim.load(FullWake(), None, "execution-1", "requester"),
     )
 
 
-def obligation(state=ObligationState.PENDING):
+def obligation(state=PendingResponse):
     return ResponseObligation(
         execution_id="execution-1",
         exact_target="requester",
-        state=state,
         reason_code=None,
         created_at_ms=100,
         updated_at_ms=100,
         revision=1,
-        receipt_message_id=None,
-        receipt_seq=None,
+        lifecycle=state.load(None, None),
     )
 
 
@@ -140,9 +146,16 @@ def snapshot(
         claims=(
             (
                 (
-                    replace(claim(), disposition=ClaimDisposition(record.status.value))
-                    if record.status
-                    in {ExecutionStatus.DEFERRED, ExecutionStatus.COMPLETED, ExecutionStatus.FAILED}
+                    replace(
+                        claim(),
+                        lifecycle=ClaimState.decode(record.lifecycle.declared_name).load(
+                            claim().lifecycle.mode,
+                            claim().lifecycle.verdict,
+                            claim().lifecycle.execution_id,
+                            claim().lifecycle.exact_target,
+                        ),
+                    )
+                    if type(record.lifecycle) in {DeferredExecution, CompletedExecution, FailedExecution}
                     else claim()
                 ),
             )
@@ -156,7 +169,7 @@ def snapshot(
         connectivity=None,
         last_recovery=None,
         current_execution_id=record.execution_id if current else None,
-        current_attempt_ordinal=record.current_attempt_ordinal if current else None,
+        current_attempt_ordinal=record.lifecycle.current_attempt_ordinal if current else None,
         pointer_revision=1,
         is_current=current,
     )
@@ -256,7 +269,7 @@ def fail_defer(db, name="e", ordinal=1):
         db.execute("INSERT INTO replay_assessments VALUES (?,0,1,0,1)", (name,))
     db.execute("BEGIN IMMEDIATE")
     db.execute(
-        "UPDATE executions SET status='deferred',revision=revision+1 " "WHERE execution_id=?",
+        "UPDATE executions SET status='deferred',revision=revision+1 WHERE execution_id=?",
         (name,),
     )
     db.execute(
@@ -273,7 +286,7 @@ def fail_defer(db, name="e", ordinal=1):
 
 
 def test_total_enum_partition_and_transitions():
-    assert {p.value for p in ExecutionStatus} == {
+    assert set(ExecutionState.names()) == {
         "queued",
         "pending",
         "active",
@@ -281,66 +294,65 @@ def test_total_enum_partition_and_transitions():
         "completed",
         "failed",
     }
-    assert set(EXECUTION_STATUS_TRANSITIONS) == set(ExecutionStatus)
-    assert set(ATTEMPT_PHASE_TRANSITIONS) == set(AttemptPhase)
-    assert AttemptPhase.RETRYING in ATTEMPT_PHASE_TRANSITIONS[AttemptPhase.ABORTING]
-    assert AttemptPhase.ATTEMPT_FAILED not in ACTIVE_ATTEMPT_PHASES
-    assert ExecutionStatus.ACTIVE not in {ExecutionStatus.COMPLETED, ExecutionStatus.FAILED}
+    assert RetryingAttempt in AbortingAttempt.successors()
+    assert AttemptFailedAttempt.terminal
+    assert ActiveExecution not in {CompletedExecution, FailedExecution}
 
 
 def test_typed_execution_and_attempt_authority_are_separate():
     pending = execution()
-    active = replace(pending, status=ExecutionStatus.ACTIVE, current_attempt_ordinal=1, revision=2)
+    active = replace(pending, revision=2, lifecycle=ActiveExecution.load(1))
     assert execution_status_transition_allowed(pending, active)
-    deferred = replace(active, status=ExecutionStatus.DEFERRED, revision=3)
+    deferred = replace(
+        active,
+        revision=3,
+        lifecycle=DeferredExecution.load(active.lifecycle.current_attempt_ordinal),
+    )
     assert execution_status_transition_allowed(active, deferred)
-    retry = replace(deferred, status=ExecutionStatus.ACTIVE, current_attempt_ordinal=2, revision=4)
+    retry = replace(deferred, revision=4, lifecycle=ActiveExecution.load(2))
     assert execution_status_transition_allowed(deferred, retry)
     assert not execution_status_transition_allowed(
-        deferred, replace(retry, current_attempt_ordinal=3)
+        deferred, replace(retry, lifecycle=type(retry.lifecycle).load(3))
     )
     assert not execution_status_transition_allowed(pending, replace(active, revision=3))
     with pytest.raises(IntegrityViolationError):
-        replace(pending, status=ExecutionStatus.ACTIVE)
+        replace(pending, lifecycle=ActiveExecution.load(pending.lifecycle.current_attempt_ordinal))
     with pytest.raises(IntegrityViolationError):
-        replace(pending, status=ExecutionStatus.COMPLETED)
-    assert replace(pending, status=ExecutionStatus.FAILED).current_attempt_ordinal is None
+        replace(
+            pending, lifecycle=CompletedExecution.load(pending.lifecycle.current_attempt_ordinal)
+        )
+    assert (
+        replace(
+            pending, lifecycle=FailedExecution.load(pending.lifecycle.current_attempt_ordinal)
+        ).lifecycle.current_attempt_ordinal
+        is None
+    )
     first = attempt()
     assert attempt_phase_transition_allowed(
         first,
-        replace(
-            first,
-            phase=AttemptPhase.ATTEMPT_FAILED,
-            lease_expires_at_ms=None,
-            backend_done=True,
-            process_dead=True,
-            revision=2,
-        ),
+        replace(first, revision=2, lifecycle=AttemptFailedAttempt.load(None, True, True)),
     )
     assert not attempt_phase_transition_allowed(
         first,
         replace(
             first,
-            phase=AttemptPhase.ATTEMPT_FAILED,
-            lease_expires_at_ms=None,
-            backend_done=True,
-            process_dead=True,
             owner_generation=2,
             revision=2,
+            lifecycle=AttemptFailedAttempt.load(None, True, True),
         ),
     )
     with pytest.raises(IntegrityViolationError):
         replace(
-            first, backend_done=True, phase=AttemptPhase.ATTEMPT_FAILED, lease_expires_at_ms=None
+            first, lifecycle=AttemptFailedAttempt.load(None, True, first.lifecycle.process_dead)
         )
     with pytest.raises(FrozenInstanceError):
         first.attempt_ordinal = 2
     with pytest.raises(FrozenInstanceError):
-        pending.status = ExecutionStatus.FAILED
+        pending.lifecycle = FailedExecution()
 
 
 def test_pointer_requires_exact_composite_attempt_and_owner():
-    record = execution(status=ExecutionStatus.ACTIVE, ordinal=1)
+    record = execution(status=ActiveExecution, ordinal=1)
     current = CurrentExecutionPointer("owner-1", "execution-1", 1, 1)
     current.assert_matches(record, attempt())
     with pytest.raises(IntegrityViolationError):
@@ -355,11 +367,11 @@ def test_pointer_requires_exact_composite_attempt_and_owner():
 
 
 def test_snapshot_projection_retry_and_inert_secrets():
-    pre_failed = snapshot(execution_record=execution(status=ExecutionStatus.FAILED))
+    pre_failed = snapshot(execution_record=execution(status=FailedExecution))
     assert pre_failed.can_retry is False
-    failed_attempt = attempt(phase=AttemptPhase.ATTEMPT_FAILED, done=True, dead=True)
+    failed_attempt = attempt(phase=AttemptFailedAttempt, done=True, dead=True)
     deferred = snapshot(
-        execution_record=execution(status=ExecutionStatus.DEFERRED, ordinal=1),
+        execution_record=execution(status=DeferredExecution, ordinal=1),
         attempt_record=failed_attempt,
     )
     assert deferred.can_retry
@@ -375,17 +387,25 @@ def test_snapshot_projection_retry_and_inert_secrets():
         snapshot(execution_record=deferred.execution, attempt_record=failed_attempt, replay=unsafe)
     with pytest.raises(IntegrityViolationError, match="authorized retry"):
         snapshot(
-            execution_record=replace(deferred.execution, status=ExecutionStatus.FAILED),
+            execution_record=replace(
+                deferred.execution,
+                lifecycle=FailedExecution.load(
+                    deferred.execution.lifecycle.current_attempt_ordinal
+                ),
+            ),
             attempt_record=failed_attempt,
         )
     failed_unsafe = snapshot(
-        execution_record=replace(deferred.execution, status=ExecutionStatus.FAILED),
+        execution_record=replace(
+            deferred.execution,
+            lifecycle=FailedExecution.load(deferred.execution.lifecycle.current_attempt_ordinal),
+        ),
         attempt_record=failed_attempt,
         replay=unsafe,
     )
     assert not failed_unsafe.can_retry
     active = snapshot(
-        execution_record=execution(status=ExecutionStatus.ACTIVE, ordinal=1),
+        execution_record=execution(status=ActiveExecution, ordinal=1),
         attempt_record=attempt(),
         current=True,
     )
@@ -413,23 +433,37 @@ def test_wire_claim_obligation_and_publication_contract():
     with pytest.raises(IntegrityViolationError):
         replace(valid, claims=(replace(claim(), recipient_lookup="other"),))
     with pytest.raises(IntegrityViolationError, match="disposition"):
-        replace(valid, claims=(replace(claim(), disposition=ClaimDisposition.COMPLETED),))
+        replace(
+            valid,
+            claims=(
+                replace(
+                    claim(),
+                    lifecycle=CompletedClaim.load(
+                        claim().lifecycle.mode,
+                        claim().lifecycle.verdict,
+                        claim().lifecycle.execution_id,
+                        claim().lifecycle.exact_target,
+                    ),
+                ),
+            ),
+        )
     with pytest.raises(IntegrityViolationError, match="disposition"):
-        replace(valid, execution=replace(record, status=ExecutionStatus.FAILED))
+        replace(
+            valid,
+            execution=replace(
+                record, lifecycle=FailedExecution.load(record.lifecycle.current_attempt_ordinal)
+            ),
+        )
     with pytest.raises(IntegrityViolationError, match="authorized retry"):
         snapshot(
-            execution_record=replace(
-                record, status=ExecutionStatus.DEFERRED, current_attempt_ordinal=1
-            ),
-            attempt_record=attempt(phase=AttemptPhase.ATTEMPT_FAILED, done=True, dead=True),
-            response=obligation(ObligationState.SILENT),
+            execution_record=replace(record, lifecycle=DeferredExecution.load(1)),
+            attempt_record=attempt(phase=AttemptFailedAttempt, done=True, dead=True),
+            response=obligation(SilentResponse),
         )
     with pytest.raises(IntegrityViolationError):
         snapshot(
-            execution_record=replace(
-                record, status=ExecutionStatus.COMPLETED, current_attempt_ordinal=1
-            ),
-            attempt_record=attempt(phase=AttemptPhase.SUCCEEDED, done=True, dead=True),
+            execution_record=replace(record, lifecycle=CompletedExecution.load(1)),
+            attempt_record=attempt(phase=SucceededAttempt, done=True, dead=True),
             response=obligation(),
         )
     assert canonical_publication_key("execution-1", "#route:variant") == (
@@ -466,19 +500,57 @@ def test_wire_claim_obligation_and_publication_contract():
 def test_claim_replay_obligation_relations_remain_authoritative():
     c = claim()
     assert claim_transition_allowed(
-        c, replace(c, disposition=ClaimDisposition.DEFERRED, revision=2)
+        c,
+        replace(
+            c,
+            revision=2,
+            lifecycle=DeferredClaim.load(
+                c.lifecycle.mode,
+                c.lifecycle.verdict,
+                c.lifecycle.execution_id,
+                c.lifecycle.exact_target,
+            ),
+        ),
     )
     assert not claim_transition_allowed(
-        c, replace(c, recipient_lookup="other", revision=2, disposition=ClaimDisposition.DEFERRED)
+        c,
+        replace(
+            c,
+            recipient_lookup="other",
+            revision=2,
+            lifecycle=DeferredClaim.load(
+                c.lifecycle.mode,
+                c.lifecycle.verdict,
+                c.lifecycle.execution_id,
+                c.lifecycle.exact_target,
+            ),
+        ),
     )
     r = ReplayAssessment("execution-1", ReplayFact.NONE, True, False, 1)
     assert replay_transition_allowed(r, replace(r, replay_safe=False, revision=2))
     with pytest.raises(IntegrityViolationError):
         replace(r, revision=2, facts=ReplayFact.TOOL_EXECUTED, replay_safe=True)
     o = obligation()
-    assert obligation_transition_allowed(o, replace(o, state=ObligationState.DEFERRED, revision=2))
+    assert obligation_transition_allowed(
+        o,
+        replace(
+            o,
+            revision=2,
+            lifecycle=DeferredResponse.load(
+                o.lifecycle.receipt_message_id, o.lifecycle.receipt_seq
+            ),
+        ),
+    )
     assert not obligation_transition_allowed(
-        o, replace(o, exact_target="wrong", state=ObligationState.DEFERRED, revision=2)
+        o,
+        replace(
+            o,
+            exact_target="wrong",
+            revision=2,
+            lifecycle=DeferredResponse.load(
+                o.lifecycle.receipt_message_id, o.lifecycle.receipt_seq
+            ),
+        ),
     )
 
 
@@ -719,7 +791,7 @@ def test_attempt_terminal_commit_requires_matching_execution_and_no_pointer(db):
         ).fetchone()
         assert rows == ("deferred", 1)
         assert reopened._connection.execute(
-            "SELECT phase,backend_done,process_dead " "FROM attempts"
+            "SELECT phase,backend_done,process_dead FROM attempts"
         ).fetchone() == ("attempt_failed", 1, 1)
 
 
@@ -782,10 +854,10 @@ def test_retry_creates_contiguous_fresh_attempt_and_preserves_n(db):
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
         assert reopened._connection.execute(
-            "SELECT status,current_attempt_ordinal " "FROM executions"
+            "SELECT status,current_attempt_ordinal FROM executions"
         ).fetchone() == ("completed", 2)
         assert reopened._connection.execute(
-            "SELECT attempt_ordinal,phase FROM attempts " "ORDER BY attempt_ordinal"
+            "SELECT attempt_ordinal,phase FROM attempts ORDER BY attempt_ordinal"
         ).fetchall() == [(1, "attempt_failed"), (2, "succeeded")]
 
 
@@ -825,18 +897,15 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
     if authority == "budget":
         with pytest.raises(sqlite3.IntegrityError):
             c.execute(
-                "UPDATE executions SET status='deferred',revision=revision+1 "
-                "WHERE execution_id='e'"
+                "UPDATE executions SET status='deferred',revision=revision+1 WHERE execution_id='e'"
             )
         c.execute("ROLLBACK")
     else:
         c.execute(
-            "UPDATE executions SET status='deferred',revision=revision+1 " "WHERE execution_id='e'"
+            "UPDATE executions SET status='deferred',revision=revision+1 WHERE execution_id='e'"
         )
         if authority == "published":
-            c.execute(
-                "UPDATE wake_claims SET disposition='deferred',revision=2 " "WHERE claim_id='a'"
-            )
+            c.execute("UPDATE wake_claims SET disposition='deferred',revision=2 WHERE claim_id='a'")
         c.execute(
             "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
             "pointer_revision=2 WHERE owner_lookup='p'"
@@ -927,16 +996,15 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
         execution_record = ExecutionRecord(
             execution_id=row["execution_id"],
             origin=ExecutionOrigin(row["origin"]),
-            status=ExecutionStatus(row["status"]),
             owner_thread=row["owner_thread"],
             owner_lookup=row["owner_lookup"],
             revision=row["revision"],
-            current_attempt_ordinal=row["current_attempt_ordinal"],
             max_attempts=row["max_attempts"],
             reason_code=row["reason_code"],
             created_at_ms=row["created_at_ms"],
             updated_at_ms=row["updated_at_ms"],
             exact_target=row["exact_target"],
+            lifecycle=ExecutionState.decode(row["status"]).load(row["current_attempt_ordinal"]),
         )
         attempt_record = AttemptRecord(
             execution_id=terminal["execution_id"],
@@ -945,15 +1013,16 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             owner_thread=terminal["owner_thread"],
             owner_generation=terminal["owner_generation"],
             owner_token_digest=terminal["owner_token_digest"],
-            phase=AttemptPhase(terminal["phase"]),
             revision=terminal["revision"],
-            lease_expires_at_ms=terminal["lease_expires_at_ms"],
             last_progress_at_ms=terminal["last_progress_at_ms"],
-            backend_done=bool(terminal["backend_done"]),
-            process_dead=bool(terminal["process_dead"]),
             reason_code=terminal["reason_code"],
             created_at_ms=terminal["created_at_ms"],
             updated_at_ms=terminal["updated_at_ms"],
+            lifecycle=AttemptState.decode(terminal["phase"]).load(
+                terminal["lease_expires_at_ms"],
+                bool(terminal["backend_done"]),
+                bool(terminal["process_dead"]),
+            ),
         )
         absent = RecoverySnapshot(
             execution=execution_record,
@@ -974,7 +1043,15 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
         assert absent.to_primitive()["replay"] is None
         assert not absent.can_retry
         with pytest.raises(IntegrityViolationError, match="authorized retry"):
-            replace(absent, execution=replace(execution_record, status=ExecutionStatus.DEFERRED))
+            replace(
+                absent,
+                execution=replace(
+                    execution_record,
+                    lifecycle=DeferredExecution.load(
+                        execution_record.lifecycle.current_attempt_ordinal
+                    ),
+                ),
+            )
     with pytest.raises(sqlite3.IntegrityError, match="authorized retry"):
         c.execute("INSERT INTO replay_assessments VALUES ('e',0,1,0,1)")
     c.execute("INSERT INTO replay_assessments VALUES ('e',8,0,1,1)")
@@ -1171,7 +1248,7 @@ def test_new_attempt_fence_must_advance_and_change_digest(db):
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
         assert reopened._connection.execute(
-            "SELECT owner_generation,owner_token_digest " "FROM attempts ORDER BY attempt_ordinal"
+            "SELECT owner_generation,owner_token_digest FROM attempts ORDER BY attempt_ordinal"
         ).fetchall() == [(1, "digest-1"), (3, "digest-3")]
 
 
@@ -1195,7 +1272,7 @@ def test_fence_digest_is_globally_unique_across_executions(db):
 
 
 def test_typed_retry_fence_relation_requires_new_global_digest():
-    prior = attempt(phase=AttemptPhase.ATTEMPT_FAILED, done=True, dead=True)
+    prior = attempt(phase=AttemptFailedAttempt, done=True, dead=True)
     fresh = attempt(ordinal=2, generation=3)
     issued = frozenset({"digest-1", "other-execution-digest"})
     assert attempt_retry_identity_allowed(
@@ -1543,7 +1620,7 @@ def test_numeric_only_message_id_input_is_not_text(db):
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         assert reopened._connection.execute(
-            "SELECT typeof(message_id),message_id " "FROM publication_receipts"
+            "SELECT typeof(message_id),message_id FROM publication_receipts"
         ).fetchone()[:2] == (
             "text",
             message.message_id,
@@ -1647,15 +1724,25 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
                 execution(origin=ExecutionOrigin.WIRE), execution_id="e", owner_lookup="p"
             ),
             attempt=None,
-            claims=(replace(claim(), execution_id="e", claim_id="a", recipient_lookup="p"),),
+            claims=(
+                replace(
+                    claim(),
+                    claim_id="a",
+                    recipient_lookup="p",
+                    lifecycle=type(claim().lifecycle).load(
+                        claim().lifecycle.mode,
+                        claim().lifecycle.verdict,
+                        "e",
+                        claim().lifecycle.exact_target,
+                    ),
+                ),
+            ),
             links=(ExecutionClaimLink("e", "a", 0),),
             replay=None,
             obligation=replace(
                 obligation(),
                 execution_id="e",
-                state=ObligationState.PUBLISHED,
-                receipt_message_id=receipt.message_id,
-                receipt_seq=1,
+                lifecycle=PublishedResponse.load(receipt.message_id, 1),
             ),
             publication_intent=recovered_intent,
             publication_receipt=recovered_receipt,
@@ -1717,7 +1804,7 @@ def test_integer_timestamps_canonicalize_through_message_authority(db):
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         stored = reopened._connection.execute(
-            "SELECT timestamp,expected_message_id " "FROM publication_intents"
+            "SELECT timestamp,expected_message_id FROM publication_intents"
         ).fetchone()
         assert (stored[0], stored[1]) == (1.0, message.message_id)
 
@@ -1770,7 +1857,7 @@ def test_signed_zero_timestamps_canonicalize_through_message_authority(db):
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
         row = reopened._connection.execute(
-            "SELECT timestamp,expected_message_id " "FROM publication_intents"
+            "SELECT timestamp,expected_message_id FROM publication_intents"
         ).fetchone()
         assert repr(row[0]) == "0.0" and row[1] == message.message_id
 
@@ -1885,7 +1972,7 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
             == "publishing"
         )
         assert reopened._connection.execute(
-            "SELECT typeof(payload),payload FROM " "publication_intents"
+            "SELECT typeof(payload),payload FROM publication_intents"
         ).fetchone() == ("text", body)
         assert (
             reopened._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()[0]

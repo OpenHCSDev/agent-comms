@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.coordination import ExecutionStatus, ReplayFact
+from agent_comms.claim_states import FullPendingClaim
+from agent_comms.coordination import ReplayFact
 from agent_comms.coordination_store import (
     MutationStore,
     RecoveryBlocked,
@@ -21,6 +22,7 @@ from agent_comms.coordination_store import (
     VerifiedOwnerLoss,
     _owner_loss_verified,
 )
+from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
@@ -115,7 +117,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
         settled = RecoveryMonitorCapability.recover_native_failure(
             store, execution_id, session_file
         ).value
-        assert settled.execution.status is ExecutionStatus.FAILED
+        assert type(settled.execution.lifecycle) is FailedExecution
         assert not settled.is_current
         assert settled.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not settled.replay.replay_safe
@@ -202,10 +204,10 @@ def test_recovery_refuses_live_native_session_process(released_failure):
 
 @pytest.mark.asyncio
 async def test_unresolved_execution_does_not_engage_a_new_source(
-    tmp_path, monkeypatch  # noqa: F811
+    tmp_path,
+    monkeypatch,  # noqa: F811
 ):
     from agent_comms.bus_publication import stable_thread_lookup
-    from agent_comms.coordination import ClaimDisposition
     from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
     from agent_comms.coordination_store import StaleFence
 
@@ -227,7 +229,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
             )
         claims = sealed_cohort_claims(store, lookup, after_seq=source.seq - 1)
         assert len(claims) == 1
-        assert claims[0].disposition is ClaimDisposition.FULL_PENDING
+        assert type(claims[0].lifecycle) is FullPendingClaim
         assert len(calls) == 1
         assert store._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
 
@@ -236,6 +238,7 @@ def replacement_release(root):
     from dataclasses import replace
 
     from agent_comms.operations import Comms
+
     comms = Comms(root)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, pid=os.getpid()), new_owner=True)
@@ -256,5 +259,5 @@ def test_later_attested_release_still_fences_original_admission(released_failure
         settled = RecoveryMonitorCapability.recover_native_failure(
             store, execution_id, session_file
         ).value
-        assert settled.execution.status is ExecutionStatus.FAILED
+        assert type(settled.execution.lifecycle) is FailedExecution
         assert not settled.is_current

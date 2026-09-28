@@ -16,7 +16,7 @@ import sqlite3
 import stat
 import tempfile
 from contextlib import suppress
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import IntFlag, StrEnum
 from pathlib import Path
@@ -31,7 +31,6 @@ from .execution_states import ExecutionState
 from .field_codec import FieldCodec, projected
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition
-from .state_tags import state_tags, transition_tags
 from .wake_policy import WakePolicy
 
 COORDINATION_SCHEMA_VERSION: Final = 2
@@ -50,16 +49,9 @@ class MessageAudience(StrEnum):
     COLLECTIVE = "collective"
 
 
-WakeMode = state_tags("WakeMode", WakePolicy)
-
-
 class TriageVerdict(StrEnum):
     IGNORE = "ignore"
     ENGAGE = "engage"
-
-
-ClaimDisposition = state_tags("ClaimDisposition", ClaimState)
-CLAIM_DISPOSITION_TRANSITIONS = transition_tags(ClaimDisposition, ClaimState)
 
 
 class ExecutionOrigin(StrEnum):
@@ -67,28 +59,6 @@ class ExecutionOrigin(StrEnum):
     ACP = "acp"
     GOAL = "goal"
     SYSTEM = "system"
-
-
-ExecutionStatus = state_tags("ExecutionStatus", ExecutionState)
-
-
-AttemptPhase = state_tags("AttemptPhase", AttemptState)
-
-
-TERMINAL_EXECUTION_STATUSES: Final = frozenset(
-    ExecutionStatus(m.declared_name)
-    for m in ExecutionState.members_with(ExecutionState)
-    if m.terminal
-)
-
-EXECUTION_STATUS_TRANSITIONS = transition_tags(ExecutionStatus, ExecutionState)
-ATTEMPT_PHASE_TRANSITIONS = transition_tags(AttemptPhase, AttemptState)
-ACTIVE_ATTEMPT_PHASES = frozenset(
-    AttemptPhase(m.declared_name) for m in AttemptState.members_with(AttemptState) if not m.terminal
-)
-TERMINAL_ATTEMPT_PHASES = frozenset(
-    AttemptPhase(m.declared_name) for m in AttemptState.members_with(AttemptState) if m.terminal
-)
 
 
 class ReplayFact(IntFlag):
@@ -108,10 +78,6 @@ class ReplayFact(IntFlag):
 APPROVED_REPLAY_FACT_MASK: Final = sum(fact.value for fact in ReplayFact)
 
 
-ObligationState = state_tags("ObligationState", ResponseState)
-OBLIGATION_STATE_TRANSITIONS = transition_tags(ObligationState, ResponseState)
-
-
 class OwnerConnectivity(StrEnum):
     CONNECTED = "connected"
     RECONNECTING = "reconnecting"
@@ -121,9 +87,6 @@ class OwnerConnectivity(StrEnum):
 class ACPClientConnectivity(StrEnum):
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
-
-
-RecoveryKind = state_tags("RecoveryKind", RecoveryCondition)
 
 
 def _nonempty(value: str, field: str) -> None:
@@ -159,7 +122,7 @@ def canonical_publication_key(execution_id: str, exact_target: str) -> str:
     return key
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class WakeClaim:
     claim_id: str
     recipient: str
@@ -174,65 +137,25 @@ class WakeClaim:
     resolver_version: str = RESOLVER_VERSION
     policy_version: str = POLICY_VERSION
 
-    def __init__(
-        self,
-        claim_id,
-        recipient,
-        recipient_lookup,
-        wire_seq,
-        message_id,
-        exact_target=...,
-        audience=None,
-        wake_mode=None,
-        triage_verdict=...,
-        disposition=None,
-        accepted_at_ms=0,
-        updated_at_ms=0,
-        revision=1,
-        resolver_version=RESOLVER_VERSION,
-        policy_version=POLICY_VERSION,
-        execution_id=...,
-        *,
-        lifecycle=None,
-    ):
-        if wake_mode is None and lifecycle is not None:
-            mode = lifecycle.mode
-        else:
-            mode = WakePolicy.decode(str(wake_mode))()
-        if triage_verdict is Ellipsis:
-            triage_verdict = lifecycle.verdict if lifecycle else None
-        if execution_id is Ellipsis:
-            execution_id = lifecycle.execution_id if lifecycle else None
-        if exact_target is Ellipsis:
-            exact_target = lifecycle.exact_target if lifecycle else None
-        declaration = (
-            ClaimState.decode(str(disposition)) if disposition is not None else type(lifecycle)
-        )
-        lifecycle = declaration.load(mode, triage_verdict, execution_id, exact_target)
-        values = locals()
-        for declared in fields(self):
-            object.__setattr__(self, declared.name, values[declared.name])
-        self.__post_init__()
+    @projected(view="snapshot", name="disposition")
+    def snapshot_disposition(self):
+        return self.lifecycle.declared_name
 
-    @projected(view="snapshot")
-    def disposition(self):
-        return ClaimDisposition(self.lifecycle.declared_name)
+    @projected(view="snapshot", name="wake_mode")
+    def snapshot_wake_mode(self):
+        return self.lifecycle.mode.declared_name
 
-    @projected(view="snapshot")
-    def wake_mode(self):
-        return WakeMode(self.lifecycle.mode.declared_name)
-
-    @projected(view="snapshot")
-    def triage_verdict(self):
+    @projected(view="snapshot", name="triage_verdict")
+    def snapshot_triage_verdict(self):
         verdict = self.lifecycle.verdict
-        return TriageVerdict(verdict) if verdict is not None else None
+        return verdict
 
-    @projected(view="snapshot")
-    def execution_id(self):
+    @projected(view="snapshot", name="execution_id")
+    def snapshot_execution_id(self):
         return self.lifecycle.execution_id
 
-    @projected(view="snapshot")
-    def exact_target(self):
+    @projected(view="snapshot", name="exact_target")
+    def snapshot_exact_target(self):
         return self.lifecycle.exact_target
 
     def __post_init__(self) -> None:
@@ -246,9 +169,9 @@ class WakeClaim:
         ):
             _nonempty(value, field)
             _bounded(value, field, MAX_IDENTIFIER_CHARS)
-        _optional_nonempty(self.exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
-        if self.execution_id is not None:
-            _validate_execution_id(self.execution_id)
+        _optional_nonempty(self.lifecycle.exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
+        if self.lifecycle.execution_id is not None:
+            _validate_execution_id(self.lifecycle.execution_id)
         if self.wire_seq <= 0 or self.revision <= 0:
             raise ValueError("wire_seq and revision must be positive")
         if self.accepted_at_ms < 0 or self.updated_at_ms < self.accepted_at_ms:
@@ -269,7 +192,6 @@ def claim_transition_allowed(before: WakeClaim, after: WakeClaim) -> bool:
         "message_id",
         "recipient",
         "audience",
-        "wake_mode",
         "resolver_version",
         "policy_version",
         "accepted_at_ms",
@@ -277,12 +199,21 @@ def claim_transition_allowed(before: WakeClaim, after: WakeClaim) -> bool:
     edge = before.lifecycle.may_become(after.lifecycle)
     return (
         edge
+        and before.lifecycle.mode == after.lifecycle.mode
         and all(getattr(before, field) == getattr(after, field) for field in frozen)
         and after.revision == before.revision + 1
         and after.updated_at_ms >= before.updated_at_ms
-        and (before.triage_verdict is None or after.triage_verdict == before.triage_verdict)
-        and (before.execution_id is None or after.execution_id == before.execution_id)
-        and (before.exact_target is None or after.exact_target == before.exact_target)
+        and (
+            before.lifecycle.verdict is None or after.lifecycle.verdict == before.lifecycle.verdict
+        )
+        and (
+            before.lifecycle.execution_id is None
+            or after.lifecycle.execution_id == before.lifecycle.execution_id
+        )
+        and (
+            before.lifecycle.exact_target is None
+            or after.lifecycle.exact_target == before.lifecycle.exact_target
+        )
         and before.lifecycle.permits_engagement_change(after.lifecycle)
     )
 
@@ -297,10 +228,13 @@ def obligation_transition_allowed(before: ResponseObligation, after: ResponseObl
         and after.revision == before.revision + 1
         and after.updated_at_ms >= before.updated_at_ms
         and (
-            before.receipt_message_id is None
-            or before.receipt_message_id == after.receipt_message_id
+            before.lifecycle.receipt_message_id is None
+            or before.lifecycle.receipt_message_id == after.lifecycle.receipt_message_id
         )
-        and (before.receipt_seq is None or before.receipt_seq == after.receipt_seq)
+        and (
+            before.lifecycle.receipt_seq is None
+            or before.lifecycle.receipt_seq == after.lifecycle.receipt_seq
+        )
     )
 
 
@@ -362,8 +296,8 @@ def attempt_phase_transition_allowed(before: AttemptRecord, after: AttemptRecord
         )
         and after.revision == before.revision + 1
         and after.updated_at_ms >= before.updated_at_ms
-        and (not before.backend_done or after.backend_done)
-        and (not before.process_dead or after.process_dead)
+        and (not before.lifecycle.backend_done or after.lifecycle.backend_done)
+        and (not before.lifecycle.process_dead or after.lifecycle.process_dead)
         and (
             before.last_progress_at_ms is None
             or (
@@ -372,11 +306,14 @@ def attempt_phase_transition_allowed(before: AttemptRecord, after: AttemptRecord
             )
         )
         and (
-            before.lease_expires_at_ms is None
-            or after.lease_expires_at_ms is None
-            or after.lease_expires_at_ms >= before.lease_expires_at_ms
+            before.lifecycle.lease_expires_at_ms is None
+            or after.lifecycle.lease_expires_at_ms is None
+            or after.lifecycle.lease_expires_at_ms >= before.lifecycle.lease_expires_at_ms
         )
-        and (not after.lifecycle.terminal or (after.backend_done and after.process_dead))
+        and (
+            not after.lifecycle.terminal
+            or (after.lifecycle.backend_done and after.lifecycle.process_dead)
+        )
     )
 
 
@@ -455,18 +392,18 @@ class CurrentExecutionPointer:
     def assert_matches(self, execution: ExecutionRecord, attempt: AttemptRecord) -> None:
         if (
             self.execution_id != execution.execution_id
-            or self.attempt_ordinal != execution.current_attempt_ordinal
+            or self.attempt_ordinal != execution.lifecycle.current_attempt_ordinal
             or (attempt.execution_id, attempt.attempt_ordinal)
             != (self.execution_id, self.attempt_ordinal)
             or self.owner_lookup != execution.owner_lookup
             or attempt.owner_lookup != self.owner_lookup
             or not execution.lifecycle.active
-            or attempt.phase not in ACTIVE_ATTEMPT_PHASES
+            or attempt.lifecycle.terminal
         ):
             raise IntegrityViolationError("current pointer requires exact active attempt")
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class ExecutionRecord:
     execution_id: str
     origin: ExecutionOrigin
@@ -480,42 +417,12 @@ class ExecutionRecord:
     updated_at_ms: int
     exact_target: str | None = None
 
-    def __init__(
-        self,
-        *,
-        execution_id,
-        origin,
-        owner_thread,
-        owner_lookup,
-        revision,
-        max_attempts,
-        reason_code,
-        created_at_ms,
-        updated_at_ms,
-        exact_target=None,
-        lifecycle=None,
-        status=None,
-        current_attempt_ordinal=...,
-    ):
-        if current_attempt_ordinal is Ellipsis:
-            current_attempt_ordinal = lifecycle.current_attempt_ordinal if lifecycle else None
-        if status is not None:
-            lifecycle = ExecutionState.decode(str(status)).load(current_attempt_ordinal)
-        elif lifecycle is not None:
-            lifecycle = type(lifecycle).load(current_attempt_ordinal)
-        else:
-            raise TypeError("execution requires a lifecycle state")
-        values = locals()
-        for declared in fields(self):
-            object.__setattr__(self, declared.name, values[declared.name])
-        self.__post_init__()
+    @projected(view="snapshot", name="status")
+    def snapshot_status(self):
+        return self.lifecycle.declared_name
 
-    @projected(view="snapshot")
-    def status(self):
-        return ExecutionStatus(self.lifecycle.declared_name)
-
-    @projected(view="snapshot")
-    def current_attempt_ordinal(self):
+    @projected(view="snapshot", name="current_attempt_ordinal")
+    def snapshot_current_attempt_ordinal(self):
         return self.lifecycle.current_attempt_ordinal
 
     def __post_init__(self) -> None:
@@ -542,7 +449,7 @@ class ExecutionRecord:
             raise IntegrityViolationError("claimless execution requires null target")
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class AttemptRecord:
     execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
     attempt_ordinal: int
@@ -557,59 +464,20 @@ class AttemptRecord:
     created_at_ms: int
     updated_at_ms: int
 
-    def __init__(
-        self,
-        *,
-        execution_id,
-        attempt_ordinal,
-        owner_lookup,
-        owner_thread,
-        owner_generation,
-        owner_token_digest,
-        revision,
-        last_progress_at_ms,
-        reason_code,
-        created_at_ms,
-        updated_at_ms,
-        lifecycle=None,
-        phase=None,
-        lease_expires_at_ms=...,
-        backend_done=...,
-        process_dead=...,
-    ):
-        if lease_expires_at_ms is Ellipsis:
-            lease_expires_at_ms = lifecycle.lease_expires_at_ms if lifecycle else None
-        if backend_done is Ellipsis:
-            backend_done = lifecycle.backend_done if lifecycle else False
-        if process_dead is Ellipsis:
-            process_dead = lifecycle.process_dead if lifecycle else False
-        if phase is not None:
-            lifecycle = AttemptState.decode(str(phase)).load(
-                lease_expires_at_ms, backend_done, process_dead
-            )
-        elif lifecycle is not None:
-            lifecycle = type(lifecycle).load(lease_expires_at_ms, backend_done, process_dead)
-        else:
-            raise TypeError("attempt requires a lifecycle state")
-        values = locals()
-        for declared in fields(self):
-            object.__setattr__(self, declared.name, values[declared.name])
-        self.__post_init__()
+    @projected(view="snapshot", name="phase")
+    def snapshot_phase(self):
+        return self.lifecycle.declared_name
 
-    @projected(view="snapshot")
-    def phase(self):
-        return AttemptPhase(self.lifecycle.declared_name)
-
-    @projected(view="snapshot")
-    def lease_expires_at_ms(self):
+    @projected(view="snapshot", name="lease_expires_at_ms")
+    def snapshot_lease_expires_at_ms(self):
         return self.lifecycle.lease_expires_at_ms
 
-    @projected(view="snapshot")
-    def backend_done(self):
+    @projected(view="snapshot", name="backend_done")
+    def snapshot_backend_done(self):
         return self.lifecycle.backend_done
 
-    @projected(view="snapshot")
-    def process_dead(self):
+    @projected(view="snapshot", name="process_dead")
+    def snapshot_process_dead(self):
         return self.lifecycle.process_dead
 
     def __post_init__(self) -> None:
@@ -643,15 +511,15 @@ def attempt_retry_identity_allowed(
     """Pure causal/new-attempt fence relation; SQL owns global uniqueness."""
     return (
         prior.lifecycle.failed
-        and prior.backend_done
-        and prior.process_dead
-        and prior.lease_expires_at_ms is None
+        and prior.lifecycle.backend_done
+        and prior.lifecycle.process_dead
+        and prior.lifecycle.lease_expires_at_ms is None
         and (prior.execution_id, prior.owner_lookup) == (fresh.execution_id, fresh.owner_lookup)
         and fresh.attempt_ordinal == prior.attempt_ordinal + 1
         and fresh.lifecycle.starting
         and fresh.revision == 1
-        and not fresh.backend_done
-        and not fresh.process_dead
+        and not fresh.lifecycle.backend_done
+        and not fresh.lifecycle.process_dead
         and fresh.owner_generation > prior.owner_generation
         and fresh.owner_generation == current_owner_generation
         and fresh.owner_thread == current_owner_thread
@@ -690,7 +558,7 @@ def replay_transition_allowed(before: ReplayAssessment, after: ReplayAssessment)
     )
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class ResponseObligation:
     """One-to-one response obligation whose identity is its execution ID."""
 
@@ -702,45 +570,16 @@ class ResponseObligation:
     updated_at_ms: int
     revision: int
 
-    def __init__(
-        self,
-        *,
-        execution_id,
-        exact_target,
-        reason_code,
-        created_at_ms,
-        updated_at_ms,
-        revision,
-        lifecycle=None,
-        state=None,
-        receipt_message_id=...,
-        receipt_seq=...,
-    ):
-        if receipt_message_id is Ellipsis:
-            receipt_message_id = lifecycle.receipt_message_id if lifecycle else None
-        if receipt_seq is Ellipsis:
-            receipt_seq = lifecycle.receipt_seq if lifecycle else None
-        if state is not None:
-            lifecycle = ResponseState.decode(str(state)).load(receipt_message_id, receipt_seq)
-        elif lifecycle is not None:
-            lifecycle = type(lifecycle).load(receipt_message_id, receipt_seq)
-        else:
-            raise TypeError("obligation requires a lifecycle state")
-        values = locals()
-        for declared in fields(self):
-            object.__setattr__(self, declared.name, values[declared.name])
-        self.__post_init__()
+    @projected(view="snapshot", name="state")
+    def snapshot_state(self):
+        return self.lifecycle.declared_name
 
-    @projected(view="snapshot")
-    def state(self):
-        return ObligationState(self.lifecycle.declared_name)
-
-    @projected(view="snapshot")
-    def receipt_message_id(self):
+    @projected(view="snapshot", name="receipt_message_id")
+    def snapshot_receipt_message_id(self):
         return self.lifecycle.receipt_message_id
 
-    @projected(view="snapshot")
-    def receipt_seq(self):
+    @projected(view="snapshot", name="receipt_seq")
+    def snapshot_receipt_seq(self):
         return self.lifecycle.receipt_seq
 
     def __post_init__(self) -> None:
@@ -748,7 +587,9 @@ class ResponseObligation:
         _nonempty(self.exact_target, "exact_target")
         _bounded(self.exact_target, "exact_target", MAX_IDENTIFIER_CHARS)
         _optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
-        _optional_nonempty(self.receipt_message_id, "receipt_message_id", MAX_IDENTIFIER_CHARS)
+        _optional_nonempty(
+            self.lifecycle.receipt_message_id, "receipt_message_id", MAX_IDENTIFIER_CHARS
+        )
         if self.revision <= 0:
             raise ValueError("revision must be positive")
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
@@ -879,7 +720,7 @@ class ConnectivityFacet:
 @dataclass(frozen=True, slots=True)
 class RecoveryAudit:
     execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
-    kind: RecoveryKind
+    kind: type[RecoveryCondition]
     reason_code: str
     sanitized_detail: str | None
     attempt: int
@@ -889,7 +730,6 @@ class RecoveryAudit:
     def __post_init__(self) -> None:
         _validate_execution_id(self.execution_id)
         _nonempty(self.reason_code, "reason_code")
-        object.__setattr__(self, "kind", RecoveryKind(self.kind))
         _bounded(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
         _bounded(self.sanitized_detail, "sanitized_detail", MAX_SANITIZED_DETAIL_CHARS)
         if self.attempt <= 0 or self.elapsed_ms < 0 or self.observed_at_ms < 0:
@@ -903,8 +743,8 @@ def retry_disposition_authorized(
 ) -> bool:
     """One derived terminal-failure partition; SQL view owns the same relation."""
     return (
-        execution.current_attempt_ordinal is not None
-        and execution.current_attempt_ordinal < execution.max_attempts
+        execution.lifecycle.current_attempt_ordinal is not None
+        and execution.lifecycle.current_attempt_ordinal < execution.max_attempts
         and replay is not None
         and replay.replay_safe
         and replay.facts == ReplayFact.NONE
@@ -965,7 +805,7 @@ class RecoverySnapshot:
         )
         if any(
             record is not None and record.execution_id != execution_id for record in related
-        ) or any(claim.execution_id != execution_id for claim in self.claims):
+        ) or any(claim.lifecycle.execution_id != execution_id for claim in self.claims):
             raise IntegrityViolationError("snapshot records belong to another execution")
         claim_ids = tuple(claim.claim_id for claim in self.claims)
         if (
@@ -988,11 +828,11 @@ class RecoverySnapshot:
         execution = self.execution
         execution_id = execution.execution_id
         attempt = self.attempt
-        if (execution.current_attempt_ordinal is None) != (attempt is None):
+        if (execution.lifecycle.current_attempt_ordinal is None) != (attempt is None):
             raise IntegrityViolationError("snapshot attempt does not match execution reference")
         if attempt is not None and (
             (attempt.execution_id, attempt.attempt_ordinal, attempt.owner_lookup)
-            != (execution_id, execution.current_attempt_ordinal, execution.owner_lookup)
+            != (execution_id, execution.lifecycle.current_attempt_ordinal, execution.owner_lookup)
         ):
             raise IntegrityViolationError("snapshot attempt identity/owner mismatch")
         if attempt is not None and not execution.lifecycle.accepts_attempt(attempt.lifecycle):
@@ -1006,7 +846,7 @@ class RecoverySnapshot:
             raise IntegrityViolationError("snapshot pointer tuple is incomplete")
         if self.is_current != (
             self.current_execution_id == execution_id
-            and self.current_attempt_ordinal == execution.current_attempt_ordinal
+            and self.current_attempt_ordinal == execution.lifecycle.current_attempt_ordinal
             and execution.lifecycle.active
             and attempt is not None
             and not attempt.lifecycle.terminal
@@ -1022,7 +862,7 @@ class RecoverySnapshot:
             raise IntegrityViolationError("claimless snapshots cannot have claims or obligation")
         expected_target = execution.exact_target
         target_records = (
-            *self.claims,
+            *(claim.lifecycle for claim in self.claims),
             self.obligation,
             self.publication_intent,
             self.publication_receipt,
@@ -1044,7 +884,7 @@ class RecoverySnapshot:
         if receipt is not None:
             if intent is None or obligation is None:
                 raise IntegrityViolationError("published receipt requires intent and obligation")
-            if (obligation.receipt_message_id, obligation.receipt_seq) != (
+            if (obligation.lifecycle.receipt_message_id, obligation.lifecycle.receipt_seq) != (
                 receipt.message_id,
                 receipt.seq,
             ):
@@ -1081,9 +921,9 @@ class RecoverySnapshot:
             and execution.lifecycle.retry
             and attempt is not None
             and attempt.lifecycle.failed
-            and attempt.backend_done
-            and attempt.process_dead
-            and attempt.lease_expires_at_ms is None
+            and attempt.lifecycle.backend_done
+            and attempt.lifecycle.process_dead
+            and attempt.lifecycle.lease_expires_at_ms is None
             and not self.is_current
         )
 

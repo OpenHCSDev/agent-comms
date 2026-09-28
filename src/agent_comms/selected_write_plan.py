@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
-from .coordination import ClaimDisposition, WakeClaim
+from .coordination import WakeClaim
 from .coordination_cohort import sealed_cohort_claims
 from .coordination_store import IdentityConflict, MutationStore
 from .declarations import Thread, _store_lock
@@ -145,7 +145,7 @@ class SelectedWritePlans:
                     if claim.wire_seq == source_seq
                     and claim.message_id == source_message_id
                     and claim.recipient == owner.name
-                    and claim.disposition is ClaimDisposition.FULL_PENDING
+                    and claim.lifecycle.full_pending
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")

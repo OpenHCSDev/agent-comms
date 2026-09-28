@@ -61,7 +61,7 @@ class RecoveredRecovery(RecoveryCondition):
             or not attempt.lifecycle.running
             or incident is None
             or incident.attempt != attempt.attempt_ordinal
-            or not incident.kind.declaration.unresolved
+            or not incident.kind.unresolved
         ):
             raise IdentityConflict(
                 "recovered requires a current unresolved incident and resumed model"

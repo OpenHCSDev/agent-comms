@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from agent_comms.coordination import MessageAudience, ObligationState, WakeMode
+from agent_comms.coordination import MessageAudience
 from agent_comms.declarations import (
     MembershipChange,
     Message,
@@ -15,6 +15,7 @@ from agent_comms.declarations import (
     ThreadRole,
 )
 from agent_comms.mentions import ThreadMention
+from agent_comms.obligation_states import SilentResponse
 from agent_comms.operations import wire
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.wake import (
@@ -26,6 +27,7 @@ from agent_comms.wake import (
     resolve_wake,
     resolve_wake_cohort,
 )
+from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake
 
 MEMBERS = (FrozenRecipient("lookup-alpha", "alpha"), FrozenRecipient("lookup-beta", "beta"))
 
@@ -78,7 +80,7 @@ def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
     message = stored(sender_role=sender_role, type=type)
     decisions = [decide(message, member.recipient_lookup) for member in MEMBERS]
     assert decisions == [
-        WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, WakeMode.BOUNDED_TRIAGE)
+        WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, BoundedTriageWake())
         for member in MEMBERS
     ]
     assert decide(message, "lookup-outsider") is None
@@ -99,7 +101,7 @@ def test_direct_is_full_only_for_frozen_lookup_and_route_ignores_sender_role(
     message = stored("alpha", sender_role=sender_role)
     members = MEMBERS[:1]
     assert decide(message, "lookup-alpha", members) == WakeDecision(
-        "lookup-alpha", MessageAudience.DIRECT, WakeMode.FULL
+        "lookup-alpha", MessageAudience.DIRECT, FullWake()
     )
     assert decide(message, "lookup-beta", members) is None
     assert derive_exact_reply_target(message) == "sender"
@@ -109,7 +111,7 @@ def test_direct_is_full_only_for_frozen_lookup_and_route_ignores_sender_role(
 def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddressed() -> None:
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     assert decide(message, "lookup-beta") == WakeDecision(
-        "lookup-beta", MessageAudience.MENTIONED, WakeMode.FULL
+        "lookup-beta", MessageAudience.MENTIONED, FullWake()
     )
     assert decide(message, "lookup-alpha") == NoWakeDecision("lookup-alpha")
     assert decide(message, "lookup-outsider") is None  # Not in the frozen audience.
@@ -124,7 +126,7 @@ def test_renamed_mentioned_member_preserves_stable_lookup_not_old_alias() -> Non
     members = (FrozenRecipient("stable-alpha", "alpha"), FrozenRecipient("stable-beta", "renamed"))
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("renamed", 0, 5),))
     assert decide(message, "stable-beta", members) == WakeDecision(
-        "stable-beta", MessageAudience.MENTIONED, WakeMode.FULL
+        "stable-beta", MessageAudience.MENTIONED, FullWake()
     )
     assert decide(message, "stable-alpha", members) == NoWakeDecision("stable-alpha")
     assert members[0] in audience(message, members).recipients
@@ -145,7 +147,7 @@ def test_renamed_mentioned_member_preserves_stable_lookup_not_old_alias() -> Non
 def test_unknown_or_out_of_scope_mention_never_suppresses_frozen_members(message: Message) -> None:
     for member in MEMBERS:
         assert decide(message, member.recipient_lookup) == WakeDecision(
-            member.recipient_lookup, MessageAudience.COLLECTIVE, WakeMode.BOUNDED_TRIAGE
+            member.recipient_lookup, MessageAudience.COLLECTIVE, BoundedTriageWake()
         )
 
 
@@ -156,7 +158,7 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
         mentions=(ThreadMention("outsider", 0, 9), ThreadMention("beta", 14, 19)),
     )
     assert decide(message, "lookup-beta") == WakeDecision(
-        "lookup-beta", MessageAudience.MENTIONED, WakeMode.FULL
+        "lookup-beta", MessageAudience.MENTIONED, FullWake()
     )
     assert decide(message, "lookup-alpha") == NoWakeDecision("lookup-alpha")
     assert MEMBERS[0] in audience(message).recipients
@@ -173,7 +175,7 @@ def test_notice_and_membership_are_passive_regardless_of_control_or_sender(
     else:
         message = replace(message, membership=MembershipChange.JOINED)
     assert decide(message, control=control) == WakeDecision(
-        "lookup-alpha", MessageAudience.COLLECTIVE, WakeMode.PASSIVE
+        "lookup-alpha", MessageAudience.COLLECTIVE, PassiveWake()
     )
 
 
@@ -182,20 +184,20 @@ def test_explicit_control_on_mentioned_row_is_passive_not_unmentioned_observer()
     for member in MEMBERS:
         assert decide(
             message, member.recipient_lookup, control=ControlClassification.SYSTEM_CONTROL
-        ) == WakeDecision(member.recipient_lookup, MessageAudience.MENTIONED, WakeMode.PASSIVE)
+        ) == WakeDecision(member.recipient_lookup, MessageAudience.MENTIONED, PassiveWake())
 
 
 def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> None:
     ordinary = stored("#team", "system command", type=MessageType.ACK)
     assert decide(ordinary) == WakeDecision(
-        "lookup-alpha", MessageAudience.COLLECTIVE, WakeMode.BOUNDED_TRIAGE
+        "lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
     assert decide(ordinary, control=ControlClassification.SYSTEM_CONTROL) == WakeDecision(
-        "lookup-alpha", MessageAudience.COLLECTIVE, WakeMode.PASSIVE
+        "lookup-alpha", MessageAudience.COLLECTIVE, PassiveWake()
     )
     direct = stored("alpha", sender_role=ThreadRole.USER)
     assert decide(direct, members=MEMBERS[:1], control=ControlClassification.SYSTEM_CONTROL) == (
-        WakeDecision("lookup-alpha", MessageAudience.DIRECT, WakeMode.PASSIVE)
+        WakeDecision("lookup-alpha", MessageAudience.DIRECT, PassiveWake())
     )
     with pytest.raises(TypeError, match="ControlClassification"):
         resolve_wake(
@@ -216,12 +218,12 @@ def test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed() -> No
     assert MEMBERS[0] in audience(mentioned).recipients
     assert decide(mentioned, "lookup-outsider") is None
     with pytest.raises(ValueError, match="stable lookup"):
-        WakeDecision("", MessageAudience.DIRECT, WakeMode.FULL)
+        WakeDecision("", MessageAudience.DIRECT, FullWake())
     with pytest.raises(ValueError, match="stable lookup"):
         NoWakeDecision("")
-    with pytest.raises(TypeError, match="MessageAudience and WakeMode"):
-        WakeDecision("lookup-alpha", "direct", WakeMode.FULL)  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="MessageAudience and WakeMode"):
+    with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
+        WakeDecision("lookup-alpha", "direct", FullWake())  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
         WakeDecision("lookup-alpha", MessageAudience.DIRECT, "full")  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="NoWakeReason"):
         NoWakeDecision("lookup-alpha", "unmentioned_observer")  # type: ignore[arg-type]
@@ -339,7 +341,7 @@ def test_full_cohort_validates_large_frozen_n_with_one_envelope_digest(monkeypat
         member.recipient_lookup for member in manifest.recipients
     ]
     assert decisions[0] == NoWakeDecision("lookup-0000")
-    assert decisions[-1] == WakeDecision("lookup-1023", MessageAudience.MENTIONED, WakeMode.FULL)
+    assert decisions[-1] == WakeDecision("lookup-1023", MessageAudience.MENTIONED, FullWake())
 
 
 def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None:
@@ -348,14 +350,14 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
         direct,
         frozen_audience=audience(direct, MEMBERS[:1]),
         control=ControlClassification.ORDINARY,
-    ) == (WakeDecision("lookup-alpha", MessageAudience.DIRECT, WakeMode.FULL),)
+    ) == (WakeDecision("lookup-alpha", MessageAudience.DIRECT, FullWake()),)
     collective = stored()
     assert resolve_wake_cohort(
         collective,
         frozen_audience=audience(collective),
         control=ControlClassification.SYSTEM_CONTROL,
     ) == tuple(
-        WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, WakeMode.PASSIVE)
+        WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, PassiveWake())
         for member in MEMBERS
     )
     with pytest.raises(ValueError, match="direct frozen recipient"):
@@ -389,9 +391,9 @@ def test_exact_stored_channel_and_alias_routes_no_wildcard_or_silence_inference(
     ]
     assert derive_exact_reply_target(None) is None
     assert decide(broadcast) == WakeDecision(
-        "lookup-alpha", MessageAudience.COLLECTIVE, WakeMode.BOUNDED_TRIAGE
+        "lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
-    assert ObligationState.SILENT.value == "silent"  # Existing explicit disposition type.
+    assert SilentResponse.declared_name == "silent"  # Existing explicit disposition type.
     assert derive_exact_reply_target(channel) == "#team"  # Route != response obligation.
 
 
@@ -413,7 +415,7 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
         recipient=MEMBERS[0],
         frozen_audience=manifest,
         control=ControlClassification.ORDINARY,
-    ) == WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, WakeMode.BOUNDED_TRIAGE)
+    ) == WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake())
     assert derive_exact_reply_target(message) == "#team"
     assert message.to_wire() == before
     assert comms.bus._path.read_bytes() == bus_before

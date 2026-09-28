@@ -888,7 +888,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
         from agent_comms.coordination_cohort import sealed_cohort_claims
 
         claims = sealed_cohort_claims(store, stable_thread_lookup(people[1].created_at))
-        assert [claim.disposition.value for claim in claims] == ["deferred"]
+        assert [claim.lifecycle.declared_name for claim in claims] == ["deferred"]
         assert read_expected_prompt_binding(store, "0" * 32) is None
     # The sidecar binding row exists and stays immutable, but no equality is
     # reported anywhere because the live proof never arrived.

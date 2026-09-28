@@ -26,14 +26,10 @@ from typing import TYPE_CHECKING
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
+from .claim_states import ClaimState, CompletedClaim, IgnoredClaim
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination import (
-    ClaimDisposition,
-    ExecutionOrigin,
-    OwnerFence,
-    WakeClaim,
-)
+from .coordination import ExecutionOrigin, OwnerFence, WakeClaim
 from .coordination_cohort import _assert_schema, accept_initial_cohort, sealed_cohort_claims
 from .coordination_response import (
     LiveResponseOwner,
@@ -102,7 +98,7 @@ _LOG = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn:
     claim_id: str
-    disposition: ClaimDisposition
+    disposition: ClaimState
     input_id: str
     response_message_id: str | None
     exact_target: str | None
@@ -418,13 +414,13 @@ def _native_send_boundary(
                 current.recipient,
                 current.wire_seq,
                 current.message_id,
-                current.wake_mode,
+                current.lifecycle.mode,
             ) != (
                 claim.recipient_lookup,
                 claim.recipient,
                 claim.wire_seq,
                 claim.message_id,
-                claim.wake_mode,
+                claim.lifecycle.mode,
             ):
                 raise StaleFence("selected claim identity changed before native send")
             if fence is None:
@@ -436,8 +432,8 @@ def _native_send_boundary(
                     not current.lifecycle.engaged
                     or not snapshot.execution.lifecycle.active
                     or not attempt.lifecycle.starting
-                    or attempt.backend_done
-                    or attempt.process_dead
+                    or attempt.lifecycle.backend_done
+                    or attempt.lifecycle.process_dead
                 ):
                     raise StaleFence("full execution is not running before native send")
             binding = read_expected_prompt_binding(store, input_id, blocking=False)
@@ -552,7 +548,7 @@ def _require_selected(
             recipient.recipient_lookup == claim.recipient_lookup
             and recipient.canonical_thread == claim.recipient
             and type(decision) is WakeDecision
-            and decision.wake_mode is claim.wake_mode
+            and decision.wake_mode == claim.lifecycle.mode
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             )
@@ -773,7 +769,7 @@ def _record_triage(
         if (
             current.revision != claim.revision + 1
             or not current.lifecycle.deferred
-            or current.execution_id is not None
+            or current.lifecycle.execution_id is not None
             or row is None
             or row["stage"] != "triage"
             or row["claim_id"] != claim.claim_id
@@ -1253,7 +1249,7 @@ async def run_one_sealed_claim(
                 )
                 return CoordinatedTurn(
                     pending.claim_id,
-                    ClaimDisposition.IGNORED,
+                    IgnoredClaim,
                     input_id,
                     None,
                     None,
@@ -1526,7 +1522,7 @@ async def run_one_sealed_claim(
         )
         return CoordinatedTurn(
             pending.claim_id,
-            ClaimDisposition.COMPLETED,
+            CompletedClaim,
             input_id,
             published.publication_receipt.message_id,
             published.execution.exact_target,
@@ -1556,7 +1552,7 @@ async def run_one_sealed_claim(
             assert snapshot.attempt is not None
             final = store.advance_attempt(
                 fence,
-                snapshot.attempt.phase,
+                type(snapshot.attempt.lifecycle),
                 expected_pointer_revision=snapshot.pointer_revision,
                 backend_done=True,
                 process_dead=True,
