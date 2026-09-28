@@ -93,7 +93,13 @@ async def test_cancellation_restores_unprocessed_user_queue(tmp_path, monkeypatc
         await agent.cancel("project")
         assert (await turn).stop_reason == "cancelled"
         assert any(
-            u.get("_meta", {}).get("agentComms", {}).get("restored") == ["keep this queued text"]
+            [
+                row["text"]
+                for row in (u.get("_meta", {}).get("agentComms", {}).get("queueState") or {}).get(
+                    "restored", []
+                )
+            ]
+            == ["keep this queued text"]
             for u in updates
         )
     finally:

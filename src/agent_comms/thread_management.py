@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from .child_process import ProcessIdentity
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
@@ -205,13 +206,13 @@ class ThreadManagement:
             canonical = self.registry.canonical_name(thread.name)
             existing = self.registry.all_threads().get(canonical)
             if existing is not None and existing.executing:
-                if thread.pid not in {0, existing.pid}:
+                if thread.process_identity not in {None, existing.process_identity}:
                     raise RelationViolationError(
                         "Cannot replace an executor during its active turn."
                     )
                 thread = replace(
                     thread,
-                    pid=existing.pid,
+                    process_identity=existing.process_identity,
                     active_turn=existing.active_turn,
                     turn_generation=existing.turn_generation,
                     last_finished_turn_id=existing.last_finished_turn_id,
@@ -273,8 +274,8 @@ class ThreadManagement:
             new_owner = (
                 existing is not None
                 and not existing.executing
-                and existing.pid > 0
-                and thread.pid > 0
+                and existing.process_identity is not None
+                and thread.process_identity is not None
                 and thread.created_at != existing.created_at
             )
             self.registry.register(thread, new_owner=new_owner)
@@ -307,7 +308,7 @@ class ThreadManagement:
                 name=name,
                 tags=tags,
                 worktree=worktree,
-                pid=pid,
+                process_identity=ProcessIdentity.capture(pid) if pid > 0 else None,
                 model=model,
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
@@ -370,7 +371,7 @@ class ThreadManagement:
         """Rename a locally managed running thread after proving process ownership."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            if owner_pid <= 0 or thread.pid != owner_pid:
+            if owner_pid <= 0 or thread.process_identity != ProcessIdentity.capture(owner_pid):
                 raise RelationViolationError(
                     f"Process {owner_pid} does not own thread {thread.name!r}."
                 )
@@ -560,7 +561,13 @@ class ThreadManagement:
             current = self.registry.require(name)
             attached = replace(
                 current,
-                pid=current.pid if pid is None else pid,
+                process_identity=(
+                    current.process_identity
+                    if pid is None
+                    else ProcessIdentity.capture(pid)
+                    if pid > 0
+                    else None
+                ),
                 session_file=str(Path(session_file).expanduser().resolve()),
             )
             self.registry.register(attached)
@@ -605,7 +612,7 @@ class ThreadManagement:
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
-            pid=0,
+            process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,
         )

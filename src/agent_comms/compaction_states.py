@@ -12,6 +12,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
+from .child_process import ChildOutcome
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 
@@ -36,22 +37,6 @@ def sql_names(family: type[DeclaredFamily], *, unresolved: bool = False) -> str:
 class OperationState(DeclaredFamily, LifecycleState, affix="Operation"):
     terminal: ClassVar[bool] = False
     committed: ClassVar[bool] = False
-    native_fields: ClassVar[frozenset[str] | None] = None
-    permits_failed_exit: ClassVar[bool] = False
-
-    def validate_native(self, evidence: dict, returncode: int) -> None:
-        keys = self.native_fields
-        if (
-            keys is None
-            or set(evidence) != keys | {"status"}
-            or any(type(evidence[key]) is not str or not evidence[key] for key in keys)
-        ):
-            raise ValueError("Incomplete native outcome; never replay")
-        if returncode and not self.permits_failed_exit:
-            raise ValueError("Inconsistent native outcome; never replay")
-
-    def matches_metadata(self, evidence: dict, expected: str) -> bool:
-        return True
 
     @classmethod
     @abstractmethod
@@ -65,9 +50,6 @@ class IntentOperation(OperationState):
 
 
 class UnknownOperation(OperationState):
-    native_fields = frozenset({"reason"})
-    permits_failed_exit = True
-
     @classmethod
     def successors(cls):
         # Uncertainty can never become a pre-write refusal.
@@ -84,16 +66,6 @@ class TerminalOperation:
 
 class CommittedOperation(TerminalOperation, OperationState):
     committed = True
-    native_fields = frozenset({"entryId", "revision", "leafId", "metadataDigest"})
-
-    def validate_native(self, evidence, returncode):
-        super().validate_native(evidence, returncode)
-        digest = evidence["metadataDigest"]
-        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-            raise ValueError("Invalid native metadata receipt; never replay")
-
-    def matches_metadata(self, evidence, expected):
-        return evidence["metadataDigest"] == expected
 
 
 class RefusedOperation(TerminalOperation, OperationState):
@@ -101,7 +73,7 @@ class RefusedOperation(TerminalOperation, OperationState):
 
 
 class AbortedNoWriteOperation(TerminalOperation, OperationState, declared_name="aborted-no-write"):
-    native_fields = frozenset({"revision", "leafId"})
+    pass
 
 
 @dataclass(frozen=True)
@@ -109,20 +81,10 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     reservable_commit: ClassVar[bool] = False
-    commit_id: ClassVar[None] = None
-    decline_reason: ClassVar[None] = None
 
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[SummaryState], ...]: ...
-
-    @classmethod
-    def from_columns(cls, name: str, commit_id: str | None, decline_reason: str | None):
-        return cls.decode(name).load(commit_id, decline_reason)
-
-    @classmethod
-    @abstractmethod
-    def load(cls, commit_id: str | None, decline_reason: str | None) -> SummaryState: ...
 
     def verifies_original(
         self, journal: CompactionJournal, session: str, operation_id: str, source_json: str
@@ -130,15 +92,7 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
         return False
 
 
-class UnsettledSummary(SummaryState):
-    @classmethod
-    def load(cls, commit_id, decline_reason):
-        if commit_id is not None or decline_reason is not None:
-            raise ValueError("Unsettled summary cannot carry terminal evidence")
-        return cls()
-
-
-class ReservedSummary(UnsettledSummary):
+class ReservedSummary(SummaryState):
     reservable_commit = True
 
     @classmethod
@@ -146,7 +100,7 @@ class ReservedSummary(UnsettledSummary):
         return (UnknownSummary, LinkedSummary, DeclinedPrestartSummary)
 
 
-class UnknownSummary(UnsettledSummary):
+class UnknownSummary(SummaryState):
     @classmethod
     def successors(cls):
         return (UnknownSummary,)
@@ -159,18 +113,12 @@ class LinkedSummary(SummaryState):
     original_eligible = True
 
     def __post_init__(self):
-        if type(self.commit_id) is not str or not self.commit_id:
+        if not self.commit_id:
             raise ValueError("Linked summary requires its native commit ID")
 
     @classmethod
     def successors(cls):
         return ()
-
-    @classmethod
-    def load(cls, commit_id, decline_reason):
-        if decline_reason is not None:
-            raise ValueError("Linked summary cannot carry a decline")
-        return cls(commit_id)
 
     def verifies_original(self, journal, session, operation_id, source_json):
         commit = journal.get(self.commit_id)
@@ -198,12 +146,6 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
     @classmethod
     def successors(cls):
         return ()
-
-    @classmethod
-    def load(cls, commit_id, decline_reason):
-        if commit_id is not None:
-            raise ValueError("Declined summary cannot carry a native commit")
-        return cls(decline_reason)
 
     def verifies_original(self, journal, session, operation_id, source_json):
         return True
@@ -233,26 +175,73 @@ class ObservedPublication(PublicationState):
 
 
 @dataclass(frozen=True)
-class NativeOutcome:
-    """One decoded child result; not proof of owner authority or durability."""
+class CompactionPublishedMetadata:
+    commit_id: str = field(metadata={"wire_name": "commitId"})
+    entry_id: str = field(metadata={"wire_name": "entryId"})
+    revision: str
+    leaf_id: str = field(metadata={"wire_name": "leafId"})
 
-    state: OperationState
-    evidence: dict
 
-    @classmethod
-    def from_wire(cls, evidence: object, returncode: int) -> NativeOutcome:
-        if not isinstance(evidence, dict):
-            raise ValueError("Invalid native outcome; never replay")
-        state = OperationState.decode(evidence.get("status"))()
-        state.validate_native(evidence, returncode)
-        return cls(state, evidence)
+class NativeOutcome(DeclaredFamily, affix="NativeOutcome"):
+    """Strict native observations, distinct from journal lifecycle authority."""
 
-    @classmethod
-    def unknown(cls, reason: str) -> NativeOutcome:
-        state = UnknownOperation()
-        return cls(state, {"status": state.declared_name, "reason": reason})
+    family_discriminator = "status"
+    state: ClassVar[OperationState]
+    permits_failed_exit: ClassVar[bool] = False
+
+    def checked_child(self, outcome: ChildOutcome) -> NativeOutcome:
+        if not outcome.successful and not self.permits_failed_exit:
+            raise ValueError("Inconsistent native outcome; never replay")
+        return self
 
     def bind_metadata(self, expected: str) -> NativeOutcome:
-        if not self.state.matches_metadata(self.evidence, expected):
-            return self.unknown("native-metadata-mismatch")
         return self
+
+
+@dataclass(frozen=True)
+class UnknownNativeOutcome(NativeOutcome):
+    state = UnknownOperation()
+    permits_failed_exit = True
+    reason: str
+
+    def __post_init__(self):
+        if not self.reason:
+            raise ValueError("Native uncertainty requires its observed reason")
+
+
+@dataclass(frozen=True)
+class CommittedNativeOutcome(NativeOutcome):
+    state = CommittedOperation()
+    entry_id: str = field(metadata={"wire_name": "entryId"})
+    revision: str
+    leaf_id: str = field(metadata={"wire_name": "leafId"})
+    metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
+
+    def __post_init__(self):
+        if (
+            not self.entry_id
+            or not self.revision
+            or not self.leaf_id
+            or len(self.metadata_digest) != 64
+            or any(c not in "0123456789abcdef" for c in self.metadata_digest)
+        ):
+            raise ValueError("Invalid native metadata receipt; never replay")
+
+    def bind_metadata(self, expected: str) -> NativeOutcome:
+        if self.metadata_digest != expected:
+            return UnknownNativeOutcome("native-metadata-mismatch")
+        return self
+
+    def publication(self, commit_id: str) -> CompactionPublishedMetadata:
+        return CompactionPublishedMetadata(commit_id, self.entry_id, self.revision, self.leaf_id)
+
+
+@dataclass(frozen=True)
+class AbortedNoWriteNativeOutcome(NativeOutcome, declared_name="aborted-no-write"):
+    state = AbortedNoWriteOperation()
+    revision: str
+    leaf_id: str = field(metadata={"wire_name": "leafId"})
+
+    def __post_init__(self):
+        if not self.revision or not self.leaf_id:
+            raise ValueError("Incomplete native no-write receipt")

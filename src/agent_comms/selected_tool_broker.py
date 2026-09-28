@@ -28,6 +28,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_store import MutationStore
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .field_codec import FieldCodec
+from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
@@ -272,20 +273,18 @@ def verify_sent_full_input(
     """Only the exact FULL input admitted by the owner may call native tools."""
     with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._read_transaction():
         assert_native_runtime_schema(scoped._connection)
-        row = scoped._connection.execute(
-            "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
-        ).fetchone()
+        row = NativeRuntimeInput.one(scoped._connection, input_id=input_id)
         if row is None or (
-            row["stage"],
-            row["claim_id"],
-            row["execution_id"],
-            row["attempt_ordinal"],
-            row["owner_lookup"],
-            row["owner_thread"],
-            row["owner_generation"],
-            row["sent_owner_admission_epoch"],
-            row["session_id"],
-            row["verdict"],
+            row.stage,
+            row.assignment_id,
+            row.execution_id,
+            row.attempt_ordinal,
+            row.owner_lookup,
+            row.owner_thread,
+            row.owner_generation,
+            row.sent_owner_admission_generation,
+            row.session_id,
+            row.verdict,
         ) != (
             "full",
             admission.wake_assignment_id,

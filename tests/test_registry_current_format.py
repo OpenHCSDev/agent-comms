@@ -13,6 +13,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_states import GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
@@ -51,7 +52,7 @@ for name in GoalState.names():
 def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
-    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = json.loads(path.read_text())
     for field in ("owners", "admissions"):
         incomplete = dict(raw)

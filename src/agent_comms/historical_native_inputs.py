@@ -14,8 +14,12 @@ from pathlib import Path
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
+from .native_runtime_input import NativeRuntimeInput
+from .typed_table import TypedRow
 from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
+from .native_runtime_input import NativeRuntimeInput
+from .typed_table import TypedRow
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +41,13 @@ class HistoricalNativeInput:
     # before launch (crash ordering), so equality cannot be established.
     expected_prompt_digest: str | None = None
     expected_prompt_equality_established: bool = False
+
+
+@dataclass(frozen=True)
+class _HistoricalSource(TypedRow):
+    input_id: str
+    wire_seq: int
+    message_id: str
 
 
 def read_historical_native_inputs(
@@ -74,39 +85,42 @@ def read_historical_native_inputs(
         db = store._connection
         assert_cohort_schema(db)
         assert_native_runtime_schema(db)
-        rows = db.execute(
-            "SELECT n.input_id,n.stage,n.claim_id,n.owner_lookup,n.owner_thread,"
-            "n.owner_generation,n.execution_id,n.attempt_ordinal,n.verdict,n.session_id,"
-            "n.session_file,n.session_entry_id,n.request_generation,n.llm_context_digest,"
-            "c.wire_seq,c.message_id "
-            "FROM native_runtime_inputs n "
-            "JOIN wake_claims c ON c.claim_id=n.claim_id "
-            "JOIN claim_batch_members m ON m.claim_id=c.claim_id "
-            "AND m.recipient_lookup=c.recipient_lookup "
-            "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
-            "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
-            "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
-            "AND d.wire_seq=r.wire_seq AND d.claim_id=c.claim_id "
-            "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
-            "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
-            "AND n.owner_lookup=c.recipient_lookup AND n.session_id IS NOT NULL "
-            "ORDER BY CASE n.stage WHEN 'triage' THEN 0 ELSE 1 END LIMIT 3",
-            (wire_root_id, recipient_lookup, source_seq),
-        ).fetchall()
-    if len(rows) > 2 or len({row["stage"] for row in rows}) != len(rows):
+        sources = _HistoricalSource.read(
+            db.execute(
+                "SELECT n.input_id,c.wire_seq,c.message_id FROM native_runtime_input n "
+                "JOIN wake_claims c ON c.claim_id=n.assignment_id "
+                "JOIN claim_batch_members m ON m.claim_id=c.claim_id "
+                "AND m.recipient_lookup=c.recipient_lookup "
+                "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
+                "AND r.wire_seq=m.wire_seq AND r.message_id=c.message_id AND r.sealed=1 "
+                "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
+                "AND d.wire_seq=r.wire_seq AND d.claim_id=c.claim_id "
+                "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
+                "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
+                "AND n.owner_lookup=c.recipient_lookup AND n.session_id IS NOT NULL "
+                "ORDER BY CASE n.stage WHEN 'triage' THEN 0 ELSE 1 END LIMIT 3",
+                (wire_root_id, recipient_lookup, source_seq),
+            )
+        )
+        rows = [
+            (source, NativeRuntimeInput.one(db, input_id=source.input_id)) for source in sources
+        ]
+        if any(row is None for _source, row in rows):
+            raise IdentityConflict("historical native input disappeared inside its snapshot")
+    if len(rows) > 2 or len({row.stage for _source, row in rows}) != len(rows):
         raise IdentityConflict("historical source has ambiguous native input evidence")
     expected_dir = (store.path.parent / "native-sessions" / recipient_lookup).absolute()
     evidence: list[HistoricalNativeInput] = []
-    for row in rows:
-        session_file = Path(row["session_file"])
+    for source, row in rows:
+        session_file = Path(row.session_file)
         if not session_file.is_absolute() or session_file.parent != expected_dir:
             raise IdentityConflict("historical native session belongs to another recipient")
         recorded = NativeContextProof(
-            row["input_id"],
-            row["session_id"],
-            row["session_entry_id"],
-            row["request_generation"],
-            row["llm_context_digest"],
+            row.input_id,
+            row.session_id,
+            row.session_entry_id,
+            row.request_generation,
+            row.llm_context_digest,
             session_file,
         )
         try:
@@ -114,27 +128,27 @@ def read_historical_native_inputs(
             # The immutable SQL row is already present from the live event;
             # this check only corroborates its message-bearing context facts.
             observed = NativeContextProof.read_evidence(
-                session_file, row["input_id"], request_generation=row["request_generation"]
+                session_file, row.input_id, request_generation=row.request_generation
             )
         except (OSError, ValueError, NativePiUnavailable) as error:
             raise IdentityConflict("historical native context evidence is unavailable") from error
         if observed != recorded:
             raise IdentityConflict("historical native context differs from live-recorded proof")
-        binding = read_expected_prompt_binding(store, row["input_id"])
+        binding = read_expected_prompt_binding(store, row.input_id)
         if binding is not None:
             # A binding must name exactly this reserved input; anything else is
             # corruption, not a failed equality join.
             if (
                 binding.wire_root_id != wire_root_id
-                or binding.stage != row["stage"]
-                or binding.assignment_id != row["claim_id"]
-                or binding.execution_id != row["execution_id"]
-                or binding.attempt_ordinal != row["attempt_ordinal"]
-                or binding.owner_lookup != row["owner_lookup"]
-                or binding.owner_thread != row["owner_thread"]
-                or binding.owner_generation != row["owner_generation"]
-                or binding.source_seq != row["wire_seq"]
-                or binding.message_id != row["message_id"]
+                or binding.stage != row.stage
+                or binding.assignment_id != row.assignment_id
+                or binding.execution_id != row.execution_id
+                or binding.attempt_ordinal != row.attempt_ordinal
+                or binding.owner_lookup != row.owner_lookup
+                or binding.owner_thread != row.owner_thread
+                or binding.owner_generation != row.owner_generation
+                or binding.source_seq != source.wire_seq
+                or binding.message_id != source.message_id
             ):
                 raise IdentityConflict("prelaunch binding does not match this live proof")
             equality = expected_prompt_matches_journal(session_file, binding)
@@ -143,17 +157,17 @@ def read_historical_native_inputs(
         evidence.append(
             HistoricalNativeInput(
                 wire_root_id,
-                row["wire_seq"],
-                row["message_id"],
-                row["claim_id"],
-                row["stage"],
-                row["input_id"],
-                row["owner_lookup"],
-                row["owner_thread"],
-                row["owner_generation"],
-                row["execution_id"],
-                row["attempt_ordinal"],
-                row["verdict"],
+                source.wire_seq,
+                source.message_id,
+                row.assignment_id,
+                row.stage,
+                row.input_id,
+                row.owner_lookup,
+                row.owner_thread,
+                row.owner_generation,
+                row.execution_id,
+                row.attempt_ordinal,
+                row.verdict,
                 recorded,
                 binding.expected_prompt_digest if binding is not None else None,
                 equality,

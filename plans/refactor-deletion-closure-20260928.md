@@ -201,3 +201,18 @@ Receipts: evidence/round2-l0/d22-registry-acceptance.json and the child/native/
 entrypoint integration logs. Final cutover, history manifest refresh, runtime
 UNKNOWN preservation, remaining source/caller closure, integration of236/237
 and installed acceptance remain open. No source/live store was rewritten.
+
+Current queue metadata now emits only queueBinding/queueState; removed the old
+queue/restored projections and their unused emitter argument.12 exact-ID queue
+contract cases pass. Paired Toad107 old-key reader removal belongs toCopernicus.
+Complete newly uncovered L0 ownership is recorded in round2/04-DISPATCH.md;
+Nietzsche's new goal-state batch needs a code-bearing PR before assignment is
+considered published. Full required guard collection is not yet green: one stale
+helper import is assigned toLovelace. The independent debt ratchet passes.
+
+Further integration at9ff1161:2379463a44 +234947ab28 +2361e46842 merged
+into229.14focused combined cases pass, including actualpostfloor4tools.
+Production source+5837/-7504; fullsuite andinstalledacceptance remainopen.
+Nietzsche now owns complete goal/input/cursor retirement, including the three
+input_disposition/input_attempt/goal_management files formerly parent-owned.
+Parent retains final data conversion, runtime/queue integration andactivation.

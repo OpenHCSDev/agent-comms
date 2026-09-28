@@ -157,3 +157,59 @@ async def test_invalid_queued_command_reports_failure_and_reaps_child(tmp_path):
     assert isinstance(events[-1], ae.Done) and not events[-1].ok
     assert any("Invalid queued Pi command" in getattr(event, "text", "") for event in events)
     assert queue.empty()  # no implicit replay
+
+
+def test_native_startup_metadata_uses_existing_entry_family():
+    from agent_comms.native_entries import (
+        ModelChangeEntry,
+        NativeEntry,
+        StartupMetadataEntry,
+        ThinkingLevelChangeEntry,
+        UnknownEntry,
+    )
+
+    model = {
+        "type": "model_change",
+        "id": "1234abcd",
+        "parentId": None,
+        "timestamp": "2026-09-28T12:00:00Z",
+        "provider": "test",
+        "modelId": "local",
+    }
+    thinking = {
+        "type": "thinking_level_change",
+        "id": "abcd1234",
+        "parentId": model["id"],
+        "timestamp": model["timestamp"],
+        "thinkingLevel": "high",
+    }
+    first = StartupMetadataEntry.read_startup(json.dumps(model).encode())
+    second = StartupMetadataEntry.read_startup(json.dumps(thinking).encode())
+    assert isinstance(first, ModelChangeEntry)
+    assert isinstance(second, ThinkingLevelChangeEntry)
+    assert second.parent_id == first.id
+    assert first.matches_startup(("test", "local"), "high")
+    assert second.matches_startup(("test", "local"), "high")
+    assert not first.matches_startup(("test", "other"), "high")
+    assert not second.matches_startup(("test", "local"), "low")
+    assert NativeEntry.from_wire(model) == first
+    assert NativeEntry.from_wire(thinking) == second
+    assert isinstance(NativeEntry.from_wire({"type": "future"}), UnknownEntry)
+    # Native evidence is fail closed even though history can display opaque entries.
+    for row in (model, thinking):
+        malformed = [{k: v for k, v in row.items() if k != missing} for missing in row] + [
+            {**row, "extra": True},
+            {**row, "id": "invalid"},
+            {**row, "parentId": 1},
+            {**row, "parentId": "invalid"},
+            {**row, "timestamp": ""},
+            {**row, "timestamp": None},
+            {**row, "type": "future"},
+            {**row, "type": "compaction"},
+        ]
+        for bad in malformed:
+            with pytest.raises((ValueError, TypeError)):
+                StartupMetadataEntry.read_startup(json.dumps(bad).encode())
+        duplicate = json.dumps(row)[:-1] + ', "id": "1234abcd"}'
+        with pytest.raises(ValueError):
+            StartupMetadataEntry.read_startup(duplicate.encode())

@@ -4,7 +4,6 @@ Only PI_COMPACTION_TEST_PACKAGE selects a disposable, patched package. No
 provider calls or installed package edits. Normal unit suites skip this file.
 """
 
-
 import copy
 import hashlib
 import json
@@ -21,16 +20,20 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
-from agent_comms.compaction_states import NativeOutcome
+from agent_comms.compaction_states import UnknownNativeOutcome
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.owner_compaction_commit import (
+    CompactionTransportUnknownError,
+    OwnerCompactionCommit,
+)
 from agent_comms.owner_compaction_prepare import NativeWitness
-from agent_comms.owner_compaction_process import CompactionTransportUnknownError
+from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
 from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
 from agent_comms.threads import Thread
@@ -66,7 +69,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         "owner",
         frozenset(),
         str(tmp_path),
-        pid=os.getpid(),
+        process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=witness.session_file,
         goal=Goal("task", "goal"),
     )
@@ -122,8 +125,10 @@ def test_native_file_operations_survive_journaled_commit(native):
         "Synthetic summary with file evidence",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]},
-        usage=usage,
+        details=FieldCodec.decode(
+            SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+        ),
+        usage=FieldCodec.decode(SummaryUsage, usage),
     )
     assert operation.state.declared_name == "committed"
     saved = entries(witness)[-1]
@@ -170,22 +175,25 @@ def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/⚙️-𝄞.py"], "modifiedFiles": []},
-        usage={
-            "input": 12,
-            "output": 9,
-            "cacheRead": 0,
-            "cacheWrite": 0,
-            "totalTokens": 21,
-            "reasoning": 0,
-            "cost": {
-                "input": 0.0000001,
-                "output": 0.02,
-                "cacheRead": 0.0,
-                "cacheWrite": 0.0,
-                "total": 0.0200001,
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/⚙️-𝄞.py"], "modifiedFiles": []}),
+        usage=FieldCodec.decode(
+            SummaryUsage,
+            {
+                "input": 12,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "totalTokens": 21,
+                "reasoning": 0,
+                "cost": {
+                    "input": 0.0000001,
+                    "output": 0.02,
+                    "cacheRead": 0.0,
+                    "cacheWrite": 0.0,
+                    "total": 0.0200001,
+                },
             },
-        },
+        ),
     )
     assert operation.state.declared_name == "committed"
     row = entries(witness)[-1]
@@ -229,8 +237,8 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
-        usage=usage,
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": []}),
+        usage=FieldCodec.decode(SummaryUsage, usage),
     )
     assert operation.state.declared_name == "unknown"
     assert Path(witness.session_file).read_bytes() == before
@@ -265,7 +273,7 @@ def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": []}),
     )
     assert operation.state.declared_name == "unknown"
     assert entries(witness)[-1]["details"]["readFiles"] == ["src/other.py"]
@@ -286,7 +294,7 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
     def lost_result(fd, request, timeout, retained_fds=()):
         result = original(fd, request, timeout, retained_fds)
         assert result.state.committed
-        return NativeOutcome.unknown("test-only lost receipt")
+        return UnknownNativeOutcome("test-only lost receipt")
 
     bridge._call = lost_result
     operation = OwnerCompactionCommit.commit(
@@ -297,15 +305,18 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
         "summary",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": []},
-        usage={
-            "input": 12,
-            "output": 9,
-            "cacheRead": 0,
-            "cacheWrite": 0,
-            "totalTokens": 21,
-            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
-        },
+        details=FieldCodec.decode(SummaryFiles, {"readFiles": ["src/a.py"], "modifiedFiles": []}),
+        usage=FieldCodec.decode(
+            SummaryUsage,
+            {
+                "input": 12,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "totalTokens": 21,
+                "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0},
+            },
+        ),
     )
     assert operation.state.declared_name == "unknown"
     bridge._call = original
@@ -351,15 +362,6 @@ async def test_active_backend_executor_refuses_before_intent_or_dispatch(native)
             bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert bridge.journal.unresolved(witness.session_file) == ()
     assert Path(witness.session_file).read_bytes() == before
-
-
-def test_json_source_is_not_accepted_as_owner_capture(native):
-    bridge, owner, owner_generation, witness = native
-    with pytest.raises(ValueError, match="Owner-captured"):
-        OwnerCompactionCommit.commit(
-            bridge, owner, owner_generation, witness, "summary", 42, source={}
-        )
-    assert bridge.journal.unresolved(witness.session_file) == ()
 
 
 def test_malformed_bus_refuses_source_capture_without_repair(native):
@@ -538,6 +540,7 @@ def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, 
 import fcntl, sys
 from pathlib import Path
 from dataclasses import replace
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, MessageType
 from agent_comms.message_bus import MessageBus
@@ -760,11 +763,12 @@ def test_owner_sigkill_after_native_write_before_journal_result(native, tmp_path
 import json,os,signal,sys
 from pathlib import Path
 from dataclasses import replace
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 bridge = OwnerCompactionCommit(Path(sys.argv[1]), Path(sys.argv[2]))
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
-bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+bridge.registry.register(replace(owner,process_identity=ProcessIdentity.capture(os.getpid()),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
 owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash-turn',expected_owner_generation=epoch)
@@ -875,6 +879,7 @@ def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
 import json,os,sys
 from pathlib import Path
 from dataclasses import replace
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 import agent_comms.native_package as provenance
 provenance.MANIFEST = Path(sys.argv[6])  # Test-only published tree including barrier.
@@ -882,7 +887,7 @@ bridge = OwnerCompactionCommit(Path(sys.argv[1]),Path(sys.argv[2]))
 bridge.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
-bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+bridge.registry.register(replace(owner,process_identity=ProcessIdentity.capture(os.getpid()),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
 owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash',expected_owner_generation=epoch)

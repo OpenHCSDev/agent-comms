@@ -11,6 +11,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.input_drain import QueuedInput
 from agent_comms.runtime import _present_cursor_session
@@ -19,7 +20,9 @@ from agent_comms.threads import Thread
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms = Comms(tmp_path / "wire")
-    thread = Thread("beta", frozenset(), str(tmp_path), pid=os.getpid())
+    thread = Thread(
+        "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
+    )
     comms.threads.register(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
@@ -60,11 +63,12 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
         initial["revision"] + 1,
     )
     await agent.inputs.emit_queue_state("beta")
+    assert set(updates[-1]) == {"queueBinding", "queueState"}
     queued = updates[-1]["queueState"]
     assert queued["revision"] > started["revision"]
     assert queued["items"] == [{"inputId": second, "text": "same text"}]
     agent.inputs.restored_inputs["beta"] = {second: agent.inputs.queued_inputs["beta"].pop(second)}
-    await agent.inputs.emit_queue_state("beta", restored=["same text"])
+    await agent.inputs.emit_queue_state("beta")
     restored = updates[-1]["queueState"]
     assert restored["items"] == []
     assert restored["restored"] == [{"inputId": second, "text": "same text"}]

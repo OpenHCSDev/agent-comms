@@ -7,6 +7,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
+from .child_process import ProcessIdentity
 from .compaction_publication_lease import publication_identity_fence
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
@@ -142,7 +143,7 @@ class Registration:
                 owner is None
                 or status is None
                 or not status.active
-                or owner.pid != os.getpid()
+                or owner.process_identity != ProcessIdentity.capture(os.getpid())
                 or not owner.role.executable
                 or generation is None
                 or (
@@ -167,7 +168,7 @@ class Registration:
                 owner is None
                 or status is None
                 or not status.active
-                or owner.pid != os.getpid()
+                or owner.process_identity != ProcessIdentity.capture(os.getpid())
                 or not owner.role.executable
                 or generation is None
                 or (
@@ -200,15 +201,21 @@ class Registration:
                 or current is None
                 or status is None
                 or not status.active
-                or current.pid != os.getpid()
+                or current.process_identity != ProcessIdentity.capture(os.getpid())
                 or not current.role.executable
                 or current.active_turn is not None
                 or current.goal != expected.goal
-                or (current.name, current.created_at, current.pid, current.role, current.worktree)
+                or (
+                    current.name,
+                    current.created_at,
+                    current.process_identity,
+                    current.role,
+                    current.worktree,
+                )
                 != (
                     expected.name,
                     expected.created_at,
-                    expected.pid,
+                    expected.process_identity,
                     expected.role,
                     expected.worktree,
                 )
@@ -250,7 +257,7 @@ class Registration:
                 or status is None
                 or not status.active
                 or current is None
-                or current.pid != os.getpid()
+                or current.process_identity != ProcessIdentity.capture(os.getpid())
                 or not current.role.executable
                 or current.active_turn is not None
             ):
@@ -268,7 +275,6 @@ class Registration:
         *,
         expected_goal_id: str | None,
         expected_goal_revision: int | None,
-        correction_revision: int,
         session_file: str,
         session_leaf: str,
         session_revision: str,
@@ -280,7 +286,6 @@ class Registration:
             turn_id,
             expected_goal_id=expected_goal_id,
             expected_goal_revision=expected_goal_revision,
-            correction_revision=correction_revision,
             session_file=session_file,
             session_leaf=session_leaf,
             session_revision=session_revision,
@@ -296,7 +301,6 @@ class Registration:
         *,
         expected_goal_id: str | None,
         expected_goal_revision: int | None,
-        correction_revision: int,
         session_file: str,
         session_leaf: str,
         session_revision: str,
@@ -332,8 +336,6 @@ class Registration:
                     or expected_goal_revision < 0
                 )
             )
-            or type(correction_revision) is not int
-            or correction_revision < 0
             or type(session_file) is not str
             or not session_file
             or type(session_leaf) is not str
@@ -355,7 +357,7 @@ class Registration:
                 or not status.active
                 or owner != expected
                 or generation != expected_owner_generation
-                or owner.pid != os.getpid()
+                or owner.process_identity != ProcessIdentity.capture(os.getpid())
                 or not owner.role.executable
                 or owner.active_turn is None
                 or owner.active_turn.id != turn_id
@@ -377,7 +379,6 @@ class Registration:
                     turn_id=turn_id,
                     goal_id=goal.id if goal is not None else None,
                     goal_revision=goal.revision if goal is not None else None,
-                    correction_revision=correction_revision,
                     session_file=session_file,
                     session_leaf=session_leaf,
                     session_revision=session_revision,
@@ -406,7 +407,7 @@ class Registration:
                 current is None
                 or status is None
                 or not status.active
-                or current.pid != os.getpid()
+                or current.process_identity != ProcessIdentity.capture(os.getpid())
                 or not current.role.executable
                 or current.active_turn is not None
             ):

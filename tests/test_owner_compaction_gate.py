@@ -11,6 +11,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_states import PausedGoal
 from agent_comms.goals import Goal
@@ -31,7 +32,7 @@ def make_registry(tmp_path) -> tuple[Registration, Thread, int]:
         name="owner",
         tags=frozenset(),
         worktree=str(tmp_path),
-        pid=__import__("os").getpid(),
+        process_identity=ProcessIdentity.capture(__import__("os").getpid()),
         goal=Goal("original task", "goal-1", revision=4),
     )
     registry.register(owner)
@@ -54,7 +55,6 @@ def attest(
     owner_generation: int,
     turn: str = "turn-1",
     goal: Goal | None = None,
-    correction_revision: int = 7,
 ) -> OwnerCompactionAttestation:
     goal = goal or owner.goal
     return registry.attest_owner_compaction(
@@ -63,7 +63,6 @@ def attest(
         turn,
         expected_goal_id=goal.id,
         expected_goal_revision=goal.revision,
-        correction_revision=correction_revision,
         **FENCE,
     )
 
@@ -77,7 +76,6 @@ def test_positive_attestation_echoes_owner_and_fence(tmp_path) -> None:
     assert receipt.turn_id == "turn-1"
     assert receipt.goal_id == "goal-1"
     assert receipt.goal_revision == 4
-    assert receipt.correction_revision == 7
     assert receipt.registry_revision is not None
     assert receipt.session_file == FENCE["session_file"]
     assert receipt.session_leaf == FENCE["session_leaf"]
@@ -165,7 +163,6 @@ def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
         {"turn_id": "t" * 129},
         {"expected_goal_id": ""},
         {"expected_goal_revision": -1},
-        {"correction_revision": -1},
         {"session_file": ""},
         {"session_leaf": ""},
         {"session_revision": ""},
@@ -179,7 +176,6 @@ def test_malformed_expectations_rejected(tmp_path, kwargs) -> None:
         "turn_id": "turn-1",
         "expected_goal_id": "goal-1",
         "expected_goal_revision": 4,
-        "correction_revision": 7,
         **FENCE,
     }
     request.update(kwargs)

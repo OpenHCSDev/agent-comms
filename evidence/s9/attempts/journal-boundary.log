@@ -1,0 +1,3416 @@
+...............FFFFFFFFFFFFFFFFFFFFFFFFFFEEEEEEEEEEFEEEEEEEEEEEEFFFEEEEE [ 66%]
+EEEEE.............ss...F.FF..........                                    [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_returned_ack_only_one_bound_original_and_no_status_bypass[declined-prestart] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_returned_ack_only_one_bou0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_returned_ack_only_one_bound_original_and_no_status_bypass[linked] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_returned_ack_only_one_bou1')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change0] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change1] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w1')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change2] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w2')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change3] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w3')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change4] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w4')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change5] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w5')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change6] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w6')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_mismatch_consumes_token_without_binding_or_recovery[change7] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_mismatch_consumes_token_w7')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+________ ERROR at setup of test_reserve_refuses_wrong_durable_original _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_reserve_refuses_wrong_dur0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_link_cannot_mint_without_committed_native_source_digest _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_link_cannot_mint_without_0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+____________ ERROR at setup of test_saved_source_drift_consumes_ack ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_saved_source_drift_consum0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_____ ERROR at setup of test_forked_other_process_cannot_use_inherited_ack _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_forked_other_process_cann0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_changed_durable_original_after_reservation_refuses_burn _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_changed_durable_original_0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+______ ERROR at setup of test_changed_journal_source_refuses_consumption _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_changed_journal_source_re0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+____ ERROR at setup of test_bind_fault_after_durable_unknown_never_replays _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_bind_fault_after_durable_0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_terminal_postcommit_fsync_fault_never_mints_ack[linked] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_terminal_postcommit_fsync2')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_terminal_postcommit_fsync_fault_never_mints_ack[declined-prestart] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_terminal_postcommit_fsync3')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_private_status_only_transaction_cannot_issue_admission_ack[declined-prestart] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_private_status_only_trans0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_private_status_only_transaction_cannot_issue_admission_ack[linked] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_private_status_only_trans1')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_success_without_admission_does_not_create_later_receipt _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_success_without_admission0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_native_start_retires_barrier_without_erasing_history_or_replaying_original[linked] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_native_start_retires_barr0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_native_start_retires_barrier_without_erasing_history_or_replaying_original[declined-prestart] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_native_start_retires_barr1')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[turn_id-other-turn] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in0')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[owner-other-owner] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in1')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[target-other-target] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in2')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[admission-2] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in3')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[sent_text-other sent text] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in4')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[source_text-other original] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in5')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[status-unknown] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in6')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ ERROR at setup of test_unrelated_or_uncertain_input_never_retires_selected_barrier[native_id-None] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_unrelated_or_uncertain_in7')
+
+    @pytest.fixture
+    def case(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        key, text = "acp:" + "a" * 32, "original fake input"
+        identity = _identity(str(session), text=text, key=key, turn="turn")
+        dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        assert dispositions.record(
+            key,
+            seq=None,
+            owner="project",
+            admission=identity.admission_generation,
+            target="project",
+            text=text,
+        )
+>       operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_admission.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+=================================== FAILURES ===================================
+________ test_reservation_is_durable_unresolved_and_blocks_every_input _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e941f960>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+______ test_raw_send_fence_blocks_every_same_session_status_not_unrelated ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eab85130>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved):
+        journal, session, source = reserved
+        other = Path(session).with_name("other.jsonl")
+        other.write_text('{"type":"session","id":"other"}\n')
+        with journal.ordinary_input_send_fence(Path(session)):
+            pass
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:70: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_________ test_raw_send_fence_serializes_concurrent_direct_reservation _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea9f6530>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_raw_send_fence_serializes_concurrent_direct_reservation(reserved):
+        journal, session, source = reserved
+        started, finished = threading.Event(), threading.Event()
+        failures: list[BaseException] = []
+    
+        def reserve() -> None:
+            started.set()
+            try:
+                journal.reserve_selected_summary(session, source)
+            except BaseException as error:
+                failures.append(error)
+            finally:
+                finished.set()
+    
+        worker = threading.Thread(target=reserve, daemon=True)
+        with journal.ordinary_input_send_fence(Path(session)):
+            worker.start()
+            assert started.wait(2)
+>           assert not finished.wait(0.05), "reservation committed during raw-send exclusion"
+E           AssertionError: reservation committed during raw-send exclusion
+E           assert not True
+E            +  where True = wait(0.05)
+E            +    where wait = <threading.Event at 0x7f34e93aaad0: set>.wait
+
+tests/test_selected_summary_journal.py:110: AssertionError
+_ test_legacy_private_session_without_marker_fails_closed_at_selected_reserve __
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eab1de20>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_legacy_private_session_without_marker_fails_closed_at_selected_reserve(reserved):
+        journal, session, source = reserved
+        private_dir = journal.path.parent / "native-sessions" / ("f" * 32)
+        private_dir.mkdir(parents=True)
+        saved = private_dir / "old-pr94-session.jsonl"
+        saved.write_text('{"type":"session","id":"legacy"}\n')
+        # This file can predate marker deployment; absence of a marker never
+        # proves it has no old PR94 raw or UNKNOWN input on the same session.
+        with sqlite3.connect(journal.path) as db:
+            assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
+        with pytest.raises(CompactionJournalError, match="coverage floor"):
+>           journal.reserve_selected_summary(str(saved), source)
+
+tests/test_selected_summary_journal.py:131: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+________ test_private_raw_prewrite_marker_blocks_only_its_saved_session ________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e9004fd0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
+        journal, session, source = reserved
+        other = Path(session).with_name("other.jsonl")
+        other.write_text('{"type":"session","id":"other"}\n')
+        journal.reserve_private_raw_input(Path(session), "a" * 32)
+        reopened = CompactionJournal(journal.path)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           reopened.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e8eaf4d0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity(reserved):
+        journal, session, source = reserved
+        alias = Path(session).with_name("alias.jsonl")
+        alias.symlink_to(Path(session))
+        journal.reserve_private_raw_input(alias, "a" * 32)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           journal.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_private_raw_marker_survives_child_crash_before_selected_reserve[before-write] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8bc7c0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+moment = 'before-write'
+
+    @pytest.mark.parametrize("moment", ["before-write", "after-write"])
+    def test_private_raw_marker_survives_child_crash_before_selected_reserve(reserved, moment):
+        journal, session, source = reserved
+        marker = Path(session).with_name("fake-local-raw-write")
+        script = """
+    import os,sys
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal
+    j=CompactionJournal(Path(sys.argv[1]))
+    j.reserve_private_raw_input(Path(sys.argv[2]),'a'*32)
+    if sys.argv[3]=='after-write':
+        fd=os.open(sys.argv[4],os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        os.write(fd,b'FAKE RAW BYTES')
+        os.close(fd)
+    os._exit(0)
+    """
+        process = subprocess.run(
+            [sys.executable, "-c", script, str(journal.path), session, moment, str(marker)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert process.returncode == 0, process.stderr
+        assert marker.exists() is (moment == "after-write")
+        reopened = CompactionJournal(journal.path)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           reopened.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_private_raw_marker_survives_child_crash_before_selected_reserve[after-write] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e8e7b890>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+moment = 'after-write'
+
+    @pytest.mark.parametrize("moment", ["before-write", "after-write"])
+    def test_private_raw_marker_survives_child_crash_before_selected_reserve(reserved, moment):
+        journal, session, source = reserved
+        marker = Path(session).with_name("fake-local-raw-write")
+        script = """
+    import os,sys
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal
+    j=CompactionJournal(Path(sys.argv[1]))
+    j.reserve_private_raw_input(Path(sys.argv[2]),'a'*32)
+    if sys.argv[3]=='after-write':
+        fd=os.open(sys.argv[4],os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        os.write(fd,b'FAKE RAW BYTES')
+        os.close(fd)
+    os._exit(0)
+    """
+        process = subprocess.run(
+            [sys.executable, "-c", script, str(journal.path), session, moment, str(marker)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert process.returncode == 0, process.stderr
+        assert marker.exists() is (moment == "after-write")
+        reopened = CompactionJournal(journal.path)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           reopened.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+____ test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries ____
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e9196bc0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34ea9fe2e0>
+
+    def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reserved, monkeypatch):
+        journal, session, source = reserved
+        fsync = os.fsync
+        monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
+        with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+            journal.reserve_private_raw_input(Path(session), "a" * 32)
+        monkeypatch.setattr(os, "fsync", fsync)
+        reopened = CompactionJournal(journal.path)
+        # The marker may be visible despite UNKNOWN; raw os.write has not run.
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           reopened.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:233: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+___________ test_link_requires_exact_committed_native_intent_binding ___________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e9196990>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_link_requires_exact_committed_native_intent_binding(reserved):
+        journal, session, source = reserved
+        wrong = journal.begin(
+            session,
+            {"selectedSummaryOperationId": "0" * 32},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+        journal.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+______ test_selected_reservation_two_process_race_has_exactly_one_winner _______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b4050>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_selected_reservation_two_process_race_has_exactly_one_winner(reserved):
+        journal, session, source = reserved
+        script = """
+    import json,sys
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal,CompactionJournalError
+    j=CompactionJournal(Path(sys.argv[1]))
+    sys.stdin.buffer.read(1)
+    try:
+        j.reserve_selected_summary(sys.argv[2],json.loads(sys.argv[3]),operation_id=sys.argv[4])
+    except CompactionJournalError:
+        print('blocked')
+    else:
+        print('reserved')
+    """
+        workers = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, str(journal.path), session, json.dumps(source), c * 32],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for c in "ab"
+        ]
+        for worker in workers:
+            assert worker.stdin is not None
+            worker.stdin.write("G")
+            worker.stdin.close()
+        outcomes = []
+        for worker in workers:
+            assert worker.stdout is not None and worker.stderr is not None
+            worker.wait(timeout=10)
+>           assert worker.returncode == 0, worker.stderr.read()
+E           AssertionError: Traceback (most recent call last):
+E               File "<string>", line 8, in <module>
+E                 j.reserve_selected_summary(sys.argv[2],json.loads(sys.argv[3]),operation_id=sys.argv[4])
+E                 ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/compaction_journal.py", line 482, in reserve_selected_summary
+E                 envelope = FieldCodec.decode(SelectedSummarySource, source)
+E               File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 129, in decode
+E                 return cast(T, cls._decode(target, data))
+E                                ~~~~~~~~~~~^^^^^^^^^^^^^^
+E               File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 223, in _decode
+E                 hints = cls._types(target)
+E               File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 77, in _types
+E                 return get_type_hints(declaration)
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 2391, in get_type_hints
+E                 value = _eval_type(value, base_globals, base_locals, (),
+E                                    format=format, owner=obj, prefer_fwd_module=True)
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 461, in _eval_type
+E                 return evaluate_forward_ref(t, globals=globalns, locals=localns,
+E                                             type_params=type_params, owner=owner,
+E                                             _recursive_guard=recursive_guard, format=format)
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 1000, in evaluate_forward_ref
+E                 value = forward_ref.evaluate(globals=globals, locals=locals,
+E                                              type_params=type_params, owner=owner, format=format)
+E               File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line 205, in evaluate
+E                 return eval(code, globals=globals, locals=locals)
+E               File "<string>", line 1, in <module>
+E             NameError: name 'Any' is not defined. Did you mean: 'any'?
+E             
+E           assert 1 == 0
+E            +  where 1 = <Popen: returncode: 1 args: ['/home/ts/wt/comms-historical-views-20260927/.t...>.returncode
+
+tests/test_selected_summary_journal.py:307: AssertionError
+_____________ test_selected_attempt_does_not_block_another_session _____________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e9316300>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_selected_attempt_does_not_block_another_session(reserved):
+        journal, session, source = reserved
+        other = journal.path.parent / "other-session.jsonl"
+        other.write_text("{}\n")
+>       journal.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:318: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+________________ test_mark_unknown_fsync_fault_stays_unresolved ________________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b7610>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34eaa56430>
+
+    def test_mark_unknown_fsync_fault_stays_unresolved(reserved, monkeypatch):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:325: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+__ test_competing_native_begin_refused_unless_exact_reserved_operation_bound ___
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b63a0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(reserved):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:337: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[split_turn] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b5ae0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'split_turn'
+
+    @pytest.mark.parametrize("reason", ["split_turn", "unsupported"])
+    def test_exact_prestart_clean_decline_is_recorded_but_not_send_authority(reserved, reason):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:366: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[unsupported] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b4820>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'unsupported'
+
+    @pytest.mark.parametrize("reason", ["split_turn", "unsupported"])
+    def test_exact_prestart_clean_decline_is_recorded_but_not_send_authority(reserved, reason):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:366: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_____ test_terminal_postcommit_fsync_unknown_blocks_across_reopen[linked] ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b54f0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34eaa55710>
+terminal = 'linked'
+
+    @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+    def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkeypatch, terminal):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:384: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_terminal_postcommit_fsync_unknown_blocks_across_reopen[declined-prestart] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34ea8b5360>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34eaa56120>
+terminal = 'declined-prestart'
+
+    @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+    def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkeypatch, terminal):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:384: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+______ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[busy] ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e8efe120>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'busy'
+
+    @pytest.mark.parametrize(
+        "reason", ["busy", "source_mismatch", "model_mismatch", "settings_mismatch"]
+    )
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:442: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[source_mismatch] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34e8efd310>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'source_mismatch'
+
+    @pytest.mark.parametrize(
+        "reason", ["busy", "source_mismatch", "model_mismatch", "settings_mismatch"]
+    )
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:442: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[model_mismatch] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eaa157c0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'model_mismatch'
+
+    @pytest.mark.parametrize(
+        "reason", ["busy", "source_mismatch", "model_mismatch", "settings_mismatch"]
+    )
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:442: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[settings_mismatch] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eaa15c70>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'settings_mismatch'
+
+    @pytest.mark.parametrize(
+        "reason", ["busy", "source_mismatch", "model_mismatch", "settings_mismatch"]
+    )
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+>       operation_id = journal.reserve_selected_summary(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:442: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_______________ test_native_unknown_refuses_summary_reservation ________________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eaa15bd0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_native_unknown_refuses_summary_reservation(reserved):
+        journal, session, source = reserved
+        journal.begin(
+            session,
+            {"witness": "native"},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+        with pytest.raises(CompactionJournalError, match="Unresolved native"):
+>           journal.reserve_selected_summary(session, source)
+
+tests/test_selected_summary_journal.py:459: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+________ test_postcommit_fsync_fault_may_leave_blocking_summary_intent _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eaa16850>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34eaa34980>
+
+    def test_postcommit_fsync_fault_may_leave_blocking_summary_intent(reserved, monkeypatch):
+        journal, session, source = reserved
+        fsync = os.fsync
+        monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
+        with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+>           journal.reserve_selected_summary(session, source, operation_id="b" * 32)
+
+tests/test_selected_summary_journal.py:468: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_____________ test_reservation_survives_crash_and_never_repeats_id _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_reservation_survives_cras0')
+
+    def test_reservation_survives_crash_and_never_repeats_id(tmp_path):
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        source = {
+            "source": {"witnessRevision": "r"},
+            "selected": {"provider": "fixture"},
+            "settings": {"reserveTokens": 100},
+        }
+        path = tmp_path / "compaction-commits.sqlite3"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                """
+    import os,sys,json
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal
+    CompactionJournal(Path(sys.argv[1])).reserve_selected_summary(
+        sys.argv[2], json.loads(sys.argv[3]), operation_id='c'*32)
+    os._exit(17)
+    """,
+                str(path),
+                str(session),
+                json.dumps(source),
+            ],
+            check=False,
+            timeout=10,
+        )
+>       assert result.returncode == 17
+E       assert 1 == 17
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport os,sys,jso...e": {"witnessRevision": "r"}, "selected": {"provider": "fixture"}, "settings": {"reserveTokens": 100}}'], returncode=1).returncode
+
+tests/test_selected_summary_journal.py:502: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+    CompactionJournal(Path(sys.argv[1])).reserve_selected_summary(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sys.argv[2], json.loads(sys.argv[3]), operation_id='c'*32)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/compaction_journal.py", line 482, in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 129, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 223, in _decode
+    hints = cls._types(target)
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 77, in _types
+    return get_type_hints(declaration)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 2391, in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+                       format=format, owner=obj, prefer_fwd_module=True)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 461, in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+                                type_params=type_params, owner=owner,
+                                _recursive_guard=recursive_guard, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 1000, in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+                                 type_params=type_params, owner=owner, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line 205, in evaluate
+    return eval(code, globals=globals, locals=locals)
+  File "<string>", line 1, in <module>
+NameError: name 'Any' is not defined. Did you mean: 'any'?
+_____________ test_invalid_source_or_id_refuses_before_reservation _____________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f34eaa174d0>, '/home/ts/wt/comms-refactor2-s9-20260928...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_invalid_source_or_id_refuses_before_reservation(reserved):
+        journal, session, source = reserved
+        with pytest.raises(ValueError, match="source|Source"):
+>           journal.reserve_selected_summary(session, {})
+
+tests/test_selected_summary_journal.py:510: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+______________ test_reserve_rejects_changed_saved_source_witness _______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_reserve_rejects_changed_s0')
+
+    def test_reserve_rejects_changed_saved_source_witness(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        identity = _identity(str(session), text="input", key="acp:" + "a" * 32, turn="turn")
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        session.write_text("{}\n{}\n")
+        with pytest.raises(ValueError, match="revision changed"):
+>           journal.reserve_selected_summary(str(session), _source(identity))
+
+tests/test_selected_summary_admission.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+___ test_process_death_before_or_after_fake_send_cannot_recreate_ack[False] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_process_death_before_or_a0')
+send = False
+
+    @pytest.mark.parametrize("send", [False, True])
+    def test_process_death_before_or_after_fake_send_cannot_recreate_ack(tmp_path, send):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        operation_id, key, text = "a" * 32, "acp:" + "a" * 32, "fake original"
+        marker = tmp_path / "fake-stdin"
+        # The child reserves, durably declines and mints its own ACK. In the
+        # send case it binds its exact input ID and writes to a LOCAL marker only.
+        script = """
+    import hashlib,json,os,sys
+    from pathlib import Path
+    from agent_comms import backend
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.store_files import _store_lock
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
+    root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
+    digest=hashlib.sha256(text.encode()).hexdigest()
+    identity=SelectedAdmissionIdentity('project',os.getpid(),1.0.hex(),'turn',key,1,
+        f'1:{digest}',digest,digest,backend._session_revision(session),backend._session_revision(session))
+    source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
+        'ownerCreatedAt':identity.owner_created_at,'turnId':identity.turn_id,
+        'ingressKey':identity.ingress_key,'admissionGeneration':1,
+        'correctionWitness':identity.correction_witness,'inputSha256':digest,
+        'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
+        'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
+    j=CompactionJournal(root/'compaction-commits.sqlite3')
+    d=InputDispositions(root / InputDispositions.filename)
+    assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+    assert j.reserve_selected_summary(session,source,operation_id=op)==op
+    token=j.decline_selected_summary_prestart(op,'split_turn',admission=identity)
+    assert token is not None
+    if sys.argv[6]=='1':
+        with _store_lock(root/'wire'):
+            assert token.consume_bound_original(wire_root=root,session_file=session,identity=identity,
+                native_id='b'*32,sent_text=text,dispositions=d)
+            Path(sys.argv[7]).write_text('fake local stdin write')
+    os._exit(17)
+    """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(comms.root),
+                str(session),
+                operation_id,
+                key,
+                text,
+                "1" if send else "0",
+                str(marker),
+            ],
+            check=False,
+            timeout=10,
+        )
+>       assert result.returncode == 17
+E       assert 1 == 17
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport hashlib,js...mms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_process_death_before_or_a0/fake-stdin'], returncode=1).returncode
+
+tests/test_selected_summary_admission.py:466: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 22, in <module>
+    assert j.reserve_selected_summary(session,source,operation_id=op)==op
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/compaction_journal.py", line 482, in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 129, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 223, in _decode
+    hints = cls._types(target)
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 77, in _types
+    return get_type_hints(declaration)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 2391, in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+                       format=format, owner=obj, prefer_fwd_module=True)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 461, in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+                                type_params=type_params, owner=owner,
+                                _recursive_guard=recursive_guard, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 1000, in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+                                 type_params=type_params, owner=owner, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line 205, in evaluate
+    return eval(code, globals=globals, locals=locals)
+  File "<string>", line 1, in <module>
+NameError: name 'Any' is not defined. Did you mean: 'any'?
+____ test_process_death_before_or_after_fake_send_cannot_recreate_ack[True] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_process_death_before_or_a1')
+send = True
+
+    @pytest.mark.parametrize("send", [False, True])
+    def test_process_death_before_or_after_fake_send_cannot_recreate_ack(tmp_path, send):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text("{}\n")
+        operation_id, key, text = "a" * 32, "acp:" + "a" * 32, "fake original"
+        marker = tmp_path / "fake-stdin"
+        # The child reserves, durably declines and mints its own ACK. In the
+        # send case it binds its exact input ID and writes to a LOCAL marker only.
+        script = """
+    import hashlib,json,os,sys
+    from pathlib import Path
+    from agent_comms import backend
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.store_files import _store_lock
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
+    root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
+    digest=hashlib.sha256(text.encode()).hexdigest()
+    identity=SelectedAdmissionIdentity('project',os.getpid(),1.0.hex(),'turn',key,1,
+        f'1:{digest}',digest,digest,backend._session_revision(session),backend._session_revision(session))
+    source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
+        'ownerCreatedAt':identity.owner_created_at,'turnId':identity.turn_id,
+        'ingressKey':identity.ingress_key,'admissionGeneration':1,
+        'correctionWitness':identity.correction_witness,'inputSha256':digest,
+        'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
+        'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
+    j=CompactionJournal(root/'compaction-commits.sqlite3')
+    d=InputDispositions(root / InputDispositions.filename)
+    assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+    assert j.reserve_selected_summary(session,source,operation_id=op)==op
+    token=j.decline_selected_summary_prestart(op,'split_turn',admission=identity)
+    assert token is not None
+    if sys.argv[6]=='1':
+        with _store_lock(root/'wire'):
+            assert token.consume_bound_original(wire_root=root,session_file=session,identity=identity,
+                native_id='b'*32,sent_text=text,dispositions=d)
+            Path(sys.argv[7]).write_text('fake local stdin write')
+    os._exit(17)
+    """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(comms.root),
+                str(session),
+                operation_id,
+                key,
+                text,
+                "1" if send else "0",
+                str(marker),
+            ],
+            check=False,
+            timeout=10,
+        )
+>       assert result.returncode == 17
+E       assert 1 == 17
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-c', "\nimport hashlib,js...mms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_process_death_before_or_a1/fake-stdin'], returncode=1).returncode
+
+tests/test_selected_summary_admission.py:466: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 22, in <module>
+    assert j.reserve_selected_summary(session,source,operation_id=op)==op
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/compaction_journal.py", line 482, in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 129, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 223, in _decode
+    hints = cls._types(target)
+  File "/home/ts/wt/comms-refactor2-s9-20260928/src/agent_comms/field_codec.py", line 77, in _types
+    return get_type_hints(declaration)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 2391, in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+                       format=format, owner=obj, prefer_fwd_module=True)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 461, in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+                                type_params=type_params, owner=owner,
+                                _recursive_guard=recursive_guard, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 1000, in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+                                 type_params=type_params, owner=owner, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line 205, in evaluate
+    return eval(code, globals=globals, locals=locals)
+  File "<string>", line 1, in <module>
+NameError: name 'Any' is not defined. Did you mean: 'any'?
+_________ test_acp_final_boundary_consumes_exact_ack_at_native_id_bind _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_acp_final_boundary_consum0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34ea907a80>
+
+    @pytest.mark.asyncio
+    async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path, monkeypatch):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        session = tmp_path / "saved.jsonl"
+        session.write_text("{}\n")
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        observed = []
+    
+        async def events(*args, **kwargs):
+            thread = comms.registry.snapshot().threads["project"]
+            key = agent.inputs.turn_original_input_keys["project"][0]
+            text = args[2]
+            digest = hashlib.sha256(text.encode()).hexdigest()
+            identity = SelectedAdmissionIdentity(
+                "project",
+                thread.pid,
+                float(thread.created_at).hex(),
+                agent.turns.active_turns["project"],
+                key,
+                comms.registry.snapshot().admission_generations["project"],
+                f"{comms.registry.snapshot().admission_generations['project']}:{digest}",
+                digest,
+                hashlib.sha256(
+                    agent.inputs.dispositions.read().rows.get(key).source_text.encode()
+                ).hexdigest(),
+                backend._session_revision(str(session)),
+                backend._session_revision(str(session)),
+            )
+            operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+            token = journal.decline_selected_summary_prestart(
+                operation_id, "split_turn", admission=identity
+            )
+            assert token is not None
+            agent.inputs.selected_summary_admissions["project"] = token  # fake owner only; no producer
+            with kwargs["send_boundary"](None, "c" * 32, text) as allowed:
+                observed.append(allowed)
+            with kwargs["send_boundary"](None, "d" * 32, text) as allowed:
+                observed.append(allowed)
+            yield ae.Done(ok=False, text="Provider-free fake")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.inputs.run_owned_input("project", "project", "original fake input")
+
+tests/test_selected_summary_admission.py:523: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/input_drain.py:949: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+src/agent_comms/turn_runner.py:706: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:844: in run
+    await self.stream()
+src/agent_comms/owned_turn.py:766: in stream
+    async for event in backend.stream_agent_events(
+tests/test_selected_summary_admission.py:509: in events
+    operation_id = journal.reserve_selected_summary(str(session), _source(identity))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+__ test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history __
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_returned_enrollment_admit0')
+
+    def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
+        tmp_path: Path,
+    ) -> None:
+        root = tmp_path
+        fresh = create_fresh_private_session(root / "native-sessions" / "alice-lookup", worktree=root)
+        journal = CompactionJournal(root / "compaction-commits.sqlite3")
+        with pytest.raises(CompactionJournalError, match="coverage floor"):
+>           journal.reserve_selected_summary(str(fresh.path), _private_source())
+
+tests/test_fresh_private_session.py:332: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+__ test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_raw_unknown_even_on_retur0')
+
+    def test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker(
+        tmp_path: Path,
+    ) -> None:
+        fresh = create_fresh_private_session(
+            tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
+        )
+        journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+        journal.enroll_fresh_private_session(
+            fresh,
+            owner_name="alice",
+            owner_created_at="0x1.0000000000000p+0",
+            owner_lookup="alice-lookup",
+            owner_generation=2,
+            admission_generation=3,
+        )
+        journal.reserve_private_raw_input(fresh.path, "b" * 32)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           journal.reserve_selected_summary(
+                str(fresh.path), _private_source(), fresh_session=fresh, admission_generation=3
+            )
+
+tests/test_fresh_private_session.py:389: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+_ test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_selected _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s9-20260928/.artifacts/pytest-of-ts/pytest-14/test_visible_enrollment_after_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34ea9119b0>
+
+    def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_selected(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_comms import compaction_journal as module
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
+        )
+        journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+        original_fsync = module.os.fsync
+        fail = True
+    
+        def uncertain_fsync(fd: int) -> None:
+            nonlocal fail
+            if fail and os.fstat(fd).st_ino == tmp_path.stat().st_ino:
+                fail = False
+                raise OSError("injected post-COMMIT directory fsync")
+            original_fsync(fd)
+    
+        monkeypatch.setattr(module.os, "fsync", uncertain_fsync)
+        with pytest.raises(CompactionJournalUnknownError, match="durability UNKNOWN"):
+            journal.enroll_fresh_private_session(
+                fresh,
+                owner_name="alice",
+                owner_created_at="0x1.0000000000000p+0",
+                owner_lookup="alice-lookup",
+                owner_generation=2,
+                admission_generation=3,
+            )
+        # The SQL row is visible on reopen, but no returned enrollment ACK exists.
+        monkeypatch.setattr(module.os, "fsync", original_fsync)
+        assert CompactionJournal(journal.path).path.exists()
+        with pytest.raises(CompactionJournalError, match="coverage differs"):
+>           journal.reserve_selected_summary(
+                str(fresh.path), _private_source(), fresh_session=fresh, admission_generation=3
+            )
+
+tests/test_fresh_private_session.py:427: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_journal.py:482: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:129: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:223: in _decode
+    hints = cls._types(target)
+            ^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:77: in _types
+    return get_type_hints(declaration)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:2391: in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:461: in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py:1000: in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py:205: in evaluate
+    return eval(code, globals=globals, locals=locals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   NameError: name 'Any' is not defined
+
+<string>:1: NameError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_journal.py::test_reservation_is_durable_unresolved_and_blocks_every_input
+FAILED tests/test_selected_summary_journal.py::test_raw_send_fence_blocks_every_same_session_status_not_unrelated
+FAILED tests/test_selected_summary_journal.py::test_raw_send_fence_serializes_concurrent_direct_reservation
+FAILED tests/test_selected_summary_journal.py::test_legacy_private_session_without_marker_fails_closed_at_selected_reserve
+FAILED tests/test_selected_summary_journal.py::test_private_raw_prewrite_marker_blocks_only_its_saved_session
+FAILED tests/test_selected_summary_journal.py::test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity
+FAILED tests/test_selected_summary_journal.py::test_private_raw_marker_survives_child_crash_before_selected_reserve[before-write]
+FAILED tests/test_selected_summary_journal.py::test_private_raw_marker_survives_child_crash_before_selected_reserve[after-write]
+FAILED tests/test_selected_summary_journal.py::test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries
+FAILED tests/test_selected_summary_journal.py::test_link_requires_exact_committed_native_intent_binding
+FAILED tests/test_selected_summary_journal.py::test_selected_reservation_two_process_race_has_exactly_one_winner
+FAILED tests/test_selected_summary_journal.py::test_selected_attempt_does_not_block_another_session
+FAILED tests/test_selected_summary_journal.py::test_mark_unknown_fsync_fault_stays_unresolved
+FAILED tests/test_selected_summary_journal.py::test_competing_native_begin_refused_unless_exact_reserved_operation_bound
+FAILED tests/test_selected_summary_journal.py::test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[split_turn]
+FAILED tests/test_selected_summary_journal.py::test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[unsupported]
+FAILED tests/test_selected_summary_journal.py::test_terminal_postcommit_fsync_unknown_blocks_across_reopen[linked]
+FAILED tests/test_selected_summary_journal.py::test_terminal_postcommit_fsync_unknown_blocks_across_reopen[declined-prestart]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[busy]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[source_mismatch]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[model_mismatch]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[settings_mismatch]
+FAILED tests/test_selected_summary_journal.py::test_native_unknown_refuses_summary_reservation
+FAILED tests/test_selected_summary_journal.py::test_postcommit_fsync_fault_may_leave_blocking_summary_intent
+FAILED tests/test_selected_summary_journal.py::test_reservation_survives_crash_and_never_repeats_id
+FAILED tests/test_selected_summary_journal.py::test_invalid_source_or_id_refuses_before_reservation
+FAILED tests/test_selected_summary_admission.py::test_reserve_rejects_changed_saved_source_witness
+FAILED tests/test_selected_summary_admission.py::test_process_death_before_or_after_fake_send_cannot_recreate_ack[False]
+FAILED tests/test_selected_summary_admission.py::test_process_death_before_or_after_fake_send_cannot_recreate_ack[True]
+FAILED tests/test_selected_summary_admission.py::test_acp_final_boundary_consumes_exact_ack_at_native_id_bind
+FAILED tests/test_fresh_private_session.py::test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history
+FAILED tests/test_fresh_private_session.py::test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker
+FAILED tests/test_fresh_private_session.py::test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_selected
+ERROR tests/test_selected_summary_admission.py::test_returned_ack_only_one_bound_original_and_no_status_bypass[declined-prestart]
+ERROR tests/test_selected_summary_admission.py::test_returned_ack_only_one_bound_original_and_no_status_bypass[linked]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change0]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change1]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change2]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change3]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change4]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change5]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change6]
+ERROR tests/test_selected_summary_admission.py::test_mismatch_consumes_token_without_binding_or_recovery[change7]
+ERROR tests/test_selected_summary_admission.py::test_reserve_refuses_wrong_durable_original
+ERROR tests/test_selected_summary_admission.py::test_link_cannot_mint_without_committed_native_source_digest
+ERROR tests/test_selected_summary_admission.py::test_saved_source_drift_consumes_ack
+ERROR tests/test_selected_summary_admission.py::test_forked_other_process_cannot_use_inherited_ack
+ERROR tests/test_selected_summary_admission.py::test_changed_durable_original_after_reservation_refuses_burn
+ERROR tests/test_selected_summary_admission.py::test_changed_journal_source_refuses_consumption
+ERROR tests/test_selected_summary_admission.py::test_bind_fault_after_durable_unknown_never_replays
+ERROR tests/test_selected_summary_admission.py::test_terminal_postcommit_fsync_fault_never_mints_ack[linked]
+ERROR tests/test_selected_summary_admission.py::test_terminal_postcommit_fsync_fault_never_mints_ack[declined-prestart]
+ERROR tests/test_selected_summary_admission.py::test_private_status_only_transaction_cannot_issue_admission_ack[declined-prestart]
+ERROR tests/test_selected_summary_admission.py::test_private_status_only_transaction_cannot_issue_admission_ack[linked]
+ERROR tests/test_selected_summary_admission.py::test_success_without_admission_does_not_create_later_receipt
+ERROR tests/test_selected_summary_admission.py::test_native_start_retires_barrier_without_erasing_history_or_replaying_original[linked]
+ERROR tests/test_selected_summary_admission.py::test_native_start_retires_barrier_without_erasing_history_or_replaying_original[declined-prestart]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[turn_id-other-turn]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[owner-other-owner]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[target-other-target]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[admission-2]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[sent_text-other sent text]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[source_text-other original]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[status-unknown]
+ERROR tests/test_selected_summary_admission.py::test_unrelated_or_uncertain_input_never_retires_selected_barrier[native_id-None]
+33 failed, 42 passed, 2 skipped, 32 errors in 12.79s
