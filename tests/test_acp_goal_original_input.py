@@ -91,7 +91,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     store = agent._open_goal_store()
     if existing_goal:
         comms.update_goal("project", "set", text="Original goal", owner_store=store)
-    original_emit = agent._emit_input_disposition
+    original_emit = agent.inputs.emit_input_disposition
     replacement = None
     backend_calls = 0
 
@@ -108,7 +108,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         backend_calls += 1
         yield ae.Done(ok=False, text="Must not reach backend")
 
-    monkeypatch.setattr(agent, "_emit_input_disposition", activate_after_admission)
+    monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
     monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
     try:
         with pytest.raises(RequestError) as refused:
