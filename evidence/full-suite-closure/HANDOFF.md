@@ -95,3 +95,30 @@ adds only the already-declared compaction-status command/help. Publication fixtu
 now constructs CommittedNativeOutcome with its required fixture digest through
 FieldCodec and canonical_agent. Actual delivery/cancellation/socket/rebinding
 assertions unchanged. Focused command/publication batch:39 passed in21.64s.
+
+## Remaining-suite continuation: declarations and removed public bus
+
+Merged parent6422dcb before this continuation. Beyond compaction publication,
+287 passed/12failed/1skipped in92.31s. Failures were canonical send-admission
+setup, removed truncated-public-bus auto-repair, and registry PID fixtures.
+
+Registry fixtures now carry captured ProcessIdentity. Preserved revocation,
+rename, session metadata, restart-generation and saved-owner rejection assertions.
+Removed old automatic bus-tail quarantine test; current envelope truncation
+refusal tests preserve the fail-closed behavior.
+
+Next actual declarations run exposed the deleted Publisher.publish-based class.
+Deleted28 test functions (43 parameterized cases net), obsolete hand-made marker
+helper, and private response-intent fixture; exact names in retired-public-bus-tests.txt.
+These implemented the removed public writer/hybrid format, including automatic
+metadata repair, raw-format keyed publication, and old bus deletion. Existing
+canonical envelope tests cover fsync/UNKNOWN/conflicts/sequence durability;
+coordinated runtime covers response append and stale/revoked owners; bus page
+index tests cover bounded reads. One new canonical owner flow preserves current
+sender/target validation, sequence uniqueness, cold reopen, alias DM paging,
+self-exclusion, acknowledgement and later input delivery without full-log reads.
+
+Affected run64pass/1fail/1skip in5.43s; the new test mistakenly expected latest
+sequence rather than acknowledgement count (two pending messages), corrected
+before the continuing remainder run. No source changes in this batch. Parent
+owns candidate-wrapper and finite-JSON cleanup; those paths are not restored.
