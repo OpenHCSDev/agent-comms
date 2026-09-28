@@ -145,3 +145,17 @@ Actual test passes in5.30s: disconnect first client midrequest, attach two clien
 to the same process, release exactly one loopback request, observe settlement,
 leave owner alive until explicit cleanup. Owner launch result/process behavior
 is not mocked; only stdout/stderr is redirected into the owned test log.
+
+## Image and missing-goal-authority batch
+
+Continuation129pass/3failed then interrupted deliberately at an unbounded fixture
+wait after the prompt had already failed. Corrected canonical image owner setup
+and bounded that wait. Native RPC executable fixtures now actually execute;
+image stderr protection asserts child exit7, preventing a preflight refusal
+from masquerading as a successful data-leak check. Current queueState restored
+references and exact UNKNOWN pending IDs replace dropped-steer/old metadata
+expectations; attachment images and original reference remain asserted.
+
+Deleted implicit ledger manufacture on Retry expectation; actual runtime socket
+now asserts rejection, unchanged blocked goal, absent grant and no scheduled wake.
+Focused image/UI-goal batch16passed in2.10s. Continuing remainder after images.
