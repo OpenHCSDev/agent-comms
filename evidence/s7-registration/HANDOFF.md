@@ -8,6 +8,12 @@ Worktree: `/home/ts/wt/comms-refactor-s7-registration-20260928`.
 Branch: `codex/refactor-s7-registration-20260928`; base `c45ee130b232e1afe6ed7253fd3bca39bdcf8a0b`.
 Owner: Pascal. No live activation, provider calls, helpers, model changes or new environment.
 
+## Publication
+
+Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/159
+Implementation commit: `733bba42d55ef1e58a02afedaad060d483814763`.
+Current main checked: `e751d10` (PR158). Git merge-tree reports exactly one conflicting path, `src/agent_comms/exporting.py`, in the import section: preserve parent's PR158 imports and import Registration from `.registration`. Parent owns serial integration/seam resolution; all other paths merge automatically.
+
 ## Implemented owners
 
 - `RegistryDocument` owns registration preparation, lifecycle transitions, thread facts, alias provenance, S5 owner/admission counters, turn claim/settlement and snapshot creation. It has no I/O or borrowed Comms/registry self.
