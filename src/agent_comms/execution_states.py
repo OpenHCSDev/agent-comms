@@ -83,21 +83,27 @@ class PendingExecution(UnstartedExecution):
         return ActiveExecution, DeferredExecution, FailedExecution
 
 
-@dataclass(frozen=True)
-class AttemptExecution(ExecutionState):
-    ordinal: int
+class AttemptReference:
+    """Shared ordinal projection for required and optional attempt references."""
 
-    def __post_init__(self):
-        if type(self.ordinal) is not int or self.ordinal < 1:
-            raise IntegrityViolationError("active/completed execution requires an attempt")
+    ordinal: int | None
 
     @property
-    def current_attempt_ordinal(self) -> int:
+    def current_attempt_ordinal(self) -> int | None:
         return self.ordinal
 
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
         return cls(ordinal)
+
+
+@dataclass(frozen=True)
+class AttemptExecution(AttemptReference, ExecutionState):
+    ordinal: int
+
+    def __post_init__(self):
+        if type(self.ordinal) is not int or self.ordinal < 1:
+            raise IntegrityViolationError("active/completed execution requires an attempt")
 
 
 class ActiveExecution(AttemptExecution):
@@ -143,16 +149,8 @@ class CompletedExecution(AttemptExecution):
 
 
 @dataclass(frozen=True)
-class InterruptedExecution(ExecutionState):
+class InterruptedExecution(AttemptReference, ExecutionState):
     ordinal: int | None = None
-
-    @property
-    def current_attempt_ordinal(self) -> int | None:
-        return self.ordinal
-
-    @classmethod
-    def load(cls, ordinal: int | None) -> ExecutionState:
-        return cls(ordinal)
 
     def accepts_attempt(self, phase):
         return phase.failed

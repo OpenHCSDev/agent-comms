@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from .coordination import (
-    ACTIVE_ATTEMPT_PHASES,
-    ATTEMPT_PHASE_TRANSITIONS,
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
     MAX_SANITIZED_DETAIL_CHARS,
@@ -543,8 +541,7 @@ class MutationStore(CoordinationStore):
             or claim.exact_target is not None
             or claim.updated_at_ms != claim.accepted_at_ms
             or claim.triage_verdict is not None
-            or claim.disposition
-            is not ClaimDisposition(claim.wake_mode.declaration.initial_disposition())
+            or claim.lifecycle.declared_name != claim.lifecycle.mode.initial_disposition()
             or claim.resolver_version != RESOLVER_VERSION
             or claim.policy_version != POLICY_VERSION
         ):
@@ -1135,13 +1132,16 @@ class MutationStore(CoordinationStore):
         _bounded_reason(reason_code)
         if any(type(value) is not bool for value in (backend_done, process_dead, progress)):
             raise ValueError("attempt finality and progress must be booleans")
-        if phase not in ACTIVE_ATTEMPT_PHASES:
+        if phase.declaration.terminal:
             raise IdentityConflict("terminal phases require atomic settlement")
         with self._transaction() as db:
             snapshot, attempt = self._assert_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if phase != attempt.phase and phase not in ATTEMPT_PHASE_TRANSITIONS[attempt.phase]:
+            if (
+                phase.declaration is not type(attempt.lifecycle)
+                and phase.declaration not in attempt.lifecycle.successors()
+            ):
                 raise IdentityConflict("attempt phase edge is not declared")
             if attempt.process_dead or attempt.backend_done:
                 # Once either finality fact is recorded, the backend cannot

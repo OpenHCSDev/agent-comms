@@ -145,13 +145,14 @@ class IgnoredClaim(ClaimState):
         return ()
 
 
-@dataclass(frozen=True)
-class BoundClaim(ClaimState):
-    decision: Engagement
+class ClaimDecision:
+    """One projection of a decision's mode, verdict and binding."""
+
+    decision: PendingDecision | Engagement
 
     @property
     def mode(self):
-        return WakePolicy.decode(self.decision.declared_name)()
+        return self.decision.mode
 
     @property
     def verdict(self):
@@ -164,6 +165,11 @@ class BoundClaim(ClaimState):
     @property
     def exact_target(self):
         return self.decision.exact_target
+
+
+@dataclass(frozen=True)
+class BoundClaim(ClaimDecision, ClaimState):
+    decision: Engagement
 
     @classmethod
     def build(cls, mode, execution_id, target):
@@ -188,27 +194,9 @@ class CompletedClaim(BoundClaim):
 
 
 @dataclass(frozen=True)
-class InterruptedClaim(ClaimState):
+class InterruptedClaim(ClaimDecision, ClaimState):
     decision: PendingDecision | Engagement
     preengagement_target = True
-
-    @property
-    def mode(self):
-        if isinstance(self.decision, PendingDecision):
-            return self.decision.mode
-        return WakePolicy.decode(self.decision.declared_name)()
-
-    @property
-    def verdict(self):
-        return self.decision.verdict
-
-    @property
-    def execution_id(self):
-        return self.decision.execution_id
-
-    @property
-    def exact_target(self):
-        return self.decision.exact_target
 
     @classmethod
     def build(cls, mode, execution_id, target):

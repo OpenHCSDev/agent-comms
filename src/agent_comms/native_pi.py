@@ -14,7 +14,7 @@ import re
 import signal
 import stat
 import sys
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -654,6 +654,7 @@ async def run_native_pi_turn(
     maintenance_root: Path | None = None,
     fresh_selected: FreshPrivateSession | None = None,
     selected_tool_mode: NativeToolMode | None = None,
+    observe_event: Callable[[pi.PiEvent], Awaitable[None]] | None = None,
 ) -> NativeTurnResult:
     """One tracked real Pi RPC prompt in an isolated, persisted session.
 
@@ -894,6 +895,8 @@ async def run_native_pi_turn(
                 "fork",
             }:
                 raise NativePiUnavailable("Native Pi session identity changed during a turn")
+            if observe_event is not None:
+                await observe_event(event)
         if not accepted or input_event is None or not contexts:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         if terminal_error is not None:

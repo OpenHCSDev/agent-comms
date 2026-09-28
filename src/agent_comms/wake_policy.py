@@ -20,6 +20,10 @@ class Engagement(DeclaredFamily, affix="Engagement"):
             raise IntegrityViolationError("engaged claim requires execution and exact target")
 
     @property
+    def mode(self) -> WakePolicy:
+        return WakePolicy.decode(self.declared_name)()
+
+    @property
     @abstractmethod
     def verdict(self) -> str | None: ...
 
@@ -48,6 +52,12 @@ class WakePolicy(DeclaredFamily, affix="Wake"):
     def engage(self, execution_id: str, target: str) -> Engagement:
         return Engagement.decode(self.declared_name)(execution_id, target)
 
+    def triage_expectation(self):
+        raise IntegrityViolationError("wake policy does not permit triage")
+
+    def full_expectation(self):
+        return "this is yours; answer the original committed message"
+
     @property
     def engagement_verdict(self) -> str | None:
         return None
@@ -66,6 +76,9 @@ class PassiveWake(WakePolicy):
 
 class BoundedTriageWake(WakePolicy):
     triage = True
+
+    def triage_expectation(self):
+        return "engage only if this concerns your assigned task; otherwise IGNORE"
 
     @classmethod
     def initial_disposition(cls):

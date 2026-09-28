@@ -923,7 +923,9 @@ class RecoverySnapshot:
     execution: ExecutionRecord
     attempt: AttemptRecord | None
     claims: tuple[WakeClaim, ...]
-    links: tuple[ExecutionClaimLink, ...] = dataclass_field(metadata={"snapshot_name": "execution_claims"})
+    links: tuple[ExecutionClaimLink, ...] = dataclass_field(
+        metadata={"snapshot_name": "execution_claims"}
+    )
     replay: ReplayAssessment | None
     obligation: ResponseObligation | None
     publication_intent: PublicationIntent | None
@@ -941,6 +943,16 @@ class RecoverySnapshot:
             raise ValueError("pointer_revision cannot be negative")
         if self.snapshot_version != COORDINATION_SNAPSHOT_VERSION:
             raise ValueError("unsupported snapshot version")
+        self.validate_membership()
+        self.validate_attempt_identity()
+        self.validate_current_pointer()
+        self.validate_response_route()
+        self.validate_publication_receipt()
+        self.execution.lifecycle.validate_snapshot(
+            self, retry_disposition_authorized(self.execution, self.replay, self.obligation)
+        )
+
+    def validate_membership(self) -> None:
         execution = self.execution
         execution_id = execution.execution_id
         related = (
@@ -968,9 +980,13 @@ class RecoverySnapshot:
             claim.recipient_lookup != execution.owner_lookup for claim in self.claims
         ):
             raise IntegrityViolationError("snapshot claims have duplicate IDs or wrong owner")
-        claim_kind = ClaimDisposition(execution.lifecycle.claim_disposition)
-        if any(claim.disposition is not claim_kind for claim in self.claims):
+        claim_kind = execution.lifecycle.claim_disposition
+        if any(claim.lifecycle.declared_name != claim_kind for claim in self.claims):
             raise IntegrityViolationError("snapshot claims disagree with execution disposition")
+
+    def validate_attempt_identity(self) -> None:
+        execution = self.execution
+        execution_id = execution.execution_id
         attempt = self.attempt
         if (execution.current_attempt_ordinal is None) != (attempt is None):
             raise IntegrityViolationError("snapshot attempt does not match execution reference")
@@ -981,6 +997,11 @@ class RecoverySnapshot:
             raise IntegrityViolationError("snapshot attempt identity/owner mismatch")
         if attempt is not None and not execution.lifecycle.accepts_attempt(attempt.lifecycle):
             raise IntegrityViolationError("snapshot status/attempt phase mismatch")
+
+    def validate_current_pointer(self) -> None:
+        execution = self.execution
+        execution_id = execution.execution_id
+        attempt = self.attempt
         if (self.current_execution_id is None) != (self.current_attempt_ordinal is None):
             raise IntegrityViolationError("snapshot pointer tuple is incomplete")
         if self.is_current != (
@@ -991,6 +1012,9 @@ class RecoverySnapshot:
             and not attempt.lifecycle.terminal
         ):
             raise IntegrityViolationError("snapshot current pointer is inconsistent")
+
+    def validate_response_route(self) -> None:
+        execution = self.execution
         if execution.origin is ExecutionOrigin.WIRE:
             if not self.claims or self.obligation is None:
                 raise IntegrityViolationError("wire snapshots require an obligation")
@@ -1008,9 +1032,9 @@ class RecoverySnapshot:
             for record in target_records
         ):
             raise IntegrityViolationError("snapshot exact targets disagree")
+
+    def validate_publication_receipt(self) -> None:
         obligation = self.obligation
-        authorized = retry_disposition_authorized(execution, self.replay, obligation)
-        execution.lifecycle.validate_snapshot(self, authorized)
         intent = self.publication_intent
         receipt = self.publication_receipt
         if obligation is not None:
@@ -1131,7 +1155,7 @@ WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
  OR NEW.generation != OLD.generation + 1
  OR EXISTS (SELECT 1 FROM attempts WHERE owner_lookup = OLD.owner_lookup
             AND owner_generation = OLD.generation
-            AND phase NOT IN ('succeeded', 'attempt_failed'))
+            AND phase NOT IN ({terminal_attempt_names}))
 BEGIN SELECT RAISE(ABORT, 'owner generation cannot advance with active attempts'); END;
 CREATE TABLE executions (
     execution_id TEXT PRIMARY KEY CHECK (
@@ -1139,7 +1163,7 @@ CREATE TABLE executions (
     ),
     origin TEXT NOT NULL CHECK (origin IN ('wire', 'acp', 'goal', 'system')),
     status TEXT NOT NULL CHECK (status IN
-      ('queued', 'pending', 'active', 'deferred', 'completed', 'failed')),
+      ({execution_names})),
     exact_target TEXT CHECK (exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256),
     owner_thread TEXT NOT NULL CHECK (length(owner_thread) BETWEEN 1 AND 256),
     owner_lookup TEXT NOT NULL REFERENCES participants(participant_lookup),
@@ -1154,7 +1178,7 @@ CREATE TABLE executions (
     required_attempt_kind TEXT GENERATED ALWAYS AS (CASE
         WHEN status = 'active' THEN 'active'
         WHEN status = 'completed' THEN 'succeeded'
-        WHEN status IN ('deferred','failed') AND current_attempt_ordinal IS NOT NULL
+        WHEN status IN ({optional_attempt_execution_names}) AND current_attempt_ordinal IS NOT NULL
           THEN 'attempt_failed'
     END) STORED,
     active_execution_id TEXT GENERATED ALWAYS AS
@@ -1166,7 +1190,7 @@ CREATE TABLE executions (
     wire_claim_ordinal INTEGER GENERATED ALWAYS AS
         (CASE WHEN origin = 'wire' THEN 0 END) STORED,
     claim_status_kind TEXT GENERATED ALWAYS AS (CASE
-        WHEN status IN ('queued','pending','active') THEN 'engaged'
+        WHEN status IN ({engaged_execution_names}) THEN 'engaged'
         ELSE status END) STORED,
     completed_wire_id TEXT GENERATED ALWAYS AS
         (CASE WHEN status = 'completed' AND origin = 'wire' THEN execution_id END) STORED,
@@ -1184,9 +1208,9 @@ CREATE TABLE executions (
     deferred_obligation_required INTEGER GENERATED ALWAYS AS
         (CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT NULL
                    AND origin = 'wire' THEN 1 END) STORED,
-    CHECK ((status IN ('queued','pending') AND current_attempt_ordinal IS NULL)
-      OR (status IN ('active','completed') AND current_attempt_ordinal IS NOT NULL)
-      OR status IN ('deferred','failed')),
+    CHECK ((status IN ({unstarted_execution_names}) AND current_attempt_ordinal IS NULL)
+      OR (status IN ({required_attempt_execution_names}) AND current_attempt_ordinal IS NOT NULL)
+      OR status IN ({optional_attempt_execution_names})),
     CHECK (status != 'deferred' OR current_attempt_ordinal IS NULL
            OR current_attempt_ordinal < max_attempts),
     CHECK ((origin = 'wire' AND exact_target IS NOT NULL)
@@ -1217,11 +1241,7 @@ CREATE TABLE executions (
       DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 CREATE TRIGGER execution_status_edge BEFORE UPDATE OF status ON executions
-WHEN NEW.status != OLD.status AND NOT (
-    (OLD.status = 'queued' AND NEW.status IN ('pending','failed')) OR
-    (OLD.status = 'pending' AND NEW.status IN ('active','deferred','failed')) OR
-    (OLD.status = 'active' AND NEW.status IN ('deferred','completed','failed')) OR
-    (OLD.status = 'deferred' AND NEW.status IN ('active','failed')))
+WHEN NEW.status != OLD.status AND NOT ({execution_edges})
 BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END;
 CREATE TRIGGER execution_frozen_facts BEFORE UPDATE ON executions
 WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
@@ -1230,7 +1250,7 @@ WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
  OR NEW.created_at_ms != OLD.created_at_ms OR NEW.revision != OLD.revision + 1
  OR NEW.updated_at_ms < OLD.updated_at_ms OR
  (NEW.status = 'active' AND
-  (OLD.status NOT IN ('pending','deferred') OR
+  (OLD.status NOT IN ({startable_execution_names}) OR
    NEW.current_attempt_ordinal != coalesce(OLD.current_attempt_ordinal, 0) + 1)) OR
  (NEW.status != 'active' AND
   NEW.current_attempt_ordinal IS NOT OLD.current_attempt_ordinal)
@@ -1249,10 +1269,7 @@ CREATE TABLE attempts (
     owner_thread TEXT NOT NULL CHECK (length(owner_thread) BETWEEN 1 AND 256),
     owner_generation INTEGER NOT NULL CHECK (owner_generation > 0),
     owner_token_digest TEXT NOT NULL UNIQUE CHECK (length(owner_token_digest) BETWEEN 1 AND 256),
-    phase TEXT NOT NULL CHECK (phase IN (
-      'prompt_starting', 'prompt_accepted', 'model_running', 'tool_running',
-      'compaction', 'settling', 'model_stalled', 'aborting', 'retrying',
-      'provider_unavailable', 'succeeded', 'attempt_failed')),
+    phase TEXT NOT NULL CHECK (phase IN ({attempt_names})),
     revision INTEGER NOT NULL CHECK (revision > 0),
     lease_expires_at_ms INTEGER CHECK (lease_expires_at_ms >= 0),
     last_progress_at_ms INTEGER,
@@ -1262,7 +1279,7 @@ CREATE TABLE attempts (
     created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
     updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
     phase_kind TEXT GENERATED ALWAYS AS (CASE
-       WHEN phase IN ('succeeded','attempt_failed') THEN phase ELSE 'active' END) STORED,
+       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END) STORED,
     active_required_status TEXT GENERATED ALWAYS AS
        (CASE WHEN phase_kind = 'active' THEN 'active' END) STORED,
     CHECK (last_progress_at_ms IS NULL OR
@@ -1312,26 +1329,7 @@ CREATE TRIGGER attempt_insert_authorized BEFORE INSERT ON attempts BEGIN
       AND NEW.owner_token_digest != a.owner_token_digest);
 END;
 CREATE TRIGGER attempt_phase_edge BEFORE UPDATE OF phase ON attempts
-WHEN NEW.phase != OLD.phase AND NOT (
-    (OLD.phase = 'prompt_starting' AND NEW.phase IN
-       ('prompt_accepted','provider_unavailable','attempt_failed')) OR
-    (OLD.phase = 'prompt_accepted' AND NEW.phase IN
-       ('model_running','model_stalled','aborting','attempt_failed')) OR
-    (OLD.phase = 'model_running' AND NEW.phase IN
-       ('tool_running','compaction','settling','model_stalled','aborting',
-        'provider_unavailable','attempt_failed')) OR
-    (OLD.phase = 'tool_running' AND NEW.phase IN
-       ('model_running','settling','aborting','attempt_failed')) OR
-    (OLD.phase = 'compaction' AND NEW.phase IN
-       ('model_running','model_stalled','aborting','attempt_failed')) OR
-    (OLD.phase = 'settling' AND NEW.phase IN ('succeeded','attempt_failed')) OR
-    (OLD.phase = 'model_stalled' AND NEW.phase IN ('aborting','attempt_failed')) OR
-    (OLD.phase = 'aborting' AND NEW.phase IN ('retrying','attempt_failed')) OR
-    (OLD.phase = 'retrying' AND NEW.phase IN
-       ('prompt_starting','model_running','model_stalled',
-        'provider_unavailable','attempt_failed')) OR
-    (OLD.phase = 'provider_unavailable' AND NEW.phase IN
-       ('retrying','attempt_failed')))
+WHEN NEW.phase != OLD.phase AND NOT ({attempt_edges})
 BEGIN SELECT RAISE(ABORT, 'attempt phase transition is not declared'); END;
 CREATE TRIGGER attempt_frozen_facts BEFORE UPDATE ON attempts
 WHEN NEW.execution_id IS NOT OLD.execution_id
@@ -1348,7 +1346,7 @@ WHEN NEW.execution_id IS NOT OLD.execution_id
       (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms < OLD.last_progress_at_ms))
  OR (OLD.lease_expires_at_ms IS NOT NULL AND NEW.lease_expires_at_ms IS NOT NULL
       AND NEW.lease_expires_at_ms < OLD.lease_expires_at_ms)
- OR (OLD.phase IN ('succeeded','attempt_failed') AND NEW.phase = OLD.phase)
+ OR (OLD.phase IN ({terminal_attempt_names}) AND NEW.phase = OLD.phase)
 BEGIN SELECT RAISE(ABORT, 'attempt transition rewrites frozen facts'); END;
 CREATE TRIGGER attempt_delete_frozen BEFORE DELETE ON attempts BEGIN
     SELECT RAISE(ABORT, 'attempt cannot be deleted');
@@ -1388,12 +1386,9 @@ CREATE TABLE wake_claims (
     message_id TEXT NOT NULL CHECK (length(message_id) BETWEEN 1 AND 256),
     exact_target TEXT CHECK (exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256),
     audience TEXT NOT NULL CHECK (audience IN ('direct', 'mentioned', 'collective')),
-    wake_mode TEXT NOT NULL CHECK (wake_mode IN ('passive', 'bounded_triage', 'full')),
+    wake_mode TEXT NOT NULL CHECK (wake_mode IN ({wake_names})),
     triage_verdict TEXT CHECK (triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')),
-    disposition TEXT NOT NULL CHECK (disposition IN (
-        'passive', 'triage_pending', 'full_pending', 'deferred', 'ignored',
-        'engaged', 'completed', 'failed'
-    )),
+    disposition TEXT NOT NULL CHECK (disposition IN ({claim_names})),
     resolver_version TEXT NOT NULL CHECK (length(resolver_version) BETWEEN 1 AND 256),
     policy_version TEXT NOT NULL CHECK (length(policy_version) BETWEEN 1 AND 256),
     accepted_at_ms INTEGER NOT NULL CHECK (accepted_at_ms >= 0),
@@ -1472,15 +1467,7 @@ BEGIN
        OR (OLD.execution_id IS NULL AND NEW.execution_id IS NOT NULL
            AND NEW.disposition != 'engaged');
     SELECT RAISE(ABORT, 'claim disposition edge is not realizable')
-    WHERE OLD.disposition != NEW.disposition AND NOT (
-        (OLD.disposition = 'triage_pending' AND NEW.disposition IN
-          ('ignored', 'engaged', 'deferred', 'failed')) OR
-        (OLD.disposition = 'full_pending' AND NEW.disposition IN
-          ('engaged', 'deferred', 'failed')) OR
-        (OLD.disposition = 'engaged' AND NEW.disposition IN
-          ('completed', 'deferred', 'failed')) OR
-        (OLD.disposition = 'deferred' AND NEW.disposition IN
-          ('triage_pending', 'full_pending', 'engaged', 'failed'))
+    WHERE OLD.disposition != NEW.disposition AND NOT ({claim_edges}
     );
     SELECT RAISE(ABORT, 'pre-engagement failure cannot invent execution')
     WHERE NEW.disposition = 'failed' AND OLD.execution_id IS NULL
@@ -1500,7 +1487,7 @@ CREATE TABLE execution_claims (
 ) STRICT;
 CREATE TRIGGER execution_claim_membership_insert BEFORE INSERT ON execution_claims
 WHEN NOT EXISTS (SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id
-  AND e.status IN ('queued','pending'))
+  AND e.status IN ({unstarted_execution_names}))
  OR NEW.ordinal != (SELECT count(*) FROM execution_claims
                     WHERE execution_id = NEW.execution_id)
 BEGIN SELECT RAISE(ABORT, 'execution claims require initial contiguous membership'); END;
@@ -1555,9 +1542,7 @@ END;
 CREATE TABLE obligations (
     execution_id TEXT PRIMARY KEY REFERENCES executions(execution_id) ON DELETE RESTRICT,
     exact_target TEXT NOT NULL CHECK (length(exact_target) BETWEEN 1 AND 256),
-    state TEXT NOT NULL CHECK (state IN (
-        'pending', 'publishing', 'deferred', 'published', 'silent', 'failed'
-    )),
+    state TEXT NOT NULL CHECK (state IN ({response_names})),
     reason_code TEXT CHECK (reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64),
     created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
     updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
@@ -1567,11 +1552,11 @@ CREATE TABLE obligations (
     ),
     receipt_seq INTEGER CHECK (receipt_seq IS NULL OR receipt_seq > 0),
     success_terminal INTEGER GENERATED ALWAYS AS
-       (CASE WHEN state IN ('published','silent') THEN 1 ELSE 0 END) STORED,
+       (CASE WHEN state IN ({successful_response_names}) THEN 1 ELSE 0 END) STORED,
     retryable INTEGER GENERATED ALWAYS AS
-       (CASE WHEN state IN ('pending','deferred') THEN 1 ELSE 0 END) STORED,
+       (CASE WHEN state IN ({retryable_response_names}) THEN 1 ELSE 0 END) STORED,
     intent_settled INTEGER GENERATED ALWAYS AS
-       (CASE WHEN state IN ('publishing','published','failed') THEN 1 ELSE 0 END) STORED,
+       (CASE WHEN state IN ({intent_response_names}) THEN 1 ELSE 0 END) STORED,
     receipt_settled INTEGER GENERATED ALWAYS AS
        (CASE WHEN state = 'published' THEN 1 ELSE 0 END) STORED,
     CHECK ((receipt_message_id IS NULL) = (receipt_seq IS NULL)),
@@ -1630,11 +1615,7 @@ WHEN NEW.state = OLD.state
 BEGIN SELECT RAISE(ABORT, 'obligation disposition must change'); END;
 CREATE TRIGGER obligation_declared_edge
 BEFORE UPDATE OF state ON obligations
-WHEN OLD.state != NEW.state AND NOT (
-    (OLD.state = 'pending' AND NEW.state IN
-      ('publishing', 'deferred', 'silent', 'failed')) OR
-    (OLD.state = 'publishing' AND NEW.state IN ('published', 'failed')) OR
-    (OLD.state = 'deferred' AND NEW.state IN ('pending', 'silent', 'failed'))
+WHEN OLD.state != NEW.state AND NOT ({obligation_edges}
 )
 BEGIN
     SELECT RAISE(ABORT, 'obligation state transition is not declared');
@@ -1756,7 +1737,7 @@ BEGIN
 END;
 CREATE TRIGGER obligation_publication_transition
 BEFORE UPDATE ON obligations
-WHEN NEW.state IN ('publishing', 'published')
+WHEN NEW.state IN ({required_intent_response_names})
 BEGIN
     SELECT RAISE(ABORT, 'publishing obligation requires intent')
     WHERE NOT EXISTS (
@@ -1772,7 +1753,7 @@ BEGIN
 END;
 CREATE TRIGGER obligation_publication_insert
 BEFORE INSERT ON obligations
-WHEN NEW.state IN ('publishing', 'published')
+WHEN NEW.state IN ({required_intent_response_names})
 BEGIN
     SELECT RAISE(ABORT, 'publication obligation starts pending');
 END;
@@ -1786,7 +1767,7 @@ END;
 CREATE TRIGGER obligation_state_with_intent
 BEFORE UPDATE OF state ON obligations
 WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id)
-  AND NEW.state NOT IN ('publishing', 'published', 'failed')
+  AND NEW.state NOT IN ({intent_response_names})
 BEGIN
     SELECT RAISE(ABORT, 'frozen intent cannot return to pending obligation');
 END;
@@ -1847,10 +1828,7 @@ END;
 CREATE TABLE recovery_audit (
     audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
     execution_id TEXT NOT NULL REFERENCES executions(execution_id) ON DELETE RESTRICT,
-    kind TEXT NOT NULL CHECK (kind IN (
-        'model_stalled', 'aborting', 'retrying', 'provider_unavailable',
-        'deferred', 'failed', 'recovered'
-    )),
+    kind TEXT NOT NULL CHECK (kind IN ({recovery_names})),
     reason_code TEXT NOT NULL CHECK (length(reason_code) BETWEEN 1 AND 64),
     sanitized_detail TEXT CHECK (
         sanitized_detail IS NULL OR length(sanitized_detail) <= 512
@@ -1874,6 +1852,63 @@ CREATE INDEX wake_claim_execution_idx ON wake_claims(execution_id);
 CREATE INDEX execution_owner_status_idx ON executions(owner_lookup, status);
 CREATE INDEX recovery_execution_idx ON recovery_audit(execution_id, audit_id);
 """
+
+
+def _sql_values(names):
+    return ",".join("'" + name.replace("'", "''") + "'" for name in names)
+
+
+def _sql_members(family, predicate=lambda member: True):
+    return _sql_values(
+        member.declared_name for member in family.members_with(family) if predicate(member)
+    )
+
+
+def _sql_edges(family, column):
+    return (
+        " OR ".join(
+            f"(OLD.{column} = {_sql_values((name,))} "
+            f"AND NEW.{column} IN ({_sql_values(sorted(edges))}))"
+            for name, edges in family.transition_table().items()
+            if edges
+        )
+        or "0"
+    )
+
+
+def _schema():
+    return _SCHEMA.format(
+        execution_names=_sql_members(ExecutionState),
+        attempt_names=_sql_members(AttemptState),
+        claim_names=_sql_members(ClaimState),
+        wake_names=_sql_members(WakePolicy),
+        response_names=_sql_members(ResponseState),
+        recovery_names=_sql_members(RecoveryCondition),
+        execution_edges=_sql_edges(ExecutionState, "status"),
+        attempt_edges=_sql_edges(AttemptState, "phase"),
+        claim_edges=_sql_edges(ClaimState, "disposition"),
+        obligation_edges=_sql_edges(ResponseState, "state"),
+        terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
+        engaged_execution_names=_sql_members(
+            ExecutionState, lambda member: member.unstarted or member.active
+        ),
+        unstarted_execution_names=_sql_members(ExecutionState, lambda member: member.unstarted),
+        required_attempt_execution_names=_sql_members(
+            ExecutionState, lambda member: member.active or member.completed
+        ),
+        optional_attempt_execution_names=_sql_members(
+            ExecutionState, lambda member: member.retry or member.failed
+        ),
+        startable_execution_names=_sql_members(
+            ExecutionState, lambda member: member.starts_attempt
+        ),
+        successful_response_names=_sql_members(ResponseState, lambda member: member.successful),
+        retryable_response_names=_sql_members(ResponseState, lambda member: member.retryable),
+        intent_response_names=_sql_members(ResponseState, lambda member: member.allows_intent),
+        required_intent_response_names=_sql_members(
+            ResponseState, lambda member: member.requires_intent
+        ),
+    )
 
 
 class CoordinationStore:
@@ -1976,7 +2011,7 @@ class CoordinationStore:
             }
             if version == 0 and not tables:
                 statement = ""
-                for line in _SCHEMA.splitlines(keepends=True):
+                for line in _schema().splitlines(keepends=True):
                     statement += line
                     if sqlite3.complete_statement(statement):
                         self._connection.execute(statement)
