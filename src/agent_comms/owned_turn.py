@@ -49,6 +49,7 @@ class OwnedTurn:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
+        accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
         self.runner = runner
@@ -63,6 +64,7 @@ class OwnedTurn:
         self.autonomous_goal = autonomous_goal
         self.original_owner_input = original_owner_input
         self.original_goal_id = original_goal_id
+        self.accepted_input_id = accepted_input_id
         self.dependency_wait_id = dependency_wait_id
 
     def admit(self):
@@ -92,7 +94,7 @@ class OwnedTurn:
         self.goal_permit: LaunchPermit | None = None
         if self.autonomous_goal and (self.goal is None or not self.goal.state.active):
             return
-        if self.goal is not None and self.goal.state.active:
+        if self.goal is not None and self.goal.state.active and not self.original_owner_input:
             self.store = self.runner.goal_store
             if (
                 self.store is None
@@ -165,9 +167,11 @@ class OwnedTurn:
                             ).prompt,
                         )
                     self.original_keys = (*self.original_keys, self.key)
-        self.runner.inputs.turn_input_keys[self.session_id] = set(self.original_keys)
-        self.runner.inputs.steering_input_keys[self.session_id] = {}
-        self.runner.inputs.steering_goal_ids[self.session_id] = {}
+        self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(
+            self.original_keys
+        )
+        self.runner.inputs.steering_input_keys.setdefault(self.session_id, {})
+        self.runner.inputs.steering_goal_ids.setdefault(self.session_id, {})
 
         self.passive_frame = ""
         self.passive_sources: tuple[tuple[int, str, str], ...] = ()
@@ -218,7 +222,9 @@ class OwnedTurn:
             current_wait = (
                 self.runner.comms.goals.goal_wait(canonical) if current is not None else None
             )
-            if self.goal is not None and self.goal.state.active:
+            if self.original_owner_input:
+                goal_ok = current_goal == self.goal
+            elif self.goal is not None and self.goal.state.active:
                 goal_ok = (
                     current_goal is not None
                     and current_goal.id == self.goal.id
@@ -238,14 +244,10 @@ class OwnedTurn:
                     else None
                 )
                 goal_ok = admitted_goal_id == current_goal_id
-                input_permit = (
-                    self.goal_permit
-                    if self.goal_permit is not None
-                    and self.goal_permit.reservation.goal_id == admitted_goal_id
-                    else self.progress.originated_attempts.get(admitted_goal_id or "")
-                )
-                if current_goal_id is not None and input_permit is None:
-                    goal_ok = False
+                # A freshly accepted human input is not a goal continuation.
+                # Its exact live receipt and captured goal/wait fence authorize
+                # it independently of an unrelated parked goal grant.
+                input_permit = None
             keys = (
                 self.original_keys
                 if public_id is None
@@ -270,6 +272,22 @@ class OwnedTurn:
                 and current.active_turn is not None
                 and current.active_turn.id == self.turn_id
             )
+            accepted_id = public_id if public_id is not None else self.accepted_input_id
+            if owner_ok and accepted_id is not None:
+                accepted = self.runner.inputs.queued_inputs.get(self.session_id, {}).get(
+                    accepted_id
+                )
+                owner_ok = (
+                    accepted is not None
+                    and accepted.current(
+                        current, snapshot.admission_generations[canonical], current_wait
+                    )
+                    and keys == (f"acp:{accepted_id}",)
+                    and self.runner.inputs.steering_input_keys.get(self.session_id, {}).get(
+                        accepted_id
+                    )
+                    == keys[0]
+                )
             if owner_ok and public_id is None and self.passive_frame:
                 assert current is not None
                 try:
@@ -422,7 +440,12 @@ class OwnedTurn:
                     ):
                         allowed = False
                         break
-            if allowed and current_wait is not None:
+            if (
+                allowed
+                and current_wait is not None
+                and public_id is None
+                and self.dependency_wait_id is not None
+            ):
                 allowed = self.runner.comms.goals.consume_goal_wait(canonical, current_wait.wait_id)
             if allowed:
                 if public_id is None:
@@ -494,7 +517,7 @@ class OwnedTurn:
             "comms_set_goal(text) so this same thread continues it autonomously. "
             f"Peer state: {json.dumps(self.peers)}\n\n{self.task}"
         )
-        if self.goal is not None and self.goal.state.active:
+        if self.goal_permit is not None:
             self.task = (
                 f"Persistent goal {self.goal.id}: {self.goal.text}\n"
                 f"Progress: {self.goal.progress}\n"
@@ -527,12 +550,17 @@ class OwnedTurn:
             )
 
     def open_stream(self):
-        self.backend_inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
+        self.backend_inbox = self.runner.inputs.bind_native_turn(
+            self.session_id, self.thread, self.turn_admission, self.turn_id
+        )
         self.finish_event = asyncio.Event()
-        self.controller = self.runner.runtime.controller.get()
+        self.controller = (
+            self.runner.inputs.queued_inputs[self.session_id][self.accepted_input_id].controller
+            if self.accepted_input_id is not None
+            else self.runner.runtime.controller.get()
+        )
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
-        self.runner.inputs.backend_inboxes[self.session_id] = self.backend_inbox
         self.runner.active_turns[self.session_id] = self.turn_id
         if self.original_owner_input and self.original_keys:
             self.runner.inputs.turn_original_input_keys[self.session_id] = tuple(self.original_keys)
@@ -544,7 +572,10 @@ class OwnedTurn:
             self.runner.started_event(self.thread_name, self.turn_id),
         )
         await self.runner.inputs.emit_input_delivery_changed(self.session_id)
-        await self.runner.inputs.drain_inbox(self.session_id)
+        # This turn already holds the session authority. Publish its cursor
+        # without reacquiring the observer lock held by a selected handoff;
+        # private delivery sees active_turns and cannot start another turn.
+        await self.runner.inputs.drain_owned_inbox(self.session_id)
 
         # Existing local ACP owner session only. If delivery is uncertain,
         # the keyed metadata remains pending; never invent a bus recipient.
@@ -614,7 +645,7 @@ class OwnedTurn:
             except Exception:
                 # A selected adaptive operation may already have paid or
                 # written. Do not turn a fault into ordinary input fallback.
-                if self.goal is not None and self.goal.state.active:
+                if self.goal_permit is not None:
                     self.runner.comms.goals.block_goal_after_failed_turn(
                         self.thread_name,
                         started_goal=self.goal,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from acp import RequestError
@@ -56,6 +56,10 @@ from .threads import Thread
 from .transcript_updates import StartedTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
+
+if TYPE_CHECKING:
+    from .coordinated_runtime import SelectedExecution
+
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
@@ -658,6 +662,74 @@ class TurnRunner:
         await self.effects._emit_event(session_id, event)
         self.goal_execution_signatures[session_id] = event.signature
 
+    async def run_selected(self, session_id: str, execution: SelectedExecution):
+        """Selected work and fresh ACP input share this session's one turn lifetime.
+
+        Only the live inbox transfers to the next native turn. Durable UNKNOWN
+        rows never create input, and selected failure/cancellation retires the
+        inbox without pretending that its pending prompts reached the model.
+        """
+        async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
+            task = asyncio.current_task()
+            assert task is not None
+            inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
+            self.turn_tasks[session_id] = task
+            self.inputs.backend_inboxes[session_id] = inbox
+            try:
+                result = await execution.run()
+                while not inbox.empty():
+                    command = inbox.get_nowait()
+                    if not isinstance(command, dict) or not (input_id := command.get("_input_id")):
+                        continue  # No accepted prompt: clear/interrupt controls carry no input.
+                    item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
+                    key = self.inputs.steering_input_keys.get(session_id, {}).get(input_id)
+                    with _store_lock(self.comms._wire_lock_path):
+                        snapshot = self.comms.registry.snapshot()
+                        name = snapshot.aliases.get(execution.owner_name, execution.owner_name)
+                        owner = snapshot.threads.get(name)
+                        row = self.inputs.dispositions.read().rows.get(key) if key else None
+                        valid = (
+                            item is not None
+                            and owner is not None
+                            and snapshot.statuses[name].running
+                            and owner.pid == os.getpid()
+                            and owner.active_turn is None
+                            and item.current(
+                                owner,
+                                snapshot.admission_generations[name],
+                                self.comms.goals.goal_wait(name),
+                            )
+                            and row is not None
+                            and row.key == f"acp:{input_id}"
+                            and row.unattempted
+                            and row.owner == name
+                            and row.admission == item.admission
+                        )
+                    if not valid:
+                        await self.inputs.input_refused(session_id, input_id)
+                        continue
+                    await self.run_agent_turn(
+                        session_id,
+                        name,
+                        command["message"],
+                        images=item.images,
+                        original_keys=(key,),
+                        initial_display_text=item.text if item.echo else None,
+                        original_owner_input=True,
+                        original_goal_id=(
+                            item.goal.id
+                            if item.goal is not None and item.goal.state.active
+                            else None
+                        ),
+                        accepted_input_id=input_id,
+                    )
+                    break  # The existing native forwarder consumes the remaining live inbox.
+                return result
+            finally:
+                await self.inputs.finish_turn_inputs(session_id, inbox)
+                if self.turn_tasks.get(session_id) is task:
+                    self.turn_tasks.pop(session_id, None)
+
     async def run_agent_turn(
         self,
         session_id: str,
@@ -672,6 +744,7 @@ class TurnRunner:
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
+        accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn
@@ -689,6 +762,7 @@ class TurnRunner:
             autonomous_goal=autonomous_goal,
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
+            accepted_input_id=accepted_input_id,
             dependency_wait_id=dependency_wait_id,
         ).run()
 

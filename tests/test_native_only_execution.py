@@ -158,7 +158,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             AGENT_COMMS_NO_REPLY_WINDOW="0.05",
             AGENT_COMMS_REPLY_WINDOW="0.1",
             AGENT_COMMS_REPLY_QUIET="0.05",
-            PYTHONPATH=str(Path(__file__).parents[1] / "src"),
+            PYTHONPATH=str(Path(events.__file__).parent.parent),
             AGENT_COMMS_AGENT_MODELS="openrouter/z-ai/glm-5.3-flash",
         )
         for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_AGENT_ID"):

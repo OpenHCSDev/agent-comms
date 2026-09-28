@@ -21,6 +21,9 @@ from .comms import Comms
 from .coordination_store import (
     PublicationActivationBlocked,
 )
+from .goal_waits import GoalWait
+from .goals import Goal
+from .image_inputs import ImageInput
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
@@ -47,6 +50,19 @@ class QueuedInput:
     admission: int
     receipt: InputAttempt | None = None
     turn_id: str | None = None
+    goal: Goal | None = None
+    wait: GoalWait | None = None
+    images: tuple[ImageInput, ...] = ()
+    controller: Any = None
+
+    def current(self, owner: Thread, admission: int, wait: GoalWait | None) -> bool:
+        """A fresh input retains the exact owner/goal/wait seen at acceptance."""
+        return (
+            self.owner_created_at == owner.created_at
+            and self.admission == admission
+            and self.goal == owner.goal
+            and self.wait == wait
+        )
 
 
 class InputDrain(FutureInputQueue):
@@ -470,15 +486,21 @@ class InputDrain(FutureInputQueue):
             self.steering_input_keys.setdefault(session_id, {})[input_id] = key
             self.turn_input_keys.setdefault(session_id, set()).add(key)
             owner_row = snapshot.threads[owner]
-            if delivery == "queue":
-                self.queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
-                    display_text,
-                    defer_display,
-                    owner_row.created_at,
-                    admission,
-                    self.dispositions.read().rows.get(key),
-                    owner_row.active_turn.id if owner_row.active_turn else None,
-                )
+            controller = self.runtime.controller.get()
+            if controller is UNBOUND_CONTROLLER:
+                controller = self.sessions.client
+            self.queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
+                display_text,
+                defer_display,
+                owner_row.created_at,
+                admission,
+                self.dispositions.read().rows.get(key) if delivery == "queue" else None,
+                owner_row.active_turn.id if owner_row.active_turn else None,
+                owner_row.goal,
+                self.comms.goals.goal_wait(owner),
+                images,
+                controller,
+            )
             inbox.put_nowait(
                 {
                     "type": "prompt",
@@ -506,6 +528,17 @@ class InputDrain(FutureInputQueue):
                 }
             },
         )
+
+    def bind_native_turn(
+        self, session_id: str, owner: Thread, admission: int, turn_id: str
+    ) -> asyncio.Queue[str | dict[str, Any]]:
+        """Transfer existing live inputs to the new lease, never read them from disk."""
+        inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
+        wait = self.comms.goals.goal_wait(owner.name)
+        for input_id, item in self.queued_inputs.get(session_id, {}).items():
+            if item.current(owner, admission, wait):
+                self.queued_inputs[session_id][input_id] = replace(item, turn_id=turn_id)
+        return inbox
 
     def future_inputs(
         self, owner: Thread, pending_input_key: str | None

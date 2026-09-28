@@ -28,8 +28,8 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.store_files import _store_lock
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
@@ -242,11 +242,11 @@ def test_cursor_v1_distinct_key_saturation_is_attachment_sticky():
                 "recipient_lookup",
                 "owner_thread",
                 "owner_generation",
-                "owner_admission_epoch",
+                "owner_admission_generation",
                 "covered_seq",
                 "injected_seq",
                 "input_id",
-                "claim_id",
+                "assignment_id",
                 "stage",
                 "session_id",
                 "request_generation",
@@ -254,7 +254,7 @@ def test_cursor_v1_distinct_key_saturation_is_attachment_sticky():
             assert all(name in row for name in required)
             assert row["wire_root_id"] == scope["wireRootId"]
             assert row["owner_thread"] == scope["ownerThread"]
-            assert row["owner_admission_epoch"] == scope["ownerEpoch"]
+            assert row["owner_admission_generation"] == scope["ownerEpoch"]
         return row
 
     class ReferenceAttachment:
@@ -513,9 +513,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        reserved_count = store._connection.execute(
-            "SELECT COUNT(*) FROM native_runtime_inputs"
-        ).fetchone()[0]
+        reserved_count = len(NativeRuntimeInput.select(store._connection))
         assert reserved_count == 1
 
     def fail_before_sql(*args, **kwargs):
@@ -532,10 +530,11 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     assert calls == []  # No raw native send; reserved outcome remains UNKNOWN, never retried.
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs "
-                "WHERE sent_owner_admission_epoch IS NOT NULL"
-            ).fetchone()[0]
+            len(
+                NativeRuntimeInput.select(
+                    store._connection, where="sent_owner_admission_generation IS NOT NULL"
+                )
+            )
             == 0
         )
 
@@ -590,10 +589,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     assert reconnect_cursor["input_id"] == current["input_id"]
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
-            ).fetchone()[0]
-            == 1
+            len(NativeRuntimeInput.select(store._connection, where="session_id IS NOT NULL")) == 1
         )
         assert (
             store._connection.execute(
@@ -727,7 +723,8 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     updates = []
 
     async def record_update(*, session_id, update):
-        updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
+        if cursor := (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor"):
+            updates.append(cursor)
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     comms.messaging.send_message("sender", "beta", "first")
@@ -756,7 +753,8 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
     updates = []
 
     async def record_update(*, session_id, update):
-        updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
+        if cursor := (update.field_meta or {}).get("agentComms", {}).get("privateNativeCursor"):
+            updates.append(cursor)
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     await agent._publish_private_cursor("beta", "beta")
@@ -868,8 +866,8 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert len(calls) == 1
     assert agent.inputs.pending_turns == {}
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
-        assert row is not None and row[0] is None
+        rows = NativeRuntimeInput.select(store._connection)
+        assert len(rows) == 1 and rows[0].session_id is None
 
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
@@ -911,12 +909,7 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
                 ).fetchone()[0]
                 == 1
             )
-            assert (
-                store._connection.execute("SELECT COUNT(*) FROM native_runtime_inputs").fetchone()[
-                    0
-                ]
-                == 1
-            )
+            assert len(NativeRuntimeInput.select(store._connection)) == 1
     finally:
         release.set()
         assert await asyncio.wait_for(running, timeout=5) == 1
@@ -984,8 +977,8 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
     assert calls == []
     assert await agent.inputs.drain_inbox("beta") == 0
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
-        assert row is not None and row[0] is None
+        rows = NativeRuntimeInput.select(store._connection)
+        assert len(rows) == 1 and rows[0].session_id is None
 
 
 async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_path, monkeypatch):

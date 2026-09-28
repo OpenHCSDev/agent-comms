@@ -47,7 +47,14 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
 async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", auto_wake=False)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    owner = CommsAgent(
+        comms,
+        agent_bin="pi",
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
     comms.threads.register(

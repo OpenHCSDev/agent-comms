@@ -313,7 +313,13 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     from goal_owner_fixture import activate_empty_source
     from test_acp import TestAgentTurn as GoalFixture
 
-    agent = CommsAgent(wired, agent_bin="pi")
+    root_id = wired.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        wired,
+        agent_bin="pi",
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
     activate_empty_source(agent)

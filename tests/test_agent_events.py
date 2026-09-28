@@ -82,7 +82,13 @@ class ContextWarning(events.ActivityEvent):
 
 
 async def test_new_activity_declaration_reaches_real_turn_consumer(comms, tmp_path, monkeypatch):
-    owner = CommsAgent(comms, agent_bin="unused")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    owner = CommsAgent(
+        comms,
+        agent_bin="unused",
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     observed = []
 

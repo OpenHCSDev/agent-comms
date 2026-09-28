@@ -35,10 +35,17 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
     ):
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", info.model)
         comms = wire(tmp_path / "acp-wire")
+        root_id = comms.messaging.initialize_private_initial_protocol()
         project = tmp_path / "proj"
         project.mkdir()
         agent = CommsAgent(
-            comms, agent_bin=launcher, agent_args=[], runtime_enabled=True, auto_wake=False
+            comms,
+            agent_bin=launcher,
+            agent_args=[],
+            runtime_enabled=True,
+            auto_wake=False,
+            private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            private_nk_wire_root_id=root_id,
         )
         updates = []
 
