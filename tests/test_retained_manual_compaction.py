@@ -17,6 +17,7 @@ from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.owner_compaction_prepare import prepare_native_source
+from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.selected_pi_route import read_selected_compaction_decision
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
@@ -44,7 +45,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
     config.mkdir()
     project = tmp_path / "project"
     project.mkdir()
-    provider = LoopbackProvider(status=200)
+    provider = LoopbackProvider(status=200, text="Condensed context. " * 800)
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
     provider.port = server.sockets[0].getsockname()[1]
     model = "retained-local/fixture"
@@ -95,7 +96,11 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
     agent = None
     try:
         preparation = await asyncio.to_thread(
-            prepare_native_source, package, str(session), keep_recent_tokens=20000
+            prepare_native_source,
+            package,
+            str(session),
+            settings=PiCompactionSettings(16384, 20000),
+            context_window=272000,
         )
         assert preparation is not None
         comms = Comms(tmp_path / "wire")

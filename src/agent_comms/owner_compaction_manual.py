@@ -44,7 +44,9 @@ async def compact_manual_owner(
 ):
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
     if persistent is None or persistent.proc is None:
-        raise ValueError("Canonical manual compaction requires the prepared selected native session")
+        raise ValueError(
+            "Canonical manual compaction requires the prepared selected native session"
+        )
     owner, generation = runner.comms.registry.live_owner_with_generation(thread_name)
     if owner.session_file is None or owner.active_turn is None or not owner.model:
         raise ValueError("Manual compaction requires the active owner and saved native session")
@@ -146,7 +148,8 @@ async def compact_manual_owner(
         generation,
         persistent,
         summarize,
-        keep_recent_tokens=settings.keep_recent_tokens,
+        settings=settings,
+        context_window=info.context_size,
         pending_input_key=pending_input_key,
         allow_split_turn=False,
     )

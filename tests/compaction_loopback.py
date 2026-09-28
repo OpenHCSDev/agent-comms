@@ -5,8 +5,9 @@ import json
 
 
 class LoopbackProvider:
-    def __init__(self, *, status: int = 503):
+    def __init__(self, *, status: int = 503, text: str = "local summary"):
         self.status = status
+        self.text = text
         self.port = 0
         self.posts = 0
         self.paths = []
@@ -60,7 +61,7 @@ class LoopbackProvider:
                     }
                     return b"data: " + json.dumps(chunk).encode() + b"\n\n"
 
-                body = event("local summary", None) + event("", "stop") + b"data: [DONE]\n\n"
+                body = event(self.text, None) + event("", "stop") + b"data: [DONE]\n\n"
                 writer.write(
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
                     + str(len(body)).encode()
