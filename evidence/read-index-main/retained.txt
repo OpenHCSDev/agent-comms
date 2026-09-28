@@ -1,0 +1,3 @@
+{"source_bytes": 143686055, "ticks": 138, "max_tick_s": 0.07835457200417295, "total_s": 5.3385309339355445, "reopen_s": 0.00048713298747316003, "counts": {"agent-comms-ux": 2486}}
+{"cancel_and_interpreter_executor_join_s": 0.01663374299823772}
+PASS: interpreter shutdown completed

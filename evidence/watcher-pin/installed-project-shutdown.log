@@ -1,0 +1,2 @@
+{"project": "/home/ts/.agent-comms", "native_ready_at_close": false, "watcher_reused": true, "watcher_and_child_joined": true}
+PASS: actual project UI and interpreter shutdown completed
