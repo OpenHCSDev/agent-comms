@@ -1254,3 +1254,17 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
         "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol"
     )
     assert "The usage limit has been reached" in usage.public_message
+
+
+def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
+    session = _evidence(tmp_path)
+    recorded = _read_native_context_evidence(session, INPUT_ID)
+    journal = Path(str(session) + ".input-proof")
+    first = json.loads(journal.read_text())
+    later = {**first, "requestGeneration": 2, "llmContextDigest": "d" * 64}
+    with journal.open("a") as output:
+        output.write(json.dumps(later) + "\n")
+    assert _read_native_context_evidence(session, INPUT_ID).request_generation == 2
+    assert _read_native_context_evidence(session, INPUT_ID, request_generation=1) == recorded
+    with pytest.raises(NativePiUnavailable, match="no assembled-context"):
+        _read_native_context_evidence(session, INPUT_ID, request_generation=3)

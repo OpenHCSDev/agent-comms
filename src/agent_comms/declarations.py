@@ -76,9 +76,10 @@ from .envelope_claim_transitions import (
     ClaimProjection,
     ClaimRelease,
     ClaimTransition,
+    FileClaimPath,
     WakeAdmission,
     apply_transition,
-    normalize_existing_file,
+    normalize_claim_file,
     parse_complete_transition_line,
 )
 from .mentions import MentionCandidate, ThreadMention
@@ -3674,7 +3675,7 @@ class MessageBus:
         *,
         worktree: Path,
         incarnation: str,
-        claims: Sequence[str | Path] = (),
+        claims: Sequence[str | Path | FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
         _locked_registry_snapshot: RegistrySnapshot | None = None,
         _bus_locked: bool = False,
@@ -3727,7 +3728,7 @@ class MessageBus:
                 snapshot=_locked_registry_snapshot,
             )
             owner_incarnation = str(incarnation)
-            requested = tuple(sorted(normalize_existing_file(worktree, path) for path in claims))
+            requested = tuple(sorted(normalize_claim_file(worktree, path) for path in claims))
             release_paths = tuple(sorted(_release_resource(worktree, path) for path in releases))
             release_records: list[ClaimRelease] = []
             for resource in release_paths:
