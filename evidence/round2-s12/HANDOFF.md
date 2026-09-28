@@ -38,3 +38,37 @@ that old addressed rows cannot create new attempts. No migration store is added.
 
 #230 remains the draft owner for all S12 work. NativeRuntimeInput and table
 migrations are still open; foundation adoption alone is not full surface closure.
+
+## Admission-floor handoff (source evidence; parent L0b owns activation)
+
+The existing candidate checkpoint (`wake_candidates.sqlite3`, checkpoint row:
+root_id/device/inode/byte_offset/tail_digest/last_seq) records index progress,
+NOT eligibility. Rebuilding it indexes historical recipients too. Existing
+`cohort_foreground._accept_visible_initials` accepts every addressed initial after
+its supplied cursor; `run_foreground_once` starts that cursor at zero.
+`CoordinatedPrivateRunner._select` uses `self.after_seq`, also defaulting to zero.
+`_production_optional_awareness` and `native_source_cursor._bounded_coverage_pages`
+begin their ranges at zero. Therefore a reset plus checkpoint rebuild alone
+would make historical inputs eligible again or stall fresh proof coverage.
+
+Concrete proposal for parent review/implementation: persist `admission_after_seq`
+on existing WireMetadata during the quiescent D22 rewrite, with H captured under
+its existing bus lock and checked against last_seq. Preserve this field through
+all future publications/checkpoint updates. This is the current root's authority,
+not a migration sidecar. Missing/new-format-invalid authority must fail closed.
+All claim acceptance and native selection use max(caller_after_seq, that floor),
+including direct accept_initial_cohort calls, not only the foreground scanner.
+Optional awareness and bounded native source coverage must start at the same
+floor; original messages remain available through history reads. The candidate
+index can be rebuilt for complete history and then page strictly above H for
+wake eligibility. Checkpoint through_seq/byte_offset still attest the rewritten
+source; they are not fabricated native inputs.
+
+Do NOT seed CurrentNativeCursor.covered_seq or injected_seq to H: those are native
+proof projections. Initial native proof is empty; only post-floor verified input
+may advance it. Admission floor does not assert that old UNKNOWN work succeeded.
+Required cutover test: retain an old addressed unfinished/UNKNOWN input <= H;
+reset and relaunch; verify zero new claim/native/provider attempts for it, then
+append one addressed input > H and verify its single normal admission. Repeat
+ordinary restart/index rebuild to prove the floor survives; history retains both.
+This is an explicit remaining integration requirement, not completed behavior.

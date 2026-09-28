@@ -58,7 +58,9 @@ def test_adopted_modules_have_no_raw_sqlite_access():
     for path in SOURCE.glob("*.py"):
         tree = ast.parse(path.read_text())
         if any(
-            isinstance(node, ast.ImportFrom) and node.module and node.module.split(".")[-1] == "typed_table"
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.split(".")[-1] == "typed_table"
             for node in ast.walk(tree)
         ):
             adopted[path.name] = violations(tree)
