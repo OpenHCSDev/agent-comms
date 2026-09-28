@@ -34,6 +34,7 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .goal_management import Goals
+from .historical_views import ChannelDisplayHistory, ChannelHistory, DMHistory, HistoryView
 from .message_bus import MessageBus
 from .message_page import MessagePage
 from .messages import Message
@@ -109,15 +110,9 @@ class HistoryViews:
     ) -> MessagePage:
         """Bounded DM history for any client adapter."""
 
-        def matches(message, snapshot):
-            def names(name):
-                return snapshot.aliases.get(name, name)
-
-            return {names(message.sender), names(message.target)} == {names(a), names(b)}
-
         return self._integrated_display_page(
             lambda **kwargs: self.bus.dm_history_page(a, b, **kwargs),
-            matches,
+            DMHistory(a, b),
             worktree=None,
             before=before,
             after=after,
@@ -148,7 +143,7 @@ class HistoryViews:
         )
 
     def _integrated_display_page(
-        self, live_page, matches, *, worktree, before, after, limit, max_bytes
+        self, live_page, view: HistoryView, *, worktree, before, after, limit, max_bytes
     ):
         from .historical_views import HistoricalDisplay, HistoryCursor
 
@@ -168,7 +163,7 @@ class HistoryViews:
                     history_revision=history_revision,
                 )
         history = self.bus.historical_page(
-            matches,
+            view,
             before=before if historical and before is not None else None,
             after=after if historical and after is not None else None,
             limit=limit,
@@ -215,17 +210,6 @@ class HistoryViews:
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name
 
-        def matches(message, snapshot):
-            # A view spans older incarnations by name, but each row retains its
-            # original source identity. Source aliases never rewrite live ones.
-            def canonical(name):
-                return snapshot.aliases.get(name, name)
-
-            return {canonical(message.sender), canonical(message.target)} == {
-                canonical(viewer),
-                canonical(peer),
-            }
-
         historical_only = peer not in self.registry and bool(self.historical_threads(peer))
 
         def live_page(**kwargs):
@@ -235,7 +219,7 @@ class HistoryViews:
 
         return self._integrated_display_page(
             live_page,
-            matches,
+            DMHistory(viewer, peer),
             worktree=worktree,
             before=before,
             after=after,
@@ -266,21 +250,9 @@ class HistoryViews:
         if channel is None:
             raise ValueError(f"Unknown channel: {target!r}")
 
-        def matches(message, snapshot):
-            members = frozenset(
-                name
-                for name, thread in snapshot.threads.items()
-                if channel.any_mode and channel.exact and channel.tags <= thread.tags
-            )
-            members |= frozenset(
-                name for name, owner in snapshot.aliases.items() if owner in members
-            )
-            targets = channel.builtin.history_targets if channel.builtin else frozenset({target})
-            return ChannelDisplayScope(target, targets, channel.any_mode, members).includes(message)
-
         return self._integrated_display_page(
             lambda **kwargs: self._live_channel_display_page(target, worktree=worktree, **kwargs),
-            matches,
+            ChannelDisplayHistory(channel),
             worktree=worktree,
             before=before,
             after=after,
@@ -415,7 +387,7 @@ class HistoryViews:
         targets = self.channels.catalog.read().history_targets(target)
         return self._integrated_display_page(
             lambda **kwargs: self.bus.channel_history_page(target, **kwargs),
-            lambda message, snapshot: targets is None or message.target in targets,
+            ChannelHistory(target, targets),
             worktree=None,
             before=before,
             after=after,
@@ -459,35 +431,15 @@ class HistoryViews:
             if canonical_viewer is not None
             else frozenset()
         )
-        scopes: list[ChannelDisplayScope] = []
-        for channel in channels.values():
-            members = frozenset(
-                name
-                for name, thread in registry.threads.items()
-                if channel.any_mode and channel.exact and channel.tags <= thread.tags
-            )
-            participant_names = members | frozenset(
-                name for name, owner in registry.aliases.items() if owner in members
-            )
-            targets = (
-                channel.builtin.history_targets
-                if channel.builtin is not None
-                else frozenset({channel.name})
-            )
-            scopes.append(
-                ChannelDisplayScope(
-                    channel.name,
-                    targets,
-                    channel.any_mode,
-                    participant_names,
-                    seen_sequences=seen,
-                )
-            )
+        scopes = tuple(
+            ChannelDisplayScope.capture(channel, registry, seen=seen)
+            for channel in channels.values()
+        )
         notice = self.bus.reads.read().notice
         return (
             registry,
             channels,
-            tuple(scopes),
+            scopes,
             order,
             canonical_viewer,
             viewer_names,
@@ -595,7 +547,7 @@ class HistoryViews:
     ) -> MessagePage:
         return self._integrated_display_page(
             self.bus.full_history_page,
-            lambda message, snapshot: True,
+            ChannelHistory(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets),
             worktree=None,
             before=before,
             after=after,

@@ -7,6 +7,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import astuple, dataclass, field
 from pathlib import Path
@@ -17,6 +18,7 @@ from .field_codec import FieldCodec
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
+    from .channels import Channel
     from .messages import Message
     from .registry_document import RegistrySnapshot
 
@@ -198,8 +200,49 @@ class DMDisplayBasis:
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
+class MessageDisplayScope(ABC):
+    """Captured inclusion and its sound candidate reduction for the page index."""
+
+    @property
+    @abstractmethod
+    def index_targets(self) -> frozenset[str] | None:
+        """None means that target alone cannot exclude a candidate."""
+
+    @abstractmethod
+    def includes(self, message: Message) -> bool:
+        """Apply the captured predicate to a validated authoritative message."""
+
+
 @dataclass(frozen=True, slots=True)
-class ChannelDisplayScope:
+class DMDisplayScope(MessageDisplayScope):
+    first_names: frozenset[str]
+    second_names: frozenset[str]
+
+    @classmethod
+    def capture(cls, a: str, b: str, snapshot: RegistrySnapshot) -> DMDisplayScope:
+        def names(name: str) -> frozenset[str]:
+            canonical = snapshot.aliases.get(name, name)
+            return frozenset(
+                {
+                    canonical,
+                    *(alias for alias, owner in snapshot.aliases.items() if owner == canonical),
+                }
+            )
+
+        return cls(names(a), names(b))
+
+    @property
+    def index_targets(self) -> frozenset[str]:
+        return self.first_names | self.second_names
+
+    def includes(self, message: Message) -> bool:
+        return (message.sender in self.first_names and message.target in self.second_names) or (
+            message.sender in self.second_names and message.target in self.first_names
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelDisplayScope(MessageDisplayScope):
     """One captured local display predicate; it never changes delivery or history ownership."""
 
     channel: str
@@ -208,6 +251,27 @@ class ChannelDisplayScope:
     participant_names: frozenset[str] = frozenset()
     seen_sequences: frozenset[int] = frozenset()
     displayed: DisplayBasis | None = field(default=None, compare=False)
+
+    @classmethod
+    def capture(
+        cls, channel: Channel, snapshot: RegistrySnapshot, *, seen: frozenset[int] = frozenset()
+    ) -> ChannelDisplayScope:
+        members = frozenset(
+            name
+            for name, thread in snapshot.threads.items()
+            if channel.any_mode and channel.exact and channel.tags <= thread.tags
+        )
+        participant_names = members | frozenset(
+            alias for alias, owner in snapshot.aliases.items() if owner in members
+        )
+        targets = channel.builtin.history_targets if channel.builtin else frozenset({channel.name})
+        return cls(channel.name, targets, channel.any_mode, participant_names, seen)
+
+    @property
+    def index_targets(self) -> frozenset[str] | None:
+        # The existing offset index has no mention column. Any-mode can match
+        # sender, DM peer or a mention regardless of target; never drop those rows.
+        return None if self.any_mode else self.targets
 
     def same_projection(self, other: ChannelDisplayScope) -> bool:
         """Read progress and unrelated store revisions do not change inclusion."""
