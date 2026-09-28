@@ -2,6 +2,8 @@
 
 ## Candidate and integration
 
+Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/199
+
 Branch `refactor/input-disposition-documents-20260928`. Implementation checkpoint
 `e3715e9`, merged main197 (`15c6a76`) at `4902048`; final commit adds schema-only
 codec caching and current fixture/import repairs. Parent owns integration198,
@@ -60,6 +62,11 @@ include registry stop/heartbeat/goal, bus, input and send mutations.
 - `codec-final.txt`: 53 passed after main197, typed documents + Pi payload + codec
   + family. Parent independently reports 96 shared-boundary cases passed including
   Pi RPC (`evidence/r3-integration/combined-codec-boundary.log`).
+- `boundary-focused.txt`: 45 passed, bounded tool output, headless diagnostics,
+  runtime goal retry and private N/K entrypoint current callers.
+- `stack-canonical.txt`: 2 passed, actual native repeated inbox with 935 UNKNOWN
+  records and ACP saved-history compaction, using the matching existing prepared
+  integration launcher and localhost fake provider.
 - `codec-schema-cost.txt`: 1,000 record decodes resolve annotations once; no
   decoded document cache. Test also rejects a changed invalid value after caching.
 - `nra-working.json`: 79 detectors, zero omissions, complete global context scan,
@@ -82,11 +89,11 @@ hit 60/165-second budgets; their partial dots are not passes. Earlier migration
 failures and lock traceback are retained to explain the repairs, not counted as
 current failures or green suites.
 
-Two already-started final fixture receipts will be appended separately when they
-finish. `stack-final.txt` is a launcher commitment mismatch: shared live launcher
-and source pin differ, refused before input/provider dispatch. A rerun uses the
-existing matching integration launcher, without changing either native bundle.
-No deployment hold is imposed by these supplementary fixture receipts.
+`stack-final.txt` records the initial launcher commitment mismatch: shared live
+launcher and source pin differ, refused before input/provider dispatch. The
+matching existing integration launcher resolved it; `stack-canonical.txt` exits0
+with both cases passing. No native bundle was rebuilt or changed. All started
+final fixture batches have finished; no remaining concrete failure is identified.
 
 ## Parent install procedure
 
@@ -98,3 +105,9 @@ version1 documents decode directly; subsequent mutations use the same saved
 format through A8. Parent's normal serial activation handles owner restart.
 Rollback uses the preserved prior package; saved files remain readable in the
 unchanged external format. Never replay UNKNOWN records as part of rollout.
+
+## Cleanup
+
+Owned `.audit-work`, `callers.tmp` and `/home/ts/wt/.r3doc` test fixtures were
+removed after all local test processes exited. Published scripts/receipts and
+this persistent source branch remain. No native bundle or other worktree removed.
