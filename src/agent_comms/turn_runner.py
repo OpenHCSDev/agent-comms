@@ -248,9 +248,12 @@ class TurnRunner:
             if name != thread_name and activity.state.busy:
                 return True
         if sent_seq:
-            markers = self.comms.bus._read_markers()
-            for name, marker in markers.items():
-                if name != thread_name and marker >= sent_seq:
+            snapshot = self.comms.registry.snapshot()
+            document = self.comms.bus.reads.read()
+            for name in snapshot.threads:
+                if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(
+                    name, snapshot, document=document
+                ):
                     return True
         return False
 

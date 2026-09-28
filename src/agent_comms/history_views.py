@@ -980,7 +980,6 @@ class HistoryViews:
                     self.agents.runtime_info.path,
                     self.bus.reads.path,
                     self.root / GoalWaits.filename,
-                    self.bus.reads.path.with_name(self.bus.reads.legacy_filename),
                 )
             ),
             int(time.time()),
