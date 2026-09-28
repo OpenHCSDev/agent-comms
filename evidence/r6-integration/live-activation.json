@@ -1,0 +1,63 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-r6-transcripts-20260928",
+  "previous_owners": {
+    "agent-comms-ux": {
+      "pid": 2912403,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "high"
+    },
+    "pr95-selected-pi-summary-owner": {
+      "pid": 2912404,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "medium"
+    }
+  },
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2912403,
+      "pid": 2988592
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2912404,
+      "pid": 2988593
+    }
+  ],
+  "migrations": [
+    {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "columns": [
+        "session_file",
+        "entry_id",
+        "route"
+      ],
+      "rows": {
+        "routes": 0,
+        "input_display": 11,
+        "input_routing": 11
+      }
+    },
+    {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+      "columns": [
+        "session_file",
+        "entry_id",
+        "route"
+      ],
+      "rows": {
+        "routes": 17502,
+        "input_display": 0,
+        "input_routing": 0
+      }
+    }
+  ],
+  "error": null,
+  "ready": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true
+  },
+  "roster_count": 103,
+  "bus_seq": 60
+}

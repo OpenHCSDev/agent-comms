@@ -1,3 +1,21 @@
+# R6/R7 — MERGED AND LIVE
+
+Core202 (83b4f8ddc31bc5810b3fa94666bfd90771e6edbb; includes complete200/201) and Toad99 (14310b9721f092dddc909d6f545220f6ebf45ddd; includes98) run in runtime-r6-transcripts-20260928. Paired stack pins retain Textual4fa6a9c. The preparation narrative below is historical and its activation-pending statements are superseded here.
+
+## Installed and live acceptance
+
+- Fresh configured-provider ACP queue/compaction retains all four facts; original and followup input each start once in order after committed compaction. No remaining UNKNOWN/reserved attempt or emitted error in that fresh fixture. Actual receipt installed-provider-queue.json; no original history replay.
+- All17502 attached-source route annotations preserved on copied comparison, then live schema migrated after BOTH old owners exited via normal restart_owners. Live11 display/binding rows retained; no old route writer survives. Before-migration databases and launcher links backed up in state/before-r6-r7-activation-20260928. Full original59465-row comparison remains separate evidence; original shared source DB was not migrated.
+- Exactly two configured owners restarted and verified alive/local; models/thinking retained.103 identities preserved; source61/reply62 fresh unmentioned channel post caused actual native read/bash and exact R6_R7_LIVE_OK reply in16.505s. Native tool results contain no errors. Checkpoint verifies through62. No150-owner/p99 claim.
+- Installed default-route live UI displays original#comms20/#nra8 rows,111 historical identities and the original UX transcript; no bus input sent by history harness. Same copied-root UI acceptance passed before switching.
+- Normal toad-comms PTY opened the UX conversation without traceback/import failure, innerexit0 after12-second bounded observation. Raw PTY remains uncommitted; compact launcher-summary.json is committed.
+- Installed process/ACP/tool-diff tests and source121 combined seam cases remain scoped evidence, including local real-native four-tool execution and lease/claim cleanup. Declaration-schema cache reuse passed20 registry and24 payload/native boundary cases.
+- Unused74MB R1 runtime retired after process/launcher/registry/runtime reference checks. CurrentR6/R7 and previousR3 packages retained. PreviousR3 must not write migrated route databases; reverting requires coherent database restoration, not switching one launcher back. Owned copied-route/history fixtures removed after receipts; original data, native proof projects and worktrees retained.
+
+## Remaining original closure
+
+Darwin's final source audit identified residual non-resource claim/turn_claim identifiers in current lease/assignment consumers; Darwin is implementing full caller/test deletion closure. Pascal independently closes remaining builtin-global target literals against existing declarations. Additional PF1-PF5 surfaces are audited proposals in the next refactoring backlog, not silently claimed complete or launched as duplicate work. Historical universal size/lock guards and exhaustive recorded-stream/150-thread benchmark evidence remain qualified; focused local and actual installed paths satisfy the owner's current operational shipping gate, not a claim that those older experiments ran. CI deferred. Goal remains active for the concrete closure fixes and final audit.
+
 # R6/R7 combined integration — candidate installed, activation pending
 
 Parent integration contains the entire R6 core200 and R7 core201 branches. Paired Toad98 source is integrated into the parent Toad tree; its remaining direct lease caller is migrated. Current live runtime remains R3; no live transcript schema migration or replay has occurred.
