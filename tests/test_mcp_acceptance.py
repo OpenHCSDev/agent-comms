@@ -395,9 +395,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 await owner.new_session(cwd=str(project), mcp_servers=[])
                 attached = SimpleNamespace(
                     _comms=owner._comms,
-                    _transcript_snapshots=False,
-                    _transcript_diffs=False,
-                    _client=Attachment(),
+                    sessions=SimpleNamespace(
+                        transcript=SimpleNamespace(snapshots=False, diffs=False),
+                        client=Attachment(),
+                    ),
                 )
                 proxy = RuntimeProxy(attached, "project", owner._runtime.path)
                 await proxy.subscribe()
@@ -419,7 +420,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         )
                     )
                     await asyncio.wait_for(entered.wait(), TIMEOUT)
-                    assert owner._active_turns.get("project")
+                    assert owner.turns.active_turns.get("project")
                     if case == "revoke_midturn":
                         await asyncio.to_thread(
                             _deny_via_simulated_user_pty,
@@ -429,7 +430,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                             env,
                             tmp_path / "pty-deny.log",
                         )
-                        assert owner._active_turns.get("project")  # Genuine mid-turn denial.
+                        assert owner.turns.active_turns.get("project")  # Genuine mid-turn denial.
                     elif case == "disconnect":
                         if observer:
                             # Receipt of the RPC is not proof that the user saw
@@ -441,7 +442,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     release.set()
                     if case == "revoke_midturn":
                         assert await asyncio.to_thread(second_request.wait, 12)
-                        assert owner._active_turns.get("project")
+                        assert owner.turns.active_turns.get("project")
                         # The final model response is still held at localhost:
                         # connection retirement cannot be Pi turn shutdown.
                         for pid in map(int, starts.read_text().splitlines()):
@@ -450,7 +451,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         (tmp_path / "midturn-retired.json").write_text(
                             json.dumps(
                                 {
-                                    "turnId": owner._active_turns["project"],
+                                    "turnId": owner.turns.active_turns["project"],
                                     "finalModelResponseHeld": True,
                                     "mcpPidsAbsent": True,
                                 }

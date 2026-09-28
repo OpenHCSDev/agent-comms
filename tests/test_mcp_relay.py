@@ -11,7 +11,6 @@ from types import SimpleNamespace
 import pytest
 from acp.schema import PromptResponse
 
-from agent_comms import acp as acp_module
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
@@ -33,15 +32,15 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
     receipt = {"inputId": "a" * 32}  # Backend validation is tested separately.
     event = ae.McpLiveStatus(receipt)
     try:
-        owner._active_turns["session-1"] = "turn-1"
+        owner.turns.active_turns["session-1"] = "turn-1"
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         assert len(updates) == 1
         assert updates[0]["session_id"] == "session-1"
         meta = updates[0]["update"].model_dump(by_alias=True)["_meta"]["agentComms"]
         assert meta == {"turnId": "turn-1", "mcpClient": receipt}
-        owner._active_turns.pop("session-1")  # Settled: no receipt may escape.
+        owner.turns.active_turns.pop("session-1")  # Settled: no receipt may escape.
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
-        owner._active_turns["session-1"] = "turn-2"
+        owner.turns.active_turns["session-1"] = "turn-2"
         # A stale receipt arriving FIRST in a successor turn still loses.
         await owner._emit_event("session-1", event, observer, turn_id="turn-1")
         await owner._emit_event("session-2", event, observer, turn_id="turn-1")
@@ -91,8 +90,18 @@ prompt = json.loads(sys.stdin.readline())
 send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
       "inputId": prompt["inputId"]}}}})
-send({json.dumps({"type": "extension_ui_request", "id": "owned-ui-1", "method": method,
-       "title": "Run one operation?", "message": "exact request", "options": ["one", "two"]})})
+send({
+            json.dumps(
+                {
+                    "type": "extension_ui_request",
+                    "id": "owned-ui-1",
+                    "method": method,
+                    "title": "Run one operation?",
+                    "message": "exact request",
+                    "options": ["one", "two"],
+                }
+            )
+        })
 reply = json.loads(sys.stdin.readline())
 with open({str(marker)!r}, "w") as output: json.dump(reply, output)
 send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
@@ -132,7 +141,7 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     session_id = "project"
     turn = "turn-1"
-    agent._active_turns[session_id] = turn
+    agent.turns.active_turns[session_id] = turn
     request = {"id": "ui-1", "method": "confirm", "title": "Confirm", "message": "One action"}
 
     class DirectController:
@@ -141,14 +150,14 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
             return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
     controller = DirectController()
-    agent._client = controller
-    assert (await agent._extension_ui_permission(session_id, turn, controller, request)) == {
+    agent.sessions.client = controller
+    assert (await agent.turns.extension_ui_permission(session_id, turn, controller, request)) == {
         "confirmed": True,
     }
     assert (
-        await agent._extension_ui_permission(session_id, "wrong-turn", controller, request)
+        await agent.turns.extension_ui_permission(session_id, "wrong-turn", controller, request)
     ) is None
-    assert await agent._extension_ui_permission(session_id, turn, None, request) is None
+    assert await agent.turns.extension_ui_permission(session_id, turn, None, request) is None
     assert agent._runtime.controller.get() is UNBOUND_CONTROLLER
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -159,14 +168,14 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
 
     controller.request_permission = delayed
     in_flight = asyncio.create_task(
-        agent._extension_ui_permission(session_id, turn, controller, request)
+        agent.turns.extension_ui_permission(session_id, turn, controller, request)
     )
     await asyncio.wait_for(entered.wait(), timeout=1)
-    agent._active_turns[session_id] = "successor-turn"
+    agent.turns.active_turns[session_id] = "successor-turn"
     release.set()
     assert await asyncio.wait_for(in_flight, timeout=1) is None
-    agent._active_turns[session_id] = turn
-    monkeypatch.setattr(acp_module, "ACP_PERMISSION_TIMEOUT_SECONDS", 0.05)
+    agent.turns.active_turns[session_id] = turn
+    monkeypatch.setattr("agent_comms.turn_runner.ACP_PERMISSION_TIMEOUT_SECONDS", 0.05)
 
     async def unresponsive(**kwargs):
         await asyncio.Event().wait()
@@ -174,7 +183,7 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
     controller.request_permission = unresponsive
     assert (
         await asyncio.wait_for(
-            agent._extension_ui_permission(session_id, turn, controller, request), timeout=1
+            agent.turns.extension_ui_permission(session_id, turn, controller, request), timeout=1
         )
         is None
     )
@@ -304,15 +313,15 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
             instance = SimpleNamespace(session_update=update, request_permission=answer)
             fake = SimpleNamespace(
                 _comms=owner._comms,
-                _transcript_snapshots=False,
-                _transcript_diffs=False,
-                _client=instance,
+                sessions=SimpleNamespace(
+                    transcript=SimpleNamespace(snapshots=False, diffs=False), client=instance
+                ),
             )
             proxy = RuntimeProxy(fake, session_id, owner._runtime.path)
             await proxy.subscribe()
             proxies.append(proxy)
         assert proxies[0]._controller_token != proxies[1]._controller_token
-        assert "controllerToken" not in owner._session_metadata(session_id)["agentComms"]
+        assert "controllerToken" not in owner.sessions.metadata(session_id)["agentComms"]
         request = {
             "id": "only-one-child",
             "method": "confirm",
@@ -322,13 +331,13 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
 
         async def fake_prompt(session_id, prompt, **kwargs):
             controller = owner._runtime.controller.get()
-            owner._active_turns[session_id] = "private-turn"
+            owner.turns.active_turns[session_id] = "private-turn"
             try:
-                answer = await owner._extension_ui_permission(
+                answer = await owner.turns.extension_ui_permission(
                     session_id, "private-turn", controller, request
                 )
             finally:
-                owner._active_turns.pop(session_id, None)
+                owner.turns.active_turns.pop(session_id, None)
             return PromptResponse(stop_reason="end_turn", field_meta={"answer": answer})
 
         monkeypatch.setattr(owner, "prompt", fake_prompt)
@@ -355,7 +364,7 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
             await unresolved.wait()
             return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
-        proxies[0].agent._client.request_permission = blocked_answer
+        proxies[0].agent.sessions.client.request_permission = blocked_answer
         pending = asyncio.create_task(proxies[0].request("prompt", prompt=[]))
         await asyncio.wait_for(entered.wait(), timeout=4)
         await proxies[0].close()
@@ -524,7 +533,7 @@ input.on('line', async line => {{
     try:
         for _ in range(2):
             # A detached owner can have passive observers without any active
-            # controller. A bound None must not fall back to owner._client.
+            # controller. A bound None must not fall back to owner.sessions.client.
             context = owner._runtime.controller.set(None) if not has_controller else None
             try:
                 result = await asyncio.wait_for(

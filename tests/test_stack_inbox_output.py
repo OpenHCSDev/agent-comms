@@ -192,7 +192,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
         monkeypatch.setattr(backend, "stream_agent_events", collect_events)
         comms = wire(root / "wire")
         agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
-        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"
             project.mkdir()
@@ -214,7 +214,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 for index in range(935)
             }
             # Populate the durable ledger once; setup must not perform 935 rewrites.
-            agent._dispositions._write(old_rows)
+            agent.inputs.dispositions._write(old_rows)
             full_result = {
                 "messages": [],
                 "acknowledged": 0,
@@ -222,7 +222,9 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             }
             assert 900_000 < len(json.dumps(full_result, indent=2).encode()) < 1_100_000
             await asyncio.wait_for(
-                agent._run_owned_input("parent", "parent", "Inspect the inbox twice, then finish."),
+                agent.inputs.run_owned_input(
+                    "parent", "parent", "Inspect the inbox twice, then finish."
+                ),
                 45,
             )
             assert not failures, failures
@@ -260,7 +262,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert len(terminal) == 1 and terminal[0].ok is True
             assert terminal[0].text == "INBOX_INSPECTED_TWICE"
             assert len([event for event in events if isinstance(event, ae.InputStarted)]) == 1
-            saved_rows = agent._dispositions._read()
+            saved_rows = agent.inputs.dispositions._read()
             assert {key: saved_rows[key] for key in old_rows} == old_rows
             transcript = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in transcript.read_text().splitlines()]

@@ -105,7 +105,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             updates.append(kwargs["update"])
 
     try:
-        await agent._replay_transcript("worker", "worker", client=Client())
+        await agent.sessions.transcript.replay("worker", "worker", client=Client())
         events = updates[0].field_meta["agentComms"]["transcript"]
         assert [event["text"] for event in events if event["kind"] == "context"] == [
             GOAL_PROMPT,

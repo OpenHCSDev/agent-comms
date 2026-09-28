@@ -17,11 +17,11 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
     wired, tmp_path, monkeypatch, outcome, pause_timing
 ):
     agent = CommsAgent(wired, agent_bin="pi")
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
     goal = wired.update_goal("project", "set", text="Continue independent work")
     GoalFixture()._authorize_test_goal(agent, wired, goal)
-    agent._dispositions.record(
+    agent.inputs.dispositions.record(
         "acp:earlier-uncertain",
         seq=None,
         owner="project",
@@ -29,7 +29,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         target="project",
         text="Do not replay this input",
     )
-    ledger_before = agent._dispositions.path.read_bytes()
+    ledger_before = agent.inputs.dispositions.path.read_bytes()
     paused = None
     pause_bytes = None
 
@@ -67,21 +67,21 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
                 diagnostic={"exit_code": 0},
             )
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", failed_events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
-        await agent._run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+        await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
         assert paused is not None
         assert wired.registry.require("project").goal == paused
         assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
         assert wired.goal_pause("project").owner_instruction is not None
-        assert agent._dispositions.path.read_bytes() == ledger_before
-        assert agent._dispositions.status("acp:earlier-uncertain") == "unknown"
-        generation = agent._goal_store.snapshot(goal.id)
+        assert agent.inputs.dispositions.path.read_bytes() == ledger_before
+        assert agent.inputs.dispositions.status("acp:earlier-uncertain") == "unknown"
+        generation = agent.turns.goal_store.snapshot(goal.id)
         assert generation.state == "blocked" and generation.attempt_id is not None
         with pytest.raises(UnresolvedAttempt):
-            agent._goal_store.resume(goal.id, generation.number)
-        agent._schedule_goal("project")
-        assert not agent._pending_turns.get("project")
+            agent.turns.goal_store.resume(goal.id, generation.number)
+        agent.turns.schedule_goal("project")
+        assert not agent.inputs.pending_turns.get("project")
         diagnostics = list((wired.root / "diagnostics").glob("*.json"))
         assert len(diagnostics) == 1
         diagnostic = json.loads(diagnostics[0].read_text())
@@ -100,9 +100,12 @@ def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, 
     if attribution == "stale_owner":
         wired.update_goal("project", "paused", goal_id=initial.id, owner_action=True)
         wired.update_goal("project", "active", goal_id=initial.id, owner_action=True)
-    paused = wired.update_goal(
-        "project", "paused", goal_id=initial.id, model_report=attribution == "model"
-    )
+    if attribution == "model":
+        # Current goal declarations deny a model pause before any state change.
+        with pytest.raises(ValueError, match="cannot take goal action 'paused'"):
+            wired.update_goal("project", "paused", goal_id=initial.id, model_report=True)
+        assert wired.registry.require("project").goal == initial
+    paused = wired.update_goal("project", "paused", goal_id=initial.id)
     if attribution == "missing":
         (wired.root / "goal_pause_events.json").unlink()
     elif attribution == "stale_owner":

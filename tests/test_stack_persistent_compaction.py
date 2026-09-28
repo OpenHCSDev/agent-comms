@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.manual_compaction_bridge import compact_context
 
 
 def _history(session: Path, project: Path) -> None:
@@ -241,25 +242,25 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         try:
             await owner.new_session(str(project))
             comms.attach_session("worker", str(session))
-            await asyncio.wait_for(owner._run_owned_input("worker", "worker", "WARMUP"), 20)
-            retained = owner._persistent_backends["worker"].proc
+            await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "WARMUP"), 20)
+            retained = owner.turns.persistent_backends["worker"].proc
             assert retained is not None and retained.returncode is None, json.dumps(
                 updates, indent=2
             )
-            await asyncio.wait_for(owner._run_owned_input("worker", "worker", "REUSE"), 20)
-            assert owner._persistent_backends["worker"].proc is retained
+            await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "REUSE"), 20)
+            assert owner.turns.persistent_backends["worker"].proc is retained
             assert retained.returncode is None
             assert len(requests) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[-1]["messages"])
             before = session.read_bytes()
             (root / "retained-pid").write_text(str(retained.pid))
-            compact_task = asyncio.create_task(owner.compact_context("worker"))
+            compact_task = asyncio.create_task(compact_context(owner.turns, "worker"))
             entered = await asyncio.to_thread(summary_entered.wait, 15)
             if not entered and compact_task.done():
                 pytest.fail(f"Native compaction did not request summary: {compact_task.result()}")
             assert entered, "Native compaction did not reach localhost summary"
             assert retained.returncode is not None
-            assert owner._persistent_backends["worker"].proc is None
+            assert owner.turns.persistent_backends["worker"].proc is None
             writers = [
                 json.loads(line) for line in (root / "writers.jsonl").read_text().splitlines()
             ]
@@ -275,8 +276,10 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
             assert summary in compactions[0]["summary"]
-            await asyncio.wait_for(owner._run_owned_input("worker", "worker", "AFTER_COMPACT"), 20)
-            resumed = owner._persistent_backends["worker"].proc
+            await asyncio.wait_for(
+                owner.inputs.run_owned_input("worker", "worker", "AFTER_COMPACT"), 20
+            )
+            resumed = owner.turns.persistent_backends["worker"].proc
             assert resumed is not None and resumed.returncode is None
             assert resumed.pid != retained.pid
             assert len(requests) == 4
@@ -286,7 +289,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert "LEGACY_DISCARDED_HISTORY" not in context
             await owner.shutdown()
             assert resumed.returncode is not None
-            assert not owner._persistent_backends
+            assert not owner.turns.persistent_backends
         finally:
             release_summary.set()
             if compact_task is not None and not compact_task.done():

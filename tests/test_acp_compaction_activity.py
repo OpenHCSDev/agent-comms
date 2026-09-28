@@ -16,7 +16,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", auto_wake=False)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
 
     def activity(state, detail):
@@ -45,9 +45,9 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
         assert comms.activity_of("project").state is ActivityState.IDLE
         yield ae.Done(ok=not aborted, text="Done")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn("project", "project", "Read these files")
+        await agent.turns.run_agent_turn("project", "project", "Read these files")
         assert comms.activity_of("project").state is ActivityState.IDLE
     finally:
         await agent.shutdown()
@@ -58,16 +58,16 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", auto_wake=False)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
 
     async def events(*args, **kwargs):
         yield ae.CompactionStart(reason="threshold")
         assert comms.activity_of("project").detail == "Compacting context"
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn("project", "project", "Read files")
+        await agent.turns.run_agent_turn("project", "project", "Read files")
         assert comms.activity_of("project").state is ActivityState.IDLE
     finally:
         await agent.shutdown()

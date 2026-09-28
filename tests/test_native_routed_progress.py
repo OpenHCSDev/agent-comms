@@ -128,7 +128,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
         ]
         agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
-        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "worker"
             project.mkdir()
@@ -137,7 +137,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             human = comms.user_identity(str(project))
             origin = Message(human.name, "#team", "Please help", MessageType.INFO)
             await asyncio.wait_for(
-                agent._run_agent_turn(
+                agent.turns.run_agent_turn(
                     "worker",
                     "worker",
                     "Please help",

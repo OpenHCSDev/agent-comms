@@ -13,9 +13,9 @@ async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_pa
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     async with queued_delivery_owner(tmp_path) as (owner, proxy, session, incoming):
-        ledger = owner._dispositions
+        ledger = owner.inputs.dispositions
         before = ledger._read()
-        cursor_before = owner._delivery_cursors.path.read_bytes()
+        cursor_before = owner.inputs.delivery_cursors.path.read_bytes()
         snapshot = await proxy.request("input_dispositions")
         assert snapshot["currentScope"] == "owner_queue"
         assert [row["inputId"] for row in snapshot["inputs"]] == [f"bus:{incoming.seq}"]
@@ -35,11 +35,11 @@ async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_pa
             key: {k: v for k, v in row.items() if k != "notice_dismissed"}
             for key, row in after.items()
         } == before
-        assert owner._delivery_cursors.path.read_bytes() == cursor_before
-        assert len(owner._pending_turns[session]) == 1 and not owner._backend_inboxes
+        assert owner.inputs.delivery_cursors.path.read_bytes() == cursor_before
+        assert len(owner.inputs.pending_turns[session]) == 1 and not owner.inputs.backend_inboxes
         # A new input arriving after the clear cannot inherit a cleared notice.
         second = owner._comms.send_message("peer", session, "A second new input")
-        await owner._drain_inbox(session)
+        await owner.inputs.drain_inbox(session)
         fresh = await proxy.request("input_dispositions")
         assert [r["sequence"] for r in fresh["inputs"]] == [incoming.seq, second.seq]
         assert fresh["dismissedHistoricalCount"] == 2

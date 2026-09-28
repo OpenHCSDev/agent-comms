@@ -11,8 +11,15 @@ from agent_comms import backend, wire
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.config_options import ConfigOption
 from agent_comms.declarations import MessageRoute
+from agent_comms.operations import TranscriptEvent
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from agent_comms.transcript_updates import TranscriptUpdate
+from agent_comms.transcript_updates import (
+    AssistantTranscriptUpdate,
+    NoticeTranscriptUpdate,
+    StartedTranscriptUpdate,
+    TranscriptUpdate,
+    UserTranscriptUpdate,
+)
 
 
 @pytest.fixture
@@ -31,7 +38,7 @@ async def owner(tmp_path, monkeypatch):
         agent_args=["--model", "test/one"],
         auto_wake=False,
     )
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     try:
         yield agent
     finally:
@@ -47,15 +54,12 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
     )
     await other.initialize(1, {})
     session = await owner.new_session(str(tmp_path / "project"))
-    assert owner._sessions is owner.sessions.bindings
-    assert owner._setting_requests is owner.config.setting_requests
-    assert owner.config is owner.sessions.config
     assert (
-        owner.config.session_catalog_generation[session.session_id]
-        == owner.config.catalog_generation
+        owner.sessions.config.session_catalog_generation[session.session_id]
+        == owner.sessions.config.catalog_generation
     )
-    assert owner._transcript_snapshots is True and owner._transcript_diffs is True
-    assert not other._transcript_snapshots and not other._sessions
+    assert owner.sessions.transcript.snapshots is True and owner.sessions.transcript.diffs is True
+    assert not other.sessions.transcript.snapshots and not other.sessions.bindings
     assert not {
         "_sessions",
         "_proxies",
@@ -122,11 +126,11 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
             updates.append(update)
 
     owner.on_connect(Client())
-    await owner.config.sync_thread(response.session_id)
+    await owner.sessions.config.sync_thread(response.session_id)
     updates.clear()
     thread = owner._comms.registry.require(response.session_id)
     owner._comms.registry.register(replace(thread, task="medium"))
-    await owner.config.sync_thread(response.session_id)
+    await owner.sessions.config.sync_thread(response.session_id)
     assert len(updates) == 1
     assert updates[0].config_options[-1].current_value == "medium"
 
@@ -154,11 +158,15 @@ async def test_a_new_saved_update_is_decoded_and_published_without_consumer_edit
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
-    await owner._emit_event("alias", {"type": "highlight", "text": "saved text"}, client=Client())
+    await owner._emit_event(
+        "alias",
+        TranscriptUpdate.from_transcript(TranscriptEvent(kind="highlight", text="saved text")),
+        client=Client(),
+    )
     assert len(updates) == 1 and updates[0].content.text == "Highlight: saved text"
 
 
-async def test_legacy_update_json_and_unknown_kind_are_preserved(owner):
+async def test_typed_updates_preserve_protocol_json_and_unknown_saved_kind(owner):
     rows = []
 
     class Client:
@@ -167,17 +175,13 @@ async def test_legacy_update_json_and_unknown_kind_are_preserved(owner):
 
     client = Client()
     for event in [
-        {"type": "user", "text": "hello"},
-        {"type": "assistant", "text": "answer", "route": MessageRoute("a", ("b",))},
-        {"type": "notice", "text": "saved notice"},
-        {
-            "type": "started",
-            "turn_id": "turn",
-            "started_at": 12.0,
-            "activity": "working",
-            "activity_detail": "read",
-        },
-        {"type": "tool_start", "text": "legacy clients never rendered this"},
+        UserTranscriptUpdate(text="hello"),
+        AssistantTranscriptUpdate(text="answer", route=MessageRoute("a", ("b",))),
+        NoticeTranscriptUpdate(text="saved notice"),
+        StartedTranscriptUpdate(
+            turn_id="turn", started_at=12.0, activity="working", activity_detail="read"
+        ),
+        TranscriptUpdate.from_transcript(TranscriptEvent(kind="tool_start", text="unrendered")),
     ]:
         await owner._emit_event("session", event, client=client)
     assert rows == [

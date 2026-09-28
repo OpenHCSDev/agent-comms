@@ -53,14 +53,14 @@ async def test_installed_owner_manual_compaction_cannot_launch_legacy_writer(tmp
     alias.symlink_to(executable)
 
     class Owner:
-        _agent_bin = str(alias)
-        _turn_locks = {}
-        _active_turns = {}
+        def __init__(self):
+            self.turns = SimpleNamespace(agent_bin=str(alias), turn_locks={}, active_turns={})
+            self.turns.sessions = SimpleNamespace(sync_identity=self.sync_identity)
 
-        async def _sync_session_identity(self, session):
+        async def sync_identity(self, session):
             return session
 
-    result = await manual_compaction_bridge.compact_context(Owner(), "owner")
+    result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
     assert result == {
         "ok": False,
         "error": "Canonical native compaction requires the owner journal bridge.",

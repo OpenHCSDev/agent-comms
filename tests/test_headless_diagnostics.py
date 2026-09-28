@@ -46,7 +46,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", auto_wake=False)
-    monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
     comms.register(Thread(name="sender", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     incoming = comms.send_message("sender", "#comms", "Private input")
@@ -68,8 +68,8 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
         )
 
     monkeypatch.setattr(comms, "send", publish)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
-    await owner._run_agent_turn(
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+    await owner.turns.run_agent_turn(
         session, session, "Private input", origins=(incoming,), reply_targets=("#comms",)
     )
     assert observed[0]["sequences"] == [incoming.seq]
@@ -80,8 +80,8 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     assert "[Open diagnostic](file://" in notice["text"]
     assert "SECRET" not in notice["text"]
     assert (
-        owner._dispositions.status(
-            owner._dispositions.bus_key(incoming, comms.registry.require(session))
+        owner.inputs.dispositions.status(
+            owner.inputs.dispositions.bus_key(incoming, comms.registry.require(session))
         )
         == "unknown"
     )

@@ -449,8 +449,8 @@ async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(sess
     comms = wire(root)
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     current = comms.registry.require("project")
     comms.registry.register(replace(current, goal=Goal("retain exact history", "goal-e2e")))
@@ -459,7 +459,7 @@ async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(sess
         owner, "rounds", expected_owner_generation=epoch
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
-    persistent = agent._persistent_backends.setdefault("project", PersistentPiSession())
+    persistent = agent.turns.persistent_backends.setdefault("project", PersistentPiSession())
     received = []
 
     class Client:

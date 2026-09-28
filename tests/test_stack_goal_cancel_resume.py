@@ -148,8 +148,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
         created = await proxy.request("set_goal", text="Continue the owner objective")
         goal_id = created["goal"]["id"]
-        store = owner._open_goal_store()
-        owner._dispositions.record(
+        store = owner.turns.open_goal_store()
+        owner.inputs.dispositions.record(
             "acp:uncertain-sentinel",
             seq=None,
             owner=session,
@@ -157,7 +157,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             target=session,
             text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
         )
-        sentinel_before = owner._dispositions.get("acp:uncertain-sentinel")
+        sentinel_before = owner.inputs.dispositions.get("acp:uncertain-sentinel")
         turn = asyncio.create_task(
             proxy.request(
                 "prompt",
@@ -215,9 +215,11 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             final = GoalAttemptStore(store.root).snapshot(goal_id)
             assert final.number == ready.number + 1 and final.state == "ready"
             assert len(requests) == 2
-            assert owner._dispositions.get("acp:uncertain-sentinel") == sentinel_before
+            assert owner.inputs.dispositions.get("acp:uncertain-sentinel") == sentinel_before
             assert "UNCERTAIN_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)
-            disposition_rows = json.loads(owner._dispositions.path.read_text())["rows"].values()
+            disposition_rows = json.loads(owner.inputs.dispositions.path.read_text())[
+                "rows"
+            ].values()
             accepted = [row for row in disposition_rows if row["status"] == "started"]
             assert len(accepted) == 2
             assert len({row["native_id"] for row in accepted}) == 2

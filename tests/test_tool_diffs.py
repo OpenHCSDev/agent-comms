@@ -131,23 +131,23 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path):
     assert resource["mimeType"] == "text/x-diff"
     assert resource["text"] == patch
     assert resource["uri"].endswith("edit%2F1")
-    await agent._replay_transcript("worker", "worker", client)
+    await agent.sessions.transcript.replay("worker", "worker", client)
     assert client.updates[-1]["content"] == live_content
     # A newer owner must not send extra TranscriptEvent fields to an old UI.
     client.transcript_snapshots = True
-    await agent._replay_transcript("worker", "worker", client)
+    await agent.sessions.transcript.replay("worker", "worker", client)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert "diff" not in snapshot[0]
     client.transcript_diffs = True
-    await agent._replay_transcript("worker", "worker", client)
+    await agent.sessions.transcript.replay("worker", "worker", client)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
     client.transcript_snapshots = False
     client.transcript_diffs = False
-    await agent._replay_transcript("worker", "worker", client, snapshots=True)
+    await agent.sessions.transcript.replay("worker", "worker", client, snapshots=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert "diff" not in snapshot[0]
-    await agent._replay_transcript("worker", "worker", client, snapshots=True, diffs=True)
+    await agent.sessions.transcript.replay("worker", "worker", client, snapshots=True, diffs=True)
     snapshot = client.updates[-1]["_meta"]["agentComms"]["transcript"]
     assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
 

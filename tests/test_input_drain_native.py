@@ -57,7 +57,7 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
         comms.set_agent_info(
             "proj", model=info.model, context_used=info.context_used, context_size=info.context_size
         )
-        agent._persistent_backends["proj"] = persistent
+        agent.turns.persistent_backends["proj"] = persistent
         selected_exchange = SelectedSummarySlot.run_selected_summary
         accepted = []
         operations = []

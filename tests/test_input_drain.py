@@ -30,7 +30,7 @@ async def owner(tmp_path, monkeypatch):
     agent = CommsAgent(comms, auto_wake=False)
     agent.sessions.bindings["owner"] = "owner"
     agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
-    agent._active_turns["owner"] = "turn"
+    agent.turns.active_turns["owner"] = "turn"
     agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
     agent.inputs.dispositions.record(
         "acp:original",
@@ -95,7 +95,7 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
     assert not any(
         name in vars(agent) for name in ("_queued_inputs", "_dispositions", "_drain_tasks")
     )
-    assert agent._queued_inputs is agent.inputs.queued_inputs
+    assert not hasattr(agent, "_queued_inputs")
 
 
 @pytest.mark.parametrize(
@@ -118,7 +118,7 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
     if change == "steer":
         await queue(agent, delivery="steer")
     elif change == "clear":
-        await agent.clear_queued_inputs("owner")
+        await agent.inputs.clear_queued_inputs("owner")
     elif change == "promote":
         await agent.prompt("owner", [], agentComms={"sendNow": True})
     elif change == "shutdown":

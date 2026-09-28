@@ -154,7 +154,7 @@ class AcpEventConsumer(MroDispatch):
         session_id = self.session_id
         client = self.client
         turn_id = self.turn_id
-        if not turn_id or self.agent._active_turns.get(session_id) != turn_id:
+        if not turn_id or self.agent.turns.active_turns.get(session_id) != turn_id:
             return
         await client.session_update(
             session_id=session_id,
@@ -225,7 +225,7 @@ class AcpEventConsumer(MroDispatch):
         reason = event.reason
         if reason not in {"manual", "threshold", "overflow", "unknown"}:
             reason = "unknown"
-        summary = self.agent._sanitized_compaction_summary(event.publication_summary)
+        summary = backend.compaction_summary(event.publication_summary)
         status = {"start": "running", "end": "completed", "abort": "aborted"}[phase]
         status_text = {
             "start": "",
@@ -258,12 +258,12 @@ class AcpEventConsumer(MroDispatch):
         session_id = self.session_id
         client = self.client
         text = str(event.text or "Backend failed")
-        self.agent._emitted_errors[session_id] = text
+        self.agent.turns.emitted_errors[session_id] = text
         failed_input = None
-        input_text = self.agent._turn_input_text.get(session_id)
+        input_text = self.agent.inputs.turn_input_text.get(session_id)
         if input_text and any(
-            self.agent._dispositions.status(key) != "started"
-            for key in self.agent._turn_original_input_keys.get(session_id, ())
+            self.agent.inputs.dispositions.status(key) != "started"
+            for key in self.agent.inputs.turn_original_input_keys.get(session_id, ())
         ):
             failed_input = {"text": input_text, "reason": text}
         await client.session_update(
@@ -284,10 +284,10 @@ class AcpEventConsumer(MroDispatch):
     async def on_done(self, event: events.Done) -> None:
         session_id = self.session_id
         client = self.client
-        prior_error = self.agent._emitted_errors.pop(session_id, None)
+        prior_error = self.agent.turns.emitted_errors.pop(session_id, None)
         if not event.ok and event.text:
             text = str(event.text)
             # An explicit error event in this turn already showed the failure.
             if prior_error != text:
                 await self.agent._emit_event(session_id, events.Error(text), client)
-                self.agent._emitted_errors.pop(session_id, None)
+                self.agent.turns.emitted_errors.pop(session_id, None)

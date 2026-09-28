@@ -21,7 +21,7 @@ async def _owner(tmp_path):
         async def session_update(self, *, update, **_kwargs):
             updates.append(update)
 
-    owner._client = Client()
+    owner.sessions.client = Client()
     await owner.new_session(cwd=str(project), mcp_servers=[])
     session = tmp_path / "saved.jsonl"
     saved_session(session)
@@ -48,7 +48,7 @@ async def test_bridge_success_unknown_usage_and_one_explicit_request(tmp_path, m
 
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", one)
     try:
-        result = await compact_context(owner, "project", "Focus on facts")
+        result = await compact_context(owner.turns, "project", "Focus on facts")
         assert result["ok"] is True
         assert len(requests) == 1
         assert requests[0][0][-1] == "Focus on facts"
@@ -78,7 +78,7 @@ async def test_bridge_closes_idle_pi_before_saved_session_writer(tmp_path, monke
             self.closed = True
 
     retained = Retained()
-    owner._persistent_backends["project"] = retained
+    owner.turns.persistent_backends["project"] = retained
 
     async def compact(*_args, **_kwargs):
         assert retained.closed
@@ -86,7 +86,7 @@ async def test_bridge_closes_idle_pi_before_saved_session_writer(tmp_path, monke
 
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
     try:
-        assert (await compact_context(owner, "project"))["ok"] is True
+        assert (await compact_context(owner.turns, "project"))["ok"] is True
     finally:
         await owner.shutdown()
 
@@ -102,7 +102,7 @@ async def test_bridge_uses_persisted_model_when_worker_has_no_base_args(tmp_path
 
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
     try:
-        assert (await compact_context(owner, "project"))["ok"] is True
+        assert (await compact_context(owner.turns, "project"))["ok"] is True
         assert calls[0][1] == ["--provider", "openai-codex", "--model", "gpt-5.5"]
     finally:
         await owner.shutdown()
@@ -116,7 +116,7 @@ async def test_bridge_abort_exposes_safe_failure_reason(tmp_path, monkeypatch):
 
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", failed)
     try:
-        result = await compact_context(owner, "project")
+        result = await compact_context(owner.turns, "project")
         assert result == {"ok": False, "error": "Compaction provider returned HTTP 400."}
         phases = [item["compaction"] for item in _metadata(updates) if "compaction" in item]
         assert [phase["phase"] for phase in phases] == ["start", "abort"]
@@ -138,10 +138,10 @@ async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
         await asyncio.Event().wait()
 
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", uncertain)
-    task = asyncio.create_task(compact_context(owner, "project"))
+    task = asyncio.create_task(compact_context(owner.turns, "project"))
     try:
         await asyncio.wait_for(entered.wait(), timeout=2)
-        busy = await compact_context(owner, "project")
+        busy = await compact_context(owner.turns, "project")
         assert busy["ok"] is False
         assert len(calls) == 1
         task.cancel()
@@ -179,7 +179,7 @@ async def test_bridge_releases_waiters_after_settlement_publication(tmp_path, mo
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
     monkeypatch.setattr(owner._comms, "release_waits_after_terminal_turn", observed_release)
     try:
-        assert (await compact_context(owner, "project"))["ok"] is True
+        assert (await compact_context(owner.turns, "project"))["ok"] is True
         assert len(released) == 1
     finally:
         await owner.shutdown()

@@ -21,7 +21,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     agent = CommsAgent(comms, agent_bin="nonexistent-pi", runtime_enabled=False, auto_wake=False)
 
     session = NewSessionResponse(
-        session_id="worker", field_meta=agent._session_metadata("worker")
+        session_id="worker", field_meta=agent.sessions.metadata("worker")
     ).model_dump(by_alias=True, exclude_none=True)
     assert session["_meta"]["agentComms"]["thread"] == "worker"
     assert session["_meta"]["agentComms"]["wireRoot"] == str(comms.root.resolve())

@@ -51,7 +51,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     monkeypatch.setattr(backend, "discover_models", discover)
     agent = CommsAgent(wire(tmp_path), agent_args=["--model", "test/base"])
     # Exercise the explicit refresh path without the background drain racing it.
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session_id: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
     updates = []
 
     class Client:
@@ -61,10 +61,10 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     agent.on_connect(Client())
     session = (await agent.new_session("/tmp/project")).session_id
     try:
-        await agent._refresh_auth_models()
+        await agent.sessions.config.refresh_auth_models()
         assert not updates, "The session response already supplied this catalogue"
         revision[0] = 1
-        await agent._refresh_auth_models()
+        await agent.sessions.config.refresh_auth_models()
         # The background drain may publish this same catalogue; what matters is
         # that the refresh happens and never changes the selected model.
         assert updates
@@ -77,7 +77,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
             ]
         assert agent._comms.registry.require(session).model == "test/base"
         published = len(updates)
-        await agent._refresh_auth_models()
+        await agent.sessions.config.refresh_auth_models()
         assert len(updates) == published
     finally:
         await agent.shutdown()

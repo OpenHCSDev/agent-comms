@@ -147,7 +147,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 
     comms = wire(tmp_path)
     comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
-    agent = SimpleNamespace(_comms=comms, _sessions={"session": "owner"})
+    agent = SimpleNamespace(_comms=comms, sessions=SimpleNamespace(bindings={"session": "owner"}))
     server = RuntimeServer(agent)
     await server.start()
     proxy = RuntimeProxy(agent, "owner", server.path)

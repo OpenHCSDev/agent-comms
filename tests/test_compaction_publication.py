@@ -51,8 +51,8 @@ def owner(tmp_path):
 async def test_local_delivery_requires_existing_owner_and_attached_transport(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
@@ -81,8 +81,8 @@ async def test_local_delivery_requires_existing_owner_and_attached_transport(own
 async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp_path, monkeypatch):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     updates = []
 
@@ -103,10 +103,10 @@ async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp
             assert allowed is True
         yield ae.Done(ok=False, text="No provider invoked")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     agent.on_connect(Client())
     try:
-        await agent._run_owned_input("project", "project", "distinct new input")
+        await agent.inputs.run_owned_input("project", "project", "distinct new input")
         assert journal.pending_publications(str(session)) == ()
         assert (
             len(
@@ -128,8 +128,8 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
     second = tmp_path / "second.jsonl"
     second.write_text("{}\n")
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(first), pid=os.getpid())
     delivered = []
 
@@ -167,8 +167,8 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
 async def test_client_only_rebind_before_actual_transport_denies_wrong_client(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     original_received, wrong_received = [], []
 
@@ -188,7 +188,7 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
         # Registry/session file and epoch remain untouched. This swaps only
         # the ACP binding after publisher precheck but before runtime transport.
         agent.on_connect(wrong)
-        agent._sessions[session_id] = "other-canonical-thread"
+        agent.sessions.bindings[session_id] = "other-canonical-thread"
         return await actual(session_id=session_id, update=update, **binding)
 
     agent._runtime.session_update = race
@@ -199,7 +199,7 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
         assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
         assert comms.registry.require("project").session_file == str(session)
         agent._runtime.session_update = actual
-        agent._sessions["project"] = "project"
+        agent.sessions.bindings["project"] = "project"
         agent.on_connect(original)
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(_publication_events(original_received)) == 1
@@ -207,7 +207,7 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
         assert journal.pending_publications(str(session)) == ()
     finally:
         agent._runtime.session_update = actual
-        agent._sessions["project"] = "project"
+        agent.sessions.bindings["project"] = "project"
         await agent.shutdown()
 
 
@@ -217,8 +217,8 @@ async def test_socket_incarnation_swap_before_transport_never_sends_old_commit_t
 ):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     old_received, new_received = [], []
 
@@ -258,8 +258,8 @@ async def test_socket_incarnation_swap_before_transport_never_sends_old_commit_t
 async def test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     old_received, new_received = [], []
 
@@ -298,8 +298,8 @@ async def test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending(ow
 async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     received = []
     wrong_received = []
@@ -316,7 +316,7 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
             # AFTER transport accepts metadata, BEFORE observation: cannot
             # retroactively prevent the first delivery, but never mark ACK.
             agent.on_connect(wrong)
-            agent._sessions[session_id] = "other-canonical-thread"
+            agent.sessions.bindings[session_id] = "other-canonical-thread"
 
     original = Client()
     agent.on_connect(original)
@@ -327,7 +327,7 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
         assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
         # Rebinding the ACP map back reprojects only the same exact ID; remote
         # consumers must deduplicate, and no summary text is ever projected.
-        agent._sessions["project"] = "project"
+        agent.sessions.bindings["project"] = "project"
         agent.on_connect(original)
         assert await publish_pending_local(agent, "project", "project") == 0
         assert len(_publication_events(received)) == 2
@@ -335,7 +335,7 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
         assert _publication_events(received)[0] == _publication_events(received)[1]
         assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
     finally:
-        agent._sessions["project"] = "project"
+        agent.sessions.bindings["project"] = "project"
         agent.on_connect(original)
         await agent.shutdown()
 
@@ -351,8 +351,8 @@ async def test_stalled_local_client_releases_identity_only_after_transport_clean
     second = tmp_path / "second.jsonl"
     second.write_text("{}\n")
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(first), pid=os.getpid())
     started = asyncio.Event()
     cleaned = asyncio.Event()
@@ -465,8 +465,8 @@ else:
 async def test_uncertain_local_delivery_remains_pending_until_exact_reprojection(owner, tmp_path):
     agent, comms, session, journal, commit_id = owner
     await agent.new_session(str(tmp_path / "project"))
-    agent._drain_tasks["project"].cancel()
-    await asyncio.gather(agent._drain_tasks["project"], return_exceptions=True)
+    agent.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     comms.attach_session("project", str(session), pid=os.getpid())
     seen = []
 
