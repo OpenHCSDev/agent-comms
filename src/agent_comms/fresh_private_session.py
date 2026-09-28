@@ -83,10 +83,12 @@ class FreshPrivateSession:
         """A saved marker can deny reopen; it cannot recreate first-start authority."""
         rows = _read_private_file(path)
         try:
-            header = NativeEntry.from_evidence(rows[0])
+            header = NativeEntry.from_evidence(next(rows))
             if not isinstance(header, SessionEntry):
                 raise ValueError("Native source lacks a session header")
             header.require_header()
+            for _ in rows:
+                pass  # Exhaust revision validation without retaining historical bodies.
             expected = (
                 SelectedFreshMarker(1, selected_thinking_level)
                 if selected_thinking_level is not None
@@ -94,7 +96,7 @@ class FreshPrivateSession:
             )
             if header.selected_fresh != expected:
                 raise ValueError("Selected fresh source lacks its exact first-start token")
-        except (IndexError, ValueError, TypeError, KeyError) as error:
+        except (StopIteration, ValueError, TypeError, KeyError) as error:
             raise NativePiUnavailable(
                 "Selected fresh source cannot reopen without exact first-start token"
             ) from error

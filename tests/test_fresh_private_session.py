@@ -27,7 +27,7 @@ def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> No
         1,
         0o600,
     )
-    assert _read_private_file(enrollment.path) == [
+    assert list(_read_private_file(enrollment.path)) == [
         {
             "type": "session",
             "version": 3,
@@ -51,7 +51,7 @@ def test_explicit_selected_bootstrap_is_prewrite_durable_and_attested(tmp_path: 
     fresh = create_fresh_private_session(
         tmp_path / "native-sessions" / "a", worktree=tmp_path, selected_thinking_level="high"
     )
-    rows = _read_private_file(fresh.path)
+    rows = list(_read_private_file(fresh.path))
     assert len(rows) == 3
     assert rows[0]["id"] == fresh.session_id
     assert rows[0]["agentCommsSelectedFresh"] == {"schema": 1, "thinkingLevel": "high"}
@@ -229,7 +229,7 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     assert new["context"]["thinkingLevel"] == "high"
     assert new["context"]["model"] == parsed["context"]["model"]
     assert len(new["context"]["messages"]) == 1
-    assert _read_private_file(fresh.path)[-1]["parentId"] == fresh.bootstrap_leaf_id
+    assert list(_read_private_file(fresh.path))[-1]["parentId"] == fresh.bootstrap_leaf_id
     fresh.verify_saved_identity()
     with pytest.raises(NativePiUnavailable, match="earlier input"):
         fresh.verify_prewrite()
