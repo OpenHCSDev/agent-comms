@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -448,12 +449,138 @@ def test_admitted_write_never_reenters_after_busy_post_write_failure():
 
     read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
     try:
-        with pytest.raises(native_prompt_send.PromptSendUnknown, match="post-write"):
+        with pytest.raises(
+            native_prompt_send.PromptSendUnknown,
+            match="PromptAdmissionBusy: post-write failure is not retryable",
+        ) as caught:
             native_prompt_send._write_fenced(
                 write_fd, b"one prompt\n", boundary, threading.Event(), time.monotonic() + 1
             )
         assert entered == [1]
+        assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
         assert os.read(read_fd, 100) == b"one prompt\n"
     finally:
         os.close(read_fd)
         os.close(write_fd)
+
+
+def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path):
+    """The historical mechanism is reproducible, not proof of live81's cause."""
+    import threading
+    import time
+
+    path = tmp_path / "coordinator.sqlite3"
+    with MutationStore(path, lock_timeout=0) as store:
+        store.register_participant("owner", "owner", "owner", committed=True)
+        reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+        read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
+        entered = []
+
+        @contextmanager
+        def historical_admission():
+            with store._transaction() as db:
+                db.execute("UPDATE owner_generations SET generation=2")
+                # A reader enters after BEGIN IMMEDIATE and blocks its COMMIT.
+                reader.execute("BEGIN")
+                reader.execute("SELECT * FROM owner_generations").fetchall()
+                entered.append(1)
+                yield
+
+        try:
+            with pytest.raises(
+                native_prompt_send.PromptSendUnknown,
+                match="OperationalError: database is locked",
+            ) as caught:
+                native_prompt_send._write_fenced(
+                    write_fd, b"one prompt\n", historical_admission,
+                    threading.Event(), time.monotonic() + 1,
+                )
+            assert caught.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
+            assert entered == [1]
+            assert os.read(read_fd, 100) == b"one prompt\n"
+            assert not store._connection.in_transaction
+            assert store._connection.execute(
+                "SELECT generation FROM owner_generations"
+            ).fetchone()[0] == 1
+        finally:
+            reader.close()
+            os.close(read_fd)
+            os.close(write_fd)
+
+
+@pytest.mark.parametrize("direct", [False, True])
+async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
+    tmp_path, monkeypatch, direct
+):
+    root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
+    owner = people[2] if direct else people[1]
+    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+    create = asyncio.create_subprocess_exec
+    received = tmp_path / "received.json"
+    session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    children = []
+
+    async def launch(*_args, **kwargs):
+        child = await create(
+            sys.executable, "-c", _CHILD, str(session), str(received), "no", **kwargs
+        )
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(native_pi.asyncio, "create_subprocess_exec", launch)
+    write = native_prompt_send._write_fenced
+    observations = []
+
+    def probe(fd, payload, boundary, cancelled, deadline):
+        path = root / "coordination.sqlite3"
+        reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+        reader.execute("BEGIN")
+        reader.execute("SELECT * FROM native_runtime_inputs").fetchall()
+
+        @contextmanager
+        def checked_admission():
+            try:
+                with boundary():
+                    assert observations == ["reader refused before bytes"]
+                    # A late feedback reader cannot sneak in after admission.
+                    late = sqlite3.connect(path, isolation_level=None, timeout=0)
+                    try:
+                        with pytest.raises(sqlite3.OperationalError) as blocked:
+                            late.execute("SELECT * FROM native_runtime_inputs").fetchall()
+                        assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                    finally:
+                        late.close()
+                    observations.append("late reader excluded")
+                    yield
+            except native_prompt_send.PromptAdmissionBusy:
+                assert observations == []
+                assert not received.exists()  # No raw prompt has reached the child.
+                observations.append("reader refused before bytes")
+                reader.execute("ROLLBACK")
+                raise
+
+        try:
+            write(fd, payload, checked_admission, cancelled, deadline)
+            observations.append("sent and committed once")
+        finally:
+            reader.close()
+
+    monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+    # The local child supplies capability+reads prompt then exits without proof;
+    # the expected downstream error is NOT a post-write admission failure.
+    with pytest.raises(native_pi.NativePiUnavailable) as caught:
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+        ).run()
+    assert "post-write" not in str(caught.value)
+    assert observations == [
+        "reader refused before bytes", "late reader excluded", "sent and committed once",
+    ]
+    assert json.loads(received.read_text())["type"] == "prompt"
+    assert len(children) == 1 and children[0].returncode is not None
+    with MutationStore(root / "coordination.sqlite3") as store:
+        rows = store._connection.execute(
+            "SELECT sent_owner_admission_epoch FROM native_runtime_inputs"
+        ).fetchall()
+        assert len(rows) == 1 and rows[0][0] is not None
