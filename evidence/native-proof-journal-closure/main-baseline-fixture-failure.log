@@ -1,0 +1,96 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 23 items / 22 deselected / 1 selected
+
+tests/test_continued_private_session.py F                                [100%]
+
+=================================== FAILURES ===================================
+__ test_continued_private_session_needs_no_fresh_object_and_preserves_history __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f387bfd6270>, PosixPath('/home/ts/wt/comms-t2-boundary...: 'fixture', 'modelId': 'fixture', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 10}})
+
+    def test_continued_private_session_needs_no_fresh_object_and_preserves_history(continued):
+        journal, session, inputs, source = continued
+        before = session.read_bytes(), inputs.path.read_bytes()
+>       operation = journal.reserve_selected_summary(str(session), source)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_continued_private_session.py:59: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/proof-journal-main-source/src/agent_comms/compaction_journal.py:470: in reserve_selected_summary
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/proof-journal-main-source/src/agent_comms/field_codec.py:137: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/proof-journal-main-source/src/agent_comms/field_codec.py:244: in _decode
+    field.name: cls.decode(hints[field.name], data[key])
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/proof-journal-main-source/src/agent_comms/field_codec.py:137: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.selected_source.SelectedSource'>
+data = {'ownerName': 'owner', 'ownerPid': 2124398, 'ingressKey': 'acp:new', 'reservedRevision': [[2084, 11667525, 290, 1790637557030611436, 1790637557030611436], None]}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+>               raise ValueError(f"Expected a string family {tag}.")
+E               ValueError: Expected a string family kind.
+
+.artifacts/proof-journal-main-source/src/agent_comms/field_codec.py:221: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_continued_private_session.py::test_continued_private_session_needs_no_fresh_object_and_preserves_history
+======================= 1 failed, 22 deselected in 0.21s =======================
