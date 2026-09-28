@@ -1,6 +1,6 @@
 # D2–D4 compaction closure — Darwin
 
-Source commit052581f; reconciled with main1836d2ee02 in bf701fd. Persistent branch `codex/compaction-lifecycle-closure-20260928`, tree `/home/ts/wt/comms-compaction-lifecycle-closure-20260928`. Parent owns integration/deployment. D1 body unchanged by this branch; its merged implementation is included from main. Draft PR URL added after publication below.
+Source commit052581f; reconciled with main1836d2ee02 in bf701fd. Persistent branch `codex/compaction-lifecycle-closure-20260928`, tree `/home/ts/wt/comms-compaction-lifecycle-closure-20260928`. Parent owns integration/deployment. D1 body unchanged by this branch; its merged implementation is included from main. Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/185.
 
 ## Complete owned replacement
 
@@ -53,4 +53,4 @@ Merge draft onto parent integration, retaining merged D1/current main. No paired
 
 Parent owns serial actual deployment and any fresh configured-provider acceptance; no live roots touched here. Canonical-native explicit manual `/compact` guard remains unchanged. Issue107 remains issue-only; no cap implementation. No scheduler/queue policy, native four-call ceiling, models or selected provider route changed. Review harnesses must use contracts above rather than retained aliases.
 
-Disposable artifacts will be cleaned after evidence commit/push, retaining receipts and executable tests. Published branch preserved.
+Cleanup complete: removed550MiB owned scanner/test artifacts plus596KiB short native-queue fixture after confirming no remaining task process used those paths. Removed owned Python/pytest/Ruff caches. Receipts, executable tests and published branch preserved; shared/native bundles untouched.
