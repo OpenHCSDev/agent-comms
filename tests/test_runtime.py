@@ -91,7 +91,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
-async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
+async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
     comms = wire(tmp_path / ("long-wire-" * 16))
     owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     client = CommsAgent(comms)
@@ -123,11 +123,11 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path):
         assert await proxy.request("cancel") == {}
         compact_calls = []
 
-        async def compact_context(session_id, instructions):
+        async def compact_context(runner, session_id, instructions):
             compact_calls.append((session_id, instructions))
             return {"ok": True, "status": "compacted"}
 
-        owner.compact_context = compact_context
+        monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
         assert await proxy.request("compact", instructions="focus") == {
             "ok": True,
             "status": "compacted",
@@ -217,15 +217,17 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         await until(lambda: ("worker", {"owner": "new"}) in updates)
         await until(
             lambda: (
-                "worker",
-                {
-                    "sessionUpdate": "config_option_update",
-                    "configOptions": [{"id": "model", "currentValue": "new"}],
-                },
+                (
+                    "worker",
+                    {
+                        "sessionUpdate": "config_option_update",
+                        "configOptions": [{"id": "model", "currentValue": "new"}],
+                    },
+                )
+                in updates
             )
-            in updates
         )
-        assert client._proxy_image_support["worker"] is True
+        assert client.sessions.proxy_image_support["worker"] is True
         assert ("new", "subscribe", "worker") in calls
         assert ("new", "cancel", "worker") in calls
         assert calls.count(("old", "cancel", "worker")) == 1
@@ -318,7 +320,7 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
         entered.set()
         await release.wait()
 
-    owner._replay_transcript = delayed_replay
+    owner.sessions.transcript.replay = delayed_replay
     proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
     task = asyncio.create_task(proxy.subscribe())
     try:
@@ -354,7 +356,7 @@ async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatc
     client = CommsAgent(comms)
     response = await owner.new_session(str(tmp_path / "project"))
     try:
-        attached = await client._attach_owner(
+        attached = await client.sessions.attach_owner(
             comms.registry.require(response.session_id), response.session_id
         )
         assert attached.config_options[0].current_value == "test/one"
@@ -460,8 +462,10 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         # activity_of returns a synthetic idle state before the child starts.
         # Wait for the idle event emitted after its initial turn instead.
         await until(
-            lambda: (activity := comms.activity.all_current().get("child")) is not None
-            and activity.state.value == "idle"
+            lambda: (
+                (activity := comms.activity.all_current().get("child")) is not None
+                and activity.state.value == "idle"
+            )
         )
         # The owner need not broadcast an unsolicited initial answer: a
         # completed local turn is not proof that any channel was addressed.

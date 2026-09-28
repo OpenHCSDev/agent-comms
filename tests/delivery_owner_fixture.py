@@ -18,7 +18,7 @@ async def queued_delivery_owner(root):
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     session = (await owner.new_session(str(project))).session_id
     comms.register(Thread("peer", frozenset(), str(project)))
-    ledger = owner._dispositions
+    ledger = owner.inputs.dispositions
     admission = comms.registry.snapshot().admission_generations[session]
     for key in ("acp:earlier-unbound", "acp:earlier-bound"):
         ledger.record(key, seq=None, owner=session, admission=admission, target=session, text=key)
@@ -29,15 +29,15 @@ async def queued_delivery_owner(root):
         native_id="a" * 32,
         text="old bound input",
     )
-    lock = owner._turn_locks.setdefault(session, asyncio.Lock())
+    lock = owner.turns.turn_locks.setdefault(session, asyncio.Lock())
     await lock.acquire()
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     try:
         incoming = comms.send_message("peer", session, "New input must remain awaiting")
-        await owner._drain_inbox(session)
-        assert owner._pending_turns[session][0].origin == incoming
-        assert owner._wake_tasks[session] and not owner._wake_tasks[session].done()
-        assert not owner._backend_inboxes
+        await owner.inputs.drain_inbox(session)
+        assert owner.inputs.pending_turns[session][0].origin == incoming
+        assert owner.inputs.wake_tasks[session] and not owner.inputs.wake_tasks[session].done()
+        assert not owner.inputs.backend_inboxes
         yield owner, proxy, session, incoming
     finally:
         await proxy.close()

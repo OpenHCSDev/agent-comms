@@ -180,7 +180,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
         ]
         comms = wire(root / "wire")
         agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
-        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"
             project.mkdir()
@@ -188,21 +188,24 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             comms.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
             comms.begin_turn("child", "child-report-in-flight")
             goal = comms.update_goal(
-                "parent", "set", text="Review @child report", owner_store=agent._open_goal_store()
+                "parent",
+                "set",
+                text="Review @child report",
+                owner_store=agent.turns.open_goal_store(),
             )
             goal_id = goal.id
             if review_pending:
                 # Stage unresolved inputs without allowing an unrelated direct
                 # message to start a turn before the goal wake under test.
-                agent._auto_wake = False
+                agent.inputs.auto_wake = False
                 for index in range(5):
                     early = comms.send_message("child", "parent", f"WAIT_INSTRUCTION_{index}")
                     pending_keys.append(f"bus:{early.seq}")
-                await agent._drain_inbox("parent")
-                agent._auto_wake = True
+                await agent.inputs.drain_inbox("parent")
+                agent.inputs.auto_wake = True
                 admission = comms.registry.snapshot().admission_generations["parent"]
                 for index in range(4):
-                    agent._dispositions.record(
+                    agent.inputs.dispositions.record(
                         f"acp:owner-input-{index}",
                         seq=None,
                         owner="parent",
@@ -210,44 +213,44 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                         target="parent",
                         text=f"Uncertain owner input {index}",
                     )
-            agent._schedule_goal("parent")
-            await asyncio.wait_for(agent._wake_tasks["parent"], 40)
+            agent.turns.schedule_goal("parent")
+            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
             assert comms.registry.require("parent").goal.active
             assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
             assert len(requests) == 2 + offset
-            first_proc = agent._persistent_backends["parent"].proc
+            first_proc = agent.turns.persistent_backends["parent"].proc
             assert first_proc is not None and first_proc.returncode is None
-            agent._schedule_goal("parent")
-            assert not agent._pending_turns.get("parent")
-            assert agent._goal_store.snapshot(goal.id).number == 2
+            agent.turns.schedule_goal("parent")
+            assert not agent.inputs.pending_turns.get("parent")
+            assert agent.turns.goal_store.snapshot(goal.id).number == 2
             if restart:
                 # Wait intent survives reopening. The new executing owner may
                 # rotate only the unused READY grant at the send boundary.
                 await agent.shutdown()
                 comms = wire(root / "wire")
                 agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
-                monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+                monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "parent")
-                agent._schedule_goal("parent")
+                agent.turns.schedule_goal("parent")
                 assert comms.goal_execution("parent").state is GoalExecutionState.STANDBY
-                assert not agent._pending_turns.get("parent") and len(requests) == 2 + offset
+                assert not agent.inputs.pending_turns.get("parent") and len(requests) == 2 + offset
             message = comms.send_message("child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT")
-            await agent._drain_inbox("parent")
-            await asyncio.wait_for(agent._wake_tasks["parent"], 40)
+            await agent.inputs.drain_inbox("parent")
+            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
             assert len(requests) == 4 + offset
             if not restart:
-                assert agent._persistent_backends["parent"].proc is first_proc
+                assert agent.turns.persistent_backends["parent"].proc is first_proc
             else:
                 assert first_proc.returncode is not None
-            assert agent._dispositions.status(f"bus:{message.seq}") == "started"
+            assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
             for key in pending_keys:
-                row = agent._dispositions.get(key)
+                row = agent.inputs.dispositions.get(key)
                 assert row["status"] == "unknown" and row["native_id"] is None
-                assert agent._dispositions.reviewed_for_goal(row, goal.id)
+                assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
             assert comms.registry.require("parent").goal.status == "completed"
-            assert agent._goal_store.snapshot(goal.id).state == "completed"
+            assert agent.turns.goal_store.snapshot(goal.id).state == "completed"
             session = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             users = [row["message"] for row in rows if row.get("message", {}).get("role") == "user"]

@@ -80,7 +80,7 @@ async def test_initial_and_image_only_prompts_reach_backend(tmp_path, monkeypatc
     try:
         await agent.prompt("project", [{"type": "text", "text": text}, IMAGE])
         assert received == [ImageInput(PNG, "image/png")]
-        assert agent._session_metadata("project")["agentComms"]["imagePrompts"] is True
+        assert agent.sessions.metadata("project")["agentComms"]["imagePrompts"] is True
     finally:
         await agent.shutdown()
 
@@ -152,8 +152,8 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
     proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
     try:
         await proxy.subscribe()
-        client._proxies["project"] = proxy
-        client._proxy_image_support["project"] = True
+        client.sessions.proxies["project"] = proxy
+        client.sessions.proxy_image_support["project"] = True
         turn = asyncio.create_task(owner.prompt("project", [{"type": "text", "text": "first"}]))
         await asyncio.wait_for(started.wait(), 3)
         reference = "What is this? @/private/clipboard-image.png"
@@ -169,7 +169,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
             },
         )
         assert result.field_meta["agentComms"]["inputDisposition"]["delivery"] == "steer"
-        assert not owner._queued_inputs.get("project")
+        assert not owner.inputs.queued_inputs.get("project")
         await client.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],
@@ -177,13 +177,13 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
         )
         assert any(
             item.text == reference and item.echo
-            for item in owner._queued_inputs["project"].values()
+            for item in owner.inputs.queued_inputs["project"].values()
         )
         await owner.cancel("project")
         await turn
     finally:
         await proxy.close()
-        client._proxies.clear()
+        client.sessions.proxies.clear()
         await client.shutdown()
         await owner.shutdown()
 
@@ -191,7 +191,9 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
 async def test_failed_image_child_never_exposes_encoded_attachment(tmp_path, monkeypatch):
     stub = tmp_path / "pi-image-stub"
-    stub.write_text(f"#!{sys.executable}\n" + """
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        + """
 import json, sys
 for line in sys.stdin:
     command = json.loads(line)
@@ -203,7 +205,8 @@ for line in sys.stdin:
     elif command['type'] == 'prompt':
         sys.stderr.write(json.dumps(command))
         sys.exit(7)
-""")
+"""
+    )
     stub.chmod(0o755)
     events = [
         event
@@ -219,7 +222,7 @@ for line in sys.stdin:
     assert PNG not in repr(events)
 
     agent = await make_agent(tmp_path / "acp", monkeypatch)
-    agent._agent_bin = str(stub)
+    agent.turns.agent_bin = str(stub)
     updates = []
 
     class Client:
@@ -237,7 +240,9 @@ for line in sys.stdin:
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable fixture")
 async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_path, monkeypatch):
     stub = tmp_path / "pi-image-stub"
-    stub.write_text(f"#!{sys.executable}\n" + """
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        + """
 import json, sys
 for line in sys.stdin:
     command = json.loads(line)
@@ -254,7 +259,8 @@ for line in sys.stdin:
     elif command['type'] == 'prompt':
         sys.stderr.write(json.dumps(command))
         sys.exit(7)
-""")
+"""
+    )
     stub.chmod(0o755)
     queue = asyncio.Queue()
     queue.put_nowait(
@@ -305,11 +311,11 @@ async def test_legacy_owner_and_relay_fail_explicitly(tmp_path, monkeypatch):
         with pytest.raises(RequestError):
             await agent.prompt("project", [{"type": "text", "text": "#all look"}, IMAGE])
         assert not agent._comms.full_history()
-        agent._proxies["project"] = object()
+        agent.sessions.proxies["project"] = object()
         with pytest.raises(RequestError):
             await agent.prompt("project", [IMAGE])
     finally:
-        agent._proxies.clear()
+        agent.sessions.proxies.clear()
         await agent.shutdown()
 
 
@@ -317,7 +323,9 @@ async def test_legacy_owner_and_relay_fail_explicitly(tmp_path, monkeypatch):
 async def test_rpc_prompt_serializes_images_unchanged(tmp_path):
     captured = tmp_path / "prompt.json"
     stub = tmp_path / "pi-image-stub"
-    stub.write_text(f"#!{sys.executable}\n" + f"""
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        + f"""
 import json, pathlib, sys
 state = json.loads(sys.stdin.readline())
 print(json.dumps({{'type': 'response', 'command': 'get_state', 'id': state['id'],
@@ -337,7 +345,8 @@ sys.stdin.readline()  # postturn get_state
 sys.stdin.readline()  # get_session_stats
 print(json.dumps({{'type': 'response', 'command': 'get_session_stats',
                   'success': True, 'data': {{}}}}), flush=True)
-""")
+"""
+    )
     stub.chmod(0o755)
     events = [
         event

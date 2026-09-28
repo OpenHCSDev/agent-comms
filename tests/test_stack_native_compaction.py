@@ -371,11 +371,11 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
 
                 owner.on_connect(Client())
                 await owner.new_session(str(project))
-                owner._drain_tasks["project"].cancel()
-                await asyncio.gather(owner._drain_tasks["project"], return_exceptions=True)
+                owner.inputs.drain_tasks["project"].cancel()
+                await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
                 comms.attach_session("project", str(session))
                 turn = asyncio.create_task(
-                    owner._run_owned_input("project", "project", "Reply OK.")
+                    owner.inputs.run_owned_input("project", "project", "Reply OK.")
                 )
                 try:
                     assert await asyncio.to_thread(summary_entered.wait, 10)

@@ -10,6 +10,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -173,18 +174,20 @@ def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
 @pytest.mark.asyncio
 async def test_canonical_manual_route_cannot_use_installed_legacy_compaction(tmp_path, monkeypatch):
     class Owner:
-        _agent_bin = "/disposable/stack/bin/pi-native"
-        _turn_locks = {}
-        _active_turns = {}
+        def __init__(self):
+            self.turns = SimpleNamespace(
+                agent_bin="/disposable/stack/bin/pi-native", turn_locks={}, active_turns={}
+            )
+            self.turns.sessions = SimpleNamespace(sync_identity=self.sync_identity)
 
-        async def _sync_session_identity(self, session_id):
+        async def sync_identity(self, session_id):
             return session_id
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("legacy installed Pi route must not launch")
 
     monkeypatch.setattr(manual_compaction_bridge.manual_compaction, "compact_session", forbidden)
-    result = await manual_compaction_bridge.compact_context(Owner(), "owner")
+    result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
     assert result == {
         "ok": False,
         "error": "Canonical native compaction requires the owner journal bridge.",
@@ -201,18 +204,18 @@ async def test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route
     assert native_session_reopen.package_for_launcher(str(alias)) == Path(PACKAGE)
 
     class Owner:
-        _agent_bin = str(alias)
-        _turn_locks = {}
-        _active_turns = {}
+        def __init__(self):
+            self.turns = SimpleNamespace(agent_bin=str(alias), turn_locks={}, active_turns={})
+            self.turns.sessions = SimpleNamespace(sync_identity=self.sync_identity)
 
-        async def _sync_session_identity(self, session_id):
+        async def sync_identity(self, session_id):
             return session_id
 
     async def forbidden(*args, **kwargs):
         raise AssertionError("Verified canonical native alias must not reach legacy writer")
 
     monkeypatch.setattr(manual_compaction_bridge.manual_compaction, "compact_session", forbidden)
-    result = await manual_compaction_bridge.compact_context(Owner(), "owner")
+    result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
     assert result == {
         "ok": False,
         "error": "Canonical native compaction requires the owner journal bridge.",
