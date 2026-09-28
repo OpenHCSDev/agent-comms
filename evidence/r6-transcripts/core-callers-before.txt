@@ -1,0 +1,82 @@
+src/agent_comms/transcripts.py:61:class TranscriptEvent:
+src/agent_comms/transcripts.py:74:    def from_wire(cls, data: Mapping) -> TranscriptEvent:
+src/agent_comms/transcripts.py:91:class TranscriptCursor:
+src/agent_comms/transcripts.py:97:class TranscriptPage:
+src/agent_comms/transcripts.py:98:    events: tuple[TranscriptEvent, ...]
+src/agent_comms/transcripts.py:99:    before: TranscriptCursor
+src/agent_comms/transcripts.py:100:    after: TranscriptCursor
+src/agent_comms/transcripts.py:106:            item.name: asdict(value) if isinstance(value, TranscriptCursor) else value
+src/agent_comms/transcripts.py:146:    ) -> Sequence[TranscriptEvent]:
+src/agent_comms/transcripts.py:157:        records: list[list[TranscriptEvent]] = []
+src/agent_comms/transcripts.py:165:                events = self._transcript_record_events(
+src/agent_comms/transcripts.py:185:                TranscriptEvent(
+src/agent_comms/transcripts.py:217:    def _fork_start_events(thread: Thread) -> tuple[TranscriptEvent, ...]:
+src/agent_comms/transcripts.py:221:            TranscriptEvent("notice", f"Forked from @{thread.parent}. This thread started with:"),
+src/agent_comms/transcripts.py:222:            *((TranscriptEvent("user", thread.task),) if thread.task else ()),
+src/agent_comms/transcripts.py:229:        before: TranscriptCursor | None = None,
+src/agent_comms/transcripts.py:230:        after: TranscriptCursor | None = None,
+src/agent_comms/transcripts.py:233:        through: TranscriptCursor | None = None,
+src/agent_comms/transcripts.py:235:    ) -> TranscriptPage:
+src/agent_comms/transcripts.py:272:        records: list[tuple[TranscriptEvent, ...]] = []
+src/agent_comms/transcripts.py:300:                            events: tuple[TranscriptEvent, ...] = ()
+src/agent_comms/transcripts.py:304:                                    self._transcript_record_events(
+src/agent_comms/transcripts.py:337:        return TranscriptPage(
+src/agent_comms/transcripts.py:339:            TranscriptCursor(session_file, start),
+src/agent_comms/transcripts.py:340:            TranscriptCursor(session_file, end),
+src/agent_comms/transcripts.py:345:    def _transcript_record_events(
+src/agent_comms/transcripts.py:350:    ) -> list[TranscriptEvent]:
+src/agent_comms/transcripts.py:354:                return [TranscriptEvent("notice", f"## Context compacted\n\n{summary}")]
+src/agent_comms/transcripts.py:359:        return self._transcript_message_events(message, routing, input_display)
+src/agent_comms/transcripts.py:361:    def _transcript_message_events(
+src/agent_comms/transcripts.py:366:    ) -> list[TranscriptEvent]:
+src/agent_comms/transcripts.py:396:                TranscriptEvent("user", request.body, routing=TurnRouting((request,), None))
+src/agent_comms/transcripts.py:402:                return [TranscriptEvent("notice", f"[agent error] {failure}")]
+src/agent_comms/transcripts.py:411:        context_events: list[TranscriptEvent] = []
+src/agent_comms/transcripts.py:419:                context_events.append(TranscriptEvent("context", raw_text))
+src/agent_comms/transcripts.py:429:        events: list[TranscriptEvent] = context_events
+src/agent_comms/transcripts.py:435:                events.append(TranscriptEvent("user", str(part.get("text") or "")))
+src/agent_comms/transcripts.py:438:                    TranscriptEvent("user", f"[Image attachment: {part.get('mimeType', 'image')}]")
+src/agent_comms/transcripts.py:441:                events.append(TranscriptEvent("thinking", str(part.get("thinking") or "")))
+src/agent_comms/transcripts.py:447:                    events.append(TranscriptEvent("assistant", text))
+src/agent_comms/transcripts.py:450:                    TranscriptEvent(
+src/agent_comms/transcripts.py:464:                    TranscriptEvent(
+src/agent_comms/transcripts.py:482:                        TranscriptEvent(
+src/agent_comms/transcripts.py:491:    def transcript_checkpoint(self, name: str) -> TranscriptCursor:
+src/agent_comms/transcripts.py:494:        return TranscriptCursor(
+src/agent_comms/transcripts.py:512:        self, name: str, checkpoint: TranscriptCursor, routing: TurnRouting
+tests/test_session_components.py:23:from agent_comms.transcripts import TranscriptEvent
+tests/test_session_components.py:164:        TranscriptUpdate.from_transcript(TranscriptEvent(kind="highlight", text="saved text")),
+tests/test_session_components.py:185:        TranscriptUpdate.from_transcript(TranscriptEvent(kind="tool_start", text="unrendered")),
+tests/test_toad_contract.py:13:from agent_comms.transcripts import TranscriptCursor, TranscriptPage
+tests/test_toad_contract.py:20:        for public_type in (Comms, Goal, TranscriptCursor, TranscriptPage, MessageRoute)
+tests/test_tool_diffs.py:15:from agent_comms.transcripts import TranscriptEvent
+tests/test_tool_diffs.py:123:    saved = TranscriptEvent.from_wire(page.events[0].to_wire())
+tests/test_tool_diffs.py:146:    # A newer owner must not send extra TranscriptEvent fields to an old UI.
+tests/test_tool_diffs.py:154:    assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
+tests/test_tool_diffs.py:162:    assert TranscriptEvent.from_wire(snapshot[0]).diff == live.diff
+tests/test_tool_diffs.py:166:    event = TranscriptEvent.from_wire({"kind": "tool_end", "text": "old saved output"})
+tests/test_transcript_input_routing.py:88:            inputs = [event for event in events if event.kind == "user"]
+tests/test_transcript_input_routing.py:131:    inputs = [event for event in events if event.kind == "user"]
+tests/test_reply_routing.py:81:            event for event in comms.transcripts.thread_transcript_page("worker").events if event.kind == "sent"
+tests/test_thread_unread.py:9:from agent_comms.transcripts import TranscriptCursor
+tests/test_thread_unread.py:182:            through=TranscriptCursor(str(other), other.stat().st_size + 1),
+tests/test_transcript_pages.py:8:from agent_comms.transcripts import TranscriptCursor
+tests/test_transcript_pages.py:72:        comms.transcripts.thread_transcript_page("worker", before=TranscriptCursor(str(path), -1))
+tests/test_transcript_pages.py:100:    assert [event.kind for event in page.events[-2:]] == ["notice", "user"]
+tests/test_transcript_pages.py:123:    seen = [event.text for event in page.events if event.kind == "assistant"]
+tests/test_transcript_pages.py:128:        seen[:0] = [event.text for event in page.events if event.kind == "assistant"]
+tests/test_transcript_pages.py:135:            "child", through=TranscriptCursor(str(unrelated), unrelated.stat().st_size)
+src/agent_comms/history_views.py:46:from .transcripts import TranscriptCursor, Transcripts
+src/agent_comms/history_views.py:817:                event.kind in {"assistant", "notice"} and event.text.strip()
+src/agent_comms/history_views.py:818:                for event in self.transcripts._transcript_record_events(record)
+src/agent_comms/history_views.py:822:    def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
+tests/test_transcript_input_display.py:57:    assert [event.text for event in events if event.kind == "context"] == [
+tests/test_transcript_input_display.py:61:    assert [(event.kind, event.text) for event in events if event.kind != "context"] == [
+tests/test_transcript_input_display.py:127:    events = comms.transcripts._transcript_message_events(
+tests/test_transcript_input_display.py:138:    assert [(event.kind, event.text) for event in events] == [
+tests/test_operations.py:139:        assert [event.kind for event in events] == [
+tests/test_stack_channel_delivery.py:195:                    if event.kind == "user" and event.routing and event.routing.requests
+src/agent_comms/transcript_updates.py:3:Snapshot clients retain the existing full TranscriptPage representation. Legacy
+src/agent_comms/transcript_updates.py:21:from .transcripts import TranscriptEvent
+src/agent_comms/transcript_updates.py:37:    def from_transcript(cls, event: TranscriptEvent) -> TranscriptUpdate:
+src/agent_comms/transcript_updates.py:39:        member = cls.owner_for(event.kind)
