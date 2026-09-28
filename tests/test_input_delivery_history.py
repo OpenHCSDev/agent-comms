@@ -79,7 +79,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     # New sessions have no migration boundary. Replace the fixture cursor before seeding.
     AcpDeliveryCursors(comms.root).path.unlink()
@@ -90,11 +90,11 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
-    owner._client = Client()
+    owner.sessions.client = Client()
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     before = comms.unresolved_inputs(session)
     try:
-        await owner.replay_unknown_inputs(session, client=Client())
+        await owner.inputs.replay_unknown_inputs(session, client=Client())
         assert updates == [], "An idle owner has no currently awaiting inputs to replay"
         snapshot = await proxy.request("input_dispositions")
         assert snapshot["historicalCount"] == 5
@@ -108,8 +108,8 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
         detailed = await proxy.request("input_dispositions", include_history=True)
         assert len(detailed["historicalInputs"]) == 5
         assert comms.unresolved_inputs(session) == before
-        assert not owner._pending_turns and not owner._wake_tasks
+        assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
     finally:
-        owner._client = None
+        owner.sessions.client = None
         await proxy.close()
         await owner.shutdown()

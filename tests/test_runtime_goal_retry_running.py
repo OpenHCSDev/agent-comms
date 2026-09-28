@@ -36,7 +36,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
 
     owner.on_connect(Client())
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    store = owner._open_goal_store()
+    store = owner.turns.open_goal_store()
     goal = comms.update_goal(session, "set", text="Finish the blocked objective", owner_store=store)
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
@@ -44,7 +44,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     blocked = comms.update_goal(
         session, "blocked", goal_id=goal.id, block_reason="Previous goal attempt failed"
     )
-    owner._dispositions.record(
+    owner.inputs.dispositions.record(
         "acp:old-unknown",
         seq=None,
         owner=session,
@@ -52,7 +52,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         target=session,
         text="Uncertain old input must never replay",
     )
-    old_unknown = owner._dispositions.get("acp:old-unknown")
+    old_unknown = owner.inputs.dispositions.get("acp:old-unknown")
 
     async def events(*args, **kwargs):
         nonlocal active_backends, max_active_backends
@@ -89,14 +89,14 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         finally:
             active_backends -= 1
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     turn = asyncio.create_task(
         proxy.request("prompt", prompt=[{"type": "text", "text": "Current user request"}])
     )
     try:
         await asyncio.wait_for(entered.wait(), 3)
-        assert session in owner._active_turns and session in owner._backend_inboxes
+        assert session in owner.turns.active_turns and session in owner.inputs.backend_inboxes
         results = await asyncio.gather(
             *(
                 proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
@@ -113,8 +113,8 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         generation = GoalAttemptStore(store.root).snapshot(goal.id)
         assert (generation.number, generation.state, generation.attempt_id) == (2, "ready", None)
         assert store.ready_grant(goal.id, 2)
-        owner._schedule_goal(session)
-        assert len(calls) == 1 and not owner._pending_turns.get(session)
+        owner.turns.schedule_goal(session)
+        assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
             (getattr(update, "field_meta", None) or {})
             .get("agentComms", {})
@@ -128,16 +128,18 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             await proxy.request("cancel")
             assert (await turn)["stopReason"] == "cancelled"
             assert comms.registry.require(session).goal.status == "paused"
-            owner._schedule_goal(session)
-            assert not owner._pending_turns.get(session) and len(calls) == 1
+            owner.turns.schedule_goal(session)
+            assert not owner.inputs.pending_turns.get(session) and len(calls) == 1
             assert store.snapshot(goal.id) == generation
         else:
             release.set()
             await asyncio.wait_for(settled.wait(), 3)
             # Native settlement alone is not permission to overlap a still-open stream.
-            assert session not in owner._active_turns and session in owner._backend_inboxes
-            owner._schedule_goal(session)
-            assert len(calls) == 1 and not owner._pending_turns.get(session)
+            assert (
+                session not in owner.turns.active_turns and session in owner.inputs.backend_inboxes
+            )
+            owner.turns.schedule_goal(session)
+            assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
             finish.set()
             if outcome == "exception":
                 with pytest.raises(RuntimeError, match="Current user turn failed"):
@@ -145,12 +147,12 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             else:
                 assert (await turn)["stopReason"] == "end_turn"
             await asyncio.wait_for(continued.wait(), 5)
-            await owner._wake_tasks[session]
+            await owner.inputs.wake_tasks[session]
             assert len(calls) == 2
             assert comms.registry.require(session).goal.status == "completed"
             assert store.snapshot(goal.id).state == "completed"
         assert max_active_backends == 1
-        assert owner._dispositions.get("acp:old-unknown") == old_unknown
+        assert owner.inputs.dispositions.get("acp:old-unknown") == old_unknown
         assert all("Uncertain old input must never replay" not in prompt for prompt in calls)
     finally:
         release.set()
@@ -165,9 +167,9 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    store = owner._open_goal_store()
+    store = owner.turns.open_goal_store()
     goal = comms.update_goal(session, "set", text="Keep attempt authority", owner_store=store)
     reservation = store.reserve(goal.id, 1)
     if fence != "reserved":
@@ -178,12 +180,12 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
         session, "blocked", goal_id=goal.id, block_reason="Owner input required before retry"
     )
     generation = store.snapshot(goal.id)
-    owner._active_turns[session] = "unrelated-turn"
-    owner._backend_inboxes[session] = asyncio.Queue()
+    owner.turns.active_turns[session] = "unrelated-turn"
+    owner.inputs.backend_inboxes[session] = asyncio.Queue()
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     if fence == "owner":
         # Call the actual owner handler after identity changed, without redirecting the proxy.
-        original = owner._require_session
+        original = owner.sessions.require
 
         def replaced_owner(session_id):
             comms.registry.register(
@@ -191,18 +193,18 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
             )
             return original(session_id)
 
-        monkeypatch.setattr(owner, "_require_session", replaced_owner)
+        monkeypatch.setattr(owner.sessions, "require", replaced_owner)
     elif fence == "origin":
-        owner._pending_goal_origins[session] = goal.id
+        owner.turns.pending_goal_origins[session] = goal.id
     try:
         expected = {"owner": "owner changed", "origin": "origin turn"}.get(fence, "unresolved")
         with pytest.raises(RuntimeError, match=expected):
             await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
         assert comms.registry.require(session).goal == blocked
         assert store.snapshot(goal.id) == generation
-        assert not owner._pending_turns.get(session)
+        assert not owner.inputs.pending_turns.get(session)
     finally:
-        owner._active_turns.clear()
-        owner._backend_inboxes.clear()
+        owner.turns.active_turns.clear()
+        owner.inputs.backend_inboxes.clear()
         await owner.shutdown()
         await proxy.close()

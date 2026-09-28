@@ -31,7 +31,7 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
-    agent._client = Client()
+    agent.sessions.client = Client()
 
     async def events(*args, **kwargs):
         yield ae.ToolStart(id="send1", name="comms_send")
@@ -64,7 +64,7 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.prompt("worker", [{"type": "text", "text": "!agent send this"}])
         sent = [
@@ -102,7 +102,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
-    agent._client = Client()
+    agent.sessions.client = Client()
 
     async def events(*args, **kwargs):
         native_id = "a" * 32
@@ -132,11 +132,11 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         comms.send_user_message("#test", "Question in channel", worktree=str(tmp_path))
-        await agent._drain_inbox("worker")
-        await asyncio.wait_for(agent._wake_tasks["worker"], 2)
+        await agent.inputs.drain_inbox("worker")
+        await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 2)
         routed = [
             update
             for update in updates
@@ -181,7 +181,7 @@ async def test_coordination_context_does_not_override_scheduled_response_policy(
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(acp_module.backend, "stream_agent_events", events)
     try:
-        await agent._run_agent_turn("worker", "worker", "incoming broadcast")
+        await agent.turns.run_agent_turn("worker", "worker", "incoming broadcast")
     finally:
         monkeypatch.undo()
         await agent.shutdown()

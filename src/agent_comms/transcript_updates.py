@@ -16,7 +16,6 @@ from acp.schema import AgentMessageChunk, TextContentBlock, UserMessageChunk
 
 from .declarations import MessageRoute
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
 from .operations import Comms, TranscriptEvent
 from .runtime import RuntimeServer
 
@@ -34,18 +33,8 @@ class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
             return IgnoredTranscriptUpdate
 
     @classmethod
-    def from_legacy(cls, value: dict[str, Any]) -> TranscriptUpdate:
-        member = cls.owner_for(value.get("type"))
-        payload = {"kind": member.declared_name}
-        for declared in fields(member):
-            if declared.name in value:
-                payload[declared.name] = FieldCodec.encode(value[declared.name])
-        return FieldCodec.decode(cls, payload)
-
-    @classmethod
     def from_transcript(cls, event: TranscriptEvent) -> TranscriptUpdate:
-        # Comms already decoded the saved record. Project its typed fields;
-        # only the legacy dictionary boundary above needs A2 decoding.
+        # Comms owns decoding the saved record; project its typed fields.
         member = cls.owner_for(event.kind)
         values = {"text": event.text, "route": event.routing.reply if event.routing else None}
         return member(**{f.name: values[f.name] for f in fields(member) if f.name in values})

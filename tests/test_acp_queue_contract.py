@@ -10,8 +10,9 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms.acp import CommsAgent, QueuedInput
+from agent_comms.acp import CommsAgent
 from agent_comms.declarations import Thread
+from agent_comms.input_drain import QueuedInput
 from agent_comms.operations import Comms
 from agent_comms.runtime import _present_cursor_session
 
@@ -21,7 +22,7 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     thread = Thread("beta", frozenset(), str(tmp_path), pid=os.getpid())
     comms.register(thread)
     agent = CommsAgent(comms)
-    agent._sessions["beta"] = "beta"
+    agent.sessions.bindings["beta"] = "beta"
     owner, epoch = comms.registry.live_owner_with_admission("beta")
     return comms, agent, owner.created_at, epoch
 
@@ -30,11 +31,11 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     comms, agent, created, epoch = _owner(tmp_path)
     first = "a" * 32
     second = "b" * 32
-    agent._queued_inputs["beta"] = {
+    agent.inputs.queued_inputs["beta"] = {
         first: QueuedInput("same text", True, created, epoch),
         second: QueuedInput("same text", True, created, epoch),
     }
-    binding, initial = agent._queue_state("beta")
+    binding, initial = agent.inputs.queue_state("beta")
     assert binding is not None and initial is not None
     assert binding["admissionGeneration"] == binding["ownerEpoch"] == epoch
     assert initial["scope"] == {key: value for key, value in binding.items() if key != "version"}
@@ -50,42 +51,42 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
         updates.append(update.field_meta["agentComms"])
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    item = agent._queued_inputs["beta"].pop(first)
-    await agent._emit_input_started("beta", item.text, first, queued_item=item)
+    item = agent.inputs.queued_inputs["beta"].pop(first)
+    await agent.inputs.emit_input_started("beta", item.text, first, queued_item=item)
     started = updates[-1]["inputStarted"]
     assert (started["inputId"], started["scope"], started["revision"]) == (
         first,
         initial["scope"],
         initial["revision"] + 1,
     )
-    await agent._emit_queue_state("beta")
+    await agent.inputs.emit_queue_state("beta")
     queued = updates[-1]["queueState"]
     assert queued["revision"] > started["revision"]
     assert queued["items"] == [{"inputId": second, "text": "same text"}]
-    agent._restored_inputs["beta"] = {second: agent._queued_inputs["beta"].pop(second)}
-    await agent._emit_queue_state("beta", restored=["same text"])
+    agent.inputs.restored_inputs["beta"] = {second: agent.inputs.queued_inputs["beta"].pop(second)}
+    await agent.inputs.emit_queue_state("beta", restored=["same text"])
     restored = updates[-1]["queueState"]
     assert restored["items"] == []
     assert restored["restored"] == [{"inputId": second, "text": "same text"}]
     assert (
-        agent._session_metadata("beta", session_id="beta")["agentComms"]["queueState"]["restored"]
+        agent.sessions.metadata("beta", session_id="beta")["agentComms"]["queueState"]["restored"]
         == restored["restored"]
     )
 
     # Owner admission changes without consuming or deleting old exact-ID rows.
     owner = comms.registry.require("beta")
     comms.registry.register(owner, new_owner=True)
-    new_binding, new_state = agent._queue_state("beta")
+    new_binding, new_state = agent.inputs.queue_state("beta")
     assert new_binding is not None and new_state is not None
     assert new_binding["ownerEpoch"] > epoch
     assert new_state["items"] == new_state["restored"] == []
-    assert second in agent._restored_inputs["beta"]
+    assert second in agent.inputs.restored_inputs["beta"]
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
     _, agent, _, _ = _owner(tmp_path)
-    agent._active_turns["beta"] = "fake-active"
-    inbox = agent._backend_inboxes["beta"] = asyncio.Queue()
+    agent.turns.active_turns["beta"] = "fake-active"
+    inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
     response = await agent.prompt(
         "beta",
         [{"type": "text", "text": "valid model task"}],
@@ -93,19 +94,19 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     )
     exact = inbox.get_nowait()["_input_id"]
     assert response.field_meta["agentComms"]["inputDisposition"]["inputId"] == exact
-    assert exact in agent._queued_inputs["beta"]
-    assert agent._dispositions.get("acp:" + exact)["status"] == "unknown"
-    meta = agent._session_metadata("beta", session_id="beta")["agentComms"]
+    assert exact in agent.inputs.queued_inputs["beta"]
+    assert agent.inputs.dispositions.get("acp:" + exact)["status"] == "unknown"
+    meta = agent.sessions.metadata("beta", session_id="beta")["agentComms"]
     assert meta["queueBinding"]["ownerThread"] == "beta"
     assert meta["queueState"] is None
-    assert exact in agent._queued_inputs["beta"]  # no drop, skip, or replay
+    assert exact in agent.inputs.queued_inputs["beta"]  # no drop, skip, or replay
 
 
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False, None])
 async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
     _, agent, _, _ = _owner(tmp_path)
-    agent._active_turns["beta"] = "fake-active"
-    inbox = agent._backend_inboxes["beta"] = asyncio.Queue()
+    agent.turns.active_turns["beta"] = "fake-active"
+    inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
     with pytest.raises(RequestError) as error:
         await agent.prompt(
             "beta",
@@ -115,11 +116,11 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     assert error.value.code == -32602
     assert error.value.data == {"reason": "userText must be a string"}
     assert inbox.empty()
-    assert agent._queued_inputs.get("beta", {}) == {}
-    assert agent._forwarded_inputs.get("beta", set()) == set()
-    assert not agent._dispositions.path.exists()
+    assert agent.inputs.queued_inputs.get("beta", {}) == {}
+    assert agent.inputs.forwarded_inputs.get("beta", set()) == set()
+    assert not agent.inputs.dispositions.path.exists()
     assert (
-        agent._session_metadata("beta", session_id="beta")["agentComms"]["queueState"]["items"]
+        agent.sessions.metadata("beta", session_id="beta")["agentComms"]["queueState"]["items"]
         == []
     )
 
@@ -127,25 +128,25 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
 async def test_legacy_malformed_queue_text_is_unavailable_without_dropping_id(tmp_path):
     _, agent, created, epoch = _owner(tmp_path)
     exact = "e" * 32
-    agent._queued_inputs["beta"] = {exact: QueuedInput(["malformed"], True, created, epoch)}
-    binding, state = agent._queue_state("beta")
+    agent.inputs.queued_inputs["beta"] = {exact: QueuedInput(["malformed"], True, created, epoch)}
+    binding, state = agent.inputs.queue_state("beta")
     assert binding is not None and state is None
-    meta = agent._session_metadata("beta", session_id="beta")["agentComms"]
+    meta = agent.sessions.metadata("beta", session_id="beta")["agentComms"]
     assert meta["queueBinding"] == binding and meta["queueState"] is None
-    assert exact in agent._queued_inputs["beta"]
+    assert exact in agent.inputs.queued_inputs["beta"]
 
 
 async def test_queue_overflow_unavailable_without_dropping_ids(tmp_path):
     _, agent, created, epoch = _owner(tmp_path)
-    agent._queued_inputs["beta"] = {
+    agent.inputs.queued_inputs["beta"] = {
         str(index): QueuedInput("message", True, created, epoch) for index in range(33)
     }
-    binding, state = agent._queue_state("beta")
+    binding, state = agent.inputs.queue_state("beta")
     assert binding is not None and state is None
-    assert len(agent._queued_inputs["beta"]) == 33
-    agent._queued_inputs["beta"] = {"long": QueuedInput("x" * 4097, True, created, epoch)}
-    assert agent._queue_state("beta")[1] is None
-    assert agent._queued_inputs["beta"]["long"].text == "x" * 4097
+    assert len(agent.inputs.queued_inputs["beta"]) == 33
+    agent.inputs.queued_inputs["beta"] = {"long": QueuedInput("x" * 4097, True, created, epoch)}
+    assert agent.inputs.queue_state("beta")[1] is None
+    assert agent.inputs.queued_inputs["beta"]["long"].text == "x" * 4097
 
 
 def test_queue_v1_fixture_orders_exact_ids_and_owner_scope():

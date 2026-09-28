@@ -142,7 +142,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         owner.on_connect(Client())
         (root / "project").mkdir()
         session = (await owner.new_session(str(root / "project"))).session_id
-        store = owner._open_goal_store()
+        store = owner.turns.open_goal_store()
         goal = comms.update_goal(
             session, "set", text="Finish the blocked objective", owner_store=store
         )
@@ -152,7 +152,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         blocked = comms.update_goal(
             session, "blocked", goal_id=goal.id, block_reason="Owner retry decision required"
         )
-        owner._dispositions.record(
+        owner.inputs.dispositions.record(
             "acp:old-unknown",
             seq=None,
             owner=session,
@@ -160,7 +160,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             target=session,
             text="UNCERTAIN_OLD_INPUT_MUST_NOT_REPLAY",
         )
-        unknown_before = owner._dispositions.get("acp:old-unknown")
+        unknown_before = owner.inputs.dispositions.get("acp:old-unknown")
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
         turn = asyncio.create_task(
             proxy.request(
@@ -170,7 +170,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         )
         try:
             await asyncio.wait_for(first_chunk.wait(), 15)
-            assert session in owner._active_turns and session in owner._backend_inboxes
+            assert session in owner.turns.active_turns and session in owner.inputs.backend_inboxes
             result = await proxy.request(
                 "retry_goal",
                 goal_id=goal.id,
@@ -191,7 +191,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             await asyncio.wait_for(continued.wait(), 15)
             # Pause before releasing the second response so another live-drain
             # iteration cannot reserve a third attempt between success and pause.
-            assert session in owner._active_turns and len(requests) == 2
+            assert session in owner.turns.active_turns and len(requests) == 2
             current = comms.registry.require(session).goal
             await proxy.request(
                 "update_goal",
@@ -201,11 +201,11 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             )
             assert comms.registry.require(session).goal.status == "paused"
             finish_goal.set()
-            await asyncio.wait_for(asyncio.shield(owner._wake_tasks[session]), 10)
+            await asyncio.wait_for(asyncio.shield(owner.inputs.wake_tasks[session]), 10)
             final = GoalAttemptStore(store.root).snapshot(goal.id)
             assert (final.number, final.state, final.attempt_id) == (3, "ready", None)
             assert len(requests) == 2, "One ordinary request and one authorized goal continuation"
-            assert owner._dispositions.get("acp:old-unknown") == unknown_before
+            assert owner.inputs.dispositions.get("acp:old-unknown") == unknown_before
             assert "UNCERTAIN_OLD_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)
             assert "CURRENT_USER_REQUEST" in json.dumps(requests[0])
             assert "Finish the blocked objective" in json.dumps(requests[1])

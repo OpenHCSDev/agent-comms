@@ -217,7 +217,7 @@ class TestEndToEndLifecycle:
             async def session_update(self, session_id=None, update=None, **kw):
                 sent.append(update)
 
-        agent._client = FakeClient()
+        agent.sessions.client = FakeClient()
 
         async def prompt_flow() -> None:
             await agent.prompt(

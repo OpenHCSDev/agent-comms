@@ -383,7 +383,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
     goal = comms.update_goal("owner", "set", text="Await child")
@@ -411,10 +411,10 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
         raise OSError("injected optional direct-reply read failure")
 
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     monkeypatch.setattr(comms.bus, "_history_page", unavailable)
     try:
-        await agent._run_agent_turn(child, child, "Finish work")
+        await agent.turns.run_agent_turn(child, child, "Finish work")
         assert terminal == ["settled"]
         assert comms.registry.require("owner").goal.active
         assert comms.goal_wait("owner") is not None
@@ -427,11 +427,11 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     goal = comms.update_goal(
-        owner, "set", text="Review child work", owner_store=agent._open_goal_store()
+        owner, "set", text="Review child work", owner_store=agent.turns.open_goal_store()
     )
     assert goal is not None
     wakes = []
@@ -439,14 +439,14 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     try:
         claim = comms.begin_turn(child, "child-turn")
         comms.update_goal(owner, "standby", goal_id=goal.id, wait_for=[child])
-        assert not agent._pending_turns.get(owner)
+        assert not agent.inputs.pending_turns.get(owner)
         fence = comms.finish_turn(child, "child-turn", expected=claim)
         assert comms.release_waits_after_terminal_turn(fence) == (owner,)
         assert comms.registry.require(owner).goal.active
         assert comms.goal_wait(owner) is None
-        agent._schedule_goal(owner)
+        agent.turns.schedule_goal(owner)
         assert wakes == [owner]
-        assert [turn.goal_id for turn in agent._pending_turns[owner]] == [goal.id]
+        assert [turn.goal_id for turn in agent.inputs.pending_turns[owner]] == [goal.id]
     finally:
         await agent.shutdown()
 
@@ -455,7 +455,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
     goal = comms.update_goal("owner", "set", text="Await child")
@@ -476,8 +476,8 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
         yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(agent, "_emit_event", delayed_emit)
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
-    old_task = asyncio.create_task(agent._run_agent_turn(child, child, "Finish work"))
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+    old_task = asyncio.create_task(agent.turns.run_agent_turn(child, child, "Finish work"))
     try:
         await asyncio.wait_for(old_settled.wait(), 2)
         assert comms.registry.require(child).active_turn is None
@@ -504,7 +504,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
     goal = comms.update_goal("owner", "set", text="Await child")
@@ -522,13 +522,13 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         assert comms.goal_wait("owner") is not None
         yield ae.Done(ok=True, text="Reported" if reply else "")
 
-    monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent._run_agent_turn(
+        await agent.turns.run_agent_turn(
             child, child, "Finish work", reply_targets=("owner",) if reply else ()
         )
         assert streamed == [child]
-        assert not agent._pending_turns.get("owner")
+        assert not agent.inputs.pending_turns.get("owner")
         assert not (comms.root / "goal-private").exists()
         if reply:
             assert comms.registry.require("owner").goal.active

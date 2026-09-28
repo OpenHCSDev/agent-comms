@@ -31,7 +31,7 @@ async def _owner(tmp_path, monkeypatch):
     )
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
     wakes = []
-    monkeypatch.setattr(owner, "_schedule_goal", wakes.append)
+    monkeypatch.setattr(owner.turns, "schedule_goal", wakes.append)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     return comms, owner, proxy, session, wakes
 
@@ -45,7 +45,7 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
         assert comms.registry.require(session).goal.id == goal["id"]
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(goal["id"])
         assert generation is not None and generation.state == "ready"
-        assert owner._goal_store.ready_grant(goal["id"], generation.number)
+        assert owner.turns.goal_store.ready_grant(goal["id"], generation.number)
         assert session in wakes
     finally:
         await owner.shutdown()
@@ -68,7 +68,7 @@ async def test_explicit_retry_recovers_registry_goal_missing_ledger(tmp_path, mo
         assert result["goal"]["status"] == "active"
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(legacy.id)
         assert generation is not None and generation.state == "ready" and generation.number == 2
-        assert owner._goal_store.ready_grant(legacy.id, generation.number)
+        assert owner.turns.goal_store.ready_grant(legacy.id, generation.number)
         assert session in wakes
     finally:
         await owner.shutdown()

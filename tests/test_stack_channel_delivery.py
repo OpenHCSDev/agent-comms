@@ -101,7 +101,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         ]
         comms = wire(root / "wire")
         agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
-        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
         project = root / "worker"
         project.mkdir()
@@ -111,12 +111,12 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             await agent.new_session(str(project))
             comms.update_tags("worker", add=frozenset({"team"}))
             comms.register(Thread("peer", frozenset({"team"}), str(project)))
-            turn = asyncio.create_task(agent._run_owned_input("worker", "worker", "Warmup"))
+            turn = asyncio.create_task(agent.inputs.run_owned_input("worker", "worker", "Warmup"))
             assert await asyncio.to_thread(started.wait, 15)
             if case != "steer":
                 release.set()
                 await asyncio.wait_for(turn, 20)
-                warmup_proc = agent._persistent_backends["worker"].proc
+                warmup_proc = agent.turns.persistent_backends["worker"].proc
                 message = comms.send_user_message(
                     "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
                 )
@@ -131,36 +131,36 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 )
             if case in {"rename", "batch_rename"}:
                 comms.registry.rename("worker", "renamed-worker")
-            await agent._drain_inbox("worker")
-            key = agent._dispositions.bus_key(message, comms.registry.require("worker"))
-            assert agent._dispositions.status(key) == "unknown"
+            await agent.inputs.drain_inbox("worker")
+            key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
+            assert agent.inputs.dispositions.status(key) == "unknown"
             if case == "goal":
                 comms.update_goal("worker", "set", text="Changed goal")
             elif case == "stop":
                 comms.stop("worker")
-                await agent._sync_session_identity("worker")
+                await agent.sessions.sync_identity("worker")
                 assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":
                 await agent.shutdown()
                 agent = CommsAgent(
                     wire(comms.root), agent_bin=native, agent_args=args, runtime_enabled=True
                 )
-                monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+                monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "worker")
-                await agent._drain_inbox("worker")
+                await agent.inputs.drain_inbox("worker")
             if case == "steer":
                 release.set()
                 await asyncio.wait_for(turn, 20)
             elif case != "reopen":
                 InputDrain.schedule_wake(agent.inputs, "worker")
-                await asyncio.wait_for(agent._wake_tasks["worker"], 20)
+                await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 20)
             success = case in {"deliver", "batch", "steer", "rename", "batch_rename"}
             assert len(requests) == (2 if success else 1)
             if case == "deliver":
                 assert warmup_proc is not None and warmup_proc.returncode is None
-                assert agent._persistent_backends["worker"].proc is warmup_proc
-            assert agent._dispositions.status(key) == ("started" if success else "unknown")
-            assert not agent._pending_turns.get("worker")
+                assert agent.turns.persistent_backends["worker"].proc is warmup_proc
+            assert agent.inputs.dispositions.status(key) == ("started" if success else "unknown")
+            assert not agent.inputs.pending_turns.get("worker")
             rows = [
                 json.loads(line)
                 for line in Path(comms.registry.require("worker").session_file)
@@ -178,10 +178,10 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     in json.dumps(matched[0])
                 )
             if success:
-                assert matched[0]["inputId"] == agent._dispositions.get(key)["native_id"]
+                assert matched[0]["inputId"] == agent.inputs.dispositions.get(key)["native_id"]
                 for origin in messages:
-                    row = agent._dispositions.get(
-                        agent._dispositions.bus_key(origin, comms.registry.require("worker"))
+                    row = agent.inputs.dispositions.get(
+                        agent.inputs.dispositions.bus_key(origin, comms.registry.require("worker"))
                     )
                     assert row["status"] == "started"
                     assert row["native_id"] == matched[0]["inputId"]
@@ -205,7 +205,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     async def session_update(self, **kwargs):
                         updates.append(kwargs["update"].model_dump(by_alias=True))
 
-                await agent.replay_unknown_inputs("worker", Client())
+                await agent.inputs.replay_unknown_inputs("worker", Client())
                 assert any(
                     row["_meta"]["agentComms"]["inputDisposition"]["sequence"] == message.seq
                     for row in updates

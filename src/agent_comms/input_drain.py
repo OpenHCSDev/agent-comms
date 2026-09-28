@@ -328,7 +328,7 @@ class InputDrain(FutureInputQueue):
                         if time.monotonic() >= next_goal_wait_check:
                             self.comms.recover_closed_goal_wait(session_id)
                             next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
-                        self.effects._schedule_goal(session_id)
+                        self.effects.turns.schedule_goal(session_id)
                         await self.sessions.config.refresh_auth_models()
                     except asyncio.CancelledError:
                         raise
@@ -445,7 +445,9 @@ class InputDrain(FutureInputQueue):
                             or dependency_wait is not None
                             or incoming.direct_interrupt_goal_id is not None
                         )
-                        and backend.rpc_args_for(self.effects._agent_bin, self.effects._agent_args)
+                        and backend.rpc_args_for(
+                            self.effects.turns.agent_bin, self.effects.turns.agent_args
+                        )
                         is not None
                     )
                     if (
@@ -538,7 +540,7 @@ class InputDrain(FutureInputQueue):
 
         async def wake() -> None:
             while self.pending_turns.get(session_id) and not self.closing:
-                async with self.effects._turn_locks.setdefault(session_id, asyncio.Lock()):
+                async with self.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
                     pending = self.pending_turns.pop(session_id, [])
                     owner = self.comms.registry.require(self.sessions.require(session_id))
                     if not self.comms.registry.status(owner.name).running:
@@ -607,9 +609,9 @@ class InputDrain(FutureInputQueue):
                                 current_wait.wait_id if current_wait else None
                             ),
                         )
-                    self.effects._turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
+                    self.effects.turns.turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
                     try:
-                        await self.effects._run_agent_turn(
+                        await self.effects.turns.run_agent_turn(
                             session_id,
                             self.sessions.require(session_id),
                             "\n\n".join(turn.prompt for turn in pending),
@@ -647,9 +649,9 @@ class InputDrain(FutureInputQueue):
                                 "input before explicit Retry. No input was replayed."
                             ),
                         )
-                        await self.effects._sync_goal_execution(session_id, owner.name)
+                        await self.effects.turns.sync_goal_execution(session_id, owner.name)
                     finally:
-                        self.effects._turn_tasks.pop(session_id, None)
+                        self.effects.turns.turn_tasks.pop(session_id, None)
 
         # Background work must not inherit a human controller from the task
         # that happened to schedule it. Only its own ACP prompt may bind one.
@@ -880,11 +882,14 @@ class InputDrain(FutureInputQueue):
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
     ) -> None:
-        if backend.rpc_args_for(self.effects._agent_bin, self.effects._agent_args) is None:
+        if (
+            backend.rpc_args_for(self.effects.turns.agent_bin, self.effects.turns.agent_args)
+            is None
+        ):
             # The plain text fallback has no Pi native input-ID protocol.
             # Preserve its existing local command behavior without attaching
             # a false Pi start claim to it.
-            await self.effects._run_agent_turn(session_id, thread_name, task, images=images)
+            await self.effects.turns.run_agent_turn(session_id, thread_name, task, images=images)
             return
         key = f"acp:{uuid4().hex}"
         with _store_lock(self.comms._wire_lock_path):
@@ -905,7 +910,7 @@ class InputDrain(FutureInputQueue):
         row = self.dispositions.get(key)
         assert row is not None
         await self.emit_input_disposition(session_id, row)
-        await self.effects._run_agent_turn(
+        await self.effects.turns.run_agent_turn(
             session_id,
             thread_name,
             task,

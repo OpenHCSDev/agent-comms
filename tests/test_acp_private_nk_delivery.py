@@ -56,9 +56,9 @@ def _session(tmp_path, *, package=True):
         private_nk_native_package=tmp_path if package else None,
         private_nk_wire_root_id=root_id if package else None,
     )
-    agent._sessions["beta"] = "beta"
-    agent._session_titles["beta"] = "beta"
-    agent._session_worktrees["beta"] = str(tmp_path)
+    agent.sessions.bindings["beta"] = "beta"
+    agent.sessions.titles["beta"] = "beta"
+    agent.sessions.worktrees["beta"] = str(tmp_path)
     return comms, agent, root_id
 
 
@@ -334,8 +334,8 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         return []
 
     monkeypatch.setattr(agent._runtime, "start", noop)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(agent, "_config_options", no_options)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent.sessions.config, "options", no_options)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
@@ -351,9 +351,9 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         "comms_send",
         {"from": "sender", "to": owner.name, "body": "Compute 17+25"},
     )
-    assert await agent._drain_inbox(session.session_id) == 1
+    assert await agent.inputs.drain_inbox(session.session_id) == 1
     assert len(calls) == 1
-    assert agent._inbox_cursors == {}  # private receipt, never legacy display cursor
+    assert agent.inputs.inbox_cursors == {}  # private receipt, never legacy display cursor
 
 
 @pytest.mark.parametrize("managed", [False, True])
@@ -391,10 +391,10 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new owner"})
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
-    assert agent._sessions["beta"] == "gamma"
-    assert await agent._drain_inbox("beta") == 0  # no second model send
+    assert agent.sessions.bindings["beta"] == "gamma"
+    assert await agent.inputs.drain_inbox("beta") == 0  # no second model send
 
 
 @pytest.mark.parametrize("seal_old", [False, True])
@@ -414,11 +414,11 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
     assert "new-after-rename" in calls[0][1]
     assert "old-before-rename" not in calls[0][1]
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
 
 
 async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_scan(
@@ -433,9 +433,9 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1 and "new canonical" in calls[0][1]
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
 
 
 def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
@@ -496,7 +496,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     invoke_tool(
         comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}
     )
-    running = asyncio.create_task(agent._drain_inbox("beta"))
+    running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         reserved_count = store._connection.execute(
@@ -536,7 +536,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
         comms, "comms_send", {"from": "sender", "to": "beta", "body": "Compute 17+25"}
     )
     original = comms.bus.message_by_id(sent["id"])
-    before = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert before["status"] == "none"
     assert before["version"] == 1 and before["revision"] >= 1
     assert before["scope"]["ownerThread"] == "beta"
@@ -548,9 +548,9 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
         updates.append(update)
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
-    current = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    current = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert current["status"] == "proven"
     assert current["covered_seq"] == original.seq
     assert current["injected_seq"] == original.seq
@@ -567,8 +567,8 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
         return []
 
     monkeypatch.setattr(agent._runtime, "start", noop)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(agent, "_config_options", no_options)
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent.sessions.config, "options", no_options)
     reconnected = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
     reconnect_cursor = reconnected.field_meta["agentComms"]["privateNativeCursor"]
     assert reconnect_cursor["scope"] == current["scope"]
@@ -588,9 +588,9 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
             ).fetchone()[0]
             == 1
         )
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
-    assert agent._inbox_cursors == {} and agent._pending_turns == {}
+    assert agent.inputs.inbox_cursors == {} and agent.inputs.pending_turns == {}
     assert not (comms.root / "acks.json").exists()
 
 
@@ -625,9 +625,9 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
 
     monkeypatch.setattr(agent._runtime, "session_update", update)
     monkeypatch.setattr(agent._runtime, "start", noop)
-    monkeypatch.setattr(agent, "_ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(agent, "_config_options", no_options)
-    drain = asyncio.create_task(agent._drain_inbox("beta"))
+    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+    monkeypatch.setattr(agent.sessions.config, "options", no_options)
+    drain = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     comms.registry.unregister("beta")
     comms.registry.heartbeat("beta")
@@ -667,20 +667,20 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"})
-    assert await agent._drain_inbox("beta") == 1
-    proven = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert await agent.inputs.drain_inbox("beta") == 1
+    proven = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert proven["status"] == "proven"
     comms.registry.unregister("beta")
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
     assert updates[-1]["status"] == "unavailable" and updates[-1]["scope"] is None
     comms.registry.heartbeat("beta")
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
     renewed = updates[-1]
     assert renewed["status"] == "none" and "input_id" not in renewed
     assert renewed["scope"]["ownerEpoch"] > proven["scope"]["ownerEpoch"]
     assert renewed["revision"] > proven["revision"]
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"})
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert updates[-1]["status"] == "none"
     assert updates[-1]["scope"] == renewed["scope"]
     assert len(calls) == 2  # no old-epoch native input can initialize new proof
@@ -688,10 +688,10 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
 
 async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
     comms, agent, _ = _session(tmp_path)
-    before = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         store._connection.execute("DROP TABLE native_runtime_schema_meta")
-    unavailable = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    unavailable = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert unavailable["status"] == "unavailable"
     fixture = json.loads(
         (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
@@ -717,7 +717,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     comms.send_message("sender", "beta", "first")
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert updates[-1]["status"] == "proven"
     before = len(updates)
     with _store_lock(comms.root / "wire"):
@@ -766,11 +766,11 @@ async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    agent._active_turns["beta"] = "active-human-turn"
-    assert await agent._drain_inbox("beta") == 0
-    assert calls == [] and agent._inbox_cursors == {}
-    agent._active_turns.pop("beta")
-    assert await agent._drain_inbox("beta") == 1
+    agent.turns.active_turns["beta"] = "active-human-turn"
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert calls == [] and agent.inputs.inbox_cursors == {}
+    agent.turns.active_turns.pop("beta")
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
 
 
@@ -779,7 +779,7 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     original = comms.bus.message_by_id(sent["id"])
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
-        await agent._drain_inbox("beta")
+        await agent.inputs.drain_inbox("beta")
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
@@ -788,7 +788,7 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
             ).fetchone()[0]
             == 0
         )
-    assert agent._inbox_cursors == {} and agent._pending_turns == {}
+    assert agent.inputs.inbox_cursors == {} and agent.inputs.pending_turns == {}
 
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
@@ -809,9 +809,9 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         {"from": "sender", "to": "#team", "body": "@alpha review this."},
     )
     original = comms.bus.message_by_id(sent["id"])
-    assert await agent._drain_inbox("beta") == 0
-    assert calls == [] and agent._inbox_cursors == {}
-    cursor = agent._session_metadata("beta")["agentComms"]["privateNativeCursor"]
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert calls == [] and agent.inputs.inbox_cursors == {}
+    cursor = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
     assert cursor["status"] == "coverage_only"
     fixture = json.loads(
         (Path(__file__).parent / "fixtures" / "private_native_cursor_v1.json").read_text()
@@ -819,7 +819,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     assert set(cursor) == set(fixture["coverageOnlyExample"])
     assert cursor["covered_seq"] == original.seq
     assert cursor["injected_seq"] == 0 and cursor["input_id"] is None
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         receipt = store._connection.execute(
@@ -843,11 +843,11 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     assert comms.bus.message_by_id(sent["id"]) is not None
     with pytest.raises(NativePiUnavailable):
-        await agent._drain_inbox("beta")
+        await agent.inputs.drain_inbox("beta")
     assert len(calls) == 1
-    assert await agent._drain_inbox("beta") == 0
+    assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
-    assert agent._inbox_cursors == {} and agent._pending_turns == {}
+    assert agent.inputs.inbox_cursors == {} and agent.inputs.pending_turns == {}
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
         assert row is not None and row[0] is None
@@ -861,9 +861,9 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
         private_nk_native_package=tmp_path,
         private_nk_wire_root_id=root_id,
     )
-    second._sessions["beta"] = "beta"
-    second._session_titles["beta"] = "beta"
-    second._session_worktrees["beta"] = str(tmp_path)
+    second.sessions.bindings["beta"] = "beta"
+    second.sessions.titles["beta"] = "beta"
+    second.sessions.worktrees["beta"] = str(tmp_path)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = separate_session_fake(decision="FULL")
@@ -879,11 +879,11 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
     for body in ("one", "two"):
         invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": body})
-    running = asyncio.create_task(first._drain_inbox("beta"))
+    running = asyncio.create_task(first.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
         with pytest.raises(StaleFence, match="busy"):
-            await second._drain_inbox("beta")
+            await second.inputs.drain_inbox("beta")
         assert len(calls) == 1
         with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
             assert (
@@ -901,7 +901,7 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     finally:
         release.set()
         assert await asyncio.wait_for(running, timeout=5) == 1
-    assert await second._drain_inbox("beta") == 1
+    assert await second.inputs.drain_inbox("beta") == 1
     assert len(calls) == 2
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
@@ -927,7 +927,7 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     comms.begin_turn("beta", "human-live-turn")
     with pytest.raises(StaleFence, match="busy"):
-        await agent._drain_inbox("beta")
+        await agent.inputs.drain_inbox("beta")
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
@@ -935,7 +935,7 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
         )
     assert calls == []
     comms.finish_turn("beta", "human-live-turn")
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
 
 
@@ -953,7 +953,7 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
 
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended_before_send)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    running = asyncio.create_task(agent._drain_inbox("beta"))
+    running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
         goal = comms.update_goal("beta", "set", text="Work on a separate task")
@@ -962,8 +962,8 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
         release.set()
     with pytest.raises(StaleFence, match="owner changed before native send"):
         await asyncio.wait_for(running, timeout=5)
-    assert calls == [] and agent._inbox_cursors == {}
-    assert await agent._drain_inbox("beta") == 0
+    assert calls == [] and agent.inputs.inbox_cursors == {}
+    assert await agent.inputs.drain_inbox("beta") == 0
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         row = store._connection.execute("SELECT session_id FROM native_runtime_inputs").fetchone()
         assert row is not None and row[0] is None
@@ -977,7 +977,7 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
     original = comms.update_goal("beta", "set", text="Separate ongoing goal")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    assert await agent._drain_inbox("beta") == 1
+    assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
     assert comms.registry.require("beta").goal == original
 
@@ -988,7 +988,7 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
     original = comms.bus.message_by_id(sent["id"])
     agent._private_nk_wire_root_id = "f" * 32
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
-        await agent._drain_inbox("beta")
+        await agent.inputs.drain_inbox("beta")
     agent._private_nk_wire_root_id = root_id
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
@@ -997,7 +997,7 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
         lambda _: (_ for _ in ()).throw(PublicationActivationBlocked("unreviewed Pi")),
     )
     with pytest.raises(PublicationActivationBlocked, match="unreviewed Pi"):
-        await agent._drain_inbox("beta")
+        await agent.inputs.drain_inbox("beta")
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
@@ -1006,4 +1006,4 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
             ).fetchone()[0]
             == 0
         )
-    assert agent._inbox_cursors == {}
+    assert agent.inputs.inbox_cursors == {}
