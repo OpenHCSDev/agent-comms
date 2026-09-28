@@ -52,10 +52,11 @@ stores and durable histories remain intact; executed activation operators delete
   User confirms live compaction completed in about2:40 and a later prompt worked.
   One prompt encountered provider WebSocket1011; explicit user retry succeeded.
   Dalton owns clearer typed provider-error feedback. No automatic input replay.
-- [ ] Parent: reconcile source PRs, publish actual live state and cleanup artifacts.
+- [x] Parent: reconcile this shipping batch's source PRs, publish actual live state
+  and cleanup its artifacts.
   Deployment275 merged;262 closed through ancestry;53 closed as implemented by
-  120/125.122 retains only formatting/receipts plus one test expectation, assigned
-  to Carver to preserve in T4 before closing.
+  120/125.122 closed after Carver preserved its final test/receipts in T4.
+  Deployment286 records the current installed pair and cleanup receipts.
 
 ## Actual live failures discovered after activation
 
@@ -116,14 +117,23 @@ stores and durable histories remain intact; executed activation operators delete
   Dalton audit281:19 current guards pass, retired names absent, executed operators
   deleted. Proof decoder283 and fixed RPC ceiling284 now merged and live; old
   decoder/limit deleted. Durable proof format unchanged,148 retained contexts
-  independently verified. Historical benchmarks and universal size requirements
-  remain unproven, not silently marked complete.
-- [ ] Boyle: execute S7 three real pollers at50/100/150 threads, send p50/p99 and
+  independently verified. The historical benchmark is now executed in285;
+  universal size requirements and other unexecuted acceptance remain open.
+- [x] Boyle: execute S7 three real pollers at50/100/150 threads, send p50/p99 and
   actual lock timings, replace obsolete benchmark APIs and retain honest baseline
-  comparison limits; draft285.
-- [ ] Dalton: finish nominal tool request/behavior/catalog ownership in tools.py;
+  comparison limits;285 merged. Current1200 and historical600 measured sends
+  persisted once. Five current registry polls failed; these are recorded failures,
+  not successful reads. The full-version timing comparison is not an A8-only
+  causal claim. Disposable benchmark environments and roots were removed.
+- [ ] Boyle: fix the real marker inode retirement race found by285, in289.
+  Actual concurrent canonical publication reproduced a retired inode with nlink0;
+  the fix gives marker reading/publication one canonical lock and validates the
+  opened inode. Installed1500 publications/44395 reads passed, as did actual
+  permission/hardlink/symlink rejection. Full S7 rerun underway. Not installed yet.
+- [ ] Dalton: finish nominal tool request/behavior/catalog ownership in tools.py,
+  PR287;
   remove central handler roster, parameter-kind dispatch and repeated raw decoding.
-- [ ] Wegener: finish tracked native turn lifecycle ownership using existing
+- [ ] Wegener: finish tracked native turn lifecycle ownership in288 using existing
   PiEvent/dispatch authorities, deleting manual duplicated event handling.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
   run completed35.94s; its payload lacks detector coverage counts, so it is not
