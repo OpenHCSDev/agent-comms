@@ -5,24 +5,30 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from agent_comms.typed_table import Column, Index, TypedRow, TypedTable
+from agent_comms.typed_table import Column, ForeignKey, Index, TypedRow, TypedTable
 
 
 @dataclass(frozen=True)
 class TableParentRow(TypedTable):
     key: str = field(metadata={"sql": Column(primary_key=True)})
     count: int = 0
+    unique = (("key", "count"),)
 
 
 @dataclass(frozen=True)
 class TableChildRow(TypedTable):
     key: str = field(metadata={"sql": Column(primary_key=True)})
-    parent: str = field(metadata={"sql": Column(references=(TableParentRow, "key"))})
+    parent: str
     enabled: bool
     detail: tuple[str, ...]
     weight: float | None
+    parent_count: int = 3
     indexes = (Index(("parent", "enabled")),)
     without_rowid = True
+
+    @classmethod
+    def references(cls):
+        return (ForeignKey(("parent", "parent_count"), TableParentRow, ("key", "count")),)
 
 
 def test_declared_table_family(tmp_path):
