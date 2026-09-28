@@ -7,7 +7,15 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, Literal
 
 from .errors import RelationViolationError
-from .input_attempt import GoalInputDecision, InputAttempt, UnknownInput
+from .field_codec import FieldCodec
+from .input_attempt import (
+    GoalInputDecision,
+    InputAttempt,
+    MissingInput,
+    ReservedInput,
+    SentInput,
+    StoredInput,
+)
 from .locked_store import LockedStore
 from .messages import Message
 from .threads import Thread
@@ -24,27 +32,30 @@ class FutureInputQueue(ABC):
 
 @dataclass(frozen=True, slots=True)
 class InputDocument:
-    rows: dict[str, InputAttempt] = field(default_factory=dict, metadata={"wire_required": True})
+    rows: dict[str, StoredInput] = field(default_factory=dict, metadata={"wire_required": True})
     version: Literal[1] = field(default=1, metadata={"wire_required": True})
 
     def __post_init__(self) -> None:
-        if any(key != row.key for key, row in self.rows.items()):
+        if any(not row.exists or key != row.key for key, row in self.rows.items()):
             raise ValueError("Input document key differs from its attempt")
+
+    def lookup(self, key: str | None) -> InputAttempt:
+        return self.rows.get(key, MissingInput())
 
     def compaction_rows(
         self, owner: Thread, pending_input_key: str | None, queue: FutureInputQueue | None = None
     ) -> dict[str, InputAttempt]:
         """Caller holds wire; native CAS additionally retains document lock."""
         assert owner.active_turn is not None
-        pending = self.rows.get(pending_input_key) if pending_input_key else None
-        if pending_input_key is not None and (pending is None or not pending.pending_for(owner)):
+        pending = self.lookup(pending_input_key)
+        if pending_input_key is not None and not pending.pending_for(owner):
             raise RelationViolationError("Original owner input already attempted")
         future = queue.future_inputs(owner, pending_input_key) if queue is not None else {}
-        if any(self.rows.get(key) != receipt for key, receipt in future.items()):
+        if any(self.lookup(key) != receipt for key, receipt in future.items()):
             raise RelationViolationError("Queued owner input changed after acceptance")
         relevant = {}
         for key, row in self.rows.items():
-            if row.owner != owner.name:
+            if not row.matches_owner(owner.incarnation):
                 continue
             if key != pending_input_key and key in future and row.pending_for(owner):
                 continue
@@ -59,7 +70,7 @@ class InputDocument:
         return tuple(self.rows[key].source_text for key in keys)
 
     def all_started(self, keys) -> bool:
-        return all((row := self.rows.get(key)) is not None and not row.unresolved for key in keys)
+        return all(self.lookup(key).has_started for key in keys)
 
     def unknown(self, owners: frozenset[str]) -> tuple[InputAttempt, ...]:
         return tuple(
@@ -69,11 +80,9 @@ class InputDocument:
             )
         )
 
-    def bound_bus_inputs(self) -> tuple[InputAttempt, ...]:
+    def bound_bus_inputs(self) -> tuple[SentInput, ...]:
         return tuple(
-            row
-            for row in self.rows.values()
-            if row.sequence is not None and row.native_id is not None and row.sent_text is not None
+            bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
         )
 
     def delivery_overview(
@@ -114,6 +123,22 @@ class InputDispositions(LockedStore[InputDocument]):
     def empty(self) -> InputDocument:
         return InputDocument()
 
+    def _decode(self, data) -> InputDocument:
+        if isinstance(data, dict) and isinstance(data.get("rows"), dict):
+            data = {
+                **data,
+                "rows": {
+                    key: StoredInput.declaration_record(row) for key, row in data["rows"].items()
+                },
+            }
+        return FieldCodec.decode(InputDocument, data)
+
+    def _encode(self, value: InputDocument):
+        return {
+            **FieldCodec.encode(value),
+            "rows": {key: row.stored_record() for key, row in value.rows.items()},
+        }
+
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
         return message.response_policy.disposition_key(message, owner)
@@ -121,8 +146,8 @@ class InputDispositions(LockedStore[InputDocument]):
     def record(
         self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str
     ) -> bool:
-        """Return acceptance only after UNKNOWN and its directory are fsynced."""
-        row = UnknownInput(key, seq, owner, admission, target, text)
+        """Return acceptance only after the reservation and directory are fsynced."""
+        row = ReservedInput(key, seq, owner, admission, target, text)
         recorded = False
 
         def change(document: InputDocument) -> InputDocument:
@@ -140,8 +165,7 @@ class InputDispositions(LockedStore[InputDocument]):
 
         def update(document: InputDocument) -> InputDocument:
             nonlocal changed
-            row = document.rows.get(key)
-            next_row = change(row) if row is not None else None
+            next_row = change(document.lookup(key))
             if next_row is None:
                 return document
             changed = True
