@@ -37,8 +37,6 @@ from .compaction_states import (
     OperationState,
     PendingPublication,
     PublicationState,
-    RefusedSummary,
-    RetiredRefusalSummary,
     ReservedSummary,
     SummaryState,
     UnknownSummary,
@@ -332,13 +330,14 @@ class CompactionJournal:
                 selected = self._blocking_selected_summary(db, canonical, inputs)
                 if selected and (
                     len(selected) != 1
-                    or not selected[0].state.reservable_commit
                     or type(intent) is not dict
                     or intent.get("selectedSummaryOperationId") != selected[0].operation_id
                 ):
                     raise CompactionJournalError(
                         "Blocked selected summary; unrelated native commit forbidden"
                     )
+                if selected:
+                    selected[0].state.require_commit_reservation()
                 db.execute(
                     "INSERT INTO operations VALUES (?, ?, ?, ?, NULL)",
                     (commit_id, canonical, payload, IntentOperation.declared_name),
@@ -730,15 +729,15 @@ class CompactionJournal:
 
     def refuse_selected_summary(self, operation_id: str, reason: str) -> None:
         """Retain the observed native prestart failure without admitting any input."""
-        target = RefusedSummary(reason)
         with self._transaction() as db:
             row = db.execute(
                 "SELECT status, commit_id, decline_reason FROM selected_summary_attempts "
                 "WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row is None or not SummaryState.from_columns(*row).may_become(target):
+            if row is None:
                 raise CompactionJournalError("Selected summary refusal transition forbidden")
+            target = SummaryState.from_columns(*row).refuse(reason)
             db.execute(
                 "UPDATE selected_summary_attempts SET status = ?, decline_reason = ? "
                 "WHERE operation_id = ?",
@@ -751,9 +750,7 @@ class CompactionJournal:
         This does not change or admit its original UNKNOWN input, and cannot
         transition a reserved/UNKNOWN provider attempt or native commit.
         """
-        if not isinstance(attempt.state, RefusedSummary):
-            raise CompactionJournalError("Exact observed native refusal required")
-        target = RetiredRefusalSummary(attempt.state.decline_reason)
+        target = attempt.state.manual_recovery()
         with self._transaction() as db:
             row = db.execute(
                 "SELECT * FROM selected_summary_attempts WHERE operation_id = ?",

@@ -1,7 +1,7 @@
 """Read-only strict native session validation before a discarded idle Pi reopens.
 
 Never use SessionManager.open for this preflight: it can migrate a legacy file.
-The pinned manager's loadEntriesFromFile enforces its actual strict v3 parse.
+The pinned disk entry owner enforces its actual strict v3 parse.
 """
 
 from __future__ import annotations
@@ -21,13 +21,13 @@ import {realpathSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 const [root, file] = process.argv.slice(1);
-const managerURL = pathToFileURL(join(root, 'dist/core/session-manager.js'));
-const {loadEntriesFromFile} = await import(managerURL);
-const rows = loadEntriesFromFile(file);
-if (!rows.length || rows[0].type !== 'session' || rows[0].version !== 3 ||
-    typeof rows[0].id !== 'string' || !rows[0].id)
-    throw new Error('Exact saved native session identity unavailable');
-console.log(JSON.stringify({sessionId:rows[0].id, sessionFile:realpathSync(file)}));
+const {DiskEntryStore} = await import(pathToFileURL(join(root, 'dist/core/session-entry-store.js')));
+const store = new DiskEntryStore(file);
+try {
+  store.assertCurrent();
+  console.log(JSON.stringify({sessionId:store.header.id, sessionFile:realpathSync(file)}));
+} finally {store.close();}
+
 """
 
 
@@ -80,7 +80,7 @@ def validate_native_reopen(
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
             or before.st_uid not in (0, os.getuid())
-            or not 0 < before.st_size <= 256 * 1024 * 1024
+            or before.st_size <= 0
         ):
             raise NativeReopenError("Saved native session is not a bounded regular file")
         node = shutil.which("node")

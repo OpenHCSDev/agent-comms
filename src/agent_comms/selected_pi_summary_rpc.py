@@ -26,9 +26,6 @@ from .pi_summary_payloads import SummaryDeclinedData, SummarySummarizedData, Sum
 from .selected_pi_child_deadline import SelectedChildUnknown, arm_selected_child
 from .selected_pi_route import _request
 
-# Native v1 text/file limits, allowing JSON's six-byte control escaping.
-_MAX_RESPONSE = 6 * (262144 + 2 * 256 * 4096) + 65536
-
 
 @dataclass(frozen=True)
 class SelectedSummaryResult:
@@ -43,9 +40,9 @@ def _summary_response(
     """Decode the existing native v1 protocol once at the RPC boundary."""
 
     try:
-        if not raw or len(raw) > _MAX_RESPONSE or not raw.endswith(b"\n"):
-            raise ValueError("Incomplete bounded selected summary")
-        response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE)
+        if not raw or not raw.endswith(b"\n"):
+            raise ValueError("Incomplete selected summary")
+        response = PiRpcChannel.decode_record(raw, strict=True)
         if (
             not isinstance(response, Response)
             or response.id != request.id
@@ -171,8 +168,8 @@ class SelectedSummarySlot:
                     await proc.stdin.drain()
                 while True:
                     async with asyncio.timeout_at(deadline):
-                        raw = await reader.readline(max_bytes=_MAX_RESPONSE)
-                    event = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_RESPONSE)
+                        raw = await reader.readline()
+                    event = PiRpcChannel.decode_record(raw, strict=True)
                     if not isinstance(event, AgentCommsCompactionProgress):
                         break
                     if event.id != request.id or event.operation_id != operation:

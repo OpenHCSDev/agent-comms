@@ -105,7 +105,9 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
 
 async def test_actual_acp_compact_uses_journal_and_reports_saved_history(tmp_path, monkeypatch):
     from dataclasses import replace
+
     from acp.agent.router import build_agent_router
+
     from agent_comms.acp import CommsAgent
 
     async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
@@ -163,3 +165,50 @@ async def test_actual_acp_compact_uses_journal_and_reports_saved_history(tmp_pat
             )
         finally:
             await agent.shutdown()
+
+
+@pytest.mark.parametrize("uncertain", [False, True], ids=["reserved", "unknown"])
+async def test_manual_does_not_retire_or_repeat_uncertain_provider(
+    tmp_path, monkeypatch, uncertain
+):
+    from agent_comms.compaction_journal import CompactionJournalError
+
+    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+        persistent,
+        registry,
+        inputs,
+        file,
+        launcher,
+        info,
+    ):
+        inputs.replace(InputDocument())
+        journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+        operation = journal.reserve_selected_summary(
+            file,
+            {
+                "source": {"ownerName": "owner"},
+                "selected": {
+                    "provider": "openai",
+                    "modelId": "gpt-4.1-mini",
+                    "contextWindow": info.context_size,
+                },
+                "settings": {"reserveTokens": 1000, "keepRecentTokens": 10},
+            },
+        )
+        if uncertain:
+            journal.mark_selected_summary_unknown(operation)
+        attempt = journal.selected_summary(operation)
+        before = Path(file).read_bytes()
+        runner = SimpleNamespace(
+            persistent_backends={"owner": persistent},
+            comms=wire(tmp_path),
+            agent_bin=launcher,
+            effects=SimpleNamespace(
+                _private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()
+            ),
+        )
+        with pytest.raises(CompactionJournalError, match="uncertain"):
+            await compact_manual_owner(runner, "owner", "owner", info, None)
+        assert journal.selected_summary(operation) == attempt
+        assert Path(file).read_bytes() == before
+        assert not native_input_admitted(tmp_path, file)

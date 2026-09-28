@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError, SelectedSummaryAttempt
-from .compaction_states import ManualCommittedSummary, RefusedSummary
+from .compaction_states import ManualCommittedSummary
 from .errors import RelationViolationError
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
@@ -61,10 +61,7 @@ async def compact_manual_owner(
     pending_input_key = None
     refusals = bridge.journal.blocking_selected_summary(owner.session_file)
     for refusal in refusals:
-        if not isinstance(refusal.state, RefusedSummary):
-            raise CompactionJournalError(
-                "Prior selected compaction is uncertain; inspect compaction-status, never replay"
-            )
+        refusal.state.manual_recovery()
         prior = json.loads(refusal.source_json)["source"]
         if prior.get("ownerName") != owner.name:
             raise CompactionJournalError("Refused selected source belongs to another owner")
@@ -131,9 +128,7 @@ async def compact_manual_owner(
             custom_instructions=instructions.strip() if instructions else None,
         )
         if result.summary is None:
-            attempt = bridge.journal.selected_summary(result.operation_id)
-            if attempt.state.reservable_commit:
-                bridge.journal.refuse_selected_summary(result.operation_id, result.decline_reason)
+            bridge.journal.refuse_selected_summary(result.operation_id, result.decline_reason)
             raise ValueError(f"Selected Pi declined manual summary ({result.decline_reason})")
         current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)
         if current != owner or current_generation != generation or await decision() != settings:
