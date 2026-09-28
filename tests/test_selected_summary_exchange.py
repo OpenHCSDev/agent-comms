@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
@@ -88,7 +90,10 @@ async def selected(tmp_path, mode="success"):
     persistent = PersistentPiSession()
     persistent.proc = child
     persistent.reader = PiRpcChannel(child.stdout)
-    persistent.launch_key = ("existing-pi",)
+    persistent.launch_key = (
+        NativePiRpcLaunch((sys.executable,), tmp_path, {}, tmp_path, file, tmp_path),
+        (0, 0),
+    )
     persistent.session_file = str(file)
     persistent.session_id = "session"
     persistent.revision = _session_revision(str(file))
@@ -112,7 +117,7 @@ async def selected(tmp_path, mode="success"):
             journal,
             witness,
             source,
-            expected_launcher="existing-pi",
+            expected_package=tmp_path,
             tokens_before=1200,
             **kwargs,
         )
@@ -203,9 +208,14 @@ async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
 
 
-async def test_stale_child_never_reserves_or_sends(tmp_path):
+@pytest.mark.parametrize("changed", ["revision", "package"])
+async def test_stale_child_never_reserves_or_sends(tmp_path, changed):
     async with selected(tmp_path) as (run, persistent, journal, file, received):
-        persistent.revision = None
+        if changed == "revision":
+            persistent.revision = None
+        else:
+            launch, auth = persistent.launch_key
+            persistent.launch_key = (replace(launch, package=tmp_path / "changed-package"), auth)
         with pytest.raises(SelectedChildUnknown, match="stale"):
             await run()
         assert not received.exists()
@@ -262,7 +272,12 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
             persistent.session_file = fixture["sessionFile"]
             persistent.session_id = fixture["witness"]["sessionId"]
             persistent.revision = _session_revision(fixture["sessionFile"])
-            persistent.launch_key = ("native-fixture",)
+            persistent.launch_key = (
+                NativePiRpcLaunch(
+                    ("node",), tmp_path, env, tmp_path, Path(fixture["sessionFile"]), tmp_path
+                ),
+                (0, 0),
+            )
             source = dict(
                 source=dict(ownerName="owner"),
                 selected=fixture["selected"],
@@ -277,7 +292,7 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 FieldCodec.decode(NativeWitness, fixture["witness"]),
                 source,
                 tokens_before=fixture["tokensBefore"],
-                expected_launcher="native-fixture",
+                expected_package=tmp_path,
                 timeout_seconds=5,
             )
             if provider_error:

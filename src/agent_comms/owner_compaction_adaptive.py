@@ -132,7 +132,7 @@ async def maybe_compact_owner_turn(
             return await read_selected_compaction_decision(
                 persistent,
                 session_file=owner.session_file,
-                expected_launcher=launcher,
+                expected_package=package,
                 provider=provider,
                 model_id=model_id,
                 context_tokens=context_used,
@@ -190,7 +190,7 @@ async def maybe_compact_owner_turn(
                     },
                     "settings": FieldCodec.project(settings, "settings"),
                 },
-                expected_launcher=launcher,
+                expected_package=package,
                 tokens_before=prepared.tokens_before,
             )
             if result.summary is None:

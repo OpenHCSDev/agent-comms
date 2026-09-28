@@ -12,6 +12,7 @@ import secrets
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal, TypeVar
 
 from .backend import PersistentPiSession, _session_revision
@@ -83,7 +84,7 @@ async def probe_idle_selected_pi(
     selected: dict[str, Any],
     settings: dict[str, Any],
     *,
-    expected_launcher: str,
+    expected_package: Path,
     timeout: float = 3.0,
 ) -> SelectedPiDryRun:
     """One RPC request to an idle, existing child; NEVER starts provider work.
@@ -99,7 +100,7 @@ async def probe_idle_selected_pi(
         witness.session_file,
         witness.session_id,
         _read_response,
-        expected_launcher=expected_launcher,
+        expected_package=expected_package,
         timeout=timeout,
     )
 
@@ -114,13 +115,13 @@ async def _exchange_observation(
     session_id: str,
     decode: Callable[[bytes, PiCommand], _Observation],
     *,
-    expected_launcher: str,
+    expected_package: Path,
     timeout: float,
     max_response: int | None = None,
 ) -> _Observation:
     """One read-only request; every uncertain transport retires the borrowed child."""
-    if type(expected_launcher) is not str or not expected_launcher or not 0 < timeout <= 5:
-        raise ValueError("Bounded selected Pi launcher and deadline required")
+    if not 0 < timeout <= 5:
+        raise ValueError("Bounded selected Pi deadline required")
     async with persistent.lock:
         proc, reader = persistent.proc, persistent.reader
         if (
@@ -134,7 +135,7 @@ async def _exchange_observation(
             or persistent.revision is None
             or persistent.revision != _session_revision(session_file)
             or persistent.launch_key is None
-            or persistent.launch_key[0] != expected_launcher
+            or persistent.launch_key[0].package != expected_package
         ):
             raise SelectedPiProbeUnknownError("Selected idle Pi child is unavailable or stale")
         transmitted = False
@@ -198,7 +199,7 @@ async def read_selected_compaction_decision(
     persistent: PersistentPiSession,
     *,
     session_file: str,
-    expected_launcher: str,
+    expected_package: Path,
     provider: str,
     model_id: str,
     context_tokens: int,
@@ -231,7 +232,7 @@ async def read_selected_compaction_decision(
         session_file,
         session_id,
         _read_settings_response,
-        expected_launcher=expected_launcher,
+        expected_package=expected_package,
         timeout=timeout,
         max_response=16384,
     )

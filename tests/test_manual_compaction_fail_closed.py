@@ -94,6 +94,7 @@ def test_concurrent_session_append_cannot_be_reported_as_compaction_success():
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX session writer lock")
+@pytest.mark.usefixtures("native_rpc_fixture")
 async def test_backend_writer_waits_while_session_is_fenced(tmp_path):
     import fcntl
     import sys
@@ -101,10 +102,28 @@ async def test_backend_writer_waits_while_session_is_fenced(tmp_path):
     session = tmp_path / "session.jsonl"
     session.write_text(json.dumps({"type": "session", "version": 3, "id": "session"}) + "\n")
     marker = tmp_path / "backend-launched"
-    child = tmp_path / "text-child"
+    child = tmp_path / "native-rpc-child"
     child.write_text(
         f"#!{sys.executable}\n"
-        + f"import pathlib\npathlib.Path({str(marker)!r}).touch()\nprint('done')\n"
+        + f"import pathlib\npathlib.Path({str(marker)!r}).touch()\n"
+        + """
+import json, sys
+def emit(value):
+    print(json.dumps(value), flush=True)
+for line in sys.stdin:
+    request = json.loads(line)
+    command = request["type"]
+    emit({"type": "response", "command": command, "id": request.get("id"),
+          "success": True, "data": {}})
+    if command == "prompt":
+        emit({"type": "message_start", "message": {
+            "role": "user", "content": request["message"]}})
+        emit({"type": "message_end", "message": {
+            "role": "assistant", "stopReason": "stop"}})
+        emit({"type": "agent_settled"})
+    elif command == "get_session_stats":
+        break
+"""
     )
     child.chmod(0o700)
     lock_file = session.with_name(f".{session.name}.agent-comms-writer.lock")
