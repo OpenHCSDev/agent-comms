@@ -36,7 +36,12 @@ function acSelectedCompactionSettings(command, session, conflict) {
             trigger: shouldCompact(command.contextTokens, model.contextWindow, settings)}};
 }
 function acValidSummaryRequest(value) {
-    if (!acExactObject(value, ["id", "type", "version", "operationId", "witness", "selected", "settings"]) ||
+    const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings"];
+    if (value && Object.hasOwn(value, "customInstructions")) {
+        if (typeof value.customInstructions !== "string" || !value.customInstructions.isWellFormed()) return false;
+        fields.push("customInstructions");
+    }
+    if (!acExactObject(value, fields) ||
         value.type !== "agent_comms_summarize_compaction" || !acSummaryId(value.operationId)) return false;
     const readiness = { id: value.id, type: "agent_comms_prepare_compaction", version: value.version,
         dryRun: true, witness: value.witness, selected: value.selected, settings: value.settings };
@@ -244,7 +249,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
         // Native Pi generation only: never call AgentSession.compact(), which
         // aborts turns, emits hooks and appends session entries.
         const result = await compact(preparation, binding.model, undefined, undefined,
-            undefined, slot.controller.signal, "low", selectedStream, undefined,
+            request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
             { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, undefined, undefined);
         await Promise.allSettled([...inFlight]);
         if (slot.controller.signal.aborted ||
