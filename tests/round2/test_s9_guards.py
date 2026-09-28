@@ -91,6 +91,7 @@ def test_removed_mechanisms_and_settings_have_one_owner():
     for name in (
         "selected_source_snapshot.py",
         "compaction_child_launcher.py",
+        "owner_compaction_process.py",
         "compaction_child_watchdog.py",
     ):
         assert not (ROOT / name).exists(), name

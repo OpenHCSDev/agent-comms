@@ -12,6 +12,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
+from .child_process import ChildOutcome
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 
@@ -188,8 +189,8 @@ class NativeOutcome(DeclaredFamily, affix="NativeOutcome"):
     state: ClassVar[OperationState]
     permits_failed_exit: ClassVar[bool] = False
 
-    def checked_exit(self, returncode: int) -> NativeOutcome:
-        if returncode and not self.permits_failed_exit:
+    def checked_child(self, outcome: ChildOutcome) -> NativeOutcome:
+        if not outcome.successful and not self.permits_failed_exit:
             raise ValueError("Inconsistent native outcome; never replay")
         return self
 

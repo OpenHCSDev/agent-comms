@@ -20,7 +20,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
-from .compaction_journal import CompactionJournal, CompactionJournalError, _consume_selected_ack
+from .compaction_journal import (
+    CompactionJournal,
+    CompactionJournalError,
+    SelectedSummarySource,
+    _consume_selected_ack,
+)
 from .compaction_states import SummaryState
 from .field_codec import FieldCodec
 
@@ -72,9 +77,9 @@ class SelectedAdmissionIdentity(SelectedAdmissionSource):
         tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None
     ] = field(metadata={"source_exclude": True})
 
-    def matches_source(self, source: dict) -> bool:
+    def matches_source(self, source: SelectedSummarySource) -> bool:
         try:
-            witness = FieldCodec.decode(SelectedAdmissionSource, source.get("source"))
+            witness = FieldCodec.decode(SelectedAdmissionSource, source.source)
         except (TypeError, ValueError):
             return False
         return FieldCodec.encode(witness) == FieldCodec.project(self, "source")
@@ -136,10 +141,9 @@ class SelectedSummaryAdmission:
         if not _consume_selected_ack(receipt, scope):
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
-            source = json.loads(source_json)
+            source = FieldCodec.decode(SelectedSummarySource, json.loads(source_json))
             valid = (
-                type(source) is dict
-                and identity.matches_source(source)
+                identity.matches_source(source)
                 and identity.owner_pid == os.getpid()
                 and identity.session_revision is not None
                 and _session_revision(session) == identity.session_revision

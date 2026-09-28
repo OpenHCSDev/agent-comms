@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import stat
 import struct
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -21,13 +23,14 @@ from pathlib import Path
 from .backend import _session_revision
 from .bus_publication import unique_wire_object
 from .catalog_store import ChannelCatalog
+from .child_process import BoundedRun, TimedOutOutcome
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionOperation,
     SelectedSummaryAttempt,
 )
-from .compaction_states import NativeOutcome, UnknownNativeOutcome
+from .compaction_states import CommittedNativeOutcome, NativeOutcome, UnknownNativeOutcome
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .input_disposition import FutureInputQueue, InputDispositions
@@ -35,11 +38,6 @@ from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
-from .owner_compaction_process import (
-    CompactionTransportUnknownError,
-    require_deadline_support,
-    run_authority_child,
-)
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
 from .routing import DeliveryScope
@@ -47,6 +45,10 @@ from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSumma
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .threads import Thread
+
+
+class CompactionTransportUnknownError(RuntimeError):
+    """Native mutation may have occurred; only exact reconciliation can settle it."""
 
 
 @dataclass(frozen=True)
@@ -81,7 +83,7 @@ class OwnerCompactionCommit:
         *,
         future_queue: FutureInputQueue | None = None,
     ):
-        require_deadline_support()
+        BoundedRun.require_inherited_deadline()
         self.root = registry_path.parent.resolve(strict=True)
         self.registry = Registration(registry_path)
         self.inputs = InputDispositions(self.root / InputDispositions.filename)
@@ -122,9 +124,6 @@ class OwnerCompactionCommit:
             turn_id=owner.active_turn.id,
             expected_goal_id=owner.goal.id if owner.goal is not None else None,
             expected_goal_revision=owner.goal.revision if owner.goal is not None else None,
-            # Legacy receipt field only, not authority. CompactionSource binds
-            # actual native history plus canonical bus/input revisions below.
-            correction_revision=0,
             session_file=session,
             session_leaf=witness.leaf_id,
             session_revision=witness.revision,
@@ -318,29 +317,37 @@ class OwnerCompactionCommit:
                 inode=str(held.st_ino),
             ),
         )
-        result = run_authority_child(
-            [
-                self.environment_launcher,
-                "-u",
-                "NODE_OPTIONS",
-                "-u",
-                "NODE_PATH",
-                "-u",
-                "NODE_COMPILE_CACHE",
-                "NODE_DISABLE_COMPILE_CACHE=1",
-                self.node,
-                "--no-global-search-paths",
-                "--import",
-                str(self.import_fence),
-                str(self.helper),
-                str(self.package_dir),
-                str(fd),
-            ],
-            json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
-            authority_fd=fd,
-            timeout=timeout,
-            retained_fds=retained_fds,
-        )
+        if not math.isfinite(timeout) or not 0 < timeout <= 30:
+            raise ValueError("Compaction child deadline must be in (0, 30] seconds")
+        try:
+            result = BoundedRun.run_inherited(
+                (
+                    self.environment_launcher,
+                    "-u",
+                    "NODE_OPTIONS",
+                    "-u",
+                    "NODE_PATH",
+                    "-u",
+                    "NODE_COMPILE_CACHE",
+                    "NODE_DISABLE_COMPILE_CACHE=1",
+                    self.node,
+                    "--no-global-search-paths",
+                    "--import",
+                    str(self.import_fence),
+                    str(self.helper),
+                    str(self.package_dir),
+                    str(fd),
+                ),
+                input=json.dumps(request, ensure_ascii=False, allow_nan=False).encode(),
+                pass_fds=tuple(dict.fromkeys((fd, *retained_fds))),
+                deadline=time.monotonic() + timeout,
+            )
+        except (OSError, RuntimeError) as error:
+            raise CompactionTransportUnknownError(
+                f"Native commit transport UNKNOWN: {error}; never replay"
+            ) from error
+        if isinstance(result.outcome, TimedOutOutcome):
+            raise CompactionTransportUnknownError("Native commit timed out; never replay")
         try:
             evidence = json.loads(result.stdout)
         except (ValueError, UnicodeError) as error:
@@ -348,7 +355,7 @@ class OwnerCompactionCommit:
                 "Unparseable native outcome; never replay"
             ) from error
         try:
-            return FieldCodec.decode(NativeOutcome, evidence).checked_exit(result.returncode)
+            return FieldCodec.decode(NativeOutcome, evidence).checked_child(result.outcome)
         except (ValueError, TypeError) as error:
             raise CompactionTransportUnknownError(str(error)) from error
 
@@ -551,11 +558,12 @@ class OwnerCompactionCommit:
             if current != operation:
                 raise CompactionJournalError("Selected native commit changed")
             revision = _session_revision(witness.session_file)
-            evidence = json.loads(operation.evidence_json or "null")
+            evidence = FieldCodec.decode(
+                CommittedNativeOutcome, json.loads(operation.evidence_json or "null")
+            )
             if (
                 revision is None
-                or not isinstance(evidence, dict)
-                or evidence.get("revision") != ":".join(map(str, revision[0]))
+                or evidence.revision != ":".join(map(str, revision[0]))
                 or revision[1] != identity.reserved_revision[1]
             ):
                 raise CompactionJournalError("Selected native result is unavailable")

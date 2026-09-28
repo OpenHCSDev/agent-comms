@@ -14,6 +14,7 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -67,7 +68,7 @@ console.log(manager.getSessionFile());
             "owner",
             frozenset(),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             goal=Goal("work", "goal"),
             model="openrouter/fixture",
@@ -338,7 +339,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             goal=Goal("retain history", "goal-acp"),
             session_file=str(session),
             model=info.model,
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
     comms.agents.set_agent_info(

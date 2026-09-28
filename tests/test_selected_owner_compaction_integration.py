@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.backend import PersistentPiSession, _session_revision
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.goals import Goal
@@ -88,7 +89,7 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
                 "owner",
                 frozenset(),
                 str(tmp_path),
-                pid=os.getpid(),
+                process_identity=ProcessIdentity.capture(os.getpid()),
                 session_file=file,
                 model=fixture["model"] if real_host else "fake/fake",
                 goal=Goal("work", "goal") if goal else None,
@@ -249,7 +250,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 goal=Goal("retain history", "goal-acp"),
                 session_file=file,
                 model=info.model,
-                pid=os.getpid(),
+                process_identity=ProcessIdentity.capture(os.getpid()),
             )
         )
         comms.agents.set_agent_info(

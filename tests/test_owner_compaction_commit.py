@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournalError, CompactionJournalUnknownError
 from agent_comms.compaction_states import UnknownNativeOutcome
@@ -27,9 +28,11 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.owner_compaction_commit import (
+    CompactionTransportUnknownError,
+    OwnerCompactionCommit,
+)
 from agent_comms.owner_compaction_prepare import NativeWitness
-from agent_comms.owner_compaction_process import CompactionTransportUnknownError
 from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
 from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
@@ -66,7 +69,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         "owner",
         frozenset(),
         str(tmp_path),
-        pid=os.getpid(),
+        process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=witness.session_file,
         goal=Goal("task", "goal"),
     )
@@ -537,6 +540,7 @@ def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, 
 import fcntl, sys
 from pathlib import Path
 from dataclasses import replace
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, MessageType
 from agent_comms.message_bus import MessageBus
@@ -759,11 +763,12 @@ def test_owner_sigkill_after_native_write_before_journal_result(native, tmp_path
 import json,os,signal,sys
 from pathlib import Path
 from dataclasses import replace
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 bridge = OwnerCompactionCommit(Path(sys.argv[1]), Path(sys.argv[2]))
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
-bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+bridge.registry.register(replace(owner,process_identity=ProcessIdentity.capture(os.getpid()),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
 owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash-turn',expected_owner_generation=epoch)
@@ -874,6 +879,7 @@ def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
 import json,os,sys
 from pathlib import Path
 from dataclasses import replace
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 import agent_comms.native_package as provenance
 provenance.MANIFEST = Path(sys.argv[6])  # Test-only published tree including barrier.
@@ -881,7 +887,7 @@ bridge = OwnerCompactionCommit(Path(sys.argv[1]),Path(sys.argv[2]))
 bridge.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
-bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
+bridge.registry.register(replace(owner,process_identity=ProcessIdentity.capture(os.getpid()),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
 owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash',expected_owner_generation=epoch)

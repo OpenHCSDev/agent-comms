@@ -5,6 +5,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from agent_comms.child_process import ExitedOutcome
 from agent_comms.compaction_states import (
     CommittedOperation,
     NativeOutcome,
@@ -81,7 +82,7 @@ def test_native_outcome_receipts_and_metadata_refusal():
         revision="1:2:3:4:5",
         metadataDigest="a" * 64,
     )
-    outcome = FieldCodec.decode(NativeOutcome, wire).checked_exit(0)
+    outcome = FieldCodec.decode(NativeOutcome, wire).checked_child(ExitedOutcome(0))
     assert outcome.state == CommittedOperation()
     assert FieldCodec.encode(outcome) == wire
     assert outcome.bind_metadata("a" * 64) is outcome
@@ -99,12 +100,12 @@ def test_native_outcome_receipts_and_metadata_refusal():
         {"status": "unknown", "reason": ""},
     ):
         with pytest.raises(ValueError):
-            FieldCodec.decode(NativeOutcome, invalid).checked_exit(0)
+            FieldCodec.decode(NativeOutcome, invalid).checked_child(ExitedOutcome(0))
     with pytest.raises(ValueError, match="Inconsistent"):
-        FieldCodec.decode(NativeOutcome, wire).checked_exit(1)
+        FieldCodec.decode(NativeOutcome, wire).checked_child(ExitedOutcome(1))
     assert (
         FieldCodec.decode(NativeOutcome, {"status": "unknown", "reason": "402"})
-        .checked_exit(1)
+        .checked_child(ExitedOutcome(1))
         .reason
         == "402"
     )

@@ -377,5 +377,5 @@ def create_fresh_private_session(
         return result
     except OSError as error:
         # Do not delete a possibly committed header after a failed fsync. It
-        # remains an unenrolled legacy file, never an inferred coverage grant.
+        # remains unenrolled, never an inferred coverage grant.
         raise NativePiUnavailable("Fresh-session creation durability UNKNOWN") from error
