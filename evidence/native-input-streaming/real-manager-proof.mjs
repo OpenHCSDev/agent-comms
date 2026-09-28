@@ -24,6 +24,7 @@ try {
  writeFileSync(file,entries.map(e=>JSON.stringify(e)+'\n').join(''),{mode:0o600});
  writeFileSync(file+'.input-proof',JSON.stringify({schema:1,type:'context_committed',sessionId:id,inputId,sessionEntryId:'00000001',requestGeneration:73,llmContextDigest:'b'.repeat(64)})+'\n',{mode:0o600});
  manager=SessionManager.open(file,root);
+ manager.entryStore.get = () => assert.fail('Proof startup/replay must not decode historical bodies');
  const state=Object.assign(Object.create(AgentSession.prototype),{sessionManager:manager,_nativeInputClaims:new Map(),_nativeRequestGeneration:0,_emit(){assert.fail('recovery must not emit');}});
  state._loadNativeInputState();
  assert.equal(state._nativeRequestGeneration,73);
@@ -31,6 +32,6 @@ try {
  assert.equal(state._claimNativeInput(inputId,request),true);
  assert.throws(()=>state._claimNativeInput(inputId,{text:'changed'}),/Conflicting replay/);
  assert.throws(()=>state._claimNativeInput('2'.repeat(32),request),/Conflicting replay/);
- assert.equal([...manager.entryStore.entries()].length,entries.length-1);
+ assert.equal([...manager.entryStore.metadataEntries()].length,entries.length-1);
  console.log(JSON.stringify({nativeManager:true,entries:entries.length-1,oldCompactedInput:true,siblingInput:true,generation:73,emissions:0}));
 } finally { manager?.entryStore.close(); rmSync(root,{recursive:true,force:true}); }

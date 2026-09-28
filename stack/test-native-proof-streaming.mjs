@@ -1,7 +1,7 @@
 // Offline AgentSession journal boundary. Files live under the caller's owned TMPDIR.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { appendFileSync, closeSync, mkdtempSync, openSync, rmSync, statSync, writeSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,6 +14,11 @@ const request = { text: 'original' };
 const inputId = '1'.repeat(32), contextDigest = 'b'.repeat(64);
 const inputDigest = createHash('sha256').update('pi-input-request-v1\n' + JSON.stringify(request)).digest('hex');
 const entry = { id: 'entry', message: { inputId, inputDigest } };
+const metadata = { id: entry.id, role: 'user', inputId, inputDigest };
+const entryStore = {
+  *trackedMetadata() { yield metadata; },
+  trackedInputMetadata(id) { return id === inputId ? metadata : undefined; },
+};
 const row = (requestGeneration = 1) => ({ schema: 1, type: 'context_committed', sessionId: 'session',
   inputId, sessionEntryId: entry.id, requestGeneration, llmContextDigest: contextDigest });
 
@@ -22,7 +27,7 @@ function fixture(run) {
   const file = join(root, 'proof');
   const state = Object.assign(Object.create(AgentSession.prototype), {
     sessionManager: {
-      entryStore: { *trackedInputs() { yield entry; } },
+      entryStore,
       getTrackedInput(id) { return id === inputId ? entry : undefined; },
       isPersisted() { return true; },
       getSessionId() { return 'session'; },
@@ -53,7 +58,7 @@ test('retained proof larger than retired cap streams with no claim/body mirror o
   assert.equal(state._claimNativeInput(inputId, request), true);
   assert.throws(() => state._claimNativeInput(inputId, { text: 'different' }), /Conflicting replay/);
   assert.equal(state.sessionManager.getTrackedInput(inputId).message.inputDigest, inputDigest);
-  const rss = process.resourceUsage().maxRSS * 1024;
+  const rss = Number(/^VmHWM:\s+(\d+)/m.exec(readFileSync('/proc/self/status', 'utf8'))[1]) * 1024;
   assert(rss < bytes, `peak RSS ${rss} must remain below journal bytes ${bytes}`);
   console.log(JSON.stringify({ journalBytes: bytes, generations: generation, peakRSS: rss, recoveryEmissions: 0 }));
 }));
@@ -72,6 +77,7 @@ test('live context commit releases only pending memory and preserves later diges
   const file = join(root, 'session.input-proof'), receipts = [];
   const state = Object.assign(Object.create(AgentSession.prototype), {
     sessionManager: {
+      entryStore,
       getTrackedInput(id) { return id === inputId ? entry : undefined; },
       flushInputDurably(id) { assert.equal(id, inputId); return entry.id; },
       getSessionId() { return 'session'; },

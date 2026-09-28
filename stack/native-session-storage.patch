@@ -1661,15 +1661,6 @@
          this.agent.onContextReady = async (context) => await this._commitNativeContext(context);
          this._installAgentToolHooks();
          this._installAgentNextTurnRefresh();
-@@ -181,7 +183,7 @@
-         // This startup-only index is derived from the same validated entries.
-         // Re-scanning the whole session for every journal row is quadratic.
-         const trackedEntries = new Map();
--        for (const entry of this.sessionManager.getEntries()) {
-+        for (const entry of this.sessionManager.entryStore.entries()) {
-             if (entry.type !== "message" || entry.message?.role !== "user" || entry.message.inputId === undefined) continue;
-             const { inputId, inputDigest } = entry.message;
-             if (!/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
 @@ -457,9 +459,9 @@
                  this._nativeInputClaims.has(message.inputId));
              if (currentInput && estimateTokens(currentInput) > budget)

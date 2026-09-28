@@ -79,11 +79,11 @@
 +    _loadNativeInputState() {
 +        // SessionManager's historical index owns durable claims on every branch.
 +        // This map holds only newly admitted, not-yet-committed live requests.
-+        for (const entry of this.sessionManager.entryStore.trackedInputs()) {
-+            const { inputId, inputDigest } = entry.message;
-+            if (typeof inputId !== "string" || typeof inputDigest !== "string" ||
++        for (const entry of this.sessionManager.entryStore.trackedMetadata()) {
++            const { inputId, inputDigest } = entry;
++            if (entry.role !== "user" || typeof inputId !== "string" || typeof inputDigest !== "string" ||
 +                !/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
-+                this.sessionManager.getTrackedInput(inputId)?.id !== entry.id) {
++                this.sessionManager.entryStore.trackedInputMetadata(inputId)?.id !== entry.id) {
 +                throw new Error("Invalid or duplicate native input in persisted Pi session");
 +            }
 +        }
@@ -95,7 +95,7 @@
 +        let lastDigest;
 +        let idsInGeneration = new Set();
 +        for (const row of this._nativeProofRows(file)) {
-+            const entry = this.sessionManager.getTrackedInput(row.inputId);
++            const entry = this.sessionManager.entryStore.trackedInputMetadata(row.inputId);
 +            const newGeneration = row.requestGeneration > this._nativeRequestGeneration;
 +            if (row.schema !== 1 || row.type !== "context_committed" ||
 +                row.sessionId !== this.sessionId ||
@@ -122,7 +122,7 @@
 +        }
 +        this._nativeProofPath();
 +        const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
-+        const previous = this.sessionManager.getTrackedInput(inputId)?.message.inputDigest
++        const previous = this.sessionManager.entryStore.trackedInputMetadata(inputId)?.inputDigest
 +            ?? this._nativeInputClaims.get(inputId);
 +        if (previous !== undefined) {
 +            if (previous !== digest) throw new Error("Conflicting replay of native input ID");

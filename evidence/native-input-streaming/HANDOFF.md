@@ -48,25 +48,41 @@ NRA skill/current owner deletion decisions read; no fresh global-scan claim.
 - `deletion-transcript.log`:10pass current deletion guard and transcript boundary.
 - `lint-current.log`: current affected Python lint passes.
 
-## Coupled completion, not install-ready
+## Current iterator and native acceptance (2026-09-28)
 
-Darwin's EntryStore/SessionManager replacement is in progress in
-`~/wt/comms-native-session-entry-store-20260928` (checkpointe95775a).
-API received onPR234: `manager.entryStore.trackedInputs()` and existing
-`manager.getTrackedInput(id)`; adopted without another store/scanner. Requested
-indexed metadata lookup including inputDigest: current base trackedInput scans
-all tracked bodies per proof row. Adopt canonical selector API once published,
-then exercise actual native startup/replay on the combined package. Current
-combined import fails because compaction still imports removed buildSessionContext
-(`real-manager-first.log`), reported on243/234/229; that caller is Darwin-owned. No pretend
-complete mark while this production dependency is unfinished.
+Merged Darwin243 `63415f8`. AgentSession now uses the actual store's
+`trackedMetadata()` and indexed `trackedInputMetadata(inputId)` for startup,
+proof-row joins and replay digests. The startup-only body map, all-entry array,
+and repeated historical message decoding are gone. Store lookup is indexed
+(including duplicate refusal) and metadata carries the determining input digest.
 
-Python NativeEntry.read_evidence still materializes session entries; Darwin owns
-full history/SessionManager replacement. This batch removes proof whole-read but
-must compose with that owner's historical projection, not introduce another index.
-Parent owns metadata/selected summary/native commit framing and final native
-manifest/import-boundary regeneration, integration and quiet activation. No
-manifest was changed to bless an incomplete package.
+- `metadata-claims.log`:3pass unknown/no-replay, live claim release/subsequent
+  context binding, corrupt/truncated/changed journal cases on current source.
+- `real-manager-no-bodies.log`: actual AgentSession + actual indexed SessionManager,
+  compacted old input and sibling branch input both remain protected, generation73
+  recovered, zero live emissions. Store.get was forbidden during this proof/claim
+  path: no historical message-body decoding was used.
+- `native-cli-first.log`: actual compiled native CLI RPC get_state succeeds with
+  journal268,435,686bytes /969,483generations under96MiB V8 heap; no provider/model
+  request, all networking forbidden, zero live proof events, journal unchanged.
+  Generated journal/session/index files were cleaned after that process exited.
+- `assemble-combined-current.log`: removed only Darwin's displaced startup hunk
+  (getEntries→entryStore.entries on the deleted trackedEntries Map); every other
+  AgentSession context hunk composes without fuzz. Failed predecessor receipts
+  remain for traceability and are superseded by these exact current cases.
+
+Own proof/input startup closure is implemented and locally verified. Parent and
+Darwin still own whole native package closure/manifest, independent history
+consumer/race fixes, metadata/selected summary/native commit framing and quiet
+activation. For this source acceptance the candidate used Darwin's current
+prepared dist/index.js and core/compaction/index.js exports; Darwin has been
+notified to include those in his final generated source patch. No compatibility
+exports were restored and no manifest was changed to bless incomplete assembly.
+
+Python NativeEntry.read_evidence still materializes session entries; that is an
+existing historical session projection outside AgentSession startup, reported to
+Darwin/parent for the full history-store ownership work. This batch also removed
+Python proof-journal whole reading, without introducing a second history index.
 
 ## Current source accounting
 
