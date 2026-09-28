@@ -1,0 +1,11 @@
+{
+  "provider": "loopback only",
+  "native_package": "pi-coding-agent",
+  "installed_core": "/home/ts/wt/comms-t2-boundary-sol-20260928/.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "provider_calls": 3,
+  "successful_tools": [
+    "comms_send",
+    "comms_inbox"
+  ],
+  "ack_false_preserved_inbox": true
+}

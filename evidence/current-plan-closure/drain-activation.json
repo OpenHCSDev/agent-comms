@@ -1,0 +1,43 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-drain-feedback-20260928",
+  "core": "6abddc490c25ad6095d7c27725f1da542db24f33",
+  "toad": "b472e487d69c600490609fec7163376e30b1b5d1",
+  "textual": "c9743801c98dc570f82f82e25915ecce89800f4b",
+  "state_reset": false,
+  "input_replay": false,
+  "before_links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-private-config-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-private-config-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-private-config-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-private-config-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-private-config-20260928/bin/agent-comms-nk-foreground"
+  },
+  "verified": {
+    "agent-comms-ux": true,
+    "pr95-selected-pi-summary-owner": true,
+    "nra-architecture": true,
+    "nra-domain-mapping": true
+  },
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2091336,
+      "pid": 2148603
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2091337,
+      "pid": 2148605
+    },
+    {
+      "thread": "nra-architecture",
+      "previous_pid": 2091338,
+      "pid": 2148612
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "previous_pid": 2091345,
+      "pid": 2148613
+    }
+  ]
+}

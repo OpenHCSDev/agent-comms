@@ -12,7 +12,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.threads import Thread
-from agent_comms.tools import TOOLS
+from agent_comms.tools import ToolRequest
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
@@ -29,10 +29,16 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert "paused_by" not in paused.to_wire()
     assert reopened.views.list_threads()[0]["goal_pause"]["source"] == "owner"
     monkeypatch.setenv("PI_AGENT_ID", "worker")
-    report = next(tool for tool in TOOLS if tool.name == "comms_goal")
+    report = next(
+        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
+    )
     with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
         report.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"})
-    resume = next(tool for tool in TOOLS if tool.name == "comms_resume_goal")
+    resume = next(
+        tool
+        for tool in ToolRequest.members_with(ToolRequest)
+        if tool.declared_name == "comms_resume_goal"
+    )
     with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
         resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"})
     assert reopened.registry.require("worker").goal == paused
@@ -75,6 +81,10 @@ def test_failed_pause_attribution_cannot_authorize_model_resume(tmp_path, monkey
     assert comms.registry.require("worker").goal.state.declared_name == "paused"
     assert comms.goals.goal_pause("worker").source.declared_name == "owner"
     monkeypatch.setenv("PI_AGENT_ID", "worker")
-    resume = next(tool for tool in TOOLS if tool.name == "comms_resume_goal")
+    resume = next(
+        tool
+        for tool in ToolRequest.members_with(ToolRequest)
+        if tool.declared_name == "comms_resume_goal"
+    )
     with pytest.raises(ValueError, match="paused by the owner"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "Resume anyway"})
