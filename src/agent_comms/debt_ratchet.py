@@ -17,7 +17,18 @@ from .field_codec import FieldCodec, projected
 
 
 class Measure(DeclaredFamily, affix="Measure"):
-    """A declaration owns its scope, measurement and baseline matching."""
+    @classmethod
+    @abstractmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        """Return independent before/after measurements for this declaration."""
+
+    @staticmethod
+    def difference(before: int | None, after: int) -> int | None:
+        return None if before is None else after - before
+
+
+class GitMeasure(Measure):
+    """Shared Git collection and alignment for declaration-owned snapshots."""
 
     @classmethod
     def scope(cls, changed: set[str], present: set[str]) -> set[str]:
@@ -32,9 +43,15 @@ class Measure(DeclaredFamily, affix="Measure"):
     def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int | None], dict[str, int]]:
         return base, head
 
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        def snapshot(ref: str) -> dict[str, int]:
+            selected = cls.scope(changed, python_paths(repo, ref, root))
+            return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
+        return cls.align(snapshot(base), snapshot(head))
 
 
-class OccurrenceMeasure(Measure):
+class OccurrenceMeasure(GitMeasure):
     """Shared additive counting for syntactic occurrence measures."""
 
     @staticmethod
@@ -51,7 +68,7 @@ class OccurrenceMeasure(Measure):
         return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
 
 
-class ClassSize(Measure):
+class ClassSize(GitMeasure):
     """Independent lexical line spans for every class, never summed together."""
 
     @classmethod
@@ -175,8 +192,7 @@ class Comparison:
 
     @projected(view="report")
     def delta(self) -> dict[str, int | None]:
-        return {name: None if self.base[name] is None else value - self.base[name]
-                for name, value in self.head.items()}
+        return {name: Measure.difference(self.base[name], value) for name, value in self.head.items()}
 
     @property
     def increased(self) -> bool:
@@ -199,10 +215,7 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
 
     before, after = {}, {}
     for measure in Measure.members_with(Measure):
-        def snapshot(ref: str) -> dict[str, int]:
-            selected = measure.scope(paths, python_paths(repo, ref, root))
-            return measure.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
-        measured_base, measured_head = measure.align(snapshot(base), snapshot(head))
+        measured_base, measured_head = measure.compare(repo, base, head, paths, root)
         before.update(measured_base)
         after.update(measured_head)
     return Comparison(root, base, head, tuple(sorted(paths)), before, after)
