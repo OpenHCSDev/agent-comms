@@ -1,5 +1,6 @@
 // Provider-free adversarial loader/fork/snapshot tests; disposable package only.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { spawnSync } from 'node:child_process';
@@ -39,6 +40,24 @@ function fixedTime(action) {
     try { return action(); } finally { globalThis.Date = OriginalDate; }
 }
 const cases = {
+    'duplicate-entry-id': () => {
+        const { file } = fixture();
+        const original = fs.readFileSync(file);
+        fs.appendFileSync(file, JSON.stringify(rows(file)[1]) + '\n');
+        const invalid = fs.readFileSync(file);
+        assert.throws(() => SessionManager.open(file), /Invalid|duplicate/i);
+        assert.deepEqual(fs.readFileSync(file), invalid);
+        assert.deepEqual(invalid.subarray(0, original.length), original);
+    },
+    'forward-parent-id': () => {
+        const { file } = fixture();
+        const entries = rows(file);
+        entries[1].parentId = entries[2].id;
+        fs.writeFileSync(file, entries.map(JSON.stringify).join('\n') + '\n');
+        const invalid = fs.readFileSync(file);
+        assert.throws(() => SessionManager.open(file), /ancestry/i);
+        assert.deepEqual(fs.readFileSync(file), invalid);
+    },
     'newline-repair': () => {
         const { file } = fixture();
         const raw = fs.readFileSync(file).subarray(0, -1);
@@ -262,9 +281,72 @@ const cases = {
         assert.equal(SessionManager.open(branch).getLeafId(), manager.getLeafId());
     },
 };
-const selected = process.argv[2] ? [process.argv[2]] : Object.keys(cases);
-for (const name of selected) {
-    assert.ok(cases[name], `unknown case ${name}`);
-    cases[name]();
+if (process.env.AC_CAPACITY_SESSION) {
+    cases['large-history-branch-replay'] = () => {
+        const file = process.env.AC_CAPACITY_SESSION;
+        const proof = JSON.parse(fs.readFileSync(process.env.AC_CAPACITY_FIXTURE, 'utf8'));
+        const fingerprint = () => {
+            const hash = createHash('sha256');
+            const fd = fs.openSync(file, 'r');
+            const buffer = Buffer.alloc(65536);
+            try {
+                let count;
+                while ((count = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0)
+                    hash.update(buffer.subarray(0, count));
+                return hash.digest('hex');
+            } finally { fs.closeSync(fd); }
+        };
+        const before = fingerprint();
+        const size = fs.statSync(file).size;
+        assert.ok(size > 256 * 1024 * 1024, 'actual disk history must exceed old ceiling');
+        const manager = SessionManager.open(file);
+        assert.equal(manager.getSessionId(), proof.session_id);
+        assert.ok(manager.getEntry('history-user-0').message.content[0].text
+            .includes('OBSOLETE_LARGE_PAYLOAD'), 'old payload remains accessible');
+        const mainLeaf = manager.getLeafId();
+        const main = manager.buildSessionContext();
+        assert.deepEqual(main.model, { provider: 'fixture', modelId: 'fixture' });
+        assert.equal(main.thinkingLevel, 'low');
+        assert.ok(JSON.stringify(main.messages).includes('MAIN_RETAINED_SUMMARY'));
+        assert.ok(!JSON.stringify(main.messages).includes('OBSOLETE_LARGE_PAYLOAD'));
+        manager.branch('side-compaction');
+        const side = JSON.stringify(manager.buildSessionContext().messages);
+        assert.ok(side.includes('SIDE_SUMMARY_ONLY') && side.includes('SIDE_BRANCH_ONLY'));
+        assert.ok(!side.includes('MAIN_RETAINED_SUMMARY') && !side.includes('ACTIVE_BRANCH_MARKER'));
+        manager.branch(mainLeaf);
+        const witness = manager.captureCompactionWitness('seed-user');
+        assert.throws(() => manager.appendCompactionIfCurrent(witness, proof.old_summary, 2001,
+            { agentCommsCommit: proof.old_commit }), /already present|duplicate/i,
+        'old commit outside retained context must still prohibit replay');
+        assert.equal(fingerprint(), before, 'replay refusal preserves all history');
+        // Late malformed data exercises the full incremental scan, with no
+        // second large copy and no permission to silently drop the bad record.
+        for (const tail of [Buffer.from('{"incomplete":'), Buffer.from('{broken}\n'),
+            Buffer.from([0xff, 0x0a]), Buffer.from(JSON.stringify({
+                type: 'message', id: 'seed-user', parentId: null,
+                message: user('duplicate old ID'), timestamp: '2026-09-28T00:00:00Z',
+            }) + '\n')]) {
+            try {
+                fs.appendFileSync(file, tail);
+                const malformedSize = fs.statSync(file).size;
+                assert.throws(() => SessionManager.open(file));
+                assert.equal(fs.statSync(file).size, malformedSize, 'failed load never repairs');
+            } finally { fs.truncateSync(file, size); }
+        }
+        assert.equal(fingerprint(), before, 'restored owned fixture retains exact source bytes');
+        assert.equal(SessionManager.open(file).getLeafId(), mainLeaf);
+        console.log(JSON.stringify({ large_history_bytes: size, branches: 2,
+            old_commit_replay_refused: true, malformed_late_records: 4,
+            peak_rss_kib: process.resourceUsage().maxRSS }));
+    };
 }
-console.log(JSON.stringify({ ok: true, cases: selected, root }));
+const selected = process.argv[2] ? [process.argv[2]] : Object.keys(cases);
+try {
+    for (const name of selected) {
+        assert.ok(cases[name], `unknown case ${name}`);
+        cases[name]();
+    }
+    console.log(JSON.stringify({ ok: true, cases: selected, root }));
+} finally {
+    fs.rmSync(root, { recursive: true, force: true });
+}
