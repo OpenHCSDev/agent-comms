@@ -72,9 +72,9 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
-    one = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    one = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert one is not None and one.cursor_status == "proven"
     # The certificate filters 1,001 committed initials for another owner.
     # Do not accept, inject, acknowledge, or replay those unrelated sources.
@@ -82,9 +82,9 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
         comms.messaging.send_initial_cohort("sender", "other001", f"unrelated-{n}:" + "x" * 8400)
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
-    second = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    second = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
@@ -102,18 +102,18 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
-    one = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    one = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert one is not None and one.cursor_status == "proven"
     for n in range(105):
         # Both owners are frozen recipients, but alpha receives only a sealed
         # no-wake delivery. Other's selected work is never processed here.
         _seal(comms, root, root_id, "#team", f"@other001 unrelated {n}")
     selected = _seal(comms, root, root_id, "alpha", "last exact selected")
-    second = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    second = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
@@ -135,9 +135,9 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     frozen = comms.bus.log.read_initial_cohort(root_id, source.seq)
     assert len(frozen.audience.recipients) == recipients
     start = time.perf_counter()
-    turn = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    turn = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     delivery_ms = (time.perf_counter() - start) * 1000
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     start = time.perf_counter()
@@ -160,9 +160,9 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     _seal(comms, root, root_id, "alpha", "exact selected")
-    turn = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    turn = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     path = root / "private_bus_checkpoint.sqlite3"
     with sqlite3.connect(path) as db:

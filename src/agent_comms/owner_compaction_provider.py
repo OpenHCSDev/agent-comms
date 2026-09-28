@@ -68,7 +68,7 @@ class OwnerSummaryOutcome(ABC):
         self,
         bridge: OwnerCompactionCommit,
         owner: Thread,
-        epoch: int,
+        owner_generation: int,
         operation: CompactionOperation | None,
         source: CompactionSource,
     ) -> SelectedSummaryAdmission | None:

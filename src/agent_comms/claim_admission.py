@@ -72,23 +72,26 @@ def _verify_selected_wake_state(
     with store._read_transaction():
         _assert_schema(store._connection)
         receipt = _receipt_matches(store._connection, initial)
-        if not any(claim.claim_id == admission.wake_claim_id for claim in receipt.claims):
+        if not any(
+            assignment.assignment_id == admission.wake_assignment_id
+            for assignment in receipt.assignments
+        ):
             raise IdentityConflict("Wake claim is not in the sealed selected cohort")
-        claim = store.claim(admission.wake_claim_id)
+        assignment = store.assignment(admission.wake_assignment_id)
         participant = store.participant(admission.recipient_lookup)
         snapshot = store.snapshot(admission.execution_id)
         attempt = snapshot.attempt
         if (
-            claim.recipient_lookup != admission.recipient_lookup
-            or claim.recipient != owner.name
-            or claim.wire_seq != admission.source_seq
-            or claim.message_id != admission.source_message_id
-            or claim.revision != admission.wake_revision
-            or claim.lifecycle.execution_id != admission.execution_id
-            or not claim.lifecycle.engaged
+            assignment.recipient_lookup != admission.recipient_lookup
+            or assignment.recipient != owner.name
+            or assignment.wire_seq != admission.source_seq
+            or assignment.message_id != admission.source_message_id
+            or assignment.revision != admission.wake_revision
+            or assignment.lifecycle.execution_id != admission.execution_id
+            or not assignment.lifecycle.engaged
             or not participant.committed
             or participant.owner_thread != owner.name
-            or participant.generation != admission.participant_generation
+            or participant.participant_generation != admission.participant_generation
             or not snapshot.execution.lifecycle.active
             or snapshot.execution.owner_lookup != admission.recipient_lookup
             or snapshot.execution.owner_thread != owner.name
@@ -100,7 +103,7 @@ def _verify_selected_wake_state(
             or attempt.attempt_ordinal != admission.attempt_ordinal
             or attempt.owner_generation != admission.participant_generation
             or attempt.owner_thread != owner.name
-            or claim.claim_id not in {row.claim_id for row in snapshot.claims}
+            or assignment.assignment_id not in {row.assignment_id for row in snapshot.assignments}
         ):
             raise IdentityConflict("Wake execution is not the current selected attempt")
 
@@ -235,7 +238,7 @@ def release_selected_resources(
         initial,
     ):
         projection, _ = bus.log._claim_projection_unlocked(metadata)
-        if any(projection.get(claim.resource) != claim for claim in claims):
+        if any(projection.get(assignment.resource) != assignment for assignment in claims):
             raise IdentityConflict("Coding claim changed before release")
         if claims:
             target = initial.message.sender if initial.message.sender != owner.name else "#all"
@@ -249,7 +252,7 @@ def release_selected_resources(
                 ),
                 worktree=Path(owner.worktree),
                 incarnation=str(owner.created_at),
-                releases=tuple(claim.resource for claim in claims),
+                releases=tuple(assignment.resource for assignment in claims),
                 _locked_registry_snapshot=registry,
                 _bus_locked=True,
             )

@@ -20,8 +20,8 @@ from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
 from .comms import Comms
-from .coordination import WakeClaim
-from .coordination_cohort import sealed_cohort_claims
+from .coordination import WakeAssignment
+from .coordination_cohort import sealed_cohort_assignments
 from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import normalize_existing_file
 from .store_files import _store_lock
@@ -131,7 +131,7 @@ class SelectedWritePlans:
                 marker = self.comms.bus.log._private_marker_unlocked()
             if marker["wire_root_id"] != self.root_id or marker.get("claim_envelopes_version") != 1:
                 raise IdentityConflict("Selected write requires matching private claim root")
-            owner, epoch = self.comms.registry.live_owner_with_admission(owner_name)
+            owner, admission_generation = self.comms.registry.live_owner_with_admission(owner_name)
             if owner.pid != os.getpid() or owner.active_turn is not None:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.log.read_initial_cohort(self.root_id, source_seq)
@@ -139,14 +139,14 @@ class SelectedWritePlans:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = stable_thread_lookup(owner.created_at)
             with MutationStore(str(self.comms.root / "coordination.sqlite3")) as store:
-                claims = sealed_cohort_claims(store, lookup, after_seq=source_seq - 1)
+                assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
-                    claim
-                    for claim in claims
-                    if claim.wire_seq == source_seq
-                    and claim.message_id == source_message_id
-                    and claim.recipient == owner.name
-                    and claim.lifecycle.full_pending
+                    assignment
+                    for assignment in assignments
+                    if assignment.wire_seq == source_seq
+                    and assignment.message_id == source_message_id
+                    and assignment.recipient == owner.name
+                    and assignment.lifecycle.full_pending
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
@@ -160,10 +160,10 @@ class SelectedWritePlans:
                 "root_id": self.root_id,
                 "source_seq": source_seq,
                 "source_message_id": source_message_id,
-                "claim_id": selected[0].claim_id,
+                "claim_id": selected[0].assignment_id,
                 "owner": owner.name,
                 "incarnation": owner.created_at,
-                "admission_epoch": epoch,
+                "admission_epoch": admission_generation,
                 "expected_attempt_ordinal": 1,
                 "operation_id": operation_id,
                 "resource": str(path),
@@ -193,12 +193,14 @@ class SelectedWritePlans:
                 "status": "accepted_not_applied",
                 "operationId": operation_id,
                 "sourceSeq": source_seq,
-                "claimId": selected[0].claim_id,
+                "claimId": selected[0].assignment_id,
             }
 
-    def load(self, claim: WakeClaim, owner: Thread, epoch: int) -> PlannedWrite | None:
+    def load(
+        self, assignment: WakeAssignment, owner: Thread, admission_generation: int
+    ) -> PlannedWrite | None:
         lookup = stable_thread_lookup(owner.created_at)
-        path = self._path(claim.wire_seq, lookup)
+        path = self._path(assignment.wire_seq, lookup)
         row = self._read(path)
         if row is None:
             return None
@@ -206,12 +208,12 @@ class SelectedWritePlans:
             row.get("schema") != 1
             or row.get("status") != "accepted"
             or row.get("root_id") != self.root_id
-            or row.get("source_seq") != claim.wire_seq
-            or row.get("source_message_id") != claim.message_id
-            or row.get("claim_id") != claim.claim_id
+            or row.get("source_seq") != assignment.wire_seq
+            or row.get("source_message_id") != assignment.message_id
+            or row.get("claim_id") != assignment.assignment_id
             or row.get("owner") != owner.name
             or row.get("incarnation") != owner.created_at
-            or row.get("admission_epoch") != epoch
+            or row.get("admission_epoch") != admission_generation
             or row.get("expected_attempt_ordinal") != 1
         ):
             raise IdentityConflict("Selected write intent is stale or uncertain")
@@ -224,8 +226,8 @@ class SelectedWritePlans:
         resource = normalize_existing_file(Path(owner.worktree), row["resource"])
         return PlannedWrite(Path(resource), raw, operation_id)
 
-    def applied(self, claim: WakeClaim, owner: Thread, operation_id: str) -> None:
-        path = self._path(claim.wire_seq, stable_thread_lookup(owner.created_at))
+    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
+        path = self._path(assignment.wire_seq, stable_thread_lookup(owner.created_at))
         row = self._read(path)
         if (
             row is None

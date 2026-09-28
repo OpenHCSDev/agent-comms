@@ -94,9 +94,9 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
                 goal=Goal("work", "goal") if goal else None,
             )
         )
-        owner, epoch = registry.live_owner_with_generation("owner")
-        owner, epoch = registry.claim_live_turn_with_generation(
-            owner, "turn", expected_owner_generation=epoch
+        owner, owner_generation = registry.live_owner_with_generation("owner")
+        owner, owner_generation = registry.lease_live_turn_with_generation(
+            owner, "turn", expected_owner_generation=owner_generation
         )
         inputs = InputDispositions(tmp_path / InputDispositions.filename)
         inputs.record(
@@ -454,7 +454,7 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
     ):
         admit = OwnerCompactionCommit.admit_selected_original
 
-        def corrected(self, owner, epoch, operation, source, identity):
+        def corrected(self, owner, owner_generation, operation, source, identity):
             assert operation.state.declared_name == "committed"
             inputs.record(
                 "acp:correction",
@@ -464,7 +464,7 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
                 target=owner.name,
                 text="Correction after native commit",
             )
-            return admit(self, owner, epoch, operation, source, identity)
+            return admit(self, owner, owner_generation, operation, source, identity)
 
         monkeypatch.setattr(OwnerCompactionCommit, "admit_selected_original", corrected)
         admissions = []

@@ -469,7 +469,7 @@ class ThreadManagement:
                                 "lookup": person.lookup,
                                 "old": before.name,
                                 "new": new_name,
-                                "generation": person.generation,
+                                "generation": person.participant_generation,
                                 "wireRootId": metadata["wire_root_id"],
                             },
                             sort_keys=True,
@@ -478,7 +478,7 @@ class ThreadManagement:
                     )
                     intent_created = True
                     store.advance_owner_generation(
-                        person.lookup, new_name, expected_generation=person.generation
+                        person.lookup, new_name, expected_generation=person.participant_generation
                     )
                     # An old selected attempt stays fenced in its old generation;
                     # never retry or reassign it after this ownership change.
@@ -496,7 +496,7 @@ class ThreadManagement:
                                 store.advance_owner_generation(
                                     person.lookup,
                                     before.name,
-                                    expected_generation=person.generation + 1,
+                                    expected_generation=person.participant_generation + 1,
                                 )
                         except BaseException:
                             pass  # ambiguous dual-store failure needs manual inspection

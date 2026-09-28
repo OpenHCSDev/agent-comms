@@ -14,16 +14,16 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
-from agent_comms.claim_states import DeferredClaim, FullPendingClaim
+from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import (
     MessageAudience,
     PublicationIntent,
-    WakeClaim,
+    WakeAssignment,
     canonical_publication_key,
 )
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
+from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
@@ -106,12 +106,12 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert [type(decision).__name__ for decision in verified.decisions].count("NoWakeDecision") == 1
     first = accept_initial_cohort(comms.bus, root_id, message.seq, coordinator)
     assert isinstance(first, Applied)
-    assert (first.value.member_count, first.value.claim_count) == (2, 1)
-    assert first.value.claims[0].recipient_lookup == lookups["Alice"]
-    assert first.value.claims[0].lifecycle.mode == FullWake()
+    assert (first.value.member_count, first.value.assignment_count) == (2, 1)
+    assert first.value.assignments[0].recipient_lookup == lookups["Alice"]
+    assert first.value.assignments[0].lifecycle.mode == FullWake()
     assert first.value.accepted_at_ms == 4723
-    assert len(sealed_cohort_claims(coordinator, lookups["Alice"])) == 1
-    assert sealed_cohort_claims(coordinator, lookups["Bob"]) == ()
+    assert len(sealed_cohort_assignments(coordinator, lookups["Alice"])) == 1
+    assert sealed_cohort_assignments(coordinator, lookups["Bob"]) == ()
     delivery_rows = coordinator._connection.execute(
         "SELECT kind,claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
     ).fetchall()
@@ -151,11 +151,11 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     store = MutationStore(str(tmp_path / "comms" / "coordinator.sqlite"), clock_ms=lambda: 4788)
     result = accept_initial_cohort(reopened.bus, root_id, message.seq, store)
     assert isinstance(result, Applied)
-    assert (result.value.member_count, result.value.claim_count) == (2, 2)
-    assert {claim.recipient for claim in result.value.claims} == {"Alice", "Bob"}
-    assert {claim.audience for claim in result.value.claims} == {MessageAudience.COLLECTIVE}
+    assert (result.value.member_count, result.value.assignment_count) == (2, 2)
+    assert {claim.recipient for claim in result.value.assignments} == {"Alice", "Bob"}
+    assert {claim.audience for claim in result.value.assignments} == {MessageAudience.COLLECTIVE}
     store.transition_preengagement(
-        result.value.claims[0].claim_id, DeferredClaim, expected_revision=1
+        result.value.assignments[0].assignment_id, DeferredAssignment, expected_revision=1
     )
     store.close()
     # The SQL COMMIT succeeded, but the client lost its reply. No reappend or
@@ -164,11 +164,11 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     again = accept_initial_cohort(reopened.bus, root_id, message.seq, recovered)
     assert isinstance(again, AlreadyApplied)
     assert again.value.accepted_at_ms == 4788
-    assert any(type(claim.lifecycle) is DeferredClaim for claim in again.value.claims)
-    assert [claim.recipient_lookup for claim in again.value.claims] == [
-        claim.recipient_lookup for claim in result.value.claims
+    assert any(type(claim.lifecycle) is DeferredAssignment for claim in again.value.assignments)
+    assert [claim.recipient_lookup for claim in again.value.assignments] == [
+        claim.recipient_lookup for claim in result.value.assignments
     ]
-    assert {claim.recipient_lookup for claim in again.value.claims} == {
+    assert {claim.recipient_lookup for claim in again.value.assignments} == {
         lookups["Alice"],
         lookups["Bob"],
     }
@@ -180,14 +180,18 @@ def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
     empty = comms.messaging.send_initial_cohort("sender", "#missing", "No recipient")
     result = accept_initial_cohort(comms.bus, root_id, empty.seq, store)
     assert isinstance(result, Applied)
-    assert (result.value.member_count, result.value.claim_count, result.value.claims) == (0, 0, ())
+    assert (result.value.member_count, result.value.assignment_count, result.value.assignments) == (
+        0,
+        0,
+        (),
+    )
     assert isinstance(accept_initial_cohort(comms.bus, root_id, empty.seq, store), AlreadyApplied)
     direct = comms.messaging.send_initial_cohort("sender", "Alice", "Direct")
     single = accept_initial_cohort(comms.bus, root_id, direct.seq, store)
     assert isinstance(single, Applied)
-    assert (single.value.member_count, single.value.claim_count) == (1, 1)
-    assert single.value.claims[0].recipient_lookup == lookups["Alice"]
-    assert single.value.claims[0].audience is MessageAudience.DIRECT
+    assert (single.value.member_count, single.value.assignment_count) == (1, 1)
+    assert single.value.assignments[0].recipient_lookup == lookups["Alice"]
+    assert single.value.assignments[0].audience is MessageAudience.DIRECT
     comms.registry.rename("Alice", "Alicia")
     with pytest.raises(RelationViolationError, match="stable send binding"):
         comms.messaging.send_initial_cohort("sender", "Alice", "No alias")
@@ -198,8 +202,8 @@ def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
 def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
-    legacy = WakeClaim(
-        claim_id="singleton-before-cohort",
+    legacy = WakeAssignment(
+        assignment_id="singleton-before-cohort",
         recipient="Alice",
         recipient_lookup=lookups["Alice"],
         wire_seq=sent.seq,
@@ -207,9 +211,9 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
         audience=MessageAudience.MENTIONED,
         accepted_at_ms=1,
         updated_at_ms=1,
-        lifecycle=FullPendingClaim.load(FullWake(), None, None, None),
+        lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
     )
-    store.accept_claim(legacy)
+    store.accept_assignment(legacy)
     with pytest.raises(IdentityConflict, match="legacy singleton"):
         accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     assert store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0] == 0
@@ -217,7 +221,7 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
         store._connection.execute("SELECT COUNT(*) FROM cohort_delivery_receipts").fetchone()[0]
         == 0
     )
-    assert sealed_cohort_claims(store, lookups["Alice"]) == ()
+    assert sealed_cohort_assignments(store, lookups["Alice"]) == ()
 
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
@@ -226,13 +230,13 @@ def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) ->
     result = accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     assert isinstance(result, Applied)
     observer_claim = replace(
-        result.value.claims[0],
-        claim_id="legacy-observer",
+        result.value.assignments[0],
+        assignment_id="legacy-observer",
         recipient="Bob",
         recipient_lookup=lookups["Bob"],
     )
     with pytest.raises(sqlite3.IntegrityError, match="no-wake observer"):
-        store.accept_claim(observer_claim)
+        store.accept_assignment(observer_claim)
     assert store._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 1
 
 
@@ -267,7 +271,9 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
     response = response_bus.publisher.publish_keyed_response(intent)
     assert response_bus.publisher.publish_keyed_response(intent) == response
     assert [message.seq for message in response_bus.log.full_history()] == [sent.seq, response.seq]
-    assert [claim.wire_seq for claim in sealed_cohort_claims(store, lookups["Alice"])] == [sent.seq]
+    assert [claim.wire_seq for claim in sealed_cohort_assignments(store, lookups["Alice"])] == [
+        sent.seq
+    ]
     with pytest.raises(RelationViolationError, match="No committed initial"):
         response_bus.log.read_initial_cohort(root_id, response.seq)
 
@@ -294,13 +300,13 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
     sent = comms.messaging.send_initial_cohort("sender", "#all", "ordinary")
     result = accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     assert isinstance(result, Applied)
-    assert (result.value.member_count, result.value.claim_count) == (3, 3)
-    assert {claim.recipient_lookup for claim in result.value.claims} == {
+    assert (result.value.member_count, result.value.assignment_count) == (3, 3)
+    assert {claim.recipient_lookup for claim in result.value.assignments} == {
         lookups["Alice"],
         lookups["Bob"],
         lookups["Charlie"],
     }
-    assert {claim.lifecycle.mode for claim in result.value.claims} == {BoundedTriageWake()}
+    assert {claim.lifecycle.mode for claim in result.value.assignments} == {BoundedTriageWake()}
 
 
 def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path) -> None:
@@ -331,7 +337,7 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
         )
     with pytest.raises(IdentityConflict, match="unsealed"):
         accept_initial_cohort(comms.bus, root_id, sent.seq, store)
-    assert sealed_cohort_claims(store, lookups["Alice"]) == ()
+    assert sealed_cohort_assignments(store, lookups["Alice"]) == ()
     delivery_count = store._connection.execute(
         "SELECT COUNT(*) FROM cohort_delivery_receipts"
     ).fetchone()[0]

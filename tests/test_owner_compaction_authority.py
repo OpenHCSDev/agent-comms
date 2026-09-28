@@ -29,13 +29,13 @@ def owner_guard(root: Path):
     registry = Registration(root / "registry.json")
     owner = Thread("owner", frozenset(), str(root), pid=os.getpid(), goal=Goal("task", "g"))
     registry.register(owner)
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     return registry.guard_owner_compaction(
         owner,
-        epoch,
+        owner_generation,
         "turn",
         expected_goal_id="g",
         expected_goal_revision=owner.goal.revision,

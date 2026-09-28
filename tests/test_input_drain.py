@@ -26,9 +26,9 @@ async def owner(tmp_path, monkeypatch):
     session = tmp_path / "saved.jsonl"
     session.write_text("saved history\n")
     comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
-    current, epoch = comms.registry.live_owner_with_generation("owner")
-    current, epoch = comms.registry.claim_live_turn_with_generation(
-        current, "turn", expected_owner_generation=epoch
+    current, admission_generation = comms.registry.live_owner_with_generation("owner")
+    current, admission_generation = comms.registry.lease_live_turn_with_generation(
+        current, "turn", expected_owner_generation=admission_generation
     )
     agent = CommsAgent(comms, auto_wake=False)
     agent.sessions.bindings["owner"] = "owner"
@@ -54,8 +54,10 @@ async def owner(tmp_path, monkeypatch):
         first_kept_entry_id="leaf",
         revision="1:2:3:4:5",
     )
-    source = bridge.capture_source(current, epoch, witness, pending_input_key="acp:original")
-    yield agent, current, epoch, bridge, witness, source
+    source = bridge.capture_source(
+        current, admission_generation, witness, pending_input_key="acp:original"
+    )
+    yield agent, current, admission_generation, bridge, witness, source
     await agent.shutdown()
 
 
@@ -79,12 +81,14 @@ async def queue(agent, text="future", delivery="queue"):
 
 
 def capture(fixture):
-    agent, current, epoch, bridge, witness, source = fixture
-    return bridge.capture_source(current, epoch, witness, pending_input_key="acp:original")
+    agent, current, admission_generation, bridge, witness, source = fixture
+    return bridge.capture_source(
+        current, admission_generation, witness, pending_input_key="acp:original"
+    )
 
 
 async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_source(owner):
-    agent, current, epoch, bridge, witness, source = owner
+    agent, current, admission_generation, bridge, witness, source = owner
     key = await queue(agent)
     assert capture(owner) == source
     comms = agent._comms
@@ -122,7 +126,7 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
     ],
 )
 async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(owner, change):
-    agent, current, epoch, bridge, witness, source = owner
+    agent, current, admission_generation, bridge, witness, source = owner
     key = await queue(agent)
     if change == "steer":
         await queue(agent, delivery="steer")
@@ -175,7 +179,7 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
 
 @pytest.mark.parametrize("change", ["original", "bus", "owner", "turn"])
 async def test_relevant_source_and_owner_fences_remain(owner, change):
-    agent, current, epoch, bridge, witness, source = owner
+    agent, current, admission_generation, bridge, witness, source = owner
     await queue(agent)
     comms = agent._comms
     if change == "original":

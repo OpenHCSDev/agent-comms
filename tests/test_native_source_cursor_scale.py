@@ -35,9 +35,9 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    first = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    first = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert first is not None and first.cursor_status == "proven"
     for number in range(recipients - 1):
         member = Thread(f"member{number:03}", frozenset({"team"}), str(tmp_path), pid=os.getpid())
@@ -56,7 +56,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     assert len(frozen.audience.recipients) == recipients
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         receipt = accept_initial_cohort(comms.bus, root_id, selected.seq, store).value
-        assert len(receipt.claims) == 1
+        assert len(receipt.assignments) == 1
         with pytest.raises(Exception, match="bounded private initial scan"):
             read_proven_source_coverage(
                 comms.bus,
@@ -64,9 +64,9 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
                 wire_root_id=root_id,
                 recipient_lookup=stable_thread_lookup(people[1].created_at),
             )
-    second = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    second = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert second is not None and second.cursor_status == "proven"
     assert second.input_id != first.input_id and len(calls) == 2
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -77,7 +77,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         assert current.covered_seq == current.injected_seq == selected.seq
         assert current.input_id == second.input_id
         assert (
-            current.owner_admission_epoch
+            current.owner_admission_generation
             == store._connection.execute(
                 "SELECT sent_owner_admission_epoch FROM native_runtime_inputs WHERE input_id=?",
                 (second.input_id,),
@@ -96,9 +96,9 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     # The dedicated cursor scan cannot cross the second bounded page. The
     # already committed original still produces its one fake native input.
     monkeypatch.setattr(cursor_module, "_MAX_COVERAGE_PAGES", 1)
-    turn = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    turn = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert turn is not None and turn.cursor_status == "unavailable" and len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -113,9 +113,9 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
     bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(runtime, "run_native_pi_turn", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await runtime.run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        )
+        await runtime.SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
     comms.threads.register(Thread("other", frozenset(), str(tmp_path), pid=os.getpid()))
     for number in range(101):
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
@@ -124,9 +124,9 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         accept_initial_cohort(comms.bus, root_id, later.seq, store)
     good, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", good)
-    result = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    result = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert result is not None and result.cursor_status == "blocked_gap" and len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
@@ -135,14 +135,16 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         )
 
 
-async def test_legacy_cross_epoch_cursor_reopen_denied_without_mutating_sql(tmp_path, monkeypatch):
+async def test_legacy_cross_generation_cursor_reopen_denied_without_mutating_sql(
+    tmp_path, monkeypatch
+):
     root, root_id, comms, _first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    first = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    first = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert first is not None and first.cursor_status == "proven"
     # Fresh-open same-generation proof remains valid across a reconnect.
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
@@ -158,9 +160,9 @@ async def test_legacy_cross_epoch_cursor_reopen_denied_without_mutating_sql(tmp_
     second_message = comms.messaging.send_initial_cohort("sender", "alpha-new", "new selected")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second_message.seq, store)
-    second = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
-    )
+    second = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
+    ).run()
     assert second is not None and second.cursor_status == "blocked_gap"
     # Represent a supported legacy persisted row from the old cursor writer:
     # latest input is gen2, but its covered prefix includes old gen1 seq1.
@@ -209,9 +211,9 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    result = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    result = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert result is not None and result.cursor_status == "proven"
     lookup = stable_thread_lookup(people[1].created_at)
     original = cursor_module._prefix_evidence
@@ -227,7 +229,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(StaleFence, match="participant generation changed"):
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
-        assert store.participant(lookup).generation == 2
+        assert store.participant(lookup).participant_generation == 2
         retained = store._connection.execute(
             "SELECT owner_generation,input_id FROM native_runtime_source_cursors"
         ).fetchall()
@@ -259,9 +261,9 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
         return result
 
     monkeypatch.setattr(cursor_module, "_bounded_coverage_pages", replace_source)
-    result = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    result = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert result is not None and result.cursor_status == "unavailable" and len(calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (

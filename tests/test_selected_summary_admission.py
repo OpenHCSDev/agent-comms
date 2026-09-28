@@ -105,7 +105,7 @@ def case(tmp_path):
     return comms, str(session), journal, operation_id, dispositions, identity, text
 
 
-def _claim(case, token, *, identity=None, text=None, native_id=None):
+def _assignment(case, token, *, identity=None, text=None, native_id=None):
     comms, session, _, _, dispositions, expected, original_text = case
     with _store_lock(comms._wire_lock_path):
         return token.consume_bound_original(
@@ -141,10 +141,10 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
     with pytest.raises(TypeError, match="cannot cross"):
         pickle.dumps(token)
     assert not native_input_admitted(comms.root, session)
-    assert _claim(case, token)
+    assert _assignment(case, token)
     row = dispositions.read().rows.get(identity.ingress_key)
     assert row is not None and row.native_id == "b" * 32 and row.unresolved
-    assert not _claim(case, token, native_id="c" * 32)
+    assert not _assignment(case, token, native_id="c" * 32)
     assert not native_input_admitted(comms.root, session)
     reopened = CompactionJournal(journal.path)
     with pytest.raises(CompactionJournalError):
@@ -177,8 +177,8 @@ def test_mismatch_consumes_token_without_binding_or_recovery(case, change):
         operation_id, "unsupported", admission=identity
     )
     assert token is not None
-    assert not _claim(case, token, identity=replace(identity, **change))
-    assert not _claim(case, token)
+    assert not _assignment(case, token, identity=replace(identity, **change))
+    assert not _assignment(case, token)
     assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
@@ -238,8 +238,8 @@ def test_saved_source_drift_consumes_ack(case):
     assert token is not None
     with open(session, "a", encoding="utf-8") as stream:
         stream.write("{}\n")
-    assert not _claim(case, token)
-    assert not _claim(case, token)
+    assert not _assignment(case, token)
+    assert not _assignment(case, token)
     assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
@@ -255,7 +255,7 @@ def test_forked_other_process_cannot_use_inherited_ack(case):
     if child == 0:
         os.close(read_fd)
         try:
-            os.write(write_fd, b"1" if _claim(case, token) else b"0")
+            os.write(write_fd, b"1" if _assignment(case, token) else b"0")
         finally:
             os._exit(17)
     os.close(write_fd)
@@ -275,8 +275,8 @@ def test_changed_durable_original_after_reservation_refuses_burn(case):
     saved = json.loads(dispositions.path.read_text())
     saved["rows"][identity.ingress_key]["source_text"] = "different original"
     dispositions.path.write_text(json.dumps(saved))
-    assert not _claim(case, token)
-    assert not _claim(case, token)
+    assert not _assignment(case, token)
+    assert not _assignment(case, token)
     assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
@@ -292,8 +292,8 @@ def test_changed_journal_source_refuses_consumption(case):
             "UPDATE selected_summary_attempts SET source_json = ? WHERE operation_id = ?",
             ('{"changed":true}', operation_id),
         )
-    assert not _claim(case, token)
-    assert not _claim(case, token)
+    assert not _assignment(case, token)
+    assert not _assignment(case, token)
     assert dispositions.read().rows.get(identity.ingress_key).native_id is None
     assert not native_input_admitted(comms.root, session)
 
@@ -313,8 +313,8 @@ def test_bind_fault_after_durable_unknown_never_replays(case, monkeypatch):
     monkeypatch.setattr(
         type(dispositions), "bind", lambda self, *args, **kwargs: bind_then_fail(*args, **kwargs)
     )
-    assert not _claim(case, token)
-    assert not _claim(case, token)
+    assert not _assignment(case, token)
+    assert not _assignment(case, token)
     assert dispositions.read().rows.get(identity.ingress_key).native_id == "b" * 32
     assert not native_input_admitted(comms.root, session)
 
@@ -547,14 +547,14 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
         token = journal.decline_selected_summary_prestart(
             operation_id, "unsupported", admission=identity
         )
-    assert _claim(case, token)
+    assert _assignment(case, token)
     assert not native_input_admitted(comms.root, session), "bound UNKNOWN is not native start"
     assert dispositions.started(identity.ingress_key, turn_id="turn", native_id="b" * 32, text=text)
     reopened = CompactionJournal(journal.path)
     assert native_input_admitted(comms.root, session)
     assert reopened.blocking_selected_summary(session) == ()
     assert reopened.selected_summary(operation_id).state.declared_name == terminal
-    assert not _claim(case, token), "native start cannot replenish a consumed token"
+    assert not _assignment(case, token), "native start cannot replenish a consumed token"
     with reopened.ordinary_input_send_fence(Path(session)):
         pass
     with pytest.raises(ValueError, match="durable original input changed"):
@@ -598,7 +598,7 @@ def test_unrelated_or_uncertain_input_never_retires_selected_barrier(case, field
     token = journal.decline_selected_summary_prestart(
         operation_id, "unsupported", admission=identity
     )
-    assert _claim(case, token)
+    assert _assignment(case, token)
     assert dispositions.started(identity.ingress_key, turn_id="turn", native_id="b" * 32, text=text)
     saved = json.loads(dispositions.path.read_text())
     saved["rows"][identity.ingress_key][field] = value

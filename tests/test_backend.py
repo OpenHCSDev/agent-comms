@@ -780,7 +780,7 @@ for line in sys.stdin:
             {"result": {"summary": "unused"}, "aborted": True},
         ],
     )
-    async def test_failed_or_aborted_compaction_keeps_prior_epoch(self, tmp_path, compaction):
+    async def test_failed_or_aborted_compaction_keeps_prior_generation(self, tmp_path, compaction):
         events = await _rpc_events(
             tmp_path,
             [

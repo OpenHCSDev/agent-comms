@@ -177,7 +177,7 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
             result = read_recovery_projection(
                 database, owner_lookup=owner_lookup, owner_thread=owner_thread
             )
-            encoded = (json.dumps(result.to_primitive(), separators=(",", ":")) + "\n").encode()
+            encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
             if len(encoded) > _MAX_REPLY:
                 raise GatewayUnavailableError("projection exceeds bounded response")
             return encoded
