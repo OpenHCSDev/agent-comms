@@ -1,15 +1,16 @@
 import {realpathSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const {package:root, file, settings} = JSON.parse(process.argv[1]);
+const {package:root, file, settings, context_window} = JSON.parse(process.argv[1]);
 const {DiskEntryStore} = await import(
   pathToFileURL(join(root, 'dist/core/session-entry-store.js')));
-const {prepareCompaction, DEFAULT_COMPACTION_SETTINGS} = await import(
+const {prepareCompaction} = await import(
   pathToFileURL(join(root, 'dist/core/compaction/compaction.js')));
 const store = new DiskEntryStore(file);
 try {
 const revision = store.revision;
-const preparation = prepareCompaction(store, settings ?? DEFAULT_COMPACTION_SETTINGS);
+const preparation = prepareCompaction(store, settings,
+    {contextWindow: context_window});
 if (!preparation) {
   console.log(JSON.stringify({status:'skip', sessionId:store.header.id}));
 } else {

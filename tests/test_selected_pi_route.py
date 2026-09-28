@@ -234,7 +234,7 @@ def selected_settings(request):
             "version": 1,
             **{
                 key: request[key]
-                for key in ("sessionId", "sessionFile", "selected", "contextTokens")
+                for key in ("sessionId", "sessionFile", "selected")
             },
             "decision": {
                 "enabled": True,
@@ -256,7 +256,6 @@ async def settings_probe(case):
         expected_package=Path(witness.session_file).parent,
         provider=selected["provider"],
         model_id=selected["modelId"],
-        context_tokens=950,
         context_window=selected["contextWindow"],
     )
 

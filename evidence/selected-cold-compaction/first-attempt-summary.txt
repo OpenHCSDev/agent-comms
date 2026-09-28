@@ -1,0 +1,10 @@
+tests/test_selected_compaction_decision_native.py:218: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[True-False-0-True-True]
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[True-True-0-True-True]
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[True-False-0-False-True]
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[False-False-31000-True-True]
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[False-False-31000-False-False]
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[False-False-100-True-False]
+FAILED tests/test_selected_compaction_decision_native.py::test_cold_selected_session_decides_without_client_usage[False-True-31000-True-False]
+7 failed in 15.68s

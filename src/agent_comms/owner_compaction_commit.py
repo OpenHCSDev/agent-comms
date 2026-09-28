@@ -36,6 +36,7 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
+from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .registration import Registration
 from .routing import DeliveryScope
@@ -258,20 +259,21 @@ class OwnerCompactionCommit:
         owner: Thread,
         owner_generation: int,
         *,
-        keep_recent_tokens: int | None = None,
+        settings: PiCompactionSettings,
+        context_window: int,
         pending_input_key: str | None = None,
         settings_paths: tuple[str, ...] | None = None,
     ) -> tuple[NativePreparation, CompactionSource] | None:
         """Read Pi's saved cut point, then capture owner/ingress source before summarizing.
 
-        The bounded recent-window override is for isolated tests. Preparation
-        never invokes a provider or mutates a session, and does not grant a
+        Preparation uses exact selected settings/window, never invokes a
+        provider or mutates a session, and does not grant a
         commit: the writer must still CAS against the saved native witness.
         """
         if owner.session_file is None:
             raise ValueError("Canonical saved session required")
         prepared = prepare_native_source(
-            self.package_dir, owner.session_file, keep_recent_tokens=keep_recent_tokens
+            self.package_dir, owner.session_file, settings=settings, context_window=context_window
         )
         if prepared is None:
             return None
