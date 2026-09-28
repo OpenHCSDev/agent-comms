@@ -1,0 +1,27 @@
+Process 3832752: /home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928/bin/python -m agent_comms.worker
+Python v3.14.2 (/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14)
+
+Thread 3832752 (idle): "MainThread"
+    _store_lock (agent_comms/store_files.py:58)
+    __enter__ (contextlib.py:141)
+    read_initial_cohort (agent_comms/wire_log.py:310)
+    accept_initial_cohort (agent_comms/coordination_cohort.py:272)
+    _accept_visible_initials (agent_comms/cohort_foreground.py:108)
+    _drain_private_nk (agent_comms/acp.py:629)
+    drain_owned_inbox (agent_comms/input_drain.py:364)
+    drain_inbox (agent_comms/input_drain.py:358)
+    loop (agent_comms/input_drain.py:323)
+    _run (asyncio/events.py:94)
+    _run_once (asyncio/base_events.py:2046)
+    run_forever (asyncio/base_events.py:677)
+    run_until_complete (asyncio/base_events.py:706)
+    run (asyncio/runners.py:127)
+    run (asyncio/runners.py:204)
+    <module> (agent_comms/worker.py:49)
+    _run_code (<frozen runpy>:88)
+    _run_module_as_main (<frozen runpy>:199)
+Thread 3832908 (idle): "asyncio_0"
+    _worker (concurrent/futures/thread.py:116)
+    run (threading.py:1024)
+    _bootstrap_inner (threading.py:1082)
+    _bootstrap (threading.py:1044)
