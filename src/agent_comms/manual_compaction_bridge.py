@@ -34,9 +34,6 @@ async def compact_context(
         thread = runner.comms.registry.require(thread_name)
         if not thread.session_file:
             return {"ok": False, "error": "This thread has no saved session to compact."}
-        # Pi holds an in-memory copy of the saved branch while idle. Close it
-        # before the compaction writer acquires the session fence and rewrites
-        # that branch; the next prompt will load the compacted file anew.
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
         assert task is not None

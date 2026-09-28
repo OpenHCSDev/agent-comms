@@ -100,11 +100,14 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     comms.threads.register(
         Thread(
             "other",
-            frozenset(),
+            frozenset({"team"}),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
+    other = comms.registry.require("other")
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        store.register_participant(stable_thread_lookup(other.created_at), "other", "other", committed=True)
     for number in range(101):
         message = comms.messaging.send_initial_cohort("sender", "#team", f"@other note-{number}")
         with MutationStore(str(root / "coordination.sqlite3")) as store:

@@ -41,7 +41,7 @@ after_cutover = False
                 },
             ),
         ]
-    
+
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 try:
@@ -99,10 +99,10 @@ after_cutover = False
                 except Exception as error:
                     failures.append(str(error))
                     self.send_error(400, "Offline fixture assertion failed")
-    
+
             def log_message(self, *_args):
                 pass
-    
+
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -140,14 +140,14 @@ after_cutover = False
 >           outcome = await asyncio.wait_for(execution.run(), 40)
                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_selected_execution_native.py:156: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_selected_execution_native.py:156:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib/python3.14/asyncio/tasks.py:488: in wait_for
     return await fut
            ^^^^^^^^^
 src/agent_comms/coordinated_runtime.py:400: in run
     self._open()
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = SelectedExecution(root=PosixPath('/home/ts/wt/comms-certified-source-bootstrap-20260928/.artifacts/pytest-real-native/...=None, owned_turn_lease=None, progress=None, input_id=None, _run_permit=<locked _thread.lock object at 0x7fc322f0e850>)
 
@@ -205,7 +205,7 @@ after_cutover = True
                 },
             ),
         ]
-    
+
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 try:
@@ -263,10 +263,10 @@ after_cutover = True
                 except Exception as error:
                     failures.append(str(error))
                     self.send_error(400, "Offline fixture assertion failed")
-    
+
             def log_message(self, *_args):
                 pass
-    
+
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -304,14 +304,14 @@ after_cutover = True
 >           outcome = await asyncio.wait_for(execution.run(), 40)
                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests/test_selected_execution_native.py:156: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_selected_execution_native.py:156:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib/python3.14/asyncio/tasks.py:488: in wait_for
     return await fut
            ^^^^^^^^^
 src/agent_comms/coordinated_runtime.py:400: in run
     self._open()
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = SelectedExecution(root=PosixPath('/home/ts/wt/comms-certified-source-bootstrap-20260928/.artifacts/pytest-real-native/...=None, owned_turn_lease=None, progress=None, input_id=None, _run_permit=<locked _thread.lock object at 0x7fc32631e050>)
 

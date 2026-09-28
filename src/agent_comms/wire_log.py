@@ -711,4 +711,3 @@ class WireLog:
                 "Existing unmarked bus data is read-only until its history is rewritten "
                 "into the current source format."
             )
-

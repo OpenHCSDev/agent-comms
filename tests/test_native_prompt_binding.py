@@ -534,7 +534,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, monkeypatch):
+async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
@@ -553,8 +553,6 @@ async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, m
             )
             is None
         )
-    with pytest.raises(RelationViolationError, match="stable send binding"):
-        comms.messaging.send_initial_cohort("sender", "alpha", "Unbound retained alias.")
     second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)

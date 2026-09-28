@@ -1,5 +1,6 @@
 """Fresh canonical roots certify before publication or native source observation."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -68,3 +69,25 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
         await agent.new_session(cwd=str(tmp_path))
     assert not comms.registry.snapshot().threads
+
+
+@pytest.mark.skipif(
+    not os.environ.get("AC_NATIVE_COPIED_PACKAGE"),
+    reason="Prepared native package required; no provider request",
+)
+async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
+    comms = Comms(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
+    agent = CommsAgent(
+        comms, auto_wake=False, private_nk_wire_root_id=root_id,
+        private_nk_native_package=package,
+    )
+    try:
+        fresh = await agent.new_session(cwd=str(tmp_path))
+        assert fresh.session_id in comms.registry
+        await agent.load_session(cwd=str(tmp_path), session_id=fresh.session_id)
+        assert agent.sessions.require(fresh.session_id) == fresh.session_id
+        assert _source_witness(comms.bus).through_seq == 0
+    finally:
+        await agent.shutdown()

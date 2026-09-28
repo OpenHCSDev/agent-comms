@@ -440,5 +440,3 @@ def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: 
         os.fsync(stream.fileno())
     with pytest.raises(RelationViolationError, match="prefix tail changed"):
         _page(comms, stable_thread_lookup(17002.0))
-
-
