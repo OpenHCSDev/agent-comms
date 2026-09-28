@@ -31,3 +31,8 @@ systemic native history243/proof244 acceptance is separate ongoing work.
 
 Known separate watcher teardown BrokenPipe reported by112's synthetic native
 UI pilot remains owned by Copernicus; this retained archival check exits cleanly.
+
+Activation completed: all five normal launcher links select the new runtime.
+The actual live root snapshot returned in64ms (99visible threads,15exact counts,
+84pending); UX badge is Indexing. User UI remained alive; zero restarts/prompts.
+Owned installed UI copy and test directories removed after child/process exit.
