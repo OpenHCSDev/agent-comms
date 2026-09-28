@@ -67,7 +67,11 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
 
 def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(tmp_path):
     comms = populated(tmp_path)
-    comms.channels.set_channel("engineering", frozenset({"api", "ui"}))
+    comms.channels.set_saved_view(
+        SavedView(
+            "engineering", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"api", "ui"}))
+        )
+    )
     comms.channels.set_saved_view(
         SavedView("saved", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"api"})))
     )

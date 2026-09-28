@@ -17,7 +17,7 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     pass
-from .channel_targets import BuiltinChannel, Tag
+from .channel_targets import Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
@@ -116,10 +116,12 @@ class ChannelManagement:
                     **self.catalog.read().views(self.registry.all_threads()),
                 }
                 for channel in channels.values():
+                    if channel.view is not None:
+                        continue
                     before, after = channel.matches(thread.tags), channel.matches(updated.tags)
                     if before != after:
                         change = MembershipChange.JOINED if after else MembershipChange.LEFT
-                        self.bus.publisher.publish(
+                        self.bus.publisher.publish_ordinary(
                             Message(
                                 thread.name,
                                 channel.name,
@@ -132,20 +134,13 @@ class ChannelManagement:
                 self._rebase_passive_channel_scope(updated.name)
             return updated
 
-    def set_channel(self, name: str, tags: frozenset[str]) -> Channel:
-        channel = Channel(name, tags)
-        with _store_lock(self._wire_lock_path):
-            threads = self.registry.all_threads()
-            with self.catalog.editing() as document:
-                document.set_channel(channel, threads)
-                return document.resolve(channel.name)
-
     def set_saved_view(self, view: SavedView) -> SavedView:
         with _store_lock(self._wire_lock_path):
             threads = self.registry.all_threads()
             with self.catalog.editing() as document:
                 document.set_view(view, threads)
-        return view
+                result = document.saved_views[view.name]
+        return result
 
     def delete_saved_view(self, name: str) -> None:
         with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
@@ -198,11 +193,6 @@ class ChannelManagement:
                         f"Thread {thread.name!r} is not a member of {canonical_channel}."
                     )
                 document.set_thread_pinned(canonical_channel, thread.name, pinned)
-
-    def delete_channel(self, name: str) -> None:
-        canonical = name if name.startswith("#") else f"#{name}"
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            document.delete_channel(canonical)
 
     def rename_tag(self, name: str, new_name: str) -> None:
         Tag(new_name)

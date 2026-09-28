@@ -19,7 +19,6 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .channel_targets import BuiltinChannel, is_channel_target
-from .channels import Channel
 from .envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
@@ -361,7 +360,7 @@ class Publisher:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (
                 self._registry.store.path,
-                *self._channels.source_paths(),
+                self._channels.path,
             )
             before_revisions = tuple(file_revision(path) for path in source_paths)
             snapshot = self._registry.snapshot()
@@ -392,8 +391,6 @@ class Publisher:
             ):
                 raise RelationViolationError("A saved/aggregate view is not routable.")
             target = BuiltinChannel.canonical(message.target)
-            tags = catalog.tags
-            explicit_channels = {name: catalog.resolve(name) for name in catalog.audiences}
             if not is_channel_target(target):
                 if snapshot.aliases.get(target, target) != target:
                     raise RelationViolationError(
@@ -411,12 +408,7 @@ class Publisher:
                     raise RelationViolationError("A thread cannot message itself.")
                 names = [target]
             else:
-                if BuiltinChannel.lookup(target) is not None:
-                    channel = Channel(target)
-                else:
-                    tag = target.removeprefix("#")
-                    resolved_channel = explicit_channels.get(target) if tag not in tags else None
-                    channel = resolved_channel or Channel(target, frozenset({tag}))
+                channel = catalog.resolve(target)
                 names = [
                     name
                     for name, thread in snapshot.threads.items()
@@ -475,10 +467,6 @@ class Publisher:
                         sorted(
                             (name, thread.created_at, sorted(thread.tags))
                             for name, thread in snapshot.threads.items()
-                        ),
-                        sorted(
-                            (name, sorted(channel.tags))
-                            for name, channel in explicit_channels.items()
                         ),
                     )
                 ).encode()
