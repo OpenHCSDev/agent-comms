@@ -530,6 +530,8 @@ class TestThreadOps:
         )
 
         def exit_wait(self, pid, seconds):
+            if seconds == 0:
+                return False  # Nonblocking escalation probe: A is still alive.
             waits.append((pid, seconds))
             if len(waits) == 1:
                 return False  # A has not exited after TERM; KILL is still authorized.

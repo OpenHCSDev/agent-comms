@@ -26,8 +26,10 @@ cooperative resource claims; these claims are not an OS filesystem sandbox.
 Saved stopped owners remain stopped until explicitly started, and uncertain old
 inputs are never replayed to prove installation.
 
-Current installed C0 ownership and paired Toad acceptance is recorded in
-[`c0-live/HANDOFF.md`](../evidence/c0-live/HANDOFF.md). Earlier installed acceptance is recorded in
+Current installed bus/compaction ownership and paired Toad acceptance is recorded in
+[`current-functional/HANDOFF.md`](../evidence/current-functional/HANDOFF.md) and
+[`bus-compaction-integration/HANDOFF.md`](../evidence/bus-compaction-integration/HANDOFF.md).
+Earlier C0 acceptance is in [`c0-live/HANDOFF.md`](../evidence/c0-live/HANDOFF.md). Earlier installed acceptance is recorded in
 [`presence-integration/HANDOFF.md`](../evidence/presence-integration/HANDOFF.md) and the preceding
 [`relationship-integration/HANDOFF.md`](../evidence/relationship-integration/HANDOFF.md).
 That checkpoint includes the lossless saved-relationship migration, real channel
