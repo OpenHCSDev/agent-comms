@@ -42,8 +42,6 @@ class ManualSelectedSummary(NativeSummary):
 async def compact_manual_owner(
     runner, session_id: str, thread_name: str, info, instructions: str | None
 ):
-    if instructions:
-        raise ValueError("Canonical manual compaction does not yet accept custom instructions")
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
     if persistent is None or persistent.proc is None:
         raise ValueError("Canonical manual compaction requires the current selected native session")
@@ -130,6 +128,7 @@ async def compact_manual_owner(
             source,
             expected_launcher=runner.agent_bin,
             tokens_before=prepared.tokens_before,
+            custom_instructions=instructions.strip() if instructions else None,
         )
         if result.summary is None:
             attempt = bridge.journal.selected_summary(result.operation_id)

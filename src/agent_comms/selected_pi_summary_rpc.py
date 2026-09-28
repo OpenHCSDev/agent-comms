@@ -101,6 +101,7 @@ class SelectedSummarySlot:
         *,
         expected_launcher: str,
         tokens_before: int,
+        custom_instructions: str | None = None,
         fresh_session: FreshPrivateSession | None = None,
         admission_generation: int | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
@@ -122,6 +123,7 @@ class SelectedSummarySlot:
             witness=witness,
             selected=preparation.selected,
             settings=preparation.settings,
+            custom_instructions=custom_instructions,
         )
         if (
             witness.session_id != self.session
