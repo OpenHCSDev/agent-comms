@@ -11,7 +11,6 @@ from contextlib import closing
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
-from channel_catalog import read_source
 from registry_history import stage as stage_registry
 from transcript_annotations import stage as stage_annotations
 from wire_history import stage as stage_wire
@@ -103,7 +102,7 @@ def stage(source: Path, destination: Path, access: WireAccess | None = None) -> 
         _atomic_write_text(destination / ReadLedger.filename, json.dumps(FieldCodec.encode(reads)))
     _atomic_write_text(
         destination / ChannelCatalog.filename,
-        json.dumps(FieldCodec.encode(read_source(source))),
+        json.dumps(FieldCodec.encode(ChannelCatalog(source / ChannelCatalog.filename).read())),
     )
     input_path = source / InputDispositions.filename
     inputs = (

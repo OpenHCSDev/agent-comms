@@ -1,3 +1,29 @@
+## Current checkpoint — latest verified 2026-09-28
+
+- Corrective PR242 merged and installed; latest Toad43e57/Textual16ede pinned.
+  Four idle Comms/NRA owners restarted and actual ACP attached; no input replay.
+- B2 catalog migration completed across all five retained roots. Temporary
+  catalog and journal migration tools deleted in242. B3/B4 merged code is installed.
+- Parent229 a5809ab production delta vs main bf68bbb: +7384/-9093 (net-1709).
+  Includes S10 native-only execution, S9 current callers, and notification241.
+- S12 PR237/13547ee source/caller/deletion closure ready. Nietzsche owns integrating
+  it with242 into229, preserving typed process/table/state abstractions.
+- Native history243 and proof244 remain active: indexed EntryStore and streamed
+  journal replace eager arrays/maps/readers; Lovelace actual302/604MB native-manager
+  cases pass below input size in RSS. Full combined CLI/commit/reopen remains open.
+- Toad107 paired typed callers plus latest shared Channels integrated. Watcher109
+  fixes actual recursive-start shutdown; parent review found concurrent pipe-send
+  framing race, Copernicus fixing. Separate core unread-index shutdown/scaling
+  defect belongs to Cicero; full archived-history UI exit is not yet green.
+- Parent continues D22 full current-root migration and retained history proof;
+  global refactor is not merged/installed. No source completion inferred from counts.
+- CI-only repository gate disabled under standing owner CI-deferred instruction;
+  local ratchet and6surfaceguards passed for242; workflows still run.
+- New Toad plans discovered in plans/toad-comms_refactor/toad-refactor.zip;
+  separate dispatch preparation must retain current Comms task ownership.
+
+Older checkpoints below are historical and superseded where noted.
+
 ## Current checkpoint — 2026-09-28
 
 - Parent229 integrates S10 followup closure7b03b7e; actual selected-native followups
