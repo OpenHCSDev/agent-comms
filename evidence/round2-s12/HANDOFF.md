@@ -224,3 +224,26 @@ inherited parent/Darwin/Pascal/Copernicus changes retain their original owners.
   Broad passive-awareness testing is blocked on Darwin's current registration
   source: ThreadManagement.claim_thread still passes removed pid argument.
   Reported concretely on235; no registration compatibility added here.
+
+## Durable goal history table closure and parent tool contract
+
+`goal_history.sqlite3` is durable, NEVER reset. Existing GoalHistoryEntry now
+owns its table/schema/index, typed Goal before/after values, owner_created_at,
+and pending/committed/aborted/uncertain state. Old entries/metadata DDL, _encode,
+_decode and positional row reconstruction are deleted. Its public to_wire keeps
+exact original five fields and nested Goal state tags, excluding internal owner
+and journal state.12 behavior/family/guard checks pass, including crash before
+registry write, lost commit ACK, fsync uncertainty, reopen/rename and observed gaps.
+
+Parent tool `tools/cutover/registry_history.py` currently rewrites JSON inside
+retired `entries`; it must instead create a NEW current GoalHistoryStore stage
+and insert typed GoalHistoryEntry rows, preserving ALL source rows (including
+pending/aborted/uncertain), exact sequence, owner_created_at, kind, state,
+observed_at, and converted before_goal/after_goal as before/after. Constructors:
+`GoalHistoryEntry(sequence, kind, observed_at, before, after,
+                  owner_created_at=..., state=...).insert(db)`.
+Physical table is `goal_history_entry`; schema comes from its declaration. Use
+existing StoredGoal.current for snapshot rewrite; no new runtime reader. Preserve
+source backup, no resequencing/re-timestamping or observe()/automatic reconciliation
+while staging. Compare all rows after close/reopen; do not install old metadata.
+This extends parent's existing one-shot, not a second tool or migration store.

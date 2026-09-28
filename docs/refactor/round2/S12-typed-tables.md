@@ -169,3 +169,7 @@ UNKNOWN/reset proof remain open.
 - **Current release contract:** VerifiedOwnerLoss consumes typed release evidence
   with full process identity after parent229/b4cb42a integration. No raw receipt
   fallback; UNKNOWN preserved and only new input eligible after explicit recovery.
+- **Goal history closed:** existing GoalHistoryEntry is the sole row owner;
+  handwritten schema/JSON codecs/mappers removed, public history shape retained.
+  Durable parent one-shot must carry ALL journal states and exact sequences into
+  goal_history_entry (contract in HANDOFF), never reset this file.
