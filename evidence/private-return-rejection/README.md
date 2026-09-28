@@ -30,3 +30,17 @@ Queue predecessor acceptance: 26 actual installed owner cases passed in231.49s;
 28 reservation/journal cases passed in3.33s. Includes revoked future queue refusal
 before summary/provider work, no original admission, unchanged native history.
 Parent owns integration/deployment; native package unchanged.
+
+## Final installed acceptance
+
+- Noneditable wheel: six actual native cases passed in19.93s, including the fresh
+  child reopen and native refusal diagnostic cases.
+- Private alert/no-replay projection and structural diagnostic privacy passed.
+- An existing headless fixture still fails `reserved == unknown`; reproduced on
+  the predecessor installed wheel as well. It supplies a mocked preflight Done
+  without binding input. This is not a new failure from the rejection patch.
+- The exact live private history copy also completed one NEW synthetic input using
+  a loopback-only provider/catalog (272000 context), returning LOCAL_COPY_OK. One
+  HTTP request, one new native input, prior history retained as a byte prefix,
+  original live history unchanged. This validates the saved-history path without
+  spending provider credits; it is not a live OAuth/provider acceptance claim.
