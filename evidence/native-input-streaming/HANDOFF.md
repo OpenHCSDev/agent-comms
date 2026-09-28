@@ -62,9 +62,10 @@ and repeated historical message decoding are gone. Store lookup is indexed
   compacted old input and sibling branch input both remain protected, generation73
   recovered, zero live emissions. Store.get was forbidden during this proof/claim
   path: no historical message-body decoding was used.
-- `native-cli-first.log`: actual compiled native CLI RPC get_state succeeds with
+- `native-cli-attested.log`: actual compiled native CLI RPC get_state succeeds with
   journal268,435,686bytes /969,483generations under96MiB V8 heap; no provider/model
   request, all networking forbidden, zero live proof events, journal unchanged.
+  Exact selected session ID/path and native input-proof capability both match.
   Generated journal/session/index files were cleaned after that process exited.
 - `assemble-combined-current.log`: removed only Darwin's displaced startup hunk
   (getEntries→entryStore.entries on the deleted trackedEntries Map); every other
@@ -90,3 +91,6 @@ Checkpoint976be19: production source/patches +169/-253; tests including native
 JavaScript +156/-236 (before added live-claim regressions). Evidence is separate.
 No whole-history cap remains in the native input injection or Python proof
 reader; no replaced startup injection is kept alongside the implementation.
+
+Final production checkpoint:22b71b1. Later acceptance updates change fixtures/evidence only.
+Owned generated journal/session/index files and copied candidate modules cleaned after process exit.

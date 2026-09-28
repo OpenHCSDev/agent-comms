@@ -59,9 +59,13 @@ globalThis.fetch=deny; syncBuiltinESMExports();
     records = [json.loads(line) for line in completed.stdout.splitlines() if line.startswith('{')]
     state = next(row for row in records if row.get('id') == 'proof-startup')
     assert state['success'] is True, state
+    assert state['data']['sessionId'] == identity, state
+    assert Path(state['data']['sessionFile']) == session, state
+    assert state['data']['nativeInputProofCapability'] == 'pi-native-input-v1-live-only', state
     assert not any(row.get('type') in {'input_committed', 'context_committed'} for row in records)
     assert proof.stat().st_size == size
     print(json.dumps({'nativeCLI': True, 'journalBytes': size, 'generations': count,
-                      'stateSuccess': True, 'liveProofEmissions': 0, 'heapMiB': 96}))
+                      'stateSuccess': True, 'selectedSessionMatched': True, 'nativeProofAttested': True,
+                      'liveProofEmissions': 0, 'heapMiB': 96}))
 finally:
     shutil.rmtree(root)
