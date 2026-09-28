@@ -17,7 +17,6 @@ from agent_comms.operations import Comms
 from agent_comms.read_basis import Conversation
 from agent_comms.thread_identity import (
     GenerationCounter,
-    OwnerIdentity,
     ThreadIncarnation,
     TurnIdentity,
 )
@@ -38,7 +37,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     registry.heartbeat("owner")
     claimed, generation = registry.claim_local_turn("owner", "turn")
     assert generation == identity.generation
-    assert claimed.turn_identity == TurnIdentity(identity, 1)
+    assert claimed.turn_identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
     assert registry.snapshot().admission_generations == before.admission_generations
     assert registry.finish_claimed_turn("owner", "turn")
@@ -99,7 +98,7 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
     comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
     first = comms.begin_turn("owner", "reused")
-    assert first.identity.owner == comms.registry.snapshot().owner_identity("owner")
+    assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
     assert comms.finish_turn("owner", "reused", expected=first) is not None
     second = comms.begin_turn("renamed", "reused")
@@ -126,18 +125,15 @@ def test_legacy_owner_and_turn_metadata_read_then_single_format_write(tmp_path):
     registry = registry_with_owner(tmp_path)
     claimed, generation = registry.claim_local_turn("owner", "old")
     raw = json.loads(registry._path.read_text())
-    raw["owner_epochs"] = raw.pop("owner_generations")
-    raw["owner_epoch_counter"] = raw.pop("owner_generation_counter")
     raw["turn_epochs"] = {"owner": generation}
-    del raw["threads"]["owner"]["active_turn"]["owner_generation"]
     registry._path.write_text(json.dumps(raw))
     reopened = ThreadRegistry(registry._path)
     assert reopened.live_owner_with_generation("owner") == (claimed, generation)
     assert reopened.require("owner").incarnation == claimed.incarnation
     reopened.finish_claimed_turn("owner", "old")
     persisted = json.loads(registry._path.read_text())
-    assert not {"owner_epochs", "owner_epoch_counter", "turn_epochs"} & persisted.keys()
-    assert persisted["owner_generations"]["owner"] == generation
+    assert not {"owner_generations", "owner_generation_counter"} & persisted.keys()
+    assert persisted["owner_epochs"]["owner"] == generation
     assert ThreadRegistry(registry._path).require("owner").turn_generation == 1
 
 
@@ -160,7 +156,7 @@ def test_old_read_conversation_and_new_codec_have_same_identity(tmp_path):
 
 
 def test_identity_codec_and_counter_domain_are_not_parallel_registries():
-    identity = TurnIdentity(OwnerIdentity(ThreadIncarnation("owner", 1.0), 2), 3)
+    identity = TurnIdentity(ThreadIncarnation("owner", 1.0), 3)
     assert FieldCodec.decode(TurnIdentity, FieldCodec.encode(identity)) == identity
     counter = GenerationCounter()
     assert counter.advance("old") == 1
@@ -169,3 +165,70 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
     assert counter.advance("another") == 2
     with pytest.raises(ValueError):
         FieldCodec.decode(GenerationCounter, {"counter": 1, "generations": {"x": True}})
+
+
+def test_coordination_assignment_generation_is_independent_of_registry_process(tmp_path):
+    from agent_comms.coordination_store import MutationStore
+
+    registry = registry_with_owner(tmp_path)
+    initial = registry.snapshot().owner_identity("owner")
+    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+        participant = store.register_participant("lookup", "Owner", "owner", committed=True).value
+        advanced = store.advance_owner_generation(
+            "lookup", "owner", expected_generation=participant.participant_generation
+        ).value
+        assert advanced.participant_generation == participant.participant_generation + 1
+        assert registry.snapshot().owner_identity("owner") == initial
+        registry.register(registry.require("owner"), new_owner=True)
+        assert store.participant("lookup").participant_generation == advanced.participant_generation
+
+
+def test_old_read_ledger_key_remains_read_after_reopen_and_new_ack(tmp_path):
+    comms = Comms(tmp_path)
+    comms.register(Thread("owner", frozenset(), str(tmp_path)))
+    viewer = comms.user_identity(str(tmp_path)).name
+    message = comms.send_message("owner", viewer, "already painted")
+    page = comms.dm_display_page("owner", worktree=str(tmp_path))
+    comms.mark_dm_view_read(
+        "owner",
+        worktree=str(tmp_path),
+        through=message.seq,
+        expected_display_basis=page.display_basis,
+    )
+    path = comms.reads.path
+    document = json.loads(path.read_text())
+    keys = {}
+    for key, sequences in document["messages"].items():
+        name, created, conversation = json.loads(key)
+        conversation["participants"] = [
+            item if isinstance(item, list) else [item["name"], item["created_at"]]
+            for item in conversation["participants"]
+        ]
+        keys[json.dumps([name, created, conversation], separators=(",", ":"))] = sequences
+    document["messages"] = keys
+    path.write_text(json.dumps(document))
+    reopened = Comms(tmp_path)
+    assert message.seq in reopened.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    next_message = reopened.send_message("owner", viewer, "new paint")
+    page = reopened.dm_display_page("owner", worktree=str(tmp_path))
+    reopened.mark_dm_view_read(
+        "owner",
+        worktree=str(tmp_path),
+        through=next_message.seq,
+        expected_display_basis=page.display_basis,
+    )
+    assert {message.seq, next_message.seq} <= reopened.reads.seen_sequences(
+        viewer, reopened.registry.snapshot()
+    )
+
+
+def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):
+    registry = registry_with_owner(tmp_path)
+    registry.unregister("owner")
+    stopped = registry.snapshot().owner_identity("owner")
+    registry.unregister("owner")
+    registry.archive("owner")
+    registry.begin_delete("owner")
+    assert registry.snapshot().owner_identity("owner") == stopped
+    registry.remove("owner")
+    assert registry.snapshot().owner_generations["owner"] == stopped.generation

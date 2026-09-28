@@ -13,7 +13,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .thread_identity import ThreadIncarnation
@@ -77,7 +76,7 @@ class ReadLedger(LockedStore[ReadDocument]):
     @staticmethod
     def _key(viewer: str, created_at: float, conversation: Conversation) -> str:
         return json.dumps(
-            [viewer, created_at, FieldCodec.encode(conversation)], separators=(",", ":")
+            [viewer, created_at, conversation.to_wire()], separators=(",", ":")
         )
 
     def capture(

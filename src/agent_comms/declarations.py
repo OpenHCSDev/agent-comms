@@ -1357,13 +1357,14 @@ class ActiveTurn:
     routing: TurnRouting | None = None
     admission_generation: int | None = None
     turn_generation: int | None = None
-    owner_generation: int | None = None
 
-    def __post_init__(self) -> None:
-        if self.owner_generation is not None and (
-            type(self.owner_generation) is not int or self.owner_generation < 1
-        ):
-            raise ValueError("Turn owner generation must be a positive integer")
+    def current(self, admission_generation: int, turn_generation: int) -> bool:
+        """Existing persisted witnesses survive a reader from before S5."""
+        return (
+            self.admission_generation == admission_generation
+            and self.turn_generation == turn_generation
+            and turn_generation > 0
+        )
 
     @classmethod
     def from_wire(cls, data: Mapping) -> ActiveTurn:
@@ -1374,7 +1375,6 @@ class ActiveTurn:
             TurnRouting.from_wire(data["routing"]) if data.get("routing") else None,
             data.get("admission_generation"),
             data.get("turn_generation"),
-            data.get("owner_generation"),
         )
 
     def to_wire(self) -> dict[str, object]:
@@ -1404,18 +1404,13 @@ class TurnFence:
         if identity is None:
             if name is None or created_at is None or turn_generation is None:
                 raise ValueError("Turn fence requires an exact identity")
-            identity = TurnIdentity(
-                OwnerIdentity(ThreadIncarnation(name, created_at), 0), turn_generation
-            )
+            identity = TurnIdentity(ThreadIncarnation(name, created_at), turn_generation)
         elif name is not None or created_at is not None or turn_generation is not None:
             incarnation = identity.incarnation
             identity = TurnIdentity(
-                OwnerIdentity(
-                    ThreadIncarnation(
-                        incarnation.name if name is None else name,
-                        incarnation.created_at if created_at is None else created_at,
-                    ),
-                    identity.owner.generation,
+                ThreadIncarnation(
+                    incarnation.name if name is None else name,
+                    incarnation.created_at if created_at is None else created_at,
                 ),
                 identity.generation if turn_generation is None else turn_generation,
             )
@@ -1548,9 +1543,9 @@ class Thread:
     @property
     def turn_identity(self) -> TurnIdentity | None:
         turn = self.active_turn
-        if turn is None or turn.owner_generation is None or turn.turn_generation is None:
+        if turn is None or turn.admission_generation is None or turn.turn_generation is None:
             return None
-        return TurnIdentity(self.owner_identity(turn.owner_generation), turn.turn_generation)
+        return TurnIdentity(self.incarnation, turn.turn_generation)
 
     @property
     def is_fork(self) -> bool:
@@ -2611,17 +2606,8 @@ class ThreadRegistry:
                 turn_generation=data.get("turn_generation", 0),
                 last_finished_turn_id=data.get("last_finished_turn_id"),
             )
-            if name in legacy_turns:
-                thread = self._threads[name]
-                if thread.active_turn is None:
-                    raise RelationViolationError(
-                        "private registry turn attestation has no live turn"
-                    )
-                # Old turns without a turn counter remain historical, never gain an exact fence.
-                self._threads[name] = replace(
-                    thread,
-                    active_turn=replace(thread.active_turn, owner_generation=legacy_turns[name]),
-                )
+            if name in legacy_turns and self._threads[name].active_turn is None:
+                raise RelationViolationError("private registry turn attestation has no live turn")
             self._statuses[name] = ThreadStatus(data.get("status", "running"))
             self._last_seen[name] = data.get("last_seen", 0.0)
             if has_generations and name not in self._owner_generations:
@@ -2688,8 +2674,18 @@ class ThreadRegistry:
                     for name, t in self._threads.items()
                 },
                 "aliases": dict(sorted(self._aliases.items())),
-                "owner_generation_counter": self._owners.counter,
-                "owner_generations": dict(sorted(self._owner_generations.items())),
+                # Keep the established encoding while an old UI process may write.
+                # These are projections of the nominal owners, not parallel state.
+                "owner_epoch_counter": self._owners.counter,
+                "owner_epochs": dict(sorted(self._owner_generations.items())),
+                "turn_epochs": {
+                    name: self._owner_generations[name]
+                    for name, thread in sorted(self._threads.items())
+                    if thread.active_turn is not None
+                    and thread.active_turn.current(
+                        self._admission_generations[name], thread.turn_generation
+                    )
+                },
                 "admission_generation_counter": self._admissions.counter,
                 "admission_generations": dict(sorted(self._admission_generations.items())),
             },
@@ -2773,7 +2769,8 @@ class ThreadRegistry:
                     raise RelationViolationError("Registry creation identities collide.")
                 thread = replace(thread, created_at=candidate)
             identity_changed = previous is not None and (
-                previous.created_at != thread.created_at
+                new_owner
+                or previous.created_at != thread.created_at
                 or previous.pid != thread.pid
                 or previous.session_file != thread.session_file
                 or previous.worktree != thread.worktree
@@ -2812,7 +2809,7 @@ class ThreadRegistry:
                     previous is None or new_owner or thread.active_turn != previous.active_turn
                 ):
                     thread = replace(
-                        thread, active_turn=replace(thread.active_turn, owner_generation=None)
+                        thread, active_turn=replace(thread.active_turn, admission_generation=None)
                     )
                     self._threads[thread.name] = thread
                 self._save_unlocked()
@@ -2843,7 +2840,9 @@ class ThreadRegistry:
                 or (
                     owner is not None
                     and owner.active_turn is not None
-                    and owner.active_turn.owner_generation != epoch
+                    and not owner.active_turn.current(
+                        self._admission_generations[canonical], owner.turn_generation
+                    )
                 )
             ):
                 raise RelationViolationError("live owner is stopped or unavailable")
@@ -2870,10 +2869,7 @@ class ThreadRegistry:
                 or (
                     owner is not None
                     and owner.active_turn is not None
-                    and (
-                        owner.active_turn.admission_generation != generation
-                        or owner.active_turn.owner_generation != self._owner_generations[canonical]
-                    )
+                    and not owner.active_turn.current(generation, owner.turn_generation)
                 )
             ):
                 raise RelationViolationError("live owner is stopped or unavailable")
@@ -3070,7 +3066,9 @@ class ThreadRegistry:
                 or not owner.role.executable
                 or owner.active_turn is None
                 or owner.active_turn.id != turn_id
-                or owner.active_turn.owner_generation != epoch
+                or not owner.active_turn.current(
+                    self._admission_generations[canonical], owner.turn_generation
+                )
                 or (goal.id if goal is not None else None) != expected_goal_id
                 or (goal.revision if goal is not None else None) != expected_goal_revision
             ):
@@ -3117,7 +3115,6 @@ class ThreadRegistry:
                 routing=routing,
                 admission_generation=self._admission_generations[current.name],
                 turn_generation=current.turn_generation + 1,
-                owner_generation=self._owner_generations[current.name],
             ),
         )
         self._threads[current.name] = claimed
@@ -3181,10 +3178,6 @@ class ThreadRegistry:
                 or expected.turn_generation != current.turn_generation
                 or expected.admission_generation != admission
                 or current.active_turn.turn_generation != expected.turn_generation
-                or (
-                    expected.identity.owner.generation != 0
-                    and expected.identity.owner.generation != self._owner_generations[name]
-                )
             ):
                 return False, None
             attested = (
@@ -3194,7 +3187,6 @@ class ThreadRegistry:
                 and admission > 0
                 and self._admission_generations.get(name) == admission
                 and current.active_turn.turn_generation == current.turn_generation
-                and current.active_turn.owner_generation == self._owner_generations[name]
                 and self._statuses[name].active
             )
             self._threads[name] = replace(
@@ -3332,10 +3324,11 @@ class ThreadRegistry:
             name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            if self._statuses[name].active:
+                self._bump_owner_generation_unlocked(name)
             self._statuses[name] = ThreadStatus.STOPPED
             self._threads[name] = replace(self._threads[name], active_turn=None)
             self._bump_admission_unlocked(name)
-            self._bump_owner_generation_unlocked(name)
             self._save_unlocked()
 
     def archive(self, name: str) -> None:
@@ -3349,9 +3342,10 @@ class ThreadRegistry:
             name = self._aliases.get(name, name)
             if name not in self._threads:
                 raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
+            if self._statuses[name].active:
+                self._bump_owner_generation_unlocked(name)
             self._statuses[name] = ThreadStatus.ARCHIVED
             self._bump_admission_unlocked(name)
-            self._bump_owner_generation_unlocked(name)
             self._save_unlocked()
 
     def begin_delete(self, name: str) -> None:
@@ -3372,7 +3366,6 @@ class ThreadRegistry:
                 )
             self._statuses[name] = ThreadStatus.DELETING
             self._bump_admission_unlocked(name)
-            self._bump_owner_generation_unlocked(name)
             self._save_unlocked()
 
     def remove(self, name: str) -> tuple[str, ...]:
@@ -3392,13 +3385,14 @@ class ThreadRegistry:
             )
             for child_name in detached:
                 self._threads[child_name] = replace(self._threads[child_name], parent=None)
+            if self._statuses[name].active:
+                self._bump_owner_generation_unlocked(name)
             del self._threads[name]
             self._statuses.pop(name, None)
             self._last_seen.pop(name, None)
-            # Retain the private tombstone epoch: reusing a name cannot recycle
-            # an earlier owner's incarnation after deletion.
+            # Keep generation tombstones; allocating the next owner cannot recycle
+            # the deleted process identity, even when its name is reused.
             self._bump_admission_unlocked(name)
-            self._bump_owner_generation_unlocked(name)
             self._aliases = {
                 alias: target for alias, target in self._aliases.items() if target != name
             }

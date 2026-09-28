@@ -35,12 +35,8 @@ class OwnerIdentity:
 
 @dataclass(frozen=True, slots=True)
 class TurnIdentity:
-    owner: OwnerIdentity
+    incarnation: ThreadIncarnation
     generation: int
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return self.owner.incarnation
 
 
 @dataclass(slots=True)

@@ -1577,7 +1577,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         comms.registry.register(saved)
         restored = comms.registry.require("beta")
         assert restored == replace(
-            saved, active_turn=replace(saved.active_turn, owner_generation=None)
+            saved, active_turn=replace(saved.active_turn, admission_generation=None)
         )
         assert comms.registry.status("beta").active
 

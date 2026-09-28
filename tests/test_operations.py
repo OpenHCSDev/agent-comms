@@ -321,7 +321,6 @@ class TestThreadOps:
                 owned = wired._launch_owner_unlocked(
                     Thread(name=name, tags=frozenset(), worktree="/tmp"), "/bin/echo"
                 )
-            epoch = wired.registry.snapshot().owner_epochs[name]
             assert owned.pid == 987654
             assert os.read(inherited[0], 33) == _owner_launch_proof(
                 wired.registry.snapshot().owner_identity(name), 987654

@@ -8,7 +8,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 from __future__ import annotations
 
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from typing import TYPE_CHECKING
 
 from .field_codec import FieldCodec
@@ -25,6 +25,12 @@ class Conversation:
 
     def current(self, snapshot: RegistrySnapshot) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
+
+    def to_wire(self) -> dict:
+        """Retain the positional persisted encoding for an already-open UI."""
+        data = FieldCodec.encode(self)
+        data["participants"] = [list(astuple(participant)) for participant in self.participants]
+        return data
 
     @classmethod
     def from_wire(cls, raw: dict) -> Conversation:
