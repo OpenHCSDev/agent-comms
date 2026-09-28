@@ -12,10 +12,12 @@ from acp.schema import ImageContentBlock
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
 from agent_comms.runtime import RuntimeProxy, socket_path
+
+pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
 IMAGE = {"type": "image", "data": PNG, "mimeType": "image/png"}
@@ -61,7 +63,7 @@ def test_combined_image_budget():
 
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    agent = CommsAgent(
+    agent = canonical_agent(
         wire(tmp_path / "wire"), agent_bin="pi-image-stub", agent_args=["--model", "test/model"]
     )
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
@@ -110,7 +112,7 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
     monkeypatch.setattr(backend, "stream_agent_events", stream)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
     try:
-        await started.wait()
+        await asyncio.wait_for(started.wait(), 3)
         reference = "What is this? @/private/clipboard-image.png"
         await agent.prompt(
             "project",
@@ -123,7 +125,8 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
         await agent.cancel("project")
         await turn
         assert any(
-            update.get("_meta", {}).get("agentComms", {}).get("restored") == [reference]
+            [item["text"] for item in update.get("_meta", {}).get("agentComms", {})
+             .get("queueState", {}).get("restored", [])] == [reference]
             for update in updates
         )
     finally:
@@ -134,13 +137,13 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
 async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(
+    owner = canonical_agent(
         comms,
         agent_bin="pi-image-stub",
         agent_args=["--model", "test/model"],
         runtime_enabled=True,
     )
-    client = CommsAgent(comms)
+    client = canonical_agent(comms)
     await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     started = asyncio.Event()
 
@@ -170,7 +173,10 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
             },
         )
         assert result.field_meta["agentComms"]["inputDisposition"]["delivery"] == "steer"
-        assert not owner.inputs.queued_inputs.get("project")
+        input_id = result.field_meta["agentComms"]["inputDisposition"]["inputId"]
+        pending = owner.inputs.queued_inputs["project"][input_id]
+        assert pending.text == reference and pending.images == (ImageInput(PNG, "image/png"),)
+        assert owner.inputs.dispositions.read().rows["acp:" + input_id].declared_name == "unknown"
         await client.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],
@@ -220,6 +226,7 @@ for line in sys.stdin:
         )
     ]
     assert events[-1].ok is False
+    assert events[-1].diagnostic["exit_code"] == 7
     assert PNG not in repr(events)
 
     agent = await make_agent(tmp_path / "acp", monkeypatch)
@@ -278,10 +285,11 @@ for line in sys.stdin:
         )
     ]
     assert events[-1].ok is False
+    assert events[-1].diagnostic["exit_code"] == 7
     assert PNG not in repr(events)
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    agent = CommsAgent(
+    agent = canonical_agent(
         wire(tmp_path / "acp-wire"), agent_bin=str(stub), agent_args=["--model", "test/model"]
     )
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend, owner_compaction_runtime
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import AttachedChild, Platform, ProcessIdentity
 from agent_comms.comms import Comms, wire
@@ -438,7 +438,6 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
 ):
     """No external calls or retained user data; exercise the production chain."""
     package = Path(PACKAGE).resolve()
-    launcher = os.environ["AC_NATIVE_STACK_BIN"]
     assert "PYTEST_XDIST_WORKER" not in os.environ, "Run capacity acceptance serially with -n0"
     minimum = history_mib * 1024**2
     assert shutil.disk_usage(tmp_path).free > minimum * 3, "Insufficient owned disk fixture space"
@@ -527,7 +526,7 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             monkeypatch.setenv("AC_CAPACITY_PHASE", "strict-reopen")
             assert (
                 validate_native_reopen(
-                    launcher, str(session), expected_session_id=fixture["session_id"]
+                    package, str(session), expected_session_id=fixture["session_id"]
                 )
                 == fixture["session_id"]
             )
@@ -797,11 +796,18 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     session.write_bytes(torn)
     started = []
 
-    launcher = Path(PACKAGE).parents[3] / "bin/pi-native"
+    launcher = "pi"
+    comms = Comms(root)
+    with comms.bus.log.locked():
+        metadata = comms.bus.log.read_metadata_unlocked()
+    root_id = metadata.root_id if metadata.private else comms.messaging.initialize_private_initial_protocol()
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(root))
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", PACKAGE)
     start_child = backend.AttachedChild.start
 
     async def prevent_provider_launch(command, **kwargs):
-        if command[0] == str(launcher):
+        if str(Path(PACKAGE) / "dist/cli.js") in command:
             started.append(command)
             raise AssertionError("Corrupt saved session must not launch or send")
         # Read-only A14 validation itself owns a real bounded child.
@@ -903,7 +909,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
 async def test_provider_free_three_round_owner_commit_to_local_acp_metadata(session, tmp_path):
     root = tmp_path / "wire"
     comms = wire(root)
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
@@ -1001,5 +1007,5 @@ def test_unapproved_session_alias_and_bounds_are_refused(session):
     alias.symlink_to(session)
     with pytest.raises(NativePreparationError, match="canonical"):
         prepare_native_source(Path(PACKAGE), str(alias), keep_recent_tokens=1)
-    with pytest.raises(NativePreparationError, match="window"):
+    with pytest.raises(NativePreparationError, match="Native source cannot be prepared"):
         prepare_native_source(Path(PACKAGE), str(session), keep_recent_tokens=0)

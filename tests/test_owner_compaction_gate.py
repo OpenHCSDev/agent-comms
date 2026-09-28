@@ -7,6 +7,7 @@ commit-time recheck. The native session fence is echoed, never judged here.
 
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 
 import pytest
@@ -150,7 +151,8 @@ def test_stale_goal_expectation_fails(tmp_path) -> None:
 def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
     leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
-    monkeypatch.setattr("agent_comms.store_files.os.getpid", lambda: owner.pid + 1)
+    other_pid = os.getppid()
+    monkeypatch.setattr("agent_comms.store_files.os.getpid", lambda: other_pid)
     with pytest.raises(RelationViolationError):
         attest(registry, leased, leased_generation)
 

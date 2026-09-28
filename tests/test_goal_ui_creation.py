@@ -55,31 +55,22 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
         await owner.shutdown()
 
 
-async def test_explicit_retry_recovers_registry_goal_missing_ledger(tmp_path, monkeypatch):
+async def test_explicit_retry_cannot_invent_missing_launch_authority(tmp_path, monkeypatch):
     comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
     try:
-        legacy = comms.goals.update_goal(session, SetGoalAction(text="older UI goal"))
-        assert legacy is not None
+        goal = comms.goals.update_goal(session, SetGoalAction(text="Goal without authority"))
         blocked = comms.goals.update_goal(
             session,
             BlockedGoalAction(
-                expect=GoalPrecondition(goal_id=legacy.id), progress="Goal attempt unresolved"
+                expect=GoalPrecondition(goal_id=goal.id), progress="Goal attempt unresolved"
             ),
         )
-        assert blocked is not None
-        assert GoalAttemptStore(comms.root / "goal-private").snapshot(legacy.id) is None
-        result = await proxy.request(
-            "retry_goal", goal_id=legacy.id, expected_revision=blocked.revision
-        )
-        assert result["goal"]["id"] == legacy.id
-        assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
-        generation = GoalAttemptStore(comms.root / "goal-private").snapshot(legacy.id)
-        assert (
-            generation is not None
-            and generation.lifecycle == ReadyGeneration()
-            and generation.number == 2
-        )
-        assert owner.turns.goal_store.ready_grant(legacy.id, generation.number)
-        assert session in wakes
+        store = GoalAttemptStore(comms.root / "goal-private")
+        assert store.snapshot(goal.id) is None
+        with pytest.raises(RuntimeError, match="Retry cannot create a grant"):
+            await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
+        assert store.snapshot(goal.id) is None
+        assert comms.registry.require(session).goal == blocked
+        assert wakes == []
     finally:
         await owner.shutdown()

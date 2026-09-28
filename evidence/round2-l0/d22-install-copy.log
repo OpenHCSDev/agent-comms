@@ -1,6 +1,6 @@
 PASS live installation refused while clients remain: Registered owner is still alive: agent-comms-ux
 {
-  "messages": 135,
+  "messages": 138,
   "archived_messages": 8420,
   "threads": 104,
   "unknown_inputs": 13,

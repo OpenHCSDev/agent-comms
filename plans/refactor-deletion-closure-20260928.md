@@ -1,3 +1,27 @@
+## Combined receiver and live recovery — 2026-09-28 19:12 UTC
+
+- Parent integrates243/244indexed-native history through current PiHelper,
+  232large acceptance, main252and248checkpoint861e32e. Old helper loader and256MiB
+  limits are deleted. Current receiver passes4focused native cases and real302/604MB
+  CLI/owner/journal/reopen chains, peak213.5/218MiB native RAM. No provider calls.
+- InstalledUXoldlimit_exceededrefusal was still blocking sends. Parent explicitly
+  retired that exact known prestart refusal with existing journalCAS after idle/
+  unattempted checks; originalUNKNOWNunchanged. Installed admission nowTrue.
+  PrivateSQLitebackup retained; no prompts/restarts/providercalls. Earlieralive-only
+  usability statement was too broad; send admission is now checked directly.
+- D22 installer checks assignedWritableAccess/ArchivedAccess, all convertedSQLite
+  rows, human read memberships and internal transcriptinode bindings. Latestactual
+  copied-root exchange passes138current+8420archivedmessages104threads13UNKNOWN.
+  Original301-filebackup retained during test; all owned copies then removed.
+- 248currentfixtureclosure integrated; two obsolete unread tests corrected/deleted.
+  Passive-awareness oldledgerconsumers are a concrete remaining L0finding assigned
+  Cicero withNietzsche caller/testcoordination; no oldcursorengine restoration.
+- Toad107combines114/T7+115/T8, currentinstalledUI+46savedsessions proofpassed;
+  Copernicus updatescorepinandowns118TL0AremainingMCP/callerclosure. DarwinT1 and
+  PascalTR0continueindependently. Full refactor not live yet; current stable252is.
+- Removed over600MiB of completed parentannotation/registry/native/unread test
+  copies. Retained sharedD22candidate whilepairedToadacceptancestillreferencesit.
+
 ## D22 operator integration — 2026-09-28 19:05 UTC
 
 253 compaction barrier conversion integrated; current journal retained instead of

@@ -1,5 +1,7 @@
 import asyncio
 import sys
+import os
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +17,8 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     session = tmp_path / "session.jsonl"
     session.write_text("")
     comms = wire(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     comms.agents.set_agent_info(
         "worker", model="test/model", session_name="preserved", context_used=23, context_size=100
@@ -22,7 +26,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
     metadata = comms.agents.runtime_info.path.read_bytes()
     collaboration = comms.ledger.path.read_bytes()
-    owner = comms.owners.ensure_owner("worker", agent_bin="/bin/echo")
+    owner = comms.owners.ensure_owner("worker", agent_bin="pi")
 
     async def ready(pid):
         async with asyncio.timeout(10):
@@ -33,7 +37,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     try:
         await ready(owner.pid)
         receipts = await asyncio.to_thread(
-            comms.owners.restart_owners, ["worker"], agent_bin="/bin/echo"
+            comms.owners.restart_owners, ["worker"], agent_bin="pi"
         )
         assert receipts[0].previous_pid == owner.pid
         assert receipts[0].pid != owner.pid
