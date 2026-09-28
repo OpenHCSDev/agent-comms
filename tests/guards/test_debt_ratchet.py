@@ -8,12 +8,13 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.refactor_guard
-SCRIPT = Path(__file__).resolve().parents[2] / "tools" / "debt_ratchet.py"
+
 
 
 class Repository:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, root: str):
         self.path = path
+        self.root = root
         self.git("init", "-q")
         self.git("config", "user.email", "ratchet@example.invalid")
         self.git("config", "user.name", "Ratchet test")
@@ -25,7 +26,7 @@ class Repository:
 
     def commit(self, files: dict[str, str | None]) -> str:
         for name, source in files.items():
-            path = self.path / "src" / "agent_comms" / name
+            path = self.path / self.root / name
             if source is None:
                 path.unlink()
             else:
@@ -37,7 +38,7 @@ class Repository:
 
     def compare(self, base: str, head: str) -> tuple[int, dict]:
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--base", base, "--head", head],
+            [str(Path(sys.executable).with_name("agent-comms-ratchet")), "--root", self.root, "--base", base, "--head", head],
             cwd=self.path,
             capture_output=True,
             text=True,
@@ -48,9 +49,9 @@ class Repository:
         return result.returncode, json.loads(result.stdout)
 
 
-@pytest.fixture
-def repo(tmp_path: Path) -> Repository:
-    return Repository(tmp_path)
+@pytest.fixture(params=["src/agent_comms", "src/toad"])
+def repo(tmp_path: Path, request) -> Repository:
+    return Repository(tmp_path, request.param)
 
 
 def test_added_type_check_fails(repo: Repository) -> None:
@@ -117,3 +118,19 @@ text = 'type(x) is int and a and b and row["not code"]'
         "LongBooleanChain": 1,
         "StringSubscript": 2,
     }
+
+
+def test_other_source_root_does_not_enter_report(repo: Repository) -> None:
+    base = repo.commit({"kept.py": "value = 1\n"})
+    outside = repo.path / "unrelated.py"
+    outside.write_text('value = type(x) is int and a and b and row["key"]\n')
+    head = repo.commit({"kept.py": "value = 2\n"})
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["paths"] == [f"{repo.root}/kept.py"]
+
+
+def test_ratchet_has_one_packaged_owner() -> None:
+    from agent_comms import debt_ratchet
+    assert not (Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py").exists()
+    assert "src/agent_comms/" not in Path(debt_ratchet.__file__).read_text()
