@@ -5,6 +5,12 @@
 Published draft: https://github.com/OpenHCSDev/agent-comms/pull/201
 Implementation `8cc8566`; current main198 reconciled at `e1a84f0`.
 
+Subsequent original-plan audit: see
+`../original-plan-completion/ORIGINAL-PLAN-COMPLETION-AUDIT.md`. The combined
+R6/R7 candidate has the major replacements, but the audit found remaining
+assignment/lease locals named claim/turn_claim (O1). This qualifies the earlier
+vocabulary-complete wording below; current APIs are deleted, those names remain.
+
 Complete source candidate on `refactor/r7-selected-execution-20260928`, own tree
 `/home/ts/wt/comms-refactor-r7-selected-execution-20260928`, based main199 `065a4da`.
 Parent owns installed acceptance, paired Toad and activation; Pascal owns R6.
