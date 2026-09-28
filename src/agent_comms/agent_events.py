@@ -10,13 +10,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .declarations import ActivityState
+from .activity import ActivityState
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
-    from .declarations import Goal, GoalExecution
-    from .operations import Comms
+    from .comms import Comms
+    from .goal_presentation import GoalExecution
+    from .goals import Goal
 
 
 class AgentEvent(ABC):
@@ -306,7 +307,7 @@ class AgentEventConsumer(MroDispatch, ABC):
     @handles(AgentInfo)
     async def record_agent_info(self, event: AgentInfo) -> None:
         await self.before_agent_info(event)
-        self.comms.set_agent_info(
+        self.comms.agents.set_agent_info(
             self.thread_name,
             model=event.model,
             session_name=event.session_name,

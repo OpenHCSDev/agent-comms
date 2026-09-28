@@ -15,10 +15,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import NativeContextProof, NativePiUnavailable, _read_native_context_evidence
-from .native_prompt_binding import (
-    expected_prompt_matches_journal,
-    read_expected_prompt_binding,
-)
+from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 
 
 @dataclass(frozen=True, slots=True)

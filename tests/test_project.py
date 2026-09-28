@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 
@@ -23,7 +24,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    comms.register(
+    comms.threads.register(
         Thread(
             name="worker",
             tags=frozenset({"test"}),
@@ -34,7 +35,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
             created_at=123,
         )
     )
-    goal = comms.update_goal("worker", SetGoalAction(text="Keep this objective"))
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep this objective"))
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     result = invoke_tool(comms, "comms_set_project", {"path": "../new project"})
     assert result["current"] == str(new) and result["changed"]
@@ -44,16 +45,16 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     assert thread.goal == goal and thread.created_at == 123
     assert thread.session_file == str(old / "session.jsonl")
     assert thread.previous_worktrees == (str(old),)
-    assert not comms.set_project("worker", str(new)).changed
+    assert not comms.threads.set_project("worker", str(new)).changed
     for path in ("", str(tmp_path / "missing")):
         with pytest.raises(ValueError):
-            comms.set_project("worker", path)
+            comms.threads.set_project("worker", path)
     file = tmp_path / "file"
     file.touch()
     with pytest.raises(ValueError, match="not a directory"):
-        comms.set_project("worker", str(file))
-    comms.rename_self("renamed")
-    comms.attach_session("worker", str(old / "session.jsonl"))
+        comms.threads.set_project("worker", str(file))
+    comms.threads.rename_self("renamed")
+    comms.threads.attach_session("worker", str(old / "session.jsonl"))
     restored = wire(comms.root).registry.require("worker")
     assert restored.worktree == str(new) and restored.previous_worktrees == (str(old),)
     assert len(comms.registry.all_threads()) == 1
@@ -74,7 +75,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
             updates.append(kwargs["update"])
 
     agent.on_connect(Client())
-    comms.set_project(session, str(new))
+    comms.threads.set_project(session, str(new))
     await agent.sessions.sync_identity(session)
     assert updates[-1].field_meta["agentComms"]["worktree"] == str(new)
     await agent.shutdown()
@@ -104,7 +105,7 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
         calls.append((args[3], kwargs.get("session_file"), args[2]))
         yield ae.AgentInfo(session_file=session_file)
         if len(calls) == 1:
-            comms.set_project(session, str(new))
+            comms.threads.set_project(session, str(new))
             yield ae.ToolEnd(id="project", name="comms_set_project", ok=True)
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
@@ -134,7 +135,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
     changed = asyncio.Event()
 
     async def events(*args, **kwargs):
-        comms.set_project(session, str(new))
+        comms.threads.set_project(session, str(new))
         changed.set()
         await asyncio.sleep(60)
         yield ae.Done(ok=True, text="")
@@ -177,7 +178,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
             proxy = RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))
             proxies.append(proxy)
             assert (await proxy.subscribe())["agentComms"]["worktree"] == str(old)
-        comms.set_project(session, str(new))
+        comms.threads.set_project(session, str(new))
         await owner.sessions.sync_identity(session)
         async with asyncio.timeout(2):
             while not all(

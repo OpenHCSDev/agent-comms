@@ -1,4 +1,4 @@
-"""Strict JSON boundary conversion derived from dataclass declarations."""
+"""Strict JSON boundary conversion derived from dataclass store_files."""
 
 from __future__ import annotations
 

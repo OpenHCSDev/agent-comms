@@ -19,6 +19,7 @@ from agent_comms import cohort_send
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
@@ -27,11 +28,10 @@ from agent_comms.coordination_store import (
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Thread
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
-from agent_comms.operations import Comms
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -61,8 +61,8 @@ def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
-    return root, comms.initialize_private_initial_protocol(), comms
+    comms.threads.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
+    return root, comms.messaging.initialize_private_initial_protocol(), comms
 
 
 def _fake_pi(calls: list[str]):
@@ -155,7 +155,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
             assert thread.pid == os.getpid()
             assert comms.registry.require("beta").pid == os.getpid()
             assert comms.registry.status("beta") == RunningThreadStatus()
-            comms.send_initial_cohort("sender", "beta", "Compute 17+25")
+            comms.messaging.send_initial_cohort("sender", "beta", "Compute 17+25")
 
         result = await foreground.run_foreground_once(
             root,
@@ -171,7 +171,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         assert result is not None and result.response_message_id
         assert result.exact_target == "sender" and len(calls) == 1
         assert comms.registry.status("beta") == StoppedThreadStatus()
-        assert comms.dm_history("sender", "beta")[-1].body == "42"
+        assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
                 store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
@@ -190,7 +190,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         resource = base / "module.py"
         resource.write_bytes(b"before\n")
         root, root_id, comms = _wire(base)
-        comms.initialize_private_claim_protocol()
+        comms.messaging.initialize_private_claim_protocol()
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
@@ -198,7 +198,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
 
         def ready(thread: Thread) -> None:
             assert resource.read_bytes() == b"before\n"
-            comms.send_initial_cohort("sender", "beta", "Compute 17+25")
+            comms.messaging.send_initial_cohort("sender", "beta", "Compute 17+25")
 
         result = await foreground.run_foreground_once(
             root,
@@ -216,9 +216,9 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         )
         assert result is not None and result.response_message_id
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
-        claimed = Comms(root).claim_projection()[str(resource)]
+        claimed = Comms(root).bus.claim_projection()[str(resource)]
         assert claimed.admission is not None and claimed.admission.wake_claim_id == result.claim_id
-        assert comms.dm_history("sender", "beta")[-1].body == "42"
+        assert comms.views.dm_history("sender", "beta")[-1].body == "42"
 
 
 async def test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource(
@@ -243,7 +243,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 selected_existing_file_write=plan,
             )
         assert "alpha" not in comms.registry and resource.read_bytes() == b"before\n"
-        comms.initialize_private_claim_protocol()
+        comms.messaging.initialize_private_claim_protocol()
         external = tmp_path / "external.py"
         external.write_bytes(b"external\n")
         with pytest.raises(ValueError, match="inside the worktree"):
@@ -338,8 +338,8 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         resource = base / "module.py"
         resource.write_bytes(b"unchanged\n")
         root, root_id, comms = _wire(base)
-        comms.initialize_private_claim_protocol()
-        comms.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+        comms.messaging.initialize_private_claim_protocol()
+        comms.threads.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
@@ -353,7 +353,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
                     "beta",
                     committed=True,
                 )
-            comms.send_initial_cohort("sender", "#team", "@beta only")
+            comms.messaging.send_initial_cohort("sender", "#team", "@beta only")
 
         result = await foreground.run_foreground_once(
             root,
@@ -370,7 +370,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         )
         assert isinstance(result, foreground.NoWakeReceipt)
         assert calls == [] and resource.read_bytes() == b"unchanged\n"
-        assert Comms(root).claim_projection().get(str(resource)) is None
+        assert Comms(root).bus.claim_projection().get(str(resource)) is None
 
 
 async def test_foreground_two_recipients_one_no_wake_and_no_model(
@@ -389,7 +389,7 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         def ready(thread: Thread) -> None:
             ready_names.add(thread.name)
             if len(ready_names) == 2:
-                comms.send_initial_cohort("sender", "#team", "@beta Compute 17+25")
+                comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25")
 
         alpha = asyncio.create_task(
             foreground.run_foreground_once(
@@ -421,7 +421,7 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         assert isinstance(alpha_result, foreground.NoWakeReceipt)
         assert beta_result is not None and beta_result.response_message_id
         assert len(calls) == 1
-        assert comms.channel_history("#team")[-1].body == "42"
+        assert comms.views.channel_history("#team")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
                 store._connection.execute(
@@ -441,7 +441,7 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
         base = Path(dirname)
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
-        comms.register(Thread("beta", frozenset(), str(base), pid=os.getpid()))
+        comms.threads.register(Thread("beta", frozenset(), str(base), pid=os.getpid()))
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -452,7 +452,7 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
                 "beta",
                 committed=True,
             )
-        initial = comms.send_initial_cohort("sender", "beta", "one message")
+        initial = comms.messaging.send_initial_cohort("sender", "beta", "one message")
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             accept_initial_cohort(comms.bus, root_id, initial.seq, store)
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
@@ -576,7 +576,7 @@ raise SystemExit(f.main(sys.argv[1:]))
             assert child.returncode == 0, (out, err)
             assert json.loads(out.strip())["response_message_id"]
             assert comms.registry.status("beta") == StoppedThreadStatus()
-            assert comms.dm_history("sender", "beta")[-1].body == "42"
+            assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         finally:
             if child.poll() is None:
                 child.kill()
@@ -669,7 +669,7 @@ raise SystemExit(f.main(sys.argv[1:]))
                 outcomes[name] = json.loads(out.strip())
             assert outcomes["alpha"] == {"disposition": "NO_WAKE", "wire_seq": 1}
             assert outcomes["beta"]["response_message_id"]
-            assert comms.channel_history("#team")[-1].body == "42"
+            assert comms.views.channel_history("#team")[-1].body == "42"
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (
                     store._connection.execute(
@@ -710,7 +710,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
                 native_package=tmp_path,
                 opt_in=True,
                 wait_seconds=2,
-                ready=lambda _: comms.send_initial_cohort("sender", "beta", "one message"),
+                ready=lambda _: comms.messaging.send_initial_cohort("sender", "beta", "one message"),
             )
         assert len(calls) == 1
         with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -738,7 +738,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
 def test_sender_is_enabled_on_an_initialized_private_root() -> None:
     with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
         root, root_id, comms = _wire(Path(dirname))
-        comms.register(Thread("beta", frozenset(), dirname, pid=os.getpid()))
+        comms.threads.register(Thread("beta", frozenset(), dirname, pid=os.getpid()))
         sequence, message_id = cohort_send.publish_one(
             root,
             wire_root_id=root_id,
@@ -747,7 +747,7 @@ def test_sender_is_enabled_on_an_initialized_private_root() -> None:
             body="private message",
         )
         assert sequence == 1
-        assert message_id == comms.full_history()[0].message_id
+        assert message_id == comms.views.full_history()[0].message_id
 
 
 def test_sender_requires_private_root_and_exact_marker(tmp_path: Path) -> None:
@@ -772,7 +772,7 @@ def test_sender_requires_private_root_and_exact_marker(tmp_path: Path) -> None:
                 body="private message",
                 opt_in=True,
             )
-        assert comms.full_history() == []
+        assert comms.views.full_history() == []
 
 
 def test_foreground_rejects_live_root_without_writing(tmp_path: Path) -> None:

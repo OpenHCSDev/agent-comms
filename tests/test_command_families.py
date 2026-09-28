@@ -10,16 +10,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand, option
-from agent_comms.declarations import MessageType
+from agent_comms.comms import wire
+from agent_comms.messages import MessageType
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
     RuntimeRequest,
     SubscribeRuntimeRequest,
 )
+from agent_comms.threads import Thread
 
 
 def test_all_cli_help_and_flags_match_before_refactor(monkeypatch):
@@ -145,7 +146,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
     comms = wire(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
     agent = SimpleNamespace(_comms=comms, sessions=SimpleNamespace(bindings={"session": "owner"}))
     server = RuntimeServer(agent)
     await server.start()
@@ -200,10 +201,10 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     old, live = wire(tmp_path / "old"), wire(tmp_path / "live")
     for comms in (old, live):
         for name in ("alice", "bob"):
-            comms.register(Thread(name, frozenset({"team"}), str(tmp_path)))
-        comms.send("alice", "#team", f"{comms.root.name} channel")
-        comms.send("alice", "bob", f"{comms.root.name} direct")
-    source = live.attach_history(old.root)
+            comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.messaging.send("alice", "#team", f"{comms.root.name} channel")
+        comms.messaging.send("alice", "bob", f"{comms.root.name} direct")
+    source = live.views.attach_history(old.root)
     live_bus = (live.root / "bus.jsonl").read_bytes()
     assert main(["--root", str(live.root), *arguments]) == 0
     rows = json.loads(capsys.readouterr().out)[key]

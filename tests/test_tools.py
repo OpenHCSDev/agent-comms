@@ -1,20 +1,15 @@
 import pytest
 
-from agent_comms import Thread
-from agent_comms.tools import (
-    context_tool_catalog,
-    invoke_context_tool,
-    invoke_tool,
-    tool_catalog,
-)
+from agent_comms.threads import Thread
+from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 
 class TestToolCatalog:
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
         before = comms.registry.snapshot()
         result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"})
         assert result["collaboration"]["owner"] == "a"
@@ -42,7 +37,7 @@ class TestToolCatalog:
         assert invoke_tool(comms, "comms_collaborations", {})["collaborations"][0]["peer"] == "b"
         invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"})
         assert comms.registry.snapshot() == before
-        assert not comms.full_history()
+        assert not comms.views.full_history()
 
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
         monkeypatch.delenv("PI_AGENT_ID", raising=False)
@@ -82,21 +77,21 @@ class TestToolCatalog:
         assert actions[0]["context_bindings"] == {"parent": "subject"}
 
     def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
-        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
-        comms.send("a", "b", "hello")
+        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.messaging.send("a", "b", "hello")
 
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
 
         assert result["messages"][0]["text"] == "hello"
         assert result["acknowledged"] == 1
-        assert comms.pending_count("b") == 0
+        assert comms.bus.pending_count("b") == 0
 
     def test_delete_tool_uses_shared_lifecycle_policy(self, comms):
-        comms.register(Thread(name="running", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="running", tags=frozenset(), worktree="/wt"))
         with pytest.raises(ValueError, match="Stop a running thread"):
             invoke_tool(comms, "comms_delete", {"name": "running"})
-        comms.stop("running")
+        comms.owners.stop("running")
 
         result = invoke_tool(comms, "comms_delete", {"name": "running"})
 
@@ -112,14 +107,14 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
     def test_ack_can_target_one_conversation(self, comms):
-        comms.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        comms.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
-        comms.register(Thread(name="c", tags=frozenset(), worktree="/wt"))
-        comms.send("a", "b", "from a")
-        comms.send("c", "b", "from c")
+        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.threads.register(Thread(name="c", tags=frozenset(), worktree="/wt"))
+        comms.messaging.send("a", "b", "from a")
+        comms.messaging.send("c", "b", "from c")
 
         result = invoke_context_tool(comms, "comms_ack", subject="a", actor="b")
 
         assert result == {"acknowledged": 1}
-        assert comms.pending_count("b", "a") == 0
-        assert comms.pending_count("b", "c") == 1
+        assert comms.bus.pending_count("b", "a") == 0
+        assert comms.bus.pending_count("b", "c") == 1

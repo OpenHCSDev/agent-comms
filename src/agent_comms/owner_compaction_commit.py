@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from .backend import _session_revision
+from .bus_publication import unique_wire_object
 from .channels import ChannelCatalog
 from .compaction_journal import (
     CompactionJournal,
@@ -26,15 +27,9 @@ from .compaction_journal import (
     CompactionOperation,
     SelectedSummaryAttempt,
 )
-from .declarations import (
-    DeliveryScope,
-    Message,
-    RelationViolationError,
-    Thread,
-    _store_lock,
-    unique_wire_object,
-)
+from .errors import RelationViolationError
 from .input_disposition import FutureInputQueue, InputDispositions
+from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativePreparation, prepare_native_source
@@ -45,8 +40,11 @@ from .owner_compaction_process import (
 )
 from .owner_compaction_provider import valid_native_usage
 from .registration import Registration
+from .routing import DeliveryScope
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .session_fence import idle_session_writer_fence
+from .store_files import _store_lock
+from .threads import Thread
 
 
 @dataclass(frozen=True)

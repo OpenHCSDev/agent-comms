@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -14,6 +14,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
 
@@ -23,14 +24,14 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
-    comms.begin_turn("parent", "parent-delegation-in-flight")
-    comms.register(Thread("other", frozenset(), str(tmp_path)))
-    goal = comms.update_goal(
+    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.agents.begin_turn("parent", "parent-delegation-in-flight")
+    comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
+    goal = comms.goals.update_goal(
         "worker", SetGoalAction(text="Delegate and wait"), owner_store=agent.turns.open_goal_store()
     )
     messages = [
-        comms.send_message("parent", "worker", text) for text in ("Set standby", "Yes wait")
+        comms.messaging.send_message("parent", "worker", text) for text in ("Set standby", "Yes wait")
     ]
     inbox = next(t for t in TOOLS if t.name == "comms_inbox")
     report = next(t for t in TOOLS if t.name == "comms_goal")
@@ -77,9 +78,9 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         assert all(not agent.inputs.dispositions.get(key).get("goal_reviews") for key in keys)
         with pytest.raises(ValueError, match="recipient"):
             report.invoke(comms, {**args, "reviewed_inputs": ["bus:999999"]})
-        unrelated = comms.send_message("other", "worker", "Not a declared dependency")
+        unrelated = comms.messaging.send_message("other", "worker", "Not a declared dependency")
         await agent.inputs.drain_inbox("worker")
-        scoped = comms.goal_input_review("worker", goal.id, ["parent"])
+        scoped = comms.goals.goal_input_review("worker", goal.id, ["parent"])
         assert scoped["reviewed_inputs"] == keys
         assert len(scoped["excluded_inputs"]) == 2
         with pytest.raises(ValueError, match="declared dependencies"):
@@ -102,7 +103,7 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
         # The standby wait still defers any goal turn; the ordinary interrupts
         # stay queued and unattempted.
         assert agent.inputs.pending_turns.get("worker")
-        again = comms.goal_input_review("worker", goal.id, ["parent"])
+        again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
         assert again["reviewed_inputs"] == []
         assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
         for key in keys:
@@ -111,12 +112,12 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
         # Durable explicit handling survives reopening and a later wait declaration.
         reopened = wire(comms.root)
-        reopened.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
-        reopened.update_goal(
+        reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+        reopened.goals.update_goal(
             "worker",
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",)),
         )
-        fresh = comms.send_message("parent", "worker", "New result")
+        fresh = comms.messaging.send_message("parent", "worker", "New result")
         monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _: None)
         await agent.inputs.drain_inbox("worker")
         pending = agent.inputs.pending_turns["worker"]
@@ -132,7 +133,7 @@ async def test_inspected_unknown_dependencies_allow_standby_but_never_replay(tmp
             if turn.origin.seq != fresh.seq
         )
         # The current owner pause cannot be bypassed by an inspection argument.
-        comms.update_goal(
+        comms.goals.update_goal(
             "worker",
             PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
             actor=OwnerInvocable,

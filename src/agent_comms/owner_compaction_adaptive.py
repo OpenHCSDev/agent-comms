@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError
-from .declarations import AgentRuntimeInfo, RelationViolationError
+from .errors import RelationViolationError
 from .input_disposition import FutureInputQueue
 from .native_session_reopen import package_for_launcher
 from .owner_compaction_commit import OwnerCompactionCommit
@@ -33,6 +33,7 @@ from .owner_compaction_settings import (
     read_compaction_decision,
 )
 from .registration import Registration
+from .runtime_info import AgentRuntimeInfo
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission

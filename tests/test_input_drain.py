@@ -9,17 +9,19 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.declarations import RelationViolationError, Thread, _store_lock
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import Comms
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
 async def owner(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
     session = tmp_path / "saved.jsonl"
     session.write_text("saved history\n")
     comms.registry.register(replace(comms.registry.require("owner"), session_file=str(session)))
@@ -79,9 +81,9 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
     key = await queue(agent)
     assert capture(owner) == source
     comms = agent._comms
-    comms.register(Thread("foreign", frozenset(), str(comms.root)))
-    comms.register(Thread("another", frozenset(), str(comms.root)))
-    comms.send("foreign", "another", "unrelated")
+    comms.threads.register(Thread("foreign", frozenset(), str(comms.root)))
+    comms.threads.register(Thread("another", frozenset(), str(comms.root)))
+    comms.messaging.send("foreign", "another", "unrelated")
     agent.inputs.dispositions.record(
         "acp:foreign",
         seq=None,
@@ -173,8 +175,8 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
             agent.inputs.dispositions._write(rows)
         assert capture(owner) != source
     elif change == "bus":
-        comms.register(Thread("peer", frozenset(), str(comms.root)))
-        comms.send("peer", "owner", "correction")
+        comms.threads.register(Thread("peer", frozenset(), str(comms.root)))
+        comms.messaging.send("peer", "owner", "correction")
         assert capture(owner) != source
     else:
         comms.registry.register(

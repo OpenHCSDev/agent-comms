@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
-from .declarations import _replace_snapshot, _store_lock
 from .field_codec import FieldCodec
+from .store_files import _replace_snapshot, _store_lock
 
 T = TypeVar("T")
 

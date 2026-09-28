@@ -31,7 +31,7 @@ async def test_mounted_goal_continues_without_progress_tool(
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
     from runtime_fixture import ToadApp
 
-    from agent_comms import wire
+    from agent_comms.comms import wire
 
     live = bool(os.environ.get("AC_GOAL_LIVE_PROVIDER"))
     if live and (empty_response or compact_tools):
@@ -232,7 +232,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                 )
                 view = app.screen.conversation
                 if compact_tools:
-                    comms.attach_session("project", str(session))
+                    comms.threads.attach_session("project", str(session))
                 view.prompt.text = "/goal List one useful testing practice each turn until I pause."
                 view.prompt.focus()
                 await pilot.press("enter")

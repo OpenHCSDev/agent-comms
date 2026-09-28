@@ -3,7 +3,9 @@ from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 
-from agent_comms import Comms, Thread, ThreadSort
+from agent_comms.comms import Comms
+from agent_comms.display_order import ThreadSort
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
 
@@ -25,7 +27,7 @@ def change_shared_peer(root, instruction):
 def setup_wire(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name, parent in (("origin", None), ("owner", "origin"), ("peer", None), ("child", "owner")):
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
     return comms
 
 
@@ -42,7 +44,7 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     assert (mirror.owner, mirror.peer, mirror.note) == ("peer", "owner", "Review")
     assert collaboration_rows(comms, "owner")[0].target == "peer"
     assert collaboration_rows(comms, "peer")[0].target == "owner"
-    assert comms.full_history() == []
+    assert comms.views.full_history() == []
     assert comms.registry.snapshot() == before
     reopened = Comms(comms.root)
     original = reopened.relationships.collaborations("owner")[0]
@@ -63,10 +65,10 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
 
 def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.send("peer", "owner", "Direct input")
-    comms.send("peer", "#team", "Channel input")
-    comms.send("owner", "peer", "Output")
-    comms.acknowledge("owner")
+    comms.messaging.send("peer", "owner", "Direct input")
+    comms.messaging.send("peer", "#team", "Channel input")
+    comms.messaging.send("owner", "peer", "Output")
+    comms.messaging.acknowledge("owner")
     marker = (comms.root / "read_markers.json").read_bytes()
     snapshot = comms.relationships.snapshot("owner")
     groups = {group.key: group for group in snapshot.groups}
@@ -102,7 +104,7 @@ def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):
     comms = setup_wire(tmp_path)
     names = [f"worker-{index}" for index in range(8)]
     for name in names:
-        comms.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
     with ProcessPoolExecutor(max_workers=4) as pool:
         list(pool.map(add_peer, [comms.root] * len(names), names))
     assert {edge.peer for edge in comms.relationships.collaborations("owner")} == set(names)
@@ -142,13 +144,13 @@ def test_concurrent_add_remove_never_leaves_one_sided_contact(tmp_path):
         assert len(
             json.loads((comms.root / "relationships.json").read_text())["collaborations"]
         ) == len(left)
-    assert not comms.full_history()
+    assert not comms.views.full_history()
 
 
 def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     for index in range(5):
-        comms.send("peer", "owner", f"Input {index}")
+        comms.messaging.send("peer", "owner", f"Input {index}")
     service = comms.relationships
     monkeypatch.setattr(service, "RECENT_MESSAGES", 2)
     first = service.snapshot("owner")
@@ -156,7 +158,7 @@ def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkey
     cached = service._recent
     service.snapshot("owner")
     assert service._recent is cached
-    comms.send("owner", "peer", "New output")
+    comms.messaging.send("owner", "peer", "New output")
     assert service.snapshot("owner").groups[1].entries[0].detail.endswith("New output")
 
 
@@ -171,8 +173,8 @@ def collaboration_rows(comms, owner="owner"):
 def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
     comms = setup_wire(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Unfinished review notes")
-    comms.stop("peer")
-    comms.delete("peer")
+    comms.owners.stop("peer")
+    comms.threads.delete("peer")
 
     missing = collaboration_rows(comms)[0]
     assert missing.target == "peer", "Deleted identity must remain copyable"
@@ -197,8 +199,8 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
 def test_surviving_peer_can_end_unavailable_collaboration(tmp_path):
     comms = setup_wire(tmp_path)
     comms.relationships.edit("owner", "add", "peer", "Work to remember")
-    comms.stop("owner")
-    comms.delete("owner")
+    comms.owners.stop("owner")
+    comms.threads.delete("owner")
     row = collaboration_rows(comms, "peer")[0]
     assert (row.target, row.available, row.detail) == ("owner", False, "Work to remember")
     comms.relationships.edit("peer", "remove", "owner")
@@ -210,9 +212,9 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     comms = setup_wire(tmp_path)
     old_peer = comms.registry.require("peer")
     original = comms.relationships.edit("owner", "add", "peer", "Old incarnation's task")
-    comms.stop("peer")
-    comms.delete("peer")
-    comms.register(Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1))
+    comms.owners.stop("peer")
+    comms.threads.delete("peer")
+    comms.threads.register(Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1))
 
     row = collaboration_rows(comms)[0]
     assert row.target == "peer" and row.person is None and not row.available
@@ -234,10 +236,10 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
 def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms = setup_wire(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Retained historical declaration")
-    comms.stop("owner")
-    comms.delete("owner")
+    comms.owners.stop("owner")
+    comms.threads.delete("owner")
     comms.relationships.edit("origin", "add", "peer", "Independent work")
-    comms.register(
+    comms.threads.register(
         Thread("owner", frozenset(), str(tmp_path), created_at=original.owner_created + 1)
     )
     assert comms.relationships.collaborations("owner") == ()
@@ -258,10 +260,10 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
     comms.relationships.edit("owner", "add", "peer", "Review before rename")
     monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
-    comms.rename_self("reviewer")
+    comms.threads.rename_self("reviewer")
     assert collaboration_rows(comms)[0].target == "reviewer"
-    comms.stop("reviewer")
-    comms.delete("reviewer")
+    comms.owners.stop("reviewer")
+    comms.threads.delete("reviewer")
     comms.relationships.edit("owner", "add", "child")
     row = next(row for row in collaboration_rows(comms) if not row.available)
     assert row.target == "peer" and row.detail == "Review before rename"

@@ -21,13 +21,15 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms import proven_source_coverage as coverage_module
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import run_one_sealed_claim
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.declarations import MessageBus, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
     binding_store_path,
@@ -39,8 +41,8 @@ from agent_comms.native_source_cursor import (
     advance_current_native_cursor,
     read_current_native_cursor,
 )
-from agent_comms.operations import Comms
 from agent_comms.proven_source_coverage import read_proven_source_coverage
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -67,9 +69,9 @@ def _root(tmp_path: Path):
         ),
     ]
     for person in people:
-        comms.register(person)
-    root_id = comms.initialize_private_initial_protocol()
-    message = comms.send_initial_cohort("sender", "#team", "Compute 17+25.")
+        comms.threads.register(person)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
     initial = comms.bus.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -278,7 +280,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    second = comms.send_initial_cohort("sender", "#team", "Second source.")
+    second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
     lookup = stable_thread_lookup(people[1].created_at)
     bus = comms.bus
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -327,7 +329,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         )
-    second = comms.send_initial_cohort("sender", "alpha", "Second selected source.")
+    second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(runtime, "run_native_pi_turn", good)
@@ -363,7 +365,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
 def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path, monkeypatch):
     root, root_id, comms, _, people = _root(tmp_path)
     for index in range(8):
-        comms.send_initial_cohort("sender", "alpha", f"Additional source {index}")
+        comms.messaging.send_initial_cohort("sender", "alpha", f"Additional source {index}")
     lookup = stable_thread_lookup(people[1].created_at)
     scanned = 0
     original_rows = MessageBus._verified_private_rows_unlocked
@@ -406,12 +408,12 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     beta = Thread("beta", frozenset({"team"}), str(tmp_path), pid=os.getpid())
-    comms.register(beta)
+    comms.threads.register(beta)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         store.register_participant(
             stable_thread_lookup(beta.created_at), "beta", "beta", committed=True
         )
-    second = comms.send_initial_cohort("sender", "#team", "@beta please review.")
+    second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     assert (
@@ -582,8 +584,8 @@ async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, m
             is None
         )
     with pytest.raises(RelationViolationError, match="stable send binding"):
-        comms.send_initial_cohort("sender", "alpha", "Unbound retained alias.")
-    second = comms.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
+        comms.messaging.send_initial_cohort("sender", "alpha", "Unbound retained alias.")
+    second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     fresh = await run_one_sealed_claim(

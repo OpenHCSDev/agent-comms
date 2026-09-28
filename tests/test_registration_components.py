@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.declarations import Thread
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.threads import Thread
 
 
 def owner(path):
@@ -101,7 +101,7 @@ def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
 import json, os, sys
 from dataclasses import replace
 from pathlib import Path
-from agent_comms.declarations import Thread
+from agent_comms.threads import Thread
 from agent_comms.registration import Registration
 import time
 time.time = lambda: 1000.0

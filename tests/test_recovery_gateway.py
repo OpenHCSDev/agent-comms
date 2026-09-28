@@ -94,13 +94,13 @@ async def request(path: Path, raw: bytes = b'{"thread":"Alice"}\n') -> bytes:
 async def test_snapshot_offline_is_bounded_redacted_and_does_not_start_owner(
     private_root: Path, monkeypatch
 ):
-    from agent_comms import operations
+    from agent_comms.owner_lifecycle import OwnerLifecycle
 
     def forbidden(*args, **kwargs):
         raise AssertionError("snapshot must never launch Pi or mutate registry")
 
-    monkeypatch.setattr(operations.Comms, "ensure_owner", forbidden)
-    monkeypatch.setattr(operations.Comms, "start", forbidden)
+    monkeypatch.setattr(OwnerLifecycle, "ensure_owner", forbidden)
+    monkeypatch.setattr(OwnerLifecycle, "start", forbidden)
     db = private_root / "coordination.sqlite3"
     before = (db.stat().st_ino, db.stat().st_size, db.stat().st_mtime_ns)
     gateway = RecoveryGateway(private_root)

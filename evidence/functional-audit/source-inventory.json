@@ -1,0 +1,30 @@
+{
+  "sources": [
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+      "original_root": "/home/ts/.agent-comms",
+      "rows": 8400,
+      "channels": {
+        "#nra": 242,
+        "#openhcs": 0,
+        "#comms": 96
+      }
+    },
+    {
+      "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+      "original_root": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+      "rows": 20,
+      "channels": {
+        "#nra": 0,
+        "#openhcs": 0,
+        "#comms": 0
+      }
+    }
+  ],
+  "total_rows": 8420,
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "live_bus_bytes": 253675,
+  "last_seq": 52,
+  "checkpoint_version": null,
+  "checkpoint_file_exists": false
+}

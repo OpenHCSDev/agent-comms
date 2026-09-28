@@ -13,12 +13,15 @@ from agent_comms import agent_events as ae
 from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.declarations import AgentRuntimeInfo, Goal, Thread, _store_lock
+from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.owner_compaction_settings import PiCompactionDecision
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.registration import Registration
+from agent_comms.runtime_info import AgentRuntimeInfo
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Normal prepared native bundle required")
@@ -201,9 +204,9 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
 
     from agent_comms import backend
     from agent_comms.acp import CommsAgent
-    from agent_comms.declarations import RelationViolationError
+    from agent_comms.comms import wire
+    from agent_comms.errors import RelationViolationError
     from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.operations import wire
     from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
     if private_session:
@@ -249,7 +252,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 pid=os.getpid(),
             )
         )
-        comms.set_agent_info(
+        comms.agents.set_agent_info(
             "proj",
             model=info.model,
             context_used=info.context_used,
@@ -394,7 +397,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 )
                 # The previous real response updated usage to the tiny fixture
                 # result. Supply a new observed threshold crossing for cycle two.
-                comms.set_agent_info(
+                comms.agents.set_agent_info(
                     "proj",
                     model=info.model,
                     context_used=info.context_used,
@@ -436,7 +439,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
 
 
 async def test_correction_after_native_commit_never_mints_original_admission(tmp_path, monkeypatch):
-    from agent_comms.declarations import RelationViolationError
+    from agent_comms.errors import RelationViolationError
     from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 
     async with owner_fixture(tmp_path, monkeypatch) as (

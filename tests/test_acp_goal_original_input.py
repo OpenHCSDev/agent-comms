@@ -11,9 +11,9 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import wire
 
 
 async def owner(tmp_path, monkeypatch):
@@ -32,7 +32,7 @@ async def owner(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.attach_session("project", str(session))
+    comms.threads.attach_session("project", str(session))
     return agent, comms, session, updates
 
 
@@ -44,7 +44,7 @@ def disposition_rows(agent):
 async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeypatch):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
-    goal = comms.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+    goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
 
     async def events(*args, **kwargs):
         native_id = "a" * 32
@@ -91,7 +91,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
     if existing_goal:
-        comms.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
+        comms.goals.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
     original_emit = agent.inputs.emit_input_disposition
     replacement = None
     backend_calls = 0
@@ -100,7 +100,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         nonlocal replacement
         await original_emit(session_id, row)
         if replacement is None:
-            replacement = comms.update_goal(
+            replacement = comms.goals.update_goal(
                 "project", SetGoalAction(text="New authority"), owner_store=store
             )
 
@@ -133,7 +133,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
 async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
-    goal = comms.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+    goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
     boundaries = []
 
     async def events(*args, **kwargs):

@@ -5,10 +5,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import Thread
-from agent_comms.declarations import ActiveTurn, RelationViolationError, ThreadSort
-from agent_comms.operations import Comms
+from agent_comms.comms import Comms
+from agent_comms.display_order import ThreadSort
+from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import ActiveTurn
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
@@ -25,13 +27,13 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
         task="Original task",
         active_turn=ActiveTurn("old-turn", os.getpid()),
     )
-    old.register(live)
-    old.register(missing)
-    old.send("live", "missing", "Old pending work must not be replayed")
-    current.register(replace(live, title="Current live title"))
-    current.initialize_private_initial_protocol()
-    current.initialize_private_claim_protocol()
-    current.send_user_message("#comms", "Current message", worktree=str(tmp_path))
+    old.threads.register(live)
+    old.threads.register(missing)
+    old.messaging.send("live", "missing", "Old pending work must not be replayed")
+    current.threads.register(replace(live, title="Current live title"))
+    current.messaging.initialize_private_initial_protocol()
+    current.messaging.initialize_private_claim_protocol()
+    current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
     bus = current.bus._path.read_bytes()
     old_bus = old.bus._path.read_bytes()
@@ -47,7 +49,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.aliases["former-name"] == "missing"
     assert current.bus._path.read_bytes() == bus
     assert old.bus._path.read_bytes() == old_bus
-    assert not current.inbox("missing")
+    assert not current.bus.inbox("missing")
     first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
     assert current.registry.store.path.read_bytes() == first
@@ -58,13 +60,13 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
     old = Comms(tmp_path / "old")
     current = Comms(tmp_path / "current")
     original = Thread("owner", frozenset(), str(tmp_path))
-    current.register(original)
+    current.threads.register(original)
     good = Thread("good", frozenset(), str(tmp_path))
     conflicting = Thread("owner" if collision == "name" else "other", frozenset(), str(tmp_path))
     if collision == "incarnation":
         conflicting = replace(conflicting, created_at=original.created_at)
-    old.register(good)
-    old.register(conflicting)
+    old.threads.register(good)
+    old.threads.register(conflicting)
     if collision == "alias":
         current.registry.rename("owner", "renamed")
         conflicting = replace(conflicting, name="owner")
@@ -90,26 +92,26 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     old = Comms(tmp_path / "old")
     new = Comms(tmp_path / "new")
     for c in (old, new):
-        c.set_channel("comms", frozenset({"comms"}))
-    old.set_channel("nra", frozenset({"nra"}))
-    old.set_channel("openhcs", frozenset({"openhcs"}))
-    old.set_channel_metadata("#openhcs", parent="#nra", archived=False)
-    old.set_channel_any_mode("#nra", True)
-    old.set_channel_pinned("#nra", True)
-    old.set_channel_pinned("#all", True)
-    new.set_channel_sort("#comms", ThreadSort.LAST_ACTIVITY)
-    before = new.channel_catalog.resolve("#comms")
+        c.channels.set_channel("comms", frozenset({"comms"}))
+    old.channels.set_channel("nra", frozenset({"nra"}))
+    old.channels.set_channel("openhcs", frozenset({"openhcs"}))
+    old.channels.set_channel_metadata("#openhcs", parent="#nra", archived=False)
+    old.channels.set_channel_any_mode("#nra", True)
+    old.channels.set_channel_pinned("#nra", True)
+    old.channels.set_channel_pinned("#all", True)
+    new.channels.set_channel_sort("#comms", ThreadSort.LAST_ACTIVITY)
+    before = new.channels.catalog.resolve("#comms")
     old_files = {p: p.read_bytes() for p in old.root.glob("*.json")}
 
-    new.channel_catalog.restore_missing(old.channel_catalog)
-    assert new.channel_catalog.resolve("#comms") == before
-    assert not new.channel_catalog.resolve("#all").pinned
+    new.channels.catalog.restore_missing(old.channels.catalog)
+    assert new.channels.catalog.resolve("#comms") == before
+    assert not new.channels.catalog.resolve("#all").pinned
     for name in ("#nra", "#openhcs"):
-        assert new.channel_catalog.resolve(name) == old.channel_catalog.resolve(name)
+        assert new.channels.catalog.resolve(name) == old.channels.catalog.resolve(name)
     assert old_files == {p: p.read_bytes() for p in old.root.glob("*.json")}
-    new.channel_catalog.restore_missing(old.channel_catalog)
-    assert new.channel_catalog.resolve("#comms") == before
-    assert new.channel_catalog.resolve("#nra").any_mode
+    new.channels.catalog.restore_missing(old.channels.catalog)
+    assert new.channels.catalog.resolve("#comms") == before
+    assert new.channels.catalog.resolve("#nra").any_mode
 
 
 @pytest.mark.parametrize("repair_existing", [False, True])
@@ -124,9 +126,9 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
     live = Thread("live", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
     missing = Thread("missing", frozenset({"comms"}), str(tmp_path), pid=os.getpid())
-    old.register(missing)
-    current.register(live)
-    root_id = current.initialize_private_initial_protocol()
+    old.threads.register(missing)
+    current.threads.register(live)
+    root_id = current.messaging.initialize_private_initial_protocol()
     source = old.registry.snapshot()
     with MutationStore(str(current.root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -136,12 +138,12 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         if repair_existing:
             current.registry.restore_stopped(source, (missing.name,))
         message = (
-            current.send_user_message("#comms", "@live Reply once", worktree=str(tmp_path))
+            current.messaging.send_user_message("#comms", "@live Reply once", worktree=str(tmp_path))
             if repair_existing
             else None
         )
         bus_before = current.bus._path.read_bytes() if message else None
-        current.restore_stopped(source, (missing.name,))
+        current.threads.restore_stopped(source, (missing.name,))
         snapshot = current.registry.snapshot()
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
         assert snapshot.threads[missing.name].pid == 0
@@ -153,7 +155,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         if bus_before is not None:
             assert current.bus._path.read_bytes() == bus_before
         else:
-            message = current.send_user_message(
+            message = current.messaging.send_user_message(
                 "#comms", "@live Reply once", worktree=str(tmp_path)
             )
         accept_initial_cohort(current.bus, root_id, message.seq, store)
@@ -171,12 +173,12 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             ).fetchall()
         ] == [(live.name, "full_pending")]
         snapshot = current.registry.snapshot()
-        assert current.restore_stopped(source, (missing.name,)) == ()
+        assert current.threads.restore_stopped(source, (missing.name,)) == ()
         assert current.registry.snapshot() == snapshot
 
 
 def test_public_restoration_does_not_create_coordinator(tmp_path):
     old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
-    old.register(Thread("missing", frozenset({"comms"}), str(tmp_path)))
-    assert current.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
+    old.threads.register(Thread("missing", frozenset({"comms"}), str(tmp_path)))
+    assert current.threads.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
     assert not (current.root / "coordination.sqlite3").exists()

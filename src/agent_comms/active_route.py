@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .declarations import RelationViolationError, _store_lock, unique_wire_object
+from .bus_publication import unique_wire_object
+from .errors import RelationViolationError
+from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .supervised_cutover import ArchiveReceipt
@@ -301,7 +303,7 @@ def rotate_active_route(
     Pending and UNKNOWN inputs stay in the archived source; none are replayed.
     """
     from .cohort_foreground import _preflight
-    from .operations import Comms
+    from .comms import Comms
     from .supervised_cutover import _require_unchanged_archive_source
 
     path = active_route_path() if path is None else path
@@ -353,7 +355,7 @@ def withdraw_active_route(
     The caller must fence explicit-root ingress and stop Toad and ACP owners.
     An unconfirmed removal is never retried automatically.
     """
-    from .operations import Comms
+    from .comms import Comms
     from .supervised_cutover import archive_stopped_root
 
     path = active_route_path() if path is None else path

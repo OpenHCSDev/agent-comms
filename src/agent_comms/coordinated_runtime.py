@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .claim_states import ClaimState, CompletedClaim, IgnoredClaim
+from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import ExecutionOrigin, OwnerFence, WakeClaim
@@ -45,19 +46,13 @@ from .coordination_store import (
     StaleFence,
     prepare_fence_token,
 )
-from .declarations import (
-    MessageBus,
-    MessageType,
-    RelationViolationError,
-    Thread,
-    TurnLeaseFence,
-    _require_no_private_owner_rename,
-    _store_lock,
-)
 from .diagnostics import record_terminal_failure
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeAdmission
+from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
+from .message_bus import MessageBus
+from .messages import MessageType
 from .native_pi import (
     NativeContextProof,
     NativePiTerminalFailure,
@@ -76,16 +71,19 @@ from .native_prompt_binding import (
 )
 from .native_prompt_send import PromptAdmissionBusy
 from .native_source_cursor import advance_current_native_cursor
-from .operations import Comms
 from .optional_awareness_projection import OptionalAwarenessProjection
+from .private_registry_guard import _require_no_private_owner_rename
 from .private_sidecar import SidecarCommitUnknown, native_request_digest
 from .selected_write_plan import PlannedWrite
+from .store_files import _store_lock
+from .threads import Thread
+from .turn_lease import TurnLeaseFence
 from .wake import WakeDecision, derive_exact_reply_target
 from .wake_candidate_index import WakeCandidateIndex
 from .wake_injection import render_selected_wake_frame
 
 if TYPE_CHECKING:
-    from .selected_tool_broker import SelectedToolIntent  # type: ignore[import-not-found]
+    from .selected_tool_broker import SelectedToolIntent
 
 _MAX_PROMPT_BYTES = 32 * 1024
 _SUPPLEMENT_BUILD_SECONDS = 0.25
@@ -1076,7 +1074,7 @@ async def run_one_sealed_claim(
             raise StaleFence(
                 "selected owner has an unresolved execution; new claims remain pending"
             )
-        model_selection = comms.resolve_thread_model(owner.name)
+        model_selection = comms.threads.resolve_thread_model(owner.name)
         if not model_selection or "/" not in model_selection:
             raise IdentityConflict("Selected owner has no configured provider/model")
         provider, model = model_selection.split("/", 1)
@@ -1606,7 +1604,7 @@ def _publish_native_failure(
     )
     target = derive_exact_reply_target(initial.message)
     assert target is not None
-    comms.send(
+    comms.messaging.send(
         owner.name,
         target,
         f"Message processing failed: {description} "

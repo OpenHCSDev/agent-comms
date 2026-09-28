@@ -279,8 +279,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             return
         owner = None
         if surface.startswith("acp"):
-            from agent_comms import wire
             from agent_comms.acp import CommsAgent
+            from agent_comms.comms import wire
 
             owner = CommsAgent(
                 wire(root / "wire"),
@@ -314,7 +314,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             owner.inputs.drain_tasks["project"].cancel()
             await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
             if surface in {"acp_goal_original", "acp_terminal_goal"}:
-                owner._comms.update_goal(
+                owner._comms.goals.update_goal(
                     "project",
                     SetGoalAction(text="Continue useful work"),
                     owner_store=owner.turns.open_goal_store(),
@@ -590,7 +590,7 @@ async def _mounted_send_now(
             lambda: any("NEW_FINAL" in block.source for block in view.query(AgentResponse)), 3
         )
         if goal_mode:
-            from agent_comms import wire
+            from agent_comms.comms import wire
 
             comms = wire(root / "wire")
             await until(lambda: not view.queued_prompts and len(requests) == 3)

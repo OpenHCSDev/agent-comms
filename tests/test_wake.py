@@ -6,18 +6,14 @@ from pathlib import Path
 import pytest
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
+from agent_comms.comms import wire
 from agent_comms.coordination import MessageAudience
-from agent_comms.declarations import (
-    MembershipChange,
-    Message,
-    MessageType,
-    Thread,
-    ThreadRole,
-)
 from agent_comms.mentions import ThreadMention
+from agent_comms.messages import MembershipChange, Message, MessageType
 from agent_comms.obligation_states import SilentResponse
-from agent_comms.operations import wire
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 from agent_comms.wake import (
     ControlClassification,
     NoWakeDecision,
@@ -379,10 +375,10 @@ def test_exact_stored_channel_and_alias_routes_no_wildcard_or_silence_inference(
 ) -> None:
     comms = wire(tmp_path / "wire")
     for name in ("sender", "alpha", "beta"):
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path)))
-    channel = comms.send_message("sender", "#team", "channel note")
-    broadcast = comms.send_message("sender", "broadcast", "everyone please respond")
-    dm = comms.send_message("sender", "alpha", "direct note")
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+    channel = comms.messaging.send_message("sender", "#team", "channel note")
+    broadcast = comms.messaging.send_message("sender", "broadcast", "everyone please respond")
+    dm = comms.messaging.send_message("sender", "alpha", "direct note")
     assert broadcast.target == "#all"  # Alias was canonicalized by bus, not wake.
     assert [derive_exact_reply_target(item) for item in (channel, broadcast, dm)] == [
         "#team",
@@ -400,13 +396,13 @@ def test_exact_stored_channel_and_alias_routes_no_wildcard_or_silence_inference(
 def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Path) -> None:
     comms = wire(tmp_path / "wire")
     for name in ("sender", "alpha"):
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path)))
-    message = comms.send_message("sender", "#team", "status update")
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+    message = comms.messaging.send_message("sender", "#team", "status update")
     manifest = audience(message, MEMBERS[:1])
     before = message.to_wire()
     bus_before = comms.bus._path.read_bytes()
-    high_water = comms.message_high_water()
-    pending = comms.pending_count("alpha")
+    high_water = comms.bus.latest_sequence()
+    pending = comms.bus.pending_count("alpha")
     live_policy = message.response_policy
     live_starts = message.starts_turn_for("alpha")
     live_reply = message.reply_target
@@ -419,8 +415,8 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     assert derive_exact_reply_target(message) == "#team"
     assert message.to_wire() == before
     assert comms.bus._path.read_bytes() == bus_before
-    assert comms.message_high_water() == high_water
-    assert comms.pending_count("alpha") == pending
+    assert comms.bus.latest_sequence() == high_water
+    assert comms.bus.pending_count("alpha") == pending
     assert (message.response_policy, message.starts_turn_for("alpha"), message.reply_target) == (
         live_policy,
         live_starts,

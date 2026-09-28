@@ -22,7 +22,7 @@ async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_pa
         assert snapshot["historicalCount"] == 2 and snapshot["historicalInputs"] == []
         # Without live owner context, the compatibility projection cannot claim
         # that current-looking inputs are earlier or eligible for notice dismissal.
-        assert len(owner._comms.input_delivery(session)["inputs"]) == 3
+        assert len(owner._comms.goals.input_delivery(session)["inputs"]) == 3
         cleared = await proxy.request("dismiss_historical_inputs")
         assert cleared["inputs"] == snapshot["inputs"]
         assert cleared["historicalCount"] == 0 and cleared["dismissedHistoricalCount"] == 2
@@ -38,7 +38,7 @@ async def test_owner_queue_projection_clear_preserves_pending_and_unknown(tmp_pa
         assert owner.inputs.delivery_cursors.path.read_bytes() == cursor_before
         assert len(owner.inputs.pending_turns[session]) == 1 and not owner.inputs.backend_inboxes
         # A new input arriving after the clear cannot inherit a cleared notice.
-        second = owner._comms.send_message("peer", session, "A second new input")
+        second = owner._comms.messaging.send_message("peer", session, "A second new input")
         await owner.inputs.drain_inbox(session)
         fresh = await proxy.request("input_dispositions")
         assert [r["sequence"] for r in fresh["inputs"]] == [incoming.seq, second.seq]

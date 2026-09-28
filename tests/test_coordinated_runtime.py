@@ -21,6 +21,7 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.claim_states import CompletedClaim, FailedClaim, IgnoredClaim, TriagePendingClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -39,12 +40,12 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from agent_comms.declarations import MessageBus, Thread
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.operations import Comms
 from agent_comms.registration import Registration
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
 from agent_comms.wake_policy import PassiveWake
@@ -107,13 +108,13 @@ def _root(
         ),
     ]
     for person in people:
-        comms.register(person)
-    root_id = comms.initialize_private_initial_protocol()
+        comms.threads.register(person)
+    root_id = comms.messaging.initialize_private_initial_protocol()
     if claims:
-        comms.initialize_private_claim_protocol()
+        comms.messaging.initialize_private_claim_protocol()
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
-    message = comms.send_initial_cohort("sender", target, body)
+    message = comms.messaging.send_initial_cohort("sender", target, body)
     initial = comms.bus.read_initial_cohort(root_id, message.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -312,7 +313,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert ignored[0].execution_id is None
         # Fake journal contract checks the join only, not native acceptance.
         assert ignored[0].expected_prompt_equality_established
-    assert len(comms.channel_history("#team")) == 1
+    assert len(comms.views.channel_history("#team")) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", second)
     beta = await run_one_sealed_claim(
@@ -326,7 +327,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert '"target":"#team"' in beta_calls[1][1]
     assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]
     assert "This frame is a read-only projection, not file-write permission" in beta_calls[1][1]
-    response = comms.channel_history("#team")[-1]
+    response = comms.views.channel_history("#team")[-1]
     assert response.body == "42" and response.sender == "beta"
     assert "_agent_comms_private_v1" not in response.to_wire()
     assert (
@@ -370,7 +371,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
         is None
     )
     assert not calls  # No-wake has no prompt frame or model invocation.
-    assert len(comms.channel_history("#team")) == 1
+    assert len(comms.views.channel_history("#team")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
@@ -395,7 +396,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
     forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
     with pytest.raises(IdentityConflict, match="selected N/K"):
         render_selected_wake_frame(initial, forged, people[1], phase="full")
-    assert len(comms.channel_history("#team")) == 1  # Framing never publishes a row.
+    assert len(comms.views.channel_history("#team")) == 1  # Framing never publishes a row.
 
 
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
@@ -408,7 +409,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     assert '"wake_mode":"bounded_triage"' in frame
     assert initial.message.body not in frame
     assert "No response obligation exists until triage engages" in frame
-    assert len(comms.channel_history("#team")) == 1
+    assert len(comms.views.channel_history("#team")) == 1
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
@@ -794,7 +795,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     # These are committed frozen direct sources for another recipient. They
     # must not become beta's work or move beta's proven-injected cursor.
     for index in range(101):
-        comms.send_initial_cohort("sender", "alpha", f"unrelated {index}")
+        comms.messaging.send_initial_cohort("sender", "alpha", f"unrelated {index}")
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
@@ -803,7 +804,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     )
     assert outcome is not None and outcome.response_message_id
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
-    assert len(calls) == 1 and comms.dm_history("sender", "beta")[-1].body
+    assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         cursor = read_current_native_cursor(
             comms.bus, store, wire_root_id=root_id, owner_name="beta"
@@ -1118,7 +1119,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
         is None
     )
     assert len(calls) == 1
-    history = comms.channel_history("#team")
+    history = comms.views.channel_history("#team")
     assert len(history) == 2 and history[-1].notice
     assert "input is uncertain" in history[-1].body
     with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -1149,7 +1150,7 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
         )
-    rows = comms.channel_history("#team")
+    rows = comms.views.channel_history("#team")
     assert len(rows) == 2 and rows[-1].notice
     assert "input is uncertain" in rows[-1].body
 
@@ -1164,7 +1165,7 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
     async def register_session(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("alpha")
-        comms.register(replace(current, session_file=str(root / "metadata.jsonl")))
+        comms.threads.register(replace(current, session_file=str(root / "metadata.jsonl")))
         return result
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", register_session)
@@ -1185,7 +1186,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
     async def register_session(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
-        comms.register(replace(current, session_file=str(root / "metadata.jsonl")))
+        comms.threads.register(replace(current, session_file=str(root / "metadata.jsonl")))
         return result
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", register_session)
@@ -1210,7 +1211,7 @@ async def test_project_change_during_native_full_turn_denies_response(
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
         before = comms.registry.snapshot().admission_generations["beta"]
-        comms.register(replace(current, worktree=str(other_project)))
+        comms.threads.register(replace(current, worktree=str(other_project)))
         assert comms.registry.snapshot().admission_generations["beta"] == before
         return result
 
@@ -1242,7 +1243,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
         )
-    assert len(comms.channel_history("#team")) == 1
+    assert len(comms.views.channel_history("#team")) == 1
 
 
 @pytest.mark.parametrize(
@@ -1265,7 +1266,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
         )
-    assert len(calls) == 1 and len(comms.channel_history("#team")) == 1
+    assert len(calls) == 1 and len(comms.views.channel_history("#team")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
@@ -1292,7 +1293,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
         )
-    assert len(comms.channel_history("#team")) == 1
+    assert len(comms.views.channel_history("#team")) == 1
     assert not comms.registry.status("alpha").active
     assert comms.registry.require("alpha").active_turn is None
 
@@ -1377,8 +1378,8 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    comms.register(
+    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
         Thread(
             "beta",
             frozenset({"team"}),
@@ -1388,8 +1389,8 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
         )
     )
     comms.registry.rename("beta", "gamma")
-    root_id = comms.initialize_private_initial_protocol()
-    incoming = comms.send_initial_cohort("sender", "gamma", "Compute 17+25")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
     initial = comms.bus.read_initial_cohort(root_id, incoming.seq)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -1524,7 +1525,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         if mutation == "finish_turn":
             active = comms.registry.require("beta").active_turn
             assert active is not None
-            comms.finish_turn(comms.registry.require("beta").turn_lease)
+            comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
         else:
             comms.registry.unregister("beta")
             comms.registry.heartbeat("beta")
@@ -1584,7 +1585,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         assert comms.registry.status("beta").active
 
     if boundary == "before_run":
-        comms.begin_turn("beta", "old-authorized-turn")
+        comms.agents.begin_turn("beta", "old-authorized-turn")
         revoke_and_restore()
         with pytest.raises(StaleFence, match="stopped or changed"):
             await run_one_sealed_claim(
@@ -1666,7 +1667,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
 
 async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, monkeypatch) -> None:
     root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
-    comms.begin_turn("beta", "existing-real-turn")
+    comms.agents.begin_turn("beta", "existing-real-turn")
     original = comms.registry.require("beta").active_turn
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
@@ -1688,7 +1689,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
             ).fetchone()[0]
             == 0
         )
-    comms.finish_turn(comms.registry.require("beta").turn_lease)
+    comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
     result = await run_one_sealed_claim(
         root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     )
@@ -1767,7 +1768,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     lookup = stable_thread_lookup(people[1].created_at)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         for number in range(100):
-            message = comms.send_initial_cohort(
+            message = comms.messaging.send_initial_cohort(
                 "sender", "#team", f"Bounded selected-page item {number}"
             )
             accept_initial_cohort(comms.bus, root_id, message.seq, store)
@@ -1878,7 +1879,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         await run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         )
-    notice = comms.full_history()[-1]
+    notice = comms.views.full_history()[-1]
     assert notice.notice and notice.type.value == "alert"
     assert notice.target == ("sender" if direct else "#team")
     assert "The usage limit has been reached" in notice.body
@@ -1901,7 +1902,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         is None
     )
     assert len(calls) == before  # Failed input never replayed.
-    fresh = comms.send_initial_cohort("sender", "beta", "New independent message")
+    fresh = comms.messaging.send_initial_cohort("sender", "beta", "New independent message")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
@@ -1913,7 +1914,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
 
 
 async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch):
-    from agent_comms.declarations import Goal
+    from agent_comms.goals import Goal
 
     root, root_id, comms, _initial, _people = _root(tmp_path)
     owner = comms.registry.require("beta")

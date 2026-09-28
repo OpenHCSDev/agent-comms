@@ -15,8 +15,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from .channel_targets import BuiltinChannel
 from .coordination import MAX_IDENTIFIER_CHARS
-from .declarations import BuiltinChannel, Message
+from .messages import Message
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096

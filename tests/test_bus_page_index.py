@@ -8,8 +8,11 @@ import sqlite3
 
 import pytest
 
-from agent_comms import Message, MessageBus, MessageType, Registration, Thread
-from agent_comms.declarations import _iter_jsonl_records
+from agent_comms import Registration
+from agent_comms.message_bus import MessageBus
+from agent_comms.messages import Message, MessageType
+from agent_comms.store_files import _iter_jsonl_records
+from agent_comms.threads import Thread
 
 
 def _bus(tmp_path) -> MessageBus:

@@ -17,22 +17,25 @@ from agent_comms import (
     active_route,
     cli,
     cohort_foreground,
-    operations,
+    owner_lifecycle,
     private_nk_entrypoint,
     supervised_cutover,
     worker,
 )
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import (
     IdentityConflict,
     MutationStore,
     PublicationActivationBlocked,
 )
-from agent_comms.declarations import Message, MessageType, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.messages import Message, MessageType
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
 
@@ -64,9 +67,9 @@ def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
 
     root = tmp_path / "claim-wire"
     root.mkdir(mode=0o700)
-    comms = operations.Comms(root)
-    root_id = comms.initialize_private_initial_protocol()
-    comms.initialize_private_claim_protocol()
+    comms = Comms(root)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_claim_protocol()
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     selected = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
     assert selected is not None
@@ -145,9 +148,9 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
         monkeypatch.delenv(name, raising=False)
-    routed = operations.wire()
+    routed = wire()
     assert routed.root == root
-    assert routed._private_nk_launch == (root, root_id, tmp_path)
+    assert routed.owners._private_nk_launch == (root, root_id, tmp_path)
     selected = private_nk_entrypoint.private_nk_from_environment()
     assert selected is not None
     assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
@@ -157,7 +160,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     )
     legacy = tmp_path / "explicit-legacy"
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
-    assert operations.wire().root == legacy
+    assert wire().root == legacy
     assert private_nk_entrypoint.private_nk_from_environment() is None
 
 
@@ -168,11 +171,11 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     active_route.publish_active_route(active_route.ActiveRoute(root, root_id, tmp_path))
-    comms = operations.wire()
+    comms = wire()
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
-    comms.register(
+    comms.threads.register(
         Thread("resumable", frozenset(), str(tmp_path), pid=0, session_file=str(saved))
     )
     launched: list[subprocess.Popen] = []
@@ -192,9 +195,9 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
         launched.append(process)
         return process
 
-    monkeypatch.setattr(operations.subprocess, "Popen", provider_free_child)
+    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", provider_free_child)
     try:
-        result = comms.start("resumable")
+        result = comms.owners.start("resumable")
         assert result.pid == launched[0].pid
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
         assert captured[0][ROOT_ID_ENV] == root_id
@@ -221,7 +224,7 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert directory.stat().st_mode & 0o777 == 0o700
     assert route_file.stat().st_mode & 0o777 == 0o600
     assert active_route.read_active_route() == route
-    assert operations.wire().root == root
+    assert wire().root == root
     assert private_nk_entrypoint.private_nk_from_environment().validated_root == root
     original = route_file.read_bytes()
     with pytest.raises(ValueError, match="already installed"):
@@ -237,20 +240,20 @@ def test_rotate_stopped_private_route_without_replaying_old_inputs(
     new_root = tmp_path / "new-private"
     old_root.mkdir(mode=0o700)
     new_root.mkdir(mode=0o700)
-    old = operations.Comms(old_root)
+    old = Comms(old_root)
     old.registry.register(
         Thread("owner", frozenset(), str(tmp_path), pid=0),
         StoppedThreadStatus(),
     )
-    old_id = old.initialize_private_initial_protocol()
-    old.send_user_message("owner", "pending old message", worktree=str(tmp_path))
+    old_id = old.messaging.initialize_private_initial_protocol()
+    old.messaging.send_user_message("owner", "pending old message", worktree=str(tmp_path))
     InputDispositions(old_root).record(
         "old:unknown", seq=None, owner="owner", admission=1,
         target="owner", text="uncertain old input",
     )
-    new = operations.Comms(new_root)
-    new_id = new.initialize_private_initial_protocol()
-    new.initialize_private_claim_protocol()
+    new = Comms(new_root)
+    new_id = new.messaging.initialize_private_initial_protocol()
+    new.messaging.initialize_private_claim_protocol()
     route_file = tmp_path / "route-state" / "active-route.json"
     old_route = active_route.ActiveRoute(old_root, old_id, tmp_path)
     new_route = active_route.ActiveRoute(new_root, new_id, tmp_path)
@@ -258,14 +261,14 @@ def test_rotate_stopped_private_route_without_replaying_old_inputs(
     active_route.publish_active_route(old_route, route_file)
     archive = supervised_cutover.archive_stopped_root(old, tmp_path / "archive" / "old")
     if late_old_message:
-        old.send_user_message("owner", "late old message", worktree=str(tmp_path))
+        old.messaging.send_user_message("owner", "late old message", worktree=str(tmp_path))
         with pytest.raises(RelationViolationError, match="changed after its cutover archive"):
             active_route.rotate_active_route(old_route, new_route, archive, route_file)
         assert active_route.read_active_route(route_file) == old_route
     else:
         active_route.rotate_active_route(old_route, new_route, archive, route_file)
         assert active_route.read_active_route(route_file) == new_route
-        assert new.message_high_water() == 0
+        assert new.bus.latest_sequence() == 0
         assert archive.pending_messages == archive.unknown_inputs == 1
         assert (archive.path / "bus.jsonl").read_bytes() == (old_root / "bus.jsonl").read_bytes()
 
@@ -334,9 +337,9 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
 
 def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
-    legacy = operations.Comms(tmp_path / ".agent-comms")
+    legacy = Comms(tmp_path / ".agent-comms")
     for name in ("sender", "receiver"):
-        legacy.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        legacy.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
     route_file = tmp_path / "route-state" / "active-route.json"
     route = active_route.ActiveRoute(root, root_id, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -348,7 +351,7 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     entered_send = threading.Event()
     release_send = threading.Event()
     exclusive_requested = threading.Event()
-    original_send = legacy.send
+    original_send = legacy.messaging.send
     original_flock = active_route.fcntl.flock
 
     def delayed_send(*args):
@@ -361,7 +364,7 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
             exclusive_requested.set()
         return original_flock(fd, operation)
 
-    monkeypatch.setattr(legacy, "send", delayed_send)
+    monkeypatch.setattr(legacy.messaging, 'send', delayed_send)
     monkeypatch.setattr(active_route.fcntl, "flock", observed_flock)
     with ThreadPoolExecutor(max_workers=2) as executor:
         sending = executor.submit(
@@ -375,20 +378,20 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
         assert sending.result(timeout=5) == 0
         publishing.result(timeout=5)
     assert route_file.exists()
-    assert [message.body for message in legacy.inbox("receiver")] == ["old"]
+    assert [message.body for message in legacy.bus.inbox("receiver")] == ["old"]
     assert cli.main(["send", "--from", "sender", "--to", "receiver", "--body", "late"]) == 1
-    assert [message.body for message in legacy.inbox("receiver")] == ["old"]
+    assert [message.body for message in legacy.bus.inbox("receiver")] == ["old"]
 
 
 def test_withdraw_route_archives_stopped_private_root(tmp_path, monkeypatch):
     root = tmp_path / "private-wire"
-    comms = operations.Comms(root)
+    comms = Comms(root)
     process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
-        comms.register(Thread("sender", frozenset(), str(tmp_path), pid=process.pid))
-        comms.register(Thread("alpha", frozenset({"team"}), str(tmp_path), pid=process.pid))
-        root_id = comms.initialize_private_initial_protocol()
-        comms.send_initial_cohort("sender", "#team", "pending private message")
+        comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=process.pid))
+        comms.threads.register(Thread("alpha", frozenset({"team"}), str(tmp_path), pid=process.pid))
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.send_initial_cohort("sender", "#team", "pending private message")
         InputDispositions(root).record(
             "rollback:unknown", seq=None, owner="alpha", admission=1,
             target="alpha", text="uncertain private input",
@@ -442,19 +445,19 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
     route_file = tmp_path / "route-state" / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    legacy = operations.Comms(tmp_path / ".agent-comms")
+    legacy = Comms(tmp_path / ".agent-comms")
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
     process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
-        legacy.register(
+        legacy.threads.register(
             Thread("sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
                    session_file=str(saved))
         )
-        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
-        legacy.register(Thread("observer", frozenset(), str(tmp_path), pid=0))
-        legacy.send("sender", "receiver", "old pending")
+        legacy.threads.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
+        legacy.threads.register(Thread("observer", frozenset(), str(tmp_path), pid=0))
+        legacy.messaging.send("sender", "receiver", "old pending")
         InputDispositions(legacy.root).record(
             "cutover:unknown", seq=None, owner="sender", admission=1,
             target="sender", text="uncertain old input",
@@ -474,7 +477,7 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
         process.terminate()
         process.wait(timeout=5)
         legacy.registry.unregister("sender")
-        private = operations.Comms(tmp_path / "fresh-private")
+        private = Comms(tmp_path / "fresh-private")
         copied = threading.Event()
         release = threading.Event()
         shared_requested = threading.Event()
@@ -513,13 +516,13 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
                 cli.main,
                 ["send", "--from", "observer", "--to", "receiver", "--body", "late"],
             )
-            direct = executor.submit(legacy.send, "observer", "receiver", "direct late")
+            direct = executor.submit(legacy.messaging.send, "observer", "receiver", "direct late")
             raw = executor.submit(
                 legacy.bus.publish,
                 Message("observer", "receiver", "raw late", MessageType.INFO),
             )
             human = executor.submit(
-                legacy.send_user_message, "receiver", "human late", worktree=str(tmp_path)
+                legacy.messaging.send_user_message, "receiver", "human late", worktree=str(tmp_path)
             )
             assert shared_requested.wait(timeout=5)
             assert not route_file.exists()
@@ -535,8 +538,8 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
         assert archive.pending_messages == archive.unknown_inputs == 1
         assert private.registry.require("sender").pid == 0
         assert not (private.root / "bus.jsonl").exists()
-        assert [item.body for item in legacy.inbox("receiver")] == ["old pending"]
-        assert operations.wire()._private_nk_launch == (
+        assert [item.body for item in legacy.bus.inbox("receiver")] == ["old pending"]
+        assert wire().owners._private_nk_launch == (
             private.root, route.wire_root_id, tmp_path,
         )
     finally:
@@ -552,7 +555,7 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     with pytest.raises(ValueError, match="invalid JSON"):
-        operations.wire()
+        wire()
     with pytest.raises(ValueError, match="invalid JSON"):
         private_nk_entrypoint.private_nk_from_environment()
     assert cli.main(["threads"]) == 1
@@ -631,7 +634,7 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     def capture_wire(pinned_root):
         seen.append(pinned_root)
         assert pinned_root == root
-        assert operations.wire(pinned_root).root == root
+        assert wire(pinned_root).root == root
         raise StopBeforeOwnerAttachmentError
 
     monkeypatch.setattr(cohort_foreground, "_trusted_package", trust_and_switch)
@@ -656,7 +659,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
     other.mkdir()
     link = tmp_path / "public-link"
     link.symlink_to(physical, target_is_directory=True)
-    comms = operations.Comms(link)
+    comms = Comms(link)
     seen = []
 
     class StopBeforeSpawnError(Exception):
@@ -667,20 +670,20 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
         link.unlink()
         link.symlink_to(other, target_is_directory=True)
         # Actual child env continues to select physical A, not retargeted B.
-        assert operations.wire(env["AGENT_COMMS_ROOT"]).root == physical
+        assert wire(env["AGENT_COMMS_ROOT"]).root == physical
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
+        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [str(physical)]
     assert not (other / "registry.json").exists()
 
 
 def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
-    comms = operations.Comms(root)
-    comms.pin_private_nk_launch(root, root_id, tmp_path)
+    comms = Comms(root)
+    comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     other = tmp_path / "other"
     other.mkdir()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(other))
@@ -695,20 +698,20 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
         seen.append((env["AGENT_COMMS_ROOT"], env[ROOT_ID_ENV], env[PACKAGE_ENV]))
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
+        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [(str(root), root_id, str(tmp_path))]
     assert not (other / "registry.json").exists()
 
 
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
-    comms.pin_private_nk_launch(root, root_id, tmp_path)
-    comms.register(Thread("late-owner", frozenset(), str(tmp_path)))
+    comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
+    comms.threads.register(Thread("late-owner", frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
     lookup = stable_thread_lookup(late.created_at)
-    message = comms.send_initial_cohort("sender", "late-owner", "fresh private task")
+    message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(IdentityConflict, match="not registered"):
             store.participant(lookup)
@@ -726,8 +729,8 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
             assert participant.committed and participant.owner_thread == "late-owner"
         raise StopBeforeSpawn
 
-    monkeypatch.setattr(operations.subprocess, "Popen", intercept)
+    monkeypatch.setattr(owner_lifecycle.subprocess, "Popen", intercept)
     with pytest.raises(StopBeforeSpawn):
-        comms.start("late-owner", agent_bin="pi")
+        comms.owners.start("late-owner", agent_bin="pi")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1

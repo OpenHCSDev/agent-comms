@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
-    from .declarations import Message
+    from .messages import Message
     from .wake import NoWakeDecision, WakeDecision
+
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
 _PRIVATE_WIRE_PREFIX: Final = "_agent_comms_private"
@@ -155,7 +156,7 @@ def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> 
     """
     from .audience_manifest import FrozenRecipient, freeze_audience
     from .coordination import POLICY_VERSION, RESOLVER_VERSION
-    from .declarations import Message
+    from .messages import Message
     from .wake import ControlClassification, resolve_wake_cohort
 
     if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {PRIVATE_WIRE_FIELD}:
@@ -269,3 +270,16 @@ def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> 
         RESOLVER_VERSION,
         POLICY_VERSION,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class HumanOrigin:
+    """Cooperative local UI origin, checked against the registered USER under lock.
+
+    This is not a cryptographic credential against another process of this UID.
+    It never grants an executable owner, claim, tool, or selected source authority.
+    """
+
+    sender: str
+    created_at: float
+    worktree: str

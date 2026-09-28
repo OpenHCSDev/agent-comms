@@ -69,7 +69,7 @@ def failed_owner(directory, output, exit_allowed):
         row = store._connection.execute("SELECT * FROM native_runtime_inputs").fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
     os.environ["AGENT_COMMS_THREAD"] = "beta"
-    comms.release("beta")
+    comms.owners.release("beta")
     output.put((str(root), execution_id, input_id))
     if not exit_allowed.wait(10):
         raise TimeoutError("test failed to release fixture process")
@@ -219,7 +219,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
         await runtime.run_one_sealed_claim(
             root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
         )
-    source = comms.send_initial_cohort("sender", "beta", "New independent request")
+    source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
@@ -237,13 +237,13 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
 def replacement_release(root):
     from dataclasses import replace
 
-    from agent_comms.operations import Comms
+    from agent_comms.comms import Comms
 
     comms = Comms(root)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, pid=os.getpid()), new_owner=True)
     os.environ["AGENT_COMMS_THREAD"] = "beta"
-    comms.release("beta")
+    comms.owners.release("beta")
 
 
 def test_later_attested_release_still_fences_original_admission(released_failure):

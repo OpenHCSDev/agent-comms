@@ -14,6 +14,8 @@ import stat
 import struct
 from pathlib import Path
 
+from .errors import RelationViolationError
+
 _MAGIC = b"ACRG"
 _VERSION = 1
 _PENDING = 1
@@ -26,8 +28,7 @@ _EMPTY = hashlib.sha256(b"absent\0").digest()
 
 
 def _reject(detail: str) -> None:
-    # Import lazily because declarations owns the public exception semantics.
-    from .declarations import RelationViolationError
+    from .errors import RelationViolationError
 
     raise RelationViolationError(f"Private registry guard {detail}")
 
@@ -266,3 +267,13 @@ class PrivateRegistryGuard:
             self._write(fd, 1, _record(self.root_id, 1, _COMMITTED, first[2]))
         finally:
             os.close(fd)
+
+
+PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
+
+
+def _require_no_private_owner_rename(root: Path) -> None:
+    """A crashed cross-store rename cannot publish or run a selected input."""
+    intent = root / PRIVATE_OWNER_RENAME_PENDING
+    if intent.exists() or intent.is_symlink():
+        raise RelationViolationError("Private owner rename is pending; inspect both authorities.")

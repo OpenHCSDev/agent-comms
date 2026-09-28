@@ -18,9 +18,9 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.declarations import ActivityState
+from agent_comms.activity import ActivityState
+from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import wire
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -367,30 +367,30 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                             .get("phase")
                         )
                         if phase == "end":
-                            resumed_activity.append(comms.activity_of("project"))
+                            resumed_activity.append(comms.agents.activity_of("project"))
 
                 owner.on_connect(Client())
                 await owner.new_session(str(project))
                 owner.inputs.drain_tasks["project"].cancel()
                 await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
-                comms.attach_session("project", str(session))
+                comms.threads.attach_session("project", str(session))
                 turn = asyncio.create_task(
                     owner.inputs.run_owned_input("project", "project", "Reply OK.")
                 )
                 try:
                     assert await asyncio.to_thread(summary_entered.wait, 10)
-                    activity = comms.activity_of("project")
+                    activity = comms.agents.activity_of("project")
                     assert activity.state is ActivityState.WORKING
                     assert activity.detail == "Compacting context"
                     view = next(
-                        item for item in comms.thread_views() if item.thread.name == "project"
+                        item for item in comms.views.thread_views() if item.thread.name == "project"
                     )
                     assert view.presentation.summary == "Working · Compacting context"
                     release_summary.set()
                     await asyncio.wait_for(turn, timeout=30)
                     assert resumed_activity and resumed_activity[-1].state is ActivityState.THINKING
                     assert "Compacting" not in resumed_activity[-1].detail
-                    assert comms.activity_of("project").state is ActivityState.IDLE
+                    assert comms.agents.activity_of("project").state is ActivityState.IDLE
                 finally:
                     release_summary.set()
                     if not turn.done():

@@ -162,7 +162,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
     with pytest.MonkeyPatch.context() as patch:
         root, root_id, comms, _, people = _root(directory, direct=True)
         owner = people[2]
-        comms.register(replace(owner, task="x" * 24000))
+        comms.threads.register(replace(owner, task="x" * 24000))
         patch.setattr(runtime, "_trusted_package", lambda _: None)
         patch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
         patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)
@@ -329,7 +329,7 @@ async def test_short_admission_contention_sends_once_after_release(
     import threading
 
     from agent_comms import coordinated_runtime as runtime
-    from agent_comms.declarations import _store_lock
+    from agent_comms.store_files import _store_lock
 
     root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
     owner = people[2]

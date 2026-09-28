@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.operations import wire
 from agent_comms.selected_pi_child_deadline import SelectedChildUnknown
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 

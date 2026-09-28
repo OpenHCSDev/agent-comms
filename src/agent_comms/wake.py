@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
+from .channel_targets import BuiltinChannel, is_channel_target
 from .coordination import MessageAudience
-from .declarations import BuiltinChannel, Message, is_channel_target
+from .messages import Message
 from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
 
 

@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from agent_comms import Thread
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import (
@@ -16,6 +15,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_attempts import UnresolvedAttempt
+from agent_comms.threads import Thread
 from test_acp import TestAgentTurn as GoalFixture
 
 
@@ -27,7 +27,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
     agent = CommsAgent(wired, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
-    goal = wired.update_goal("project", SetGoalAction(text="Continue independent work"))
+    goal = wired.goals.update_goal("project", SetGoalAction(text="Continue independent work"))
     GoalFixture()._authorize_test_goal(agent, wired, goal)
     agent.inputs.dispositions.record(
         "acp:earlier-uncertain",
@@ -43,7 +43,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
     def owner_pause():
         nonlocal paused, pause_bytes
-        paused = wired.update_goal(
+        paused = wired.goals.update_goal(
             "project",
             PausedGoalAction(
                 expect=GoalPrecondition(goal_id=goal.id),
@@ -53,7 +53,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         )
         pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
 
-    original_block = wired.block_goal_after_failed_turn
+    original_block = wired.goals.block_goal_after_failed_turn
 
     def pause_at_block(name, **kwargs):
         if paused is None:
@@ -62,7 +62,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
     if pause_timing == "during_block":
         # Race after ACP's active-goal precheck, before the wire-locked operation.
-        monkeypatch.setattr(wired, "block_goal_after_failed_turn", pause_at_block)
+        monkeypatch.setattr(wired.goals, 'block_goal_after_failed_turn', pause_at_block)
 
     async def failed_events(*args, **kwargs):
         if pause_timing == "before_terminal":
@@ -82,7 +82,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         assert paused is not None
         assert wired.registry.require("project").goal == paused
         assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
-        assert wired.goal_pause("project").owner_instruction is not None
+        assert wired.goals.goal_pause("project").owner_instruction is not None
         assert agent.inputs.dispositions.path.read_bytes() == ledger_before
         assert agent.inputs.dispositions.status("acp:earlier-uncertain") == "unknown"
         generation = agent.turns.goal_store.snapshot(goal.id)
@@ -104,15 +104,15 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
 @pytest.mark.parametrize("attribution", ["model", "runtime", "missing", "stale_owner"])
 def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
-    wired.register(Thread(name="project", tags=frozenset(), worktree=str(tmp_path)))
-    initial = wired.update_goal("project", SetGoalAction(text="Work"))
+    wired.threads.register(Thread(name="project", tags=frozenset(), worktree=str(tmp_path)))
+    initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
     if attribution == "stale_owner":
-        wired.update_goal(
+        wired.goals.update_goal(
             "project",
             PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
             actor=OwnerInvocable,
         )
-        wired.update_goal(
+        wired.goals.update_goal(
             "project",
             ActiveGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
             actor=OwnerInvocable,
@@ -120,13 +120,13 @@ def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, 
     if attribution == "model":
         # Current goal declarations deny a model pause before any state change.
         with pytest.raises(ValueError, match="cannot take goal action 'paused'"):
-            wired.update_goal(
+            wired.goals.update_goal(
                 "project",
                 PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
                 actor=ModelInvocable,
             )
         assert wired.registry.require("project").goal == initial
-    paused = wired.update_goal(
+    paused = wired.goals.update_goal(
         "project", PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id))
     )
     if attribution == "missing":
@@ -137,7 +137,7 @@ def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, 
         events = json.loads(path.read_text())
         del events[f"{initial.id}:{paused.revision}"]
         path.write_text(json.dumps(events))
-    blocked = wired.block_goal_after_failed_turn(
+    blocked = wired.goals.block_goal_after_failed_turn(
         "project", started_goal=initial, expected_worktree=str(tmp_path), diagnostic="Failed"
     )
     assert blocked.state.declared_name == "blocked"

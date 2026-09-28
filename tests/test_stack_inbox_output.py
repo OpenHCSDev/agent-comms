@@ -12,8 +12,9 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms import backend, wire
+from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
 
 

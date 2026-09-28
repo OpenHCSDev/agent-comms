@@ -1,0 +1,11 @@
+F821 Undefined name `store_files`
+  --> tests/test_concurrency.py:36:5
+   |
+34 |     start.wait()
+35 |
+36 |     store_files.time.time = lambda: 1_700_000_000.0
+   |     ^^^^^^^^^^^
+37 |     wire(root).threads.register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+   |
+
+Found 17 errors (16 fixed, 1 remaining).

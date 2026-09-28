@@ -6,10 +6,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import AnyOfMatch, SavedView, Thread, ViewKind, ViewPredicate, wire
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.cli import main
-from agent_comms.declarations import Message, MessageType, RelationViolationError
+from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
     DmScope,
@@ -24,6 +25,8 @@ from agent_comms.exporting import (
     WireExportLimit,
     WireTranscriptExporter,
 )
+from agent_comms.messages import Message, MessageType
+from agent_comms.threads import Thread
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -291,29 +294,29 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
 def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob"):
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path)))
-    comms.send("alice", "#team", "captured")
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+    comms.messaging.send("alice", "#team", "captured")
 
     with comms.bus.full_history_snapshot() as (through, messages):
-        comms.send("bob", "#team", "too late")
+        comms.messaging.send("bob", "#team", "too late")
         snapshot = list(messages)
 
     assert through == 1
     assert [item.body for item in snapshot] == ["captured"]
-    assert [item.body for item in comms.full_history()] == ["captured", "too late"]
+    assert [item.body for item in comms.views.full_history()] == ["captured", "too late"]
 
 
 def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob"):
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path)))
-    comms.send("alice", "#team", "team row")
-    comms.send("alice", "#other", "other row")
-    comms.send("alice", "bob", "private row")
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+    comms.messaging.send("alice", "#team", "team row")
+    comms.messaging.send("alice", "#other", "other row")
+    comms.messaging.send("alice", "bob", "private row")
     comms.registry.rename("alice", "renamed")
 
     channel_path = tmp_path / "team.jsonl"
-    channel_receipt = comms.export_wire(
+    channel_receipt = comms.views.export_wire(
         channel_path,
         format=JsonlFormat(),
         scope=ChannelScope("#team"),
@@ -324,7 +327,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     assert channel_receipt.boundary.through_seq == 3
 
     dm_path = tmp_path / "dm.jsonl"
-    dm_receipt = comms.export_wire(
+    dm_receipt = comms.views.export_wire(
         dm_path,
         format=JsonlFormat(),
         scope=DmScope(("renamed", "bob")),
@@ -334,7 +337,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     assert [row["message"]["text"] for row in records(dm_path)[1:]] == ["private row"]
     assert dm_receipt.scope.participants == ("renamed", "bob")
 
-    comms.set_saved_view(
+    comms.channels.set_saved_view(
         SavedView(
             "projection",
             ViewKind.PARTICIPANTS,
@@ -342,7 +345,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
         )
     )
     with pytest.raises(RelationViolationError, match="no authoritative wire history"):
-        comms.export_wire(
+        comms.views.export_wire(
             tmp_path / "projection.jsonl",
             format=JsonlFormat(),
             scope=ChannelScope("#projection"),
@@ -354,8 +357,8 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
     root = tmp_path / "wire"
     comms = wire(root)
     for name in ("alice", "bob"):
-        comms.register(Thread(name, frozenset({"team"}), str(tmp_path)))
-    comms.send("alice", "#team", "hello")
+        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+    comms.messaging.send("alice", "#team", "hello")
     destination = tmp_path / "cli.jsonl"
 
     assert (
@@ -384,13 +387,13 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
 def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob"):
-        comms.register(Thread(name, frozenset(), str(tmp_path)))
-    comms.send("alice", "bob", "unread")
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+    comms.messaging.send("alice", "bob", "unread")
     bus_before = comms.bus._path.read_bytes()
     markers = comms.root / "read_markers.json"
     markers_before = markers.read_bytes() if markers.exists() else None
 
-    comms.export_wire(
+    comms.views.export_wire(
         tmp_path / "everything.jsonl",
         format=JsonlFormat(),
         scope=EverythingScope(),
@@ -399,7 +402,7 @@ def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
 
     assert comms.bus._path.read_bytes() == bus_before
     assert (markers.read_bytes() if markers.exists() else None) == markers_before
-    assert comms.pending_count("bob") == 1
+    assert comms.bus.pending_count("bob") == 1
 
 
 def test_failures_clean_temporary_output_and_invalid_sequence_never_publishes(tmp_path):

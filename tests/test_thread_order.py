@@ -3,14 +3,17 @@
 import json
 from datetime import datetime
 
-from agent_comms import Activity, ActivityState, Message, MessageType, Thread, wire
+from agent_comms.activity import Activity, ActivityState
+from agent_comms.comms import wire
+from agent_comms.messages import Message, MessageType
+from agent_comms.threads import Thread
 
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path), created_at=100))
-    comms.register(Thread(name="beta", tags=frozenset(), worktree=str(tmp_path), created_at=200))
-    comms.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
+    comms.threads.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path), created_at=100))
+    comms.threads.register(Thread(name="beta", tags=frozenset(), worktree=str(tmp_path), created_at=200))
+    comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
     comms.bus.send(
         Message(
             sender="alpha", target="beta", body="outgoing", type=MessageType.INFO, timestamp=400
@@ -21,19 +24,19 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
             sender="beta", target="alpha", body="incoming", type=MessageType.INFO, timestamp=500
         )
     )
-    assert comms.last_sent_timestamps() == {"alpha": 400, "beta": 500}
-    comms.acquire_thread("alpha", owner_pid=0)
-    comms.heartbeat("alpha")
-    comms.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path)))
-    people = {person["name"]: person for person in comms.presence()}
+    assert comms.views.last_sent_timestamps() == {"alpha": 400, "beta": 500}
+    comms.owners.acquire_thread("alpha", owner_pid=0)
+    comms.threads.heartbeat("alpha")
+    comms.threads.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path)))
+    people = {person["name"]: person for person in comms.views.presence()}
     assert people["alpha"]["created_at"] == 100
     assert people["alpha"]["last_activity"] == 300
     assert people["beta"]["last_activity"] == 0
-    assert comms.activity_of("alpha").timestamp == 300
+    assert comms.agents.activity_of("alpha").timestamp == 300
     monkeypatch.setenv("PI_AGENT_ID", "alpha")
-    comms.rename_self("renamed")
+    comms.threads.rename_self("renamed")
     assert comms.registry.require("renamed").created_at == 100
-    assert comms.last_sent_timestamps() == {"renamed": 400, "beta": 500}
+    assert comms.views.last_sent_timestamps() == {"renamed": 400, "beta": 500}
     assert wire(tmp_path).registry.require("alpha").created_at == 100
 
 
@@ -59,5 +62,5 @@ def test_legacy_creation_uses_session_header_not_last_seen(tmp_path):
     created = datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
     assert comms.registry.require("saved").created_at == created
     assert comms.registry.require("unknown").created_at == 0
-    comms.heartbeat("saved")
+    comms.threads.heartbeat("saved")
     assert wire(tmp_path).registry.require("saved").created_at == created

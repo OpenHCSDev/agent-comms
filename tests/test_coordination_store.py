@@ -60,7 +60,6 @@ from agent_comms.coordination_store import (
     VerifiedOwnerLoss,
     prepare_fence_token,
 )
-from agent_comms.declarations import Message, MessageType
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -68,6 +67,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
+from agent_comms.messages import Message, MessageType
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
 

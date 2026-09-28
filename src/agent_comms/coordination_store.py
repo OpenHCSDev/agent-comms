@@ -50,8 +50,8 @@ from .coordination import (
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
-from .declarations import MessageType
 from .execution_states import ExecutionState, QueuedExecution
+from .messages import MessageType
 from .obligation_states import ResponseState
 from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
 from .wake_policy import WakePolicy
@@ -150,9 +150,9 @@ class VerifiedOwnerLoss:
         incarnation. Lease expiry or a replaced PID alone is insufficient.
         """
         from .bus_publication import stable_thread_lookup
+        from .comms import Comms
         from .coordinated_runtime_schema import assert_native_runtime_schema
         from .coordination_response import _response_boundary
-        from .operations import Comms
 
         if store.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
@@ -175,7 +175,7 @@ class VerifiedOwnerLoss:
             ):
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
             epoch = source["sent_owner_admission_epoch"]
-            release = comms._read_owner_release_receipts().get(attempt.owner_thread)
+            release = comms.owners._read_owner_release_receipts().get(attempt.owner_thread)
             current = registry.threads.get(attempt.owner_thread)
             if release is None or current is None:
                 raise RecoveryBlocked("native owner release receipt is missing")
@@ -197,7 +197,7 @@ class VerifiedOwnerLoss:
                     and stable_thread_lookup(current.created_at) == attempt.owner_lookup
                     and registry.admission_generations[current.name] >= after
                     and current.active_turn is None
-                    and not comms._process_alive(pid)
+                    and not comms.owners._process_alive(pid)
                 )
             except (KeyError, TypeError, ValueError):
                 valid = False
