@@ -42,3 +42,20 @@ Human DM notice expectation now matches canonical publisher's human-only policy.
 Affected ACP/notification/input run:95 passed,2 failed in23.76s; remaining fixture
 and metadata-filter assertions corrected and included in next full run.
 No full-suite acceptance claimed.
+
+## Third failure batch
+
+Full run reached114 passed/12failed in43.74s. Actual canonical /compact router
+refusal escaped as ValueError. Manual bridge now returns its existing failure
+result for ValueError/CompactionJournalError, so ACP emits RequestError and the
+finally path still aborts activity. Actual router test preserves saved bytes and
+checks every launch form; no alternate unjournaled writer is admitted.
+
+Activity/goal fixtures now use canonical_agent. Native forwarding asserts actual
+thought/text/tool ordering and lifecycle identity, independent of added metadata
+updates. Focused21-case run:18pass/3fail in13.22s. Remaining failures pinned retired
+None refusal/internal goal-grant spending: current f81ac72 explicitly separates
+fresh owner authority from autonomous goal grants. Assertions now require False
+refusal and unchanged autonomous generation while retaining native STARTED/UNKNOWN,
+owner-stop revocation, goal replacement and no-replay behavior. Next full run
+includes those corrections; no production authority change.

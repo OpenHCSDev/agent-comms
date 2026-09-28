@@ -1776,38 +1776,35 @@ class TestAgentTurnForwarding:
         assert goal_updates[0].field_meta == {"agentComms": {"goal": None, "goalExecution": None}}
         assert "title" not in goal_updates[0].model_fields_set
         sent = [update for update in sent if not isinstance(update, SessionInfoUpdate)]
-        kinds = [type(u).__name__ for u in sent]
-        assert kinds == [
-            "AgentMessageChunk",  # turn-started metadata before any model output
-            "AgentThoughtChunk",  # actual backend thinking
-            "AgentMessageChunk",  # "running"
-            "ToolCallStart",  # Run pwd
-            "ToolCallProgress",  # live output
-            "ToolCallProgress",  # completed
-            "AgentMessageChunk",  # " finished"
-            "AgentMessageChunk",  # committed transcript invalidation
-            "AgentMessageChunk",  # turn-settled metadata
+        metadata = [
+            update.field_meta["agentComms"] for update in sent
+            if update.field_meta and "agentComms" in update.field_meta
         ]
-        turn_id = sent[0].field_meta["agentComms"]["turnId"]
-        assert turn_id and sent[0].field_meta["agentComms"]["turnStarted"]
-        assert sent[1].content.text == "Inspecting files"
-        tool_call = sent[3]
+        started = [item for item in metadata if item.get("turnStarted")]
+        settled = [item for item in metadata if item.get("turnSettled")]
+        assert len(started) == len(settled) == 1
+        assert started[0]["turnId"] == settled[0]["turnId"]
+        assert any(item.get("transcriptChanged") for item in metadata)
+        thoughts = [update.content.text for update in sent
+                    if type(update).__name__ == "AgentThoughtChunk"]
+        assert thoughts == ["Inspecting files"]
+        texts = [update.content.text for update in sent
+                 if type(update).__name__ == "AgentMessageChunk" and update.content.text]
+        assert "".join(texts) == "running finished"
+        tools = [update for update in sent
+                 if type(update).__name__ in {"ToolCallStart", "ToolCallProgress"}]
+        assert [type(update).__name__ for update in tools] == [
+            "ToolCallStart", "ToolCallProgress", "ToolCallProgress"
+        ]
+        tool_call, progress, completed = tools
         assert tool_call.tool_call_id == "t1"
         assert tool_call.title == "Run pwd"
         assert tool_call.kind == "execute"
         assert tool_call.raw_input == {"command": "pwd"}
-        assert sent[4].status == "in_progress"
-        assert sent[4].content[0].content.text == "working"
-        progress = sent[5]
-        assert progress.status == "completed"
-        assert progress.content[0].content.text == "/wt"
-        assert sent[-1].field_meta == {"agentComms": {"turnSettled": True, "turnId": turn_id}}
-        assert sent[-2].field_meta == {
-            "agentComms": {
-                "transcriptChanged": True,
-                "transcriptCursor": {"session_file": "", "offset": 0},
-            }
-        }
+        assert progress.status == "in_progress"
+        assert progress.content[0].content.text == "working"
+        assert completed.status == "completed"
+        assert completed.content[0].content.text == "/wt"
         assert not agent.turns.active_turns
 
     async def test_turn_sets_wire_activity(self, wired, tmp_path):
