@@ -108,6 +108,7 @@ class AbortedNoWriteOperation(TerminalOperation, OperationState, declared_name="
 class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
+    settled_without_original: ClassVar[bool] = False
     reservable_commit: ClassVar[bool] = False
     commit_id: ClassVar[None] = None
     decline_reason: ClassVar[None] = None
@@ -143,7 +144,13 @@ class ReservedSummary(UnsettledSummary):
 
     @classmethod
     def successors(cls):
-        return (UnknownSummary, LinkedSummary, DeclinedPrestartSummary, RefusedSummary)
+        return (
+            UnknownSummary,
+            LinkedSummary,
+            ManualCommittedSummary,
+            DeclinedPrestartSummary,
+            RefusedSummary,
+        )
 
 
 class UnknownSummary(UnsettledSummary):
@@ -185,6 +192,13 @@ class LinkedSummary(SummaryState):
         )
 
 
+class ManualCommittedSummary(LinkedSummary):
+    """Explicit compaction has no original prompt to admit or replay."""
+
+    original_eligible = False
+    settled_without_original = True
+
+
 @dataclass(frozen=True)
 class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
     decline_reason: str = field()
@@ -222,12 +236,31 @@ class RefusedSummary(SummaryState):
 
     @classmethod
     def successors(cls):
-        return ()
+        return (RetiredRefusalSummary,)
 
     @classmethod
     def load(cls, commit_id, decline_reason):
         if commit_id is not None:
             raise ValueError("Refused summary cannot carry a native commit")
+        return cls(decline_reason)
+
+
+@dataclass(frozen=True)
+class RetiredRefusalSummary(SummaryState):
+    """An explicit manual command acknowledged a known no-provider refusal."""
+
+    decline_reason: str = field()
+    terminal = True
+    settled_without_original = True
+
+    @classmethod
+    def successors(cls):
+        return ()
+
+    @classmethod
+    def load(cls, commit_id, decline_reason):
+        if commit_id is not None or not decline_reason:
+            raise ValueError("Retired refusal requires its native reason and no commit")
         return cls(decline_reason)
 
 
