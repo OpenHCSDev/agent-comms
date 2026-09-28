@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .activity import Activity
+from .activity import Activity, ActivityState
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
 from .channels import Channel
@@ -173,6 +173,10 @@ class ThreadView:
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
+        if self.status.active and self.thread.executing and not self.activity.state.busy:
+            return ActivityState.WORKING.presentation(
+                self.thread.title or self.thread.name, "In a turn"
+            )
         if (
             self.status.active
             and not self.activity.state.busy

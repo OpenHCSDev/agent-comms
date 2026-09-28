@@ -564,6 +564,11 @@ class SelectedExecution:
         if self.owner.active_turn is None or self.owner.active_turn.owner_pid != self.owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
         self.initial = self._selected_source(self.wire_root_id)
+        self.comms.agents.set_activity(
+            self.owner.name,
+            ActivityState.WORKING,
+            f"Preparing {self.initial.message.target} message"[:200],
+        )
         self.owner_witness = LiveResponseOwner(
             self.owner.name,
             self.lookup,

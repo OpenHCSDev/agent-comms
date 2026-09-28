@@ -29,3 +29,18 @@ def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
     comms.threads.register(Thread('reader', frozenset(), str(tmp_path)))
     assert comms.views.recent_notifications('reader') == ()
     assert not (root / 'coordination.sqlite3').exists()
+
+
+def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # noqa: F811
+    from agent_comms.activity import ActivityState
+
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    lease = comms.agents.begin_turn('beta', 'test-active-turn')
+    comms.agents.set_activity('beta', ActivityState.IDLE)
+    view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
+    assert view.presentation.busy
+    assert 'In a turn' in view.presentation.summary
+    comms.agents.finish_turn(lease)
+    view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
+    assert not view.presentation.busy
+    assert view.presentation.summary == 'Ready'
