@@ -17,7 +17,25 @@ from .field_codec import FieldCodec, projected
 
 
 class Measure(DeclaredFamily, affix="Measure"):
-    """One syntactic measure; subclasses own their matching rule."""
+    """A declaration owns its scope, measurement and baseline matching."""
+
+    @classmethod
+    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
+        return changed & present
+
+    @classmethod
+    @abstractmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        """Measure the selected source declarations."""
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int | None], dict[str, int]]:
+        return base, head
+
+
+
+class OccurrenceMeasure(Measure):
+    """Shared additive counting for syntactic occurrence measures."""
 
     @staticmethod
     @abstractmethod
@@ -28,8 +46,69 @@ class Measure(DeclaredFamily, affix="Measure"):
     def count(cls, source: bytes, filename: str) -> int:
         return sum(cls.occurrences(node) for node in ast.walk(ast.parse(source, filename)))
 
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
 
-class TypeIdentity(Measure):
+
+class ClassSize(Measure):
+    """Independent lexical line spans for every class, never summed together."""
+
+    @classmethod
+    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
+        # Complete inventories distinguish a moved declaration from another
+        # same-named class in an unchanged module.
+        return present
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        values = {}
+        def visit(node: ast.AST, path: str, scope: tuple[str, ...]) -> None:
+            match node:
+                case ast.ClassDef(name=name, lineno=start, end_lineno=end, decorator_list=decorators):
+                    scope = (*scope, name)
+                    start = min([start, *(decorator.lineno for decorator in decorators)])
+                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = end - start + 1
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                    scope = (*scope, name)
+            for child in ast.iter_child_nodes(node):
+                visit(child, path, scope)
+        for path, source in sources:
+            visit(ast.parse(source, path), path, ())
+        return values
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int | None], dict[str, int]]:
+        def names(values):
+            result = {}
+            for identity in values:
+                result.setdefault(identity.rsplit("::", 1)[1], []).append(identity)
+            return result
+        before, after = names(base), names(head)
+        matched = {}
+        consumed = set()
+        for identity in head:
+            if identity in base:
+                matched[identity] = base[identity]
+                consumed.add(identity)
+                continue
+            name = identity.rsplit("::", 1)[1]
+            previous = before.get(name, ())
+            if len(previous) == 1 and len(after[name]) == 1:
+                matched[identity] = base[previous[0]]
+                consumed.add(previous[0])
+            else:
+                # A new owner has no main baseline yet; its measured size
+                # becomes that baseline once merged. Do not fabricate zero.
+                matched[identity] = None
+        current = dict(head)
+        for identity in base.keys() - consumed:
+            matched[identity] = base[identity]
+            current[identity] = 0
+        return matched, current
+
+
+class TypeIdentity(OccurrenceMeasure):
     @staticmethod
     def is_type_call(node: ast.AST) -> bool:
         match node:
@@ -51,13 +130,13 @@ class TypeIdentity(Measure):
         )
 
 
-class LongBooleanChain(Measure):
+class LongBooleanChain(OccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         return int(isinstance(node, ast.BoolOp) and len(node.values) >= 4)
 
 
-class StringSubscript(Measure):
+class StringSubscript(OccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         return int(
@@ -91,16 +170,17 @@ class Comparison:
     base_revision: str
     head_revision: str
     paths: tuple[str, ...]
-    base: dict[str, int]
+    base: dict[str, int | None]
     head: dict[str, int]
 
     @projected(view="report")
-    def delta(self) -> dict[str, int]:
-        return {name: value - self.base[name] for name, value in self.head.items()}
+    def delta(self) -> dict[str, int | None]:
+        return {name: None if self.base[name] is None else value - self.base[name]
+                for name, value in self.head.items()}
 
     @property
     def increased(self) -> bool:
-        return any(value > 0 for value in self.delta.values())
+        return any(value is not None and value > 0 for value in self.delta.values())
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
@@ -117,15 +197,15 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
     }
     paths = touched & (python_paths(repo, base, root) | python_paths(repo, head, root))
 
-    def count(ref: str) -> dict[str, int]:
-        present = paths & python_paths(repo, ref, root)
-        sources = [(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(present)]
-        return {
-            measure.__name__: sum(measure.count(source, path) for path, source in sources)
-            for measure in Measure.members_with(Measure)
-        }
-
-    return Comparison(root, base, head, tuple(sorted(paths)), count(base), count(head))
+    before, after = {}, {}
+    for measure in Measure.members_with(Measure):
+        def snapshot(ref: str) -> dict[str, int]:
+            selected = measure.scope(paths, python_paths(repo, ref, root))
+            return measure.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
+        measured_base, measured_head = measure.align(snapshot(base), snapshot(head))
+        before.update(measured_base)
+        after.update(measured_head)
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after)
 
 
 def main() -> int:

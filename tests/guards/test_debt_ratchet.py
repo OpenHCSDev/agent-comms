@@ -134,3 +134,41 @@ def test_ratchet_has_one_packaged_owner() -> None:
     from agent_comms import debt_ratchet
     assert not (Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py").exists()
     assert "src/agent_comms/" not in Path(debt_ratchet.__file__).read_text()
+
+
+def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
+    base = repo.commit({"classes.py": "class Growing:\n    pass\n\nclass Shrinking:\n    first = 1\n    second = 2\n"})
+    head = repo.commit({"classes.py": "class Growing:\n    first = 1\n    second = 2\n\nclass Shrinking:\n    pass\n"})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["delta"][f"ClassSize:{repo.root}/classes.py::Growing"] == 1
+    assert report["delta"][f"ClassSize:{repo.root}/classes.py::Shrinking"] == -1
+
+
+def test_class_move_keeps_baseline_and_new_owner_starts_baseline(repo: Repository) -> None:
+    base = repo.commit({"old.py": "class Existing:\n    pass\n"})
+    moved = repo.commit({"old.py": None, "new.py": "class Existing:\n    pass\n\nclass NewOwner:\n    value = 1\n"})
+    status, report = repo.compare(base, moved)
+    assert status == 0
+    assert report["delta"][f"ClassSize:{repo.root}/new.py::Existing"] == 0
+    assert report["base"][f"ClassSize:{repo.root}/new.py::NewOwner"] is None
+    assert report["delta"][f"ClassSize:{repo.root}/new.py::NewOwner"] is None
+    grown = repo.commit({"new.py": "class Existing:\n    pass\n\nclass NewOwner:\n    value = 1\n    more = 2\n"})
+    assert repo.compare(moved, grown)[0] == 1
+
+
+def test_moved_class_growth_is_rejected(repo: Repository) -> None:
+    base = repo.commit({"old.py": "class Existing:\n    pass\n"})
+    head = repo.commit({"old.py": None, "new.py": "class Existing:\n    value = 1\n    more = 2\n"})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["delta"][f"ClassSize:{repo.root}/new.py::Existing"] == 1
+
+
+def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Repository) -> None:
+    base = repo.commit({"one.py": "class Outer:\n    class Inner:\n        pass\n", "two.py": "class Inner:\n    pass\n"})
+    head = repo.commit({"one.py": "class Outer:\n    class Inner:\n        pass\n", "two.py": "class Inner:\n    value = 1\n    more = 2\n"})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["delta"][f"ClassSize:{repo.root}/one.py::Outer.Inner"] == 0
+    assert report["delta"][f"ClassSize:{repo.root}/two.py::Inner"] == 1
