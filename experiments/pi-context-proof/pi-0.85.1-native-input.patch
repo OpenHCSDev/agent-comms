@@ -5,7 +5,7 @@
   * Modes use this class and add their own I/O layer on top.
   */
 -import { readFileSync } from "node:fs";
-+import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync } from "node:fs";
++import { appendFileSync, closeSync, existsSync, fsyncSync, openSync, readFileSync, readSync, fstatSync, lstatSync } from "node:fs";
 +import { createHash } from "node:crypto";
  import { basename, dirname } from "node:path";
  import { contentText } from "@earendil-works/pi-ai";
@@ -22,7 +22,7 @@
      /** Messages queued to be included with the next user prompt as context ("asides"). */
      _pendingNextTurnMessages = [];
      /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
-@@ -153,6 +159,8 @@
+@@ -153,12 +159,181 @@
          // Always subscribe to agent events for internal handling
          // (session persistence, extensions, auto-compaction, retry logic)
          this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
@@ -31,10 +31,10 @@
          this._installAgentToolHooks();
          this._installAgentNextTurnRefresh();
          this._buildRuntime({
-@@ -160,6 +168,145 @@
+             activeToolNames: this._initialActiveToolNames,
              includeAllExtensionTools: true,
          });
-     }
++    }
 +    _nativeProofPath() {
 +        const file = this.sessionManager.getSessionFile();
 +        if (!this.sessionManager.isPersisted() || !file) {
@@ -43,32 +43,58 @@
 +        this.sessionManager.assertNativeInputSafe();
 +        return `${file}.input-proof`;
 +    }
++    *_nativeProofRows(file) {
++        const fd = openSync(file, "r");
++        try {
++            const before = fstatSync(fd, { bigint: true });
++            const buffer = Buffer.alloc(64 * 1024);
++            const decoder = new TextDecoder("utf-8", { fatal: true });
++            const parts = [];
++            let position = 0;
++            while (BigInt(position) < before.size) {
++                const count = readSync(fd, buffer, 0, Number(before.size - BigInt(position) > BigInt(buffer.length)
++                    ? BigInt(buffer.length) : before.size - BigInt(position)), position);
++                if (!count) throw new Error("Native input proof journal changed during recovery");
++                position += count;
++                let start = 0;
++                for (let end = 0; end < count; end++) {
++                    if (buffer[end] !== 10) continue;
++                    parts.push(Buffer.from(buffer.subarray(start, end)));
++                    const line = decoder.decode(Buffer.concat(parts));
++                    parts.length = 0;
++                    start = end + 1;
++                    if (line) yield JSON.parse(line);
++                }
++                if (start < count) parts.push(Buffer.from(buffer.subarray(start, count)));
++            }
++            if (parts.length) throw new Error("Truncated native input proof journal");
++            const after = fstatSync(fd, { bigint: true });
++            const named = lstatSync(file, { bigint: true });
++            for (const key of ["dev", "ino", "size", "mtimeNs", "ctimeNs"]) {
++                if (before[key] !== after[key] || before[key] !== named[key])
++                    throw new Error("Native input proof journal changed during recovery");
++            }
++        } finally { closeSync(fd); }
++    }
 +    _loadNativeInputState() {
-+        for (const entry of this.sessionManager.getEntries()) {
-+            if (entry.type !== "message" || entry.message?.role !== "user" || entry.message.inputId === undefined) continue;
++        // SessionManager's historical index owns durable claims on every branch.
++        // This map holds only newly admitted, not-yet-committed live requests.
++        for (const entry of this.sessionManager.entryStore.trackedInputs()) {
 +            const { inputId, inputDigest } = entry.message;
-+            if (!/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
-+                this._nativeInputClaims.has(inputId)) {
++            if (typeof inputId !== "string" || typeof inputDigest !== "string" ||
++                !/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
++                this.sessionManager.getTrackedInput(inputId)?.id !== entry.id) {
 +                throw new Error("Invalid or duplicate native input in persisted Pi session");
 +            }
-+            this._nativeInputClaims.set(inputId, inputDigest);
 +        }
 +        if (!this.sessionManager.isPersisted()) return;
-+        if (this._nativeInputClaims.size > 0) this.sessionManager.assertNativeInputSafe();
 +        const file = this._nativeProofPath();
 +        if (!existsSync(file)) return;
-+        const raw = readFileSync(file, "utf8");
-+        if (raw.length > 16 * 1024 * 1024 || (raw && !raw.endsWith("\n"))) {
-+            throw new Error("Truncated or oversized native input proof journal");
-+        }
-+        // A newline-terminated row can survive FAILED fsync. It may reserve the
-+        // next generation, but it NEVER re-emits or proves context_committed.
-+        // Only a live, post-successful-fsync event may become coordinator evidence.
++        // Even a newline-terminated row may survive FAILED fsync. Recovery
++        // reserves generations only: it never emits context acceptance proof.
 +        let lastDigest;
 +        let idsInGeneration = new Set();
-+        for (const line of raw.split("\n")) {
-+            if (!line) continue;
-+            const row = JSON.parse(line);
++        for (const row of this._nativeProofRows(file)) {
 +            const entry = this.sessionManager.getTrackedInput(row.inputId);
 +            const newGeneration = row.requestGeneration > this._nativeRequestGeneration;
 +            if (row.schema !== 1 || row.type !== "context_committed" ||
@@ -77,7 +103,7 @@
 +                row.requestGeneration < this._nativeRequestGeneration ||
 +                (!newGeneration && row.llmContextDigest !== lastDigest) ||
 +                (!newGeneration && idsInGeneration.has(row.inputId)) ||
-+                entry?.id !== row.sessionEntryId ||
++                !entry || entry.id !== row.sessionEntryId ||
 +                !/^[a-f0-9]{64}$/.test(row.llmContextDigest)) {
 +                throw new Error("Invalid native input proof journal row");
 +            }
@@ -96,7 +122,8 @@
 +        }
 +        this._nativeProofPath();
 +        const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
-+        const previous = this._nativeInputClaims.get(inputId);
++        const previous = this.sessionManager.getTrackedInput(inputId)?.message.inputDigest
++            ?? this._nativeInputClaims.get(inputId);
 +        if (previous !== undefined) {
 +            if (previous !== digest) throw new Error("Conflicting replay of native input ID");
 +            return true; // exact replay: never create a second queue or user entry
@@ -129,7 +156,7 @@
 +            }
 +            seen.add(inputId);
 +            const entry = this.sessionManager.getTrackedInput(inputId);
-+            const claimedDigest = this._nativeInputClaims.get(inputId);
++            const claimedDigest = this._nativeInputClaims.get(inputId) ?? entry?.message.inputDigest;
 +            if (typeof claimedDigest !== "string" || !/^[a-f0-9]{64}$/.test(claimedDigest) ||
 +                !entry || entry.message.inputDigest !== claimedDigest ||
 +                message.inputDigest !== claimedDigest) {
@@ -168,16 +195,16 @@
 +        const parent = openSync(dirname(file), "r");
 +        try { fsyncSync(parent); } finally { closeSync(parent); }
 +        for (const { inputId, sessionEntryId } of tracked) {
++            this._nativeInputClaims.delete(inputId);
 +            this._awaitingNativeInputIds.delete(inputId);
 +            this._emit({ type: "context_committed", sessionId: this.sessionId,
 +                inputId, sessionEntryId, requestGeneration: generation,
 +                llmContextDigest: digest });
 +        }
-+    }
+     }
      get modelRuntime() {
          return this._modelRuntime;
-     }
-@@ -274,7 +421,7 @@
+@@ -274,7 +449,7 @@
      async _compactBeforeNextAssistantResponse(context) {
          const model = this.model;
          const settings = this.settingsManager.getCompactionSettings();
@@ -186,7 +213,7 @@
              model.contextWindow <= 0 ||
              !shouldCompact(estimateContextTokens(context.messages).tokens, model.contextWindow, settings)) {
              return context;
-@@ -315,12 +462,22 @@
+@@ -315,12 +490,22 @@
              l(event);
          }
      }
@@ -214,7 +241,7 @@
      }
      async _emitSessionCompactFailed(event) {
          if (this._extensionRunner.hasHandlers("session_compact_failed")) {
-@@ -361,21 +518,28 @@
+@@ -361,21 +546,28 @@
          // When a user message starts, check if it's from either queue and remove it BEFORE emitting
          // This ensures the UI sees the updated queue state
          if (event.type === "message_start" && event.message.role === "user") {
@@ -247,7 +274,7 @@
                      }
                  }
              }
-@@ -383,7 +547,13 @@
+@@ -383,7 +575,13 @@
          // Emit to extensions first
          await this._emitExtensionEvent(event);
          // Notify all listeners
@@ -262,7 +289,7 @@
          // Handle session persistence
          if (event.type === "message_end") {
              // Check if this is a custom message from extensions
-@@ -395,7 +565,23 @@
+@@ -395,7 +593,23 @@
                  event.message.role === "assistant" ||
                  event.message.role === "toolResult") {
                  // Regular LLM message - persist as SessionMessageEntry
@@ -287,7 +314,7 @@
              }
              // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
              // Track assistant message for auto-compaction (checked on agent_end)
-@@ -427,6 +613,7 @@
+@@ -427,6 +641,7 @@
          }
      };
      _willRetryAfterAgentEnd(event) {
@@ -295,7 +322,7 @@
          const settings = this.settingsManager.getRetrySettings();
          if (!settings.enabled || this._retryAttempt >= settings.maxRetries) {
              return false;
-@@ -522,6 +709,10 @@
+@@ -522,6 +737,10 @@
                      replacement.content == null
                      ? { ...replacement, content: [] }
                      : replacement;
@@ -306,7 +333,7 @@
                  this._replaceMessageInPlace(event.message, normalized);
              }
          }
-@@ -770,6 +961,21 @@
+@@ -770,6 +989,21 @@
      // Prompting
      // =========================================================================
      async _runAgentPrompt(messages) {
@@ -328,7 +355,7 @@
          this._isAgentRunActive = true;
          try {
              await this.agent.prompt(messages);
-@@ -778,6 +984,11 @@
+@@ -778,6 +1012,11 @@
              }
          }
          finally {
@@ -340,10 +367,11 @@
              this._systemPromptOverride = undefined;
              this._flushPendingBashMessages();
              this._flushPendingCustomMessages();
-@@ -790,6 +1001,15 @@
+@@ -789,6 +1028,15 @@
+         this._lastAssistantMessage = undefined;
          if (!msg) {
              return false;
-         }
++        }
 +        // A failed/uncertain native turn must not retry or drain a queued
 +        // agent_end continuation. After an authoritative stop, do not run an
 +        // implicit compaction, but allow explicitly queued subsequent inputs.
@@ -352,11 +380,10 @@
 +            if (msg.stopReason !== "stop") return false;
 +            this._nativeRunHadTrackedInput = false;
 +            return this.agent.hasQueuedMessages();
-+        }
+         }
          if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {
              return true;
-         }
-@@ -822,13 +1042,37 @@
+@@ -822,13 +1070,37 @@
          const expandPromptTemplates = options?.expandPromptTemplates ?? true;
          const preflightResult = options?.preflightResult;
          let messages;
@@ -394,7 +421,7 @@
                      preflightResult?.(true);
                      return;
                  }
-@@ -842,6 +1086,10 @@
+@@ -842,6 +1114,10 @@
              if (this._extensionRunner.hasHandlers("input")) {
                  const inputResult = await this._extensionRunner.emitInput(currentText, currentImages, options?.source ?? "interactive", this.isStreaming ? options?.streamingBehavior : undefined);
                  if (inputResult.action === "handled") {
@@ -405,7 +432,7 @@
                      preflightResult?.(true);
                      return;
                  }
-@@ -862,11 +1110,12 @@
+@@ -862,11 +1138,12 @@
                      throw new Error("Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
                  }
                  if (options.streamingBehavior === "followUp") {
@@ -414,13 +441,14 @@
                  }
                  else {
 -                    await this._queueSteer(expandedText, currentImages);
+-                }
 +                    await this._queueSteer(expandedText, currentImages, options?.inputId);
-                 }
++                }
 +                preflightAccepted = true;
                  preflightResult?.(true);
                  return;
              }
-@@ -891,7 +1140,7 @@
+@@ -891,7 +1168,7 @@
              // Check if we need to compact before sending (catches aborted responses).
              // The user's new prompt is sent below, so do not call agent.continue() here.
              const lastAssistant = this._findLastAssistantMessage();
@@ -429,7 +457,7 @@
                  await this._checkCompaction(lastAssistant, false);
              }
              // Build messages array (custom message if any, then user message)
-@@ -905,6 +1154,8 @@
+@@ -905,6 +1182,8 @@
                  role: "user",
                  content: userContent,
                  timestamp: Date.now(),
@@ -438,7 +466,7 @@
              });
              // Inject any pending "nextTurn" messages as context alongside the user message
              for (const msg of this._pendingNextTurnMessages) {
-@@ -939,14 +1190,24 @@
+@@ -939,14 +1218,24 @@
              }
          }
          catch (error) {
@@ -466,7 +494,7 @@
      }
      /**
       * Try to execute an extension command. Returns true if command was found and executed.
-@@ -1013,15 +1274,25 @@
+@@ -1013,15 +1302,25 @@
       * @param images Optional image attachments to include with the message
       * @throws Error if text is an extension command
       */
@@ -498,7 +526,7 @@
      }
      /**
       * Queue a follow-up message to be processed after the agent finishes.
-@@ -1030,47 +1301,66 @@
+@@ -1030,47 +1329,66 @@
       * @param images Optional image attachments to include with the message
       * @throws Error if text is an extension command
       */
@@ -587,7 +615,7 @@
      }
      /**
       * Throw an error if the text is an extension command.
-@@ -1193,11 +1483,19 @@
+@@ -1193,11 +1511,19 @@
       * @returns Object with steering and followUp arrays
       */
      clearQueue() {
@@ -610,7 +638,7 @@
          this._emitQueueUpdate();
          return { steering, followUp };
      }
-@@ -1207,11 +1505,11 @@
+@@ -1207,11 +1533,11 @@
      }
      /** Get pending steering messages (read-only) */
      getSteeringMessages() {
@@ -624,6 +652,7 @@
      }
      get resourceLoader() {
          return this._resourceLoader;
+
 --- a/dist/core/session-manager.js
 +++ b/dist/core/session-manager.js
 @@ -1,8 +1,8 @@

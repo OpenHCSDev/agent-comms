@@ -84,9 +84,6 @@ MODEL_WAIT_TIMEOUT_SECONDS = 360.0
 assert MODEL_WAIT_TIMEOUT_SECONDS > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
-# Advisory uses bytes. Pinned Pi checks decoded JS text length (or a missing
-# newline) after reading the proof journal; byte size alone is not the cause.
-_NATIVE_PROOF_JOURNAL_WARN_BYTES = 96 * 1024 * 1024
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
 _MCP_LIVE_STATES = frozenset(
@@ -1086,18 +1083,6 @@ class TurnSession:
             self.native_capability_confirmed = True
             if self.startup is not None:
                 self.startup.release()
-            if (
-                self.proof_journal_bytes is not None
-                and self.proof_journal_bytes >= _NATIVE_PROOF_JOURNAL_WARN_BYTES
-            ):
-                yield events.Notice(
-                    text=(
-                        "[agent-comms warning] Pi native input proof journal measures at least "
-                        "96 MiB. Pi checks decoded content against a 128 MiB startup limit; "
-                        "byte size is only an advisory. Preserve the session and journal; "
-                        "arrange a reviewed checkpoint or upgrade before further growth."
-                    )
-                )
             self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
             assert self.proc.stdin is not None
             try:
@@ -1380,12 +1365,9 @@ class TurnSession:
     async def spawn_child(self) -> AsyncIterator[events.AgentEvent]:
         self.launch_started_at = self.loop.time()
         self.session_bytes: int | None = None
-        self.proof_journal_bytes: int | None = None
         if self.session_file:
             with suppress(OSError):
                 self.session_bytes = Path(self.session_file).stat().st_size
-            with suppress(OSError):
-                self.proof_journal_bytes = Path(f"{self.session_file}.input-proof").stat().st_size
         if self.reused:
             assert self.persistent_session is not None and self.persistent_session.proc is not None
             self.proc = self.persistent_session.proc
@@ -1618,21 +1600,6 @@ class TurnSession:
                     "Pi native input-ID capability preflight ended before attestation. "
                     "The prompt was not sent. Backend startup reported:\n"
                     + self.error_text.strip()
-                )
-            )
-        if (
-            self.preflight_failure == FailureReason.PREFLIGHT_EXIT
-            and self.proof_journal_bytes is not None
-            and ("Truncated or oversized native input proof journal" in self.error_text)
-        ):
-            self.preflight_failure = FailureReason.PROOF_JOURNAL_REJECTED
-            self.diagnostic["proof_journal_bytes"] = self.proof_journal_bytes
-            self.record_failure(
-                failures.InputIdUnavailable(
-                    "Pi rejected its native input proof journal before this prompt was sent "
-                    f"(measured {self.proof_journal_bytes} bytes; decoded-content limit or "
-                    "incomplete final row). Preserve the session and journal; arrange a "
-                    "reviewed recovery. Uncertain inputs must not be replayed."
                 )
             )
         if self.owner is not None:

@@ -9,7 +9,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-BASE_SHA = "424066056076cbe2861c12277cb745428b13bf3308a8b9873d3064b62dc740d7"
+BASE_SHA = "84e2e7cf0d6fbeeacbe041d888665ec21005b3da47453967a5af1ea77f3fc4a2"
 INSTALL_ANCHOR = "        this._installAgentNextTurnRefresh();\n"
 INSTALL = "        this._installNativeCompactionBeforeProvider();\n"
 METHOD_ANCHOR = "    _installAgentNextTurnRefresh() {\n"
