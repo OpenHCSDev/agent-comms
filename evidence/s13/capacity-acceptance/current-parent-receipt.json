@@ -1,0 +1,47 @@
+{
+  "receiver_checkpoint": "1aef899",
+  "receiver_source": "/home/ts/wt/comms-refactor2-s13-20260928/src",
+  "runtime": "current Thread/ProcessIdentity, PiHelper/BoundedRun, typed request/result families, current _pi_helpers DiskEntryStore programs",
+  "native_package": "/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent",
+  "focused_receipt": "current-parent-focused-first.log",
+  "focused_result": "4 passed in 16.42s",
+  "runs": [
+    {
+      "receipt": "current-parent-288.log",
+      "source_bytes": 302041856,
+      "phases": [
+        "cli-open",
+        "branch-replay-malformed",
+        "prepare",
+        "commit",
+        "strict-reopen",
+        "cli-reopen"
+      ],
+      "native_peak_rss_kib": 218640,
+      "python_peak_rss_kib": 87032,
+      "provider_calls": 0,
+      "generated_data_removed": true,
+      "memory_exceeded": [],
+      "pytest_result": "1 passed in 27.95s"
+    },
+    {
+      "receipt": "current-parent-576.log",
+      "source_bytes": 604009760,
+      "phases": [
+        "cli-open",
+        "branch-replay-malformed",
+        "prepare",
+        "commit",
+        "strict-reopen",
+        "cli-reopen"
+      ],
+      "native_peak_rss_kib": 223196,
+      "python_peak_rss_kib": 87020,
+      "provider_calls": 0,
+      "generated_data_removed": true,
+      "memory_exceeded": [],
+      "pytest_result": "1 passed in 46.97s"
+    }
+  ],
+  "changes": "Capacity fixture passes verified package to current reopen API; obsolete225 receiver runner deleted. No production fix needed."
+}

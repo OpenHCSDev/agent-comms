@@ -1,0 +1,26 @@
+✖ both stores preserve branch context, settings, archived input and commit identity (5.667082ms)
+✔ strict disk scan refuses malformed UTF8, incomplete tail, duplicated IDs and forward parent without modifying history (3.855639ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71.471876
+
+✖ failing tests:
+
+test at tests/native-session-entry-store.test.mjs:18:1
+✖ both stores preserve branch context, settings, archived input and commit identity (5.667082ms)
+  Error: disk I/O error
+      at new DiskEntryStore (file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/native-session-entry-store.mjs:189:22)
+      at TestContext.<anonymous> (file:///home/ts/wt/comms-native-session-entry-store-20260928/tests/native-session-entry-store.test.mjs:27:18)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.start (node:internal/test_runner/test:1242:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    code: 'ERR_SQLITE_ERROR',
+    errcode: 1802,
+    errstr: 'disk I/O error'
+  }

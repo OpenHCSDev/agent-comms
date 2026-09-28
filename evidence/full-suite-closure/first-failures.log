@@ -1,0 +1,15 @@
+=========================== short test summary info ============================
+FAILED tests/test_acp.py::TestHandlers::test_new_session_starts_after_existing_wire_history
+FAILED tests/test_acp.py::TestHandlers::test_prompt_broadcasts_to_global_channel
+FAILED tests/test_acp.py::TestHandlers::test_cancel_ends_active_relay_turn - ...
+FAILED tests/test_acp.py::TestAgentTurn::test_agent_turn_streams_reply_without_broadcasting
+FAILED tests/test_acp.py::TestAgentTurn::test_agent_turn_runs_in_thread_worktree
+FAILED tests/test_acp.py::TestAgentTurn::test_missing_agent_bin_is_reported_not_raised
+FAILED tests/test_acp.py::TestAgentTurn::test_plain_prompt_launches_agent - a...
+FAILED tests/test_acp.py::TestAgentTurn::test_cancel_terminates_active_backend_process
+FAILED tests/test_acp.py::TestAgentTurn::test_pi_session_name_stays_runtime_metadata
+FAILED tests/test_acp.py::TestAgentTurn::test_backend_session_is_persisted_and_live_inbox_is_steered
+FAILED tests/test_acp.py::TestAgentTurn::test_thread_rename_updates_acp_title
+FAILED tests/test_acp.py::TestAgentTurn::test_provider_failure_is_visible_once_and_blocks_the_goal
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 12 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+12 failed, 35 passed in 10.67s

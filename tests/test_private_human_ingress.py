@@ -161,7 +161,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     original_append = comms.bus.log._append_private_unlocked
 
     def fail_bus_open(path, *args, **kwargs):
-        if Path(path) == comms.bus.log.path:
+        if Path(path) == comms.bus.log.path and args[0] & os.O_WRONLY:
             raise OSError("bus open failed after durable marker reservation")
         return original_open(path, *args, **kwargs)
 

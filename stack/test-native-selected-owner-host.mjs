@@ -51,10 +51,10 @@ if (existing < 0) {
       provider: model.provider, model: model.id, api: model.api, usage,
       stopReason: 'stop', timestamp: 2 * i + 1});
   }
-  session.agent.state.messages = manager.buildSessionContext().messages;
+  session.agent.state.messages = manager.buildContextEntries().flatMap(pi.sessionEntryToContextMessages).toArray();
 }
 session.agent.streamFunction = (_model, context) => {
-  const previous = manager.getEntries().findLast(entry => entry.type === 'compaction');
+  const previous = manager.entryStore.latest(manager.getLeafId(), 'compaction');
   if (previous) {
     // Verify the actual native provider context retains the committed summary,
     // including the second compaction's previous-summary and reopened original.

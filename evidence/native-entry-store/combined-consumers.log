@@ -1,0 +1,13 @@
+✔ native branch summary consumes the store range and preserves its budget (5.278864ms)
+✔ HTML exports full retained entries and custom rendering without consuming history twice (14.75877ms)
+✔ cache notices use persisted identity when disk reads return distinct message objects (0.444192ms)
+✔ both stores preserve branch context, settings, archived input and commit identity (11.98365ms)
+✔ strict disk scan refuses malformed UTF8, incomplete tail, duplicated IDs and forward parent without modifying history (5.153997ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 457.517033

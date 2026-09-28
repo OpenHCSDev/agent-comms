@@ -429,14 +429,8 @@ class SelectedExecution:
 
     def _open(self):
         self.root = Path(self.root).absolute()
-        if (
-            not self.opt_in
-            or self.root == Path("/var/tmp")
-            or not self.root.is_relative_to("/var/tmp")
-        ):
-            raise PublicationActivationBlocked(
-                "coordinated runtime requires a private /var/tmp root"
-            )
+        if not self.opt_in:
+            raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
         _private_session_dir(self.root)
         if type(self.fresh_private_enrollment) is not bool or (
             self.fresh_private_enrollment and self.session_file is not None

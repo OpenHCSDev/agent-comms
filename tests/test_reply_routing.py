@@ -5,7 +5,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import invoke_tool
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
@@ -21,7 +21,7 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
     tmp_path, monkeypatch, target
 ):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
     comms.threads.register(Thread("peer", frozenset({"test"}), str(tmp_path)))
     session = tmp_path / "session.jsonl"
@@ -97,7 +97,7 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
 async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False)
     await agent.new_session(str(tmp_path / "worker"))
     comms.channels.update_tags("worker", add=frozenset({"test"}))
     session = tmp_path / "session.jsonl"
@@ -141,9 +141,15 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        comms.messaging.send_user_message("#test", "Question in channel", worktree=str(tmp_path))
-        await agent.inputs.drain_inbox("worker")
-        await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 2)
+        message = comms.messaging.send_user_message(
+            "#test", "Question in channel", worktree=str(tmp_path)
+        )
+        # Routing persists by entry identity on the current owned turn. Native
+        # channel notification/admission is covered by the canonical drain tests.
+        await asyncio.wait_for(agent.turns.run_agent_turn(
+            "worker", "worker", message.body,
+            reply_targets=(message.target,), origins=(message,),
+        ), 2)
         routed = [
             update
             for update in updates
@@ -176,7 +182,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
 
 async def test_coordination_context_does_not_override_scheduled_response_policy(tmp_path):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
     seen: dict = {}
 
@@ -186,10 +192,10 @@ async def test_coordination_context_does_not_override_scheduled_response_policy(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    import agent_comms.acp as acp_module
+    import agent_comms.backend as backend_module
 
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(acp_module.backend, "stream_agent_events", events)
+    monkeypatch.setattr(backend_module, "stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("worker", "worker", "incoming broadcast")
     finally:

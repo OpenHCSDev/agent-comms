@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -319,7 +319,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             ),
         )
 
-    agent = CommsAgent(
+    agent = canonical_agent(
         comms,
         agent_bin="pi",
         agent_args=[],
@@ -355,6 +355,8 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     store = GoalAttemptStore.initialize(private)
     store.create_goal("goal-acp")
     agent.turns.goal_store = store
+    goal_before = comms.registry.require("proj").goal
+    grant_before = store.snapshot("goal-acp")
     admission = comms.registry.snapshot().admission_generations["proj"]
     InputDispositions(root / InputDispositions.filename).record(
         "acp:original",
@@ -400,7 +402,9 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
                 .declared_name
                 == "unknown"
             )
-            assert comms.registry.require("proj").goal.state.declared_name == "blocked"
+            # Fresh owner input does not consume or block the autonomous grant.
+            assert comms.registry.require("proj").goal == goal_before
+            assert store.snapshot("goal-acp") == grant_before
         else:
             await turn
             assert dispatched == ["a" * 32]

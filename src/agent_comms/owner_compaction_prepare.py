@@ -111,9 +111,9 @@ def prepare_native_source(
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
             or before.st_uid not in (0, os.getuid())
-            or not 0 < before.st_size <= 256 * 1024 * 1024
+            or before.st_size <= 0
         ):
-            raise NativePreparationError("Native session is not bounded regular storage")
+            raise NativePreparationError("Native session is not regular storage")
         result = asyncio.run(
             PrepareCompactionHelper.run(
                 PreparationRequest(

@@ -1,0 +1,6 @@
+{"large_history_bytes":302041814,"branches":2,"old_commit_replay_refused":true,"malformed_late_records":4,"peak_rss_kib":148720}
+{"ok":true,"cases":["large-history-branch-replay"],"root":"/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/indexed-manager/pr48-writer-coverage-PSST7D"}
+
+
+CAPACITY_MEMORY {"rss_limit_mib": 240, "v8_old_space_mib": 128, "processes": [{"pid": 443734, "phase": "indexed-manager-branch-replay", "peak_rss_kib": 149996, "rusage_peak_rss_kib": 148720, "memory": {"rss": 152289280, "heapTotal": 51515392, "heapUsed": 21084752, "external": 7918487, "arrayBuffers": 5458375}}], "sampled_peak_rss_kib": {"443734": 149936}, "python_peak_rss_kib": 72936, "exceeded": [], "monitor_errors": []}
+GENERATED_HISTORY_REMOVED True

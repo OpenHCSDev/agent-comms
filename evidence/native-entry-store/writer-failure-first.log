@@ -1,0 +1,31 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /rewrite outcome unknown/. Input:
+
+'Error: injected branch partial write'
+
+    at file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:146:25
+    at inject (file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:34:18)
+    at branch-partial-write (file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:139:9)
+    at file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:193:20 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: Error: injected branch partial write
+      at file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:143:23
+      at fs.<computed> (file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:32:31)
+      at file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/complete-native/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:1194:25
+      at pr48WriterLock (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/complete-native/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:397:16)
+      at file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/complete-native/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:1191:17
+      at #acMutation (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/complete-native/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:482:28)
+      at SessionManager.createBranchedSession (file:///home/ts/wt/comms-native-session-entry-store-20260928/.artifacts/complete-native/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:1181:32)
+      at file:///home/ts/wt/comms-native-session-entry-store-20260928/stack/test-native-writer-failure-state.mjs:146:48
+      at getActual (node:assert:580:5)
+      at strict.throws (node:assert:728:24),
+  expected: /rewrite outcome unknown/,
+  operator: 'throws',
+  diff: 'simple'
+}
+
+Node.js v26.5.0

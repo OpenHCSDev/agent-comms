@@ -1,7 +1,7 @@
 """Read-only strict native session validation before a discarded idle Pi reopens.
 
-Never use SessionManager.open for this preflight: it can rewrite a saved file.
-The pinned manager's loadEntriesFromFile enforces its actual strict v3 parse.
+The pinned EntryStore owns strict v3 parsing and the observed file revision;
+preflight does not construct a session writer or activate its consumers.
 """
 
 from __future__ import annotations
@@ -52,9 +52,9 @@ def validate_native_reopen(
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
             or before.st_uid not in (0, os.getuid())
-            or not 0 < before.st_size <= 256 * 1024 * 1024
+            or before.st_size <= 0
         ):
-            raise NativeReopenError("Saved native session is not a bounded regular file")
+            raise NativeReopenError("Saved native session is not a regular file")
         identity = asyncio.run(
             ReopenSessionHelper.run(SessionHelperRequest(str(package), str(file)), cwd=file.parent)
         )

@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_attempts import GoalAttemptStore, GoalHumanDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
@@ -102,7 +102,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
     assert store.snapshot(goal.id).number == 2
     with sqlite3.connect(store.path) as database:
-        assert database.execute("SELECT count(*) FROM human_decisions").fetchone()[0] == 1
+        assert database.execute(f"SELECT count(*) FROM {GoalHumanDecision.declared_name}").fetchone()[0] == 1
 
 
 def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path):

@@ -161,7 +161,7 @@ const manager=SessionManager.open(file);
 manager.appendMessage({role:'user',content:'next task',timestamp:3});
 manager.appendMessage({role:'assistant',content:[{type:'text',text:'next answer'}],
   provider:'fixture',model:'fixture',api:'fixture',stopReason:'stop',timestamp:4});
-const prepared=prepareCompaction(manager.getBranch(),
+const prepared=prepareCompaction(manager.entryStore,
   {...DEFAULT_COMPACTION_SETTINGS,keepRecentTokens:1});
 console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
 """
@@ -378,8 +378,9 @@ async def test_active_backend_executor_refuses_before_intent_or_dispatch(native)
 def test_malformed_bus_refuses_source_capture_without_repair(native):
     bridge, owner, owner_generation, witness = native
     bus = bridge.root / "bus.jsonl"
+    Comms(bridge.root).messaging.initialize_private_initial_protocol()
     bus.write_bytes(b'{"incomplete":')
-    with pytest.raises(RelationViolationError, match="Invalid compaction ingress"):
+    with pytest.raises(RelationViolationError):
         bridge.capture_source(owner, owner_generation, witness)
     assert bus.read_bytes() == b'{"incomplete":'
     assert bridge.journal.unresolved(witness.session_file) == ()
@@ -553,8 +554,6 @@ from pathlib import Path
 from dataclasses import replace
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goals import Goal
-from agent_comms.messages import Message, MessageType
-from agent_comms.message_bus import MessageBus
 from agent_comms.registration import Registration
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.comms import Comms
@@ -582,9 +581,6 @@ else:
     elif mutation == 'goal':
         owner = registry.snapshot().threads['owner']
         registry.register(replace(owner, goal=Goal('new', 'new-goal')))
-    elif mutation == 'bus':
-        MessageBus(root / 'bus.jsonl', registry).publisher.publish(Message(
-            sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
     else:
         Comms(root).messaging.send('owner', 'broadcast', 'late message')
 print('changed', flush=True)

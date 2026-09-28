@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import MessageType
 from agent_comms.thread_management import ForkSpec
@@ -216,7 +217,7 @@ class TestThreadOps:
         detail = wired.views.thread_detail("fixer")
         assert detail["is_fork"] is True
         assert detail["task"] == "fix auth"
-        assert detail["pid"] == 0
+        assert detail["process_identity"] is None
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
@@ -324,7 +325,7 @@ class TestThreadOps:
                 name="generated-7",
                 tags=frozenset({"acp"}),
                 worktree="/tmp/project",
-                pid=os.getpid(),
+                process_identity=ProcessIdentity.capture(os.getpid()),
             )
         )
 
@@ -336,7 +337,7 @@ class TestThreadOps:
         assert result.current == "testing-123"
         assert wired.registry.require("generated-7").name == "testing-123"
         with pytest.raises(RelationViolationError, match="does not own"):
-            wired.threads.rename_managed_thread("testing-123", "wrong", owner_pid=os.getpid() + 1)
+            wired.threads.rename_managed_thread("testing-123", "wrong", owner_pid=os.getppid())
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired):
         wired.threads.register(
@@ -344,7 +345,7 @@ class TestThreadOps:
                 name="testing-123",
                 tags=frozenset(),
                 worktree="/tmp/other",
-                pid=123,
+                process_identity=ProcessIdentity.capture(os.getppid()),
             )
         )
         wired.threads.register(
@@ -352,17 +353,17 @@ class TestThreadOps:
                 name="generated-7",
                 tags=frozenset({"acp"}),
                 worktree="/tmp/project",
-                pid=456,
+                process_identity=ProcessIdentity.capture(os.getpid()),
             )
         )
 
-        result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner_pid=456)
+        result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner_pid=os.getpid())
 
         assert result.current == "testing-123-2"
 
     def test_managed_rename_reclaims_own_alias(self, wired):
         wired.threads.register(
-            Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", pid=os.getpid())
+            Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", process_identity=ProcessIdentity.capture(os.getpid()))
         )
         assert wired.threads.rename_managed_thread(
             "generated-7", "chosen", owner_pid=os.getpid()
@@ -395,7 +396,7 @@ class TestThreadOps:
                 name="live-process",
                 tags=frozenset(),
                 worktree="/tmp",
-                pid=process.pid,
+                process_identity=ProcessIdentity.capture(process.pid),
             )
         )
         try:

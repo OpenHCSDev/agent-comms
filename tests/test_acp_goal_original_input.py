@@ -10,7 +10,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
@@ -20,7 +20,7 @@ from agent_comms.input_disposition import InputDispositions
 async def owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     updates = []
@@ -42,10 +42,11 @@ def disposition_rows(agent):
 
 
 @pytest.mark.asyncio
-async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeypatch):
+async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_path, monkeypatch):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
     goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+    prior_generation = store.snapshot(goal.id)
 
     async def events(*args, **kwargs):
         native_id = "a" * 32
@@ -79,7 +80,8 @@ async def test_idle_owner_original_input_continues_active_goal(tmp_path, monkeyp
         current = comms.registry.require("project").goal
         assert current.id == goal.id and current.state.active
         generation = store.snapshot(goal.id)
-        assert generation.lifecycle == ReadyGeneration() and generation.number == 2
+        # Fresh owner input has its own authority; it does not spend the autonomous grant.
+        assert generation == prior_generation
     finally:
         await agent.shutdown()
 
@@ -135,6 +137,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
     store = agent.turns.open_goal_store()
     goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+    prior_generation = store.snapshot(goal.id)
     boundaries = []
 
     async def events(*args, **kwargs):
@@ -150,6 +153,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].declared_name == "unknown"
         assert rows[0].native_id is None
-        assert store.snapshot(goal.id).lifecycle != ReadyGeneration()
+        # A refused owner input cannot spend an unrelated autonomous grant.
+        assert store.snapshot(goal.id) == prior_generation
     finally:
         await agent.shutdown()
