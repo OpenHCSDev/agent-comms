@@ -1,0 +1,13 @@
+Resolved 8 packages in 374ms
+   Building agent-comms @ file:///home/ts/wt/comms-s7-baseline-20260928
+      Built agent-comms @ file:///home/ts/wt/comms-s7-baseline-20260928
+Prepared 1 package in 184ms
+Installed 8 packages in 5ms
+ + agent-client-protocol==0.12.1
+ + agent-comms==0.1.0 (from file:///home/ts/wt/comms-s7-baseline-20260928)
+ + annotated-types==0.8.0
+ + metaclass-registry==0.2.1
+ + pydantic==2.13.5
+ + pydantic-core==2.46.5
+ + typing-extensions==4.16.0
+ + typing-inspection==0.4.4
