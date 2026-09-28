@@ -271,12 +271,12 @@ def _trusted_package(package: Path) -> Path:
     package = package.absolute()  # lexical: resolve() would hide a symlink component
     if ".." in package.parts:
         raise NativePiUnavailable("Pinned native Pi package path is not lexical")
-    if not str(package).startswith("/var/tmp/agent-comms-pi-native-") or package.parts[-3:] != (
+    if package.parts[-3:] != (
         "node_modules",
         "@earendil-works",
         "pi-coding-agent",
     ):
-        raise NativePiUnavailable("Pinned disposable native Pi package is required")
+        raise NativePiUnavailable("Canonical native Pi package layout is required")
     for ancestor in (package, *package.parents):
         info = ancestor.lstat()
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):

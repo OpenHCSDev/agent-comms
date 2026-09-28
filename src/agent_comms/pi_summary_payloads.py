@@ -43,7 +43,7 @@ class SummaryFiles(PiPayload):
 
     def __post_init__(self):
         for paths in (self.read_files, self.modified_files):
-            if len(paths) > 256 or any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
+            if any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
                 raise ValueError("Invalid selected native file operations")
 
 
@@ -95,8 +95,9 @@ class SummaryResult(PiPayload):
     usage: SummaryUsage
 
     def __post_init__(self):
-        if not self.summary.strip() or len(self.summary.encode()) > 262144:
+        if not self.summary.strip():
             raise ValueError("Invalid selected native summary")
+        self.summary.encode("utf-8")  # Validate text, without a second output-size policy.
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -103,7 +103,18 @@ def test_compaction_child_refuses_external_helper_before_execution(native, tmp_p
     assert not marker.exists()
 
 
-def test_native_file_operations_survive_journaled_commit(native):
+@pytest.mark.parametrize(
+    "details",
+    [
+        {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]},
+        {
+            "readFiles": [f"workspace/{'segment/' * 120}source{i:04}.py" for i in range(800)],
+            "modifiedFiles": ["src/b.py"],
+        },
+    ],
+    ids=["ordinary", "beyond-retired-count-metadata-and-request-caps"],
+)
+def test_native_file_operations_survive_journaled_commit(native, details):
     bridge, owner, owner_generation, witness = native
     source = bridge.capture_source(owner, owner_generation, witness)
     usage = {
@@ -122,13 +133,13 @@ def test_native_file_operations_survive_journaled_commit(native):
         "Synthetic summary with file evidence",
         42,
         source=source,
-        details={"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]},
+        details=details,
         usage=usage,
     )
     assert operation.state.declared_name == "committed"
     saved = entries(witness)[-1]
-    assert saved["details"]["readFiles"] == ["src/a.py"]
-    assert saved["details"]["modifiedFiles"] == ["src/b.py"]
+    assert saved["details"]["readFiles"] == details["readFiles"]
+    assert saved["details"]["modifiedFiles"] == details["modifiedFiles"]
     assert saved["usage"] == usage
     assert saved["details"]["agentCommsCommit"]["commitId"] == operation.commit_id
     # Pi's next preparation consumes the prior structured details, not just
@@ -156,7 +167,7 @@ console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
         timeout=10,
         text=True,
     )
-    assert json.loads(result.stdout) == {"readFiles": ["src/a.py"], "modifiedFiles": ["src/b.py"]}
+    assert json.loads(result.stdout) == details
 
 
 def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
