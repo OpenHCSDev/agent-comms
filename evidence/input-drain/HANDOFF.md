@@ -6,13 +6,18 @@ Owned persistent tree: /home/ts/wt/comms-refactor-s7-input-drain-20260928
 Production candidate: 1dea4f7f7d0652561465abe2cea987e2378abfc8
 Base includes PR149, PR150, PR151 and PR152 (9988f6b).
 
-Parent has integrated the production candidate, passed 57 combined focused
-checks, and started fresh installed/configured-provider acceptance. Latest
-parent report: inside an actual selected summary with the fresh followup
-durably accepted_not_started. That is not yet a completed provider acceptance.
-Parent owns remaining actual-provider verification, merge/install and deployment.
-No production changes after the candidate; final commit adds evidence and moves
-two goal-admission fixture hooks to their new owner.
+Parent actual installed/configured-provider queue acceptance PASSED. The fresh
+session linked and committed its selected summary; original and queued native
+input IDs started exactly once in order after compaction. The original reply
+was exact; queued reply retained ORCHID-7301, Thursday14:30, cobalt and cedar.
+Parent reports no UNKNOWN/active reservations or emitted errors. I independently
+read the parent's receipt and verified verified_success=true, distinct STARTED
+input IDs and linked/committed records. Parent is merging/deploying PR154.
+
+Receipt: `/home/ts/wt/comms-refactor-integration-20260928/evidence/input-drain/actual-provider-queue-result.json`.
+No production changes after1dea4f7;8ec2c01 adds evidence and moves two
+fixture interception hooks to their new component owner. Parent retains serial
+deployment; this worker did not run a provider or mutate any live root.
 
 ## Implemented ownership
 
@@ -112,8 +117,8 @@ all39 native commit/lock cases pass. No live root or saved session was mutated.
 
 ## Remaining boundary and next work
 
-No local implementation blocker remains. Actual configured-provider acceptance
-and deployment belong to parent. Complete S7 TurnRunner ownership is the next
+No implementation blocker remains. Actual configured-provider acceptance passed;
+serial deployment remains with parent. Complete S7 TurnRunner ownership is the next
 independent surface: preserve this component and SessionLifecycle; no queue,
 compaction or native protocol redesign is needed for that work.
 

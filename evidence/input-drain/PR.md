@@ -11,4 +11,4 @@ Fixes the actual PR95 queued-during-summary failure. Compaction permits an exact
 - 53 final candidate queue/channel/private delivery cases pass after PR152 integration.
 - Full-context NRA scan: 79 detectors, none omitted, no findings in selected files. Authored component ownership is verified by tests, not claimed as native equivalence proof.
 
-Parent owns fresh configured-provider acceptance and serial integration/deployment. No CI wait. Evidence and final handoff are being completed on this branch.
+Parent fresh installed/configured-provider acceptance PASSED: linked/committed summary, original then queued native inputs each once, exact original reply and all four retained facts in queued reply, no UNKNOWN or emitted errors. Parent owns serial deployment. Full evidence and handoff are in evidence/input-drain/HANDOFF.md; no CI wait. Final test-only fixture migration passed all4 goal-original tests. Owned caches and basetemps (473689780 logical bytes) removed; no native package mutation.
