@@ -132,6 +132,23 @@ class SummarySummarizedData(SelectedSummaryData, declared_name="summary_summariz
 
 
 @dataclass(frozen=True, kw_only=True)
+class SummaryFailedData(SelectedSummaryData, declared_name="summary_failed"):
+    """Joined provider failure with unchanged summary-only native source."""
+
+    status: Literal["failed"]
+    witness: NativeWitness
+    selected: SelectedModel
+    settings: PiCompactionSettings
+    reason: str
+
+    def __post_init__(self):
+        if not 0 < len(self.reason) <= 1024 or any(
+            ord(c) < 32 or ord(c) == 127 for c in self.reason
+        ):
+            raise ValueError("Invalid selected summary failure detail")
+
+
+@dataclass(frozen=True, kw_only=True)
 class SelectedProbeData(PiResponseData):
     strict_fields = True
     version: Literal[1]
