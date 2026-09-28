@@ -286,6 +286,12 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
     from dataclasses import replace
 
     from agent_comms.acp import CommsAgent
+    from agent_comms.acp_extension import (
+        InputDeliveryChangedUpdate,
+        QueuePromptRequest,
+        decode_updates,
+        encode_request,
+    )
     from agent_comms.comms import wire
     from agent_comms.errors import RelationViolationError
     from agent_comms.goal_attempts import GoalAttemptStore
@@ -373,11 +379,11 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 response = await agent.prompt(
                     "proj",
                     [{"type": "text", "text": "Fresh followup"}],
-                    agentComms={"delivery": "queue", "deferDisplay": True},
+                    _meta=encode_request(QueuePromptRequest(defer_display=True)),
                 )
-                receipt = response.field_meta["agentComms"]["inputDisposition"]
-                assert receipt["status"] == "accepted_not_started"
-                key = "acp:" + receipt["inputId"]
+                (receipt,) = decode_updates(response.field_meta)
+                assert isinstance(receipt, InputDeliveryChangedUpdate)
+                key = "acp:" + receipt.input_id
                 queued_keys.append(key)
                 row = dispositions.read().lookup(key)
                 assert row.accepts_reservation and not row.has_native_binding
