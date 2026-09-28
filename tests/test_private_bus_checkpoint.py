@@ -317,8 +317,8 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
         )
     else:
         monkeypatch.setattr(
-            checkpoint,
-            "_final_seal",
+            checkpoint.FinalSeal,
+            "capture",
             lambda *_: (_ for _ in ()).throw(OSError("after SQLite COMMIT")),
         )
     with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
@@ -327,7 +327,7 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
     witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
     assert [item.message.seq for item in rows] == [1, 2]
     assert witness.through_seq == 2 and not more
-    assert comms.bus.log._private_marker_unlocked()["checkpoint_seal"]["state"] == "final"
+    assert isinstance(comms.bus.log._private_marker_unlocked().seal, checkpoint.FinalSeal)
 
 
 def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, monkeypatch) -> None:
@@ -337,8 +337,8 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
     install_private_bus_checkpoint(comms.bus.log)
     with monkeypatch.context() as patch:
         patch.setattr(
-            checkpoint,
-            "_final_seal",
+            checkpoint.FinalSeal,
+            "capture",
             lambda *_: (_ for _ in ()).throw(OSError("after commit")),
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):

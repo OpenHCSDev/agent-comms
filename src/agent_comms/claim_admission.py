@@ -142,7 +142,7 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake owner stopped or changed")
         _require_no_private_owner_rename(comms.root)
         metadata = bus.log._private_marker_unlocked()
-        if metadata["wire_root_id"] != admission.wire_root_id:
+        if metadata.root_id != admission.wire_root_id:
             raise IdentityConflict("Selected wake belongs to another wire root")
         initial = next(
             (
@@ -377,7 +377,7 @@ def write_selected_claimed_file(
             raise IdentityConflict("Selected write owner stopped or changed")
         _require_no_private_owner_rename(comms.root)
         marker = bus.log._private_marker_unlocked()
-        if marker["wire_root_id"] != admission.wire_root_id:
+        if marker.root_id != admission.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
         initial = next(
             (

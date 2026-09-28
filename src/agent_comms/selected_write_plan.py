@@ -129,7 +129,7 @@ class SelectedWritePlans:
         with _store_lock(self.comms._wire_lock_path):
             with self.comms.bus.log.locked():
                 marker = self.comms.bus.log._private_marker_unlocked()
-            if marker["wire_root_id"] != self.root_id or marker.get("claim_envelopes_version") != 1:
+            if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
             owner, admission_generation = self.comms.registry.live_owner_with_admission(owner_name)
             if owner.pid != os.getpid() or owner.active_turn is not None:

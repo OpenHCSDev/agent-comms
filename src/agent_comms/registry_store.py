@@ -10,7 +10,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .private_registry_guard import PrivateRegistryGuard
@@ -119,53 +118,13 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if guard_present:
                 raise RelationViolationError("Private registry guard has no protocol marker")
             return None
-        try:
-            marker = json.loads(marker_path.read_text(), object_pairs_hook=unique_wire_object)
-        except (OSError, ValueError, UnicodeError) as error:
-            raise RelationViolationError("Private registry guard marker is invalid") from error
-        if type(marker) is not dict:
-            raise RelationViolationError("Private registry guard marker is not an object")
-        if "writer_protocol_version" not in marker:
+        from .wire_log import WireLog
+
+        marker = WireLog(self.path.with_name("bus.jsonl")).read_metadata_unlocked(required=True)
+        if not marker.private:
             if guard_present:
                 raise RelationViolationError("Private registry guard marker is absent")
             return None
-        if (
-            set(marker)
-            not in (
-                {"last_seq", "writer_protocol_version", "wire_root_id"},
-                {"last_seq", "writer_protocol_version", "wire_root_id", "claim_envelopes_version"},
-                {
-                    "last_seq",
-                    "writer_protocol_version",
-                    "wire_root_id",
-                    "claim_envelopes_version",
-                    "checkpoint_version",
-                    "checkpoint_seal",
-                },
-            )
-            or (
-                "checkpoint_version" in marker and (type(marker.get("checkpoint_seal")) is not dict)
-            )
-            or (
-                "checkpoint_version" in marker
-                and (
-                    type(marker["checkpoint_version"]) is not int
-                    or marker["checkpoint_version"] != 1
-                )
-            )
-            or (
-                "claim_envelopes_version" in marker
-                and (
-                    type(marker["claim_envelopes_version"]) is not int
-                    or marker["claim_envelopes_version"] != 1
-                )
-            )
-            or type(marker["writer_protocol_version"]) is not int
-            or marker["writer_protocol_version"] != 1
-            or type(marker["last_seq"]) is not int
-            or not 0 <= marker["last_seq"] < 1 << 63
-        ):
-            raise RelationViolationError("Private registry guard marker is malformed")
         marker_info = marker_path.lstat()
         if (
             not stat.S_ISREG(marker_info.st_mode)
@@ -174,9 +133,6 @@ class RegistryStore(LockedStore[RegistryDocument]):
             or marker_info.st_nlink != 1
         ):
             raise RelationViolationError("Private registry guard marker is not owner-only")
-        root_id = marker.get("wire_root_id")
-        if type(root_id) is not str:
-            raise RelationViolationError("Private registry guard root ID is invalid")
-        guard = PrivateRegistryGuard(self.path, root_id)
+        guard = PrivateRegistryGuard(self.path, marker.root_id)
         guard.verify()
         return guard

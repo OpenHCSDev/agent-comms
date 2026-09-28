@@ -395,7 +395,7 @@ class WakeCandidateIndex:
         self._validate_limits(max_rows, max_bytes)
         try:
             marker = self.bus.log._private_marker_unlocked()
-            root_id = str(marker["wire_root_id"])
+            root_id = marker.root_id
             with self.bus.log.path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
@@ -455,7 +455,7 @@ class WakeCandidateIndex:
         """Check one WAL checkpoint against its bounded source prefix-tail witness."""
         try:
             marker = self.bus.log._private_marker_unlocked()
-            if marker["wire_root_id"] != root_id:
+            if marker.root_id != root_id:
                 raise ProjectionRebuildRequiredError("candidate private root changed")
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
@@ -510,7 +510,7 @@ class WakeCandidateIndex:
                 "candidate catch-up requires an exact append hint and bootstrap choice"
             )
         self._validate_limits(max_rows, max_bytes)
-        if self.bus.log._private_marker_unlocked()["wire_root_id"] != hint.root_id:
+        if self.bus.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         if self.path.exists():
             prior = self._verified_checkpoint(hint.root_id)

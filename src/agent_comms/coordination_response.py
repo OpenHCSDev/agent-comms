@@ -242,7 +242,7 @@ def _require_cohort_assignments(
     if not snapshot.assignments or snapshot.obligation is None:
         raise IdentityConflict("wire response requires selected claims and obligation")
     metadata = bus.log._private_marker_unlocked()
-    if metadata["wire_root_id"] != wire_root_id:
+    if metadata.root_id != wire_root_id:
         raise IdentityConflict("cohort bus root changed")
     originals = {
         message.seq: initial
@@ -374,7 +374,7 @@ def prepare_fenced_response(
         tuple(bus.log._verified_private_rows_unlocked(metadata))
         with store._transaction() as db:
             snapshot = _require_final_owner(
-                store, bus, fence, str(metadata["wire_root_id"]), owner_witness
+                store, bus, fence, metadata.root_id, owner_witness
             )
             execution = snapshot.execution
             assert execution.exact_target is not None
@@ -504,7 +504,7 @@ def _settle_fenced_response(
     with _response_boundary(bus) as registry_snapshot:
         _require_live_registry_owner(registry_snapshot, fence, owner_pid, owner_witness)
         metadata = bus.log._private_marker_unlocked()
-        wire_root_id = str(metadata["wire_root_id"])
+        wire_root_id = metadata.root_id
         first_dispatch = False
         if allow_append:
             # A durable dispatch barrier BEFORE the external append distinguishes

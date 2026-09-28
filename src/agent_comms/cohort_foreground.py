@@ -65,7 +65,7 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
     with bus.log.locked():
         marker = bus.log._private_marker_unlocked()
-    if marker["wire_root_id"] != wire_root_id:
+    if marker.root_id != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
 
 
@@ -87,7 +87,7 @@ def _accept_visible_initials(
     with bus.log.locked():
         _require_no_private_owner_rename(bus.log.path.parent)
         marker = bus.log._private_marker_unlocked()
-        if marker["wire_root_id"] != root_id:
+        if marker.root_id != root_id:
             raise IdentityConflict("private initial wire root changed")
         initials = tuple(
             initial
@@ -149,7 +149,7 @@ async def run_foreground_once(
         # resource before owner registration or an irreversible native send.
         with comms.bus.log.locked():
             marker = comms.bus.log._private_marker_unlocked()
-        if marker.get("claim_envelopes_version") != 1:
+        if not marker.claims:
             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
         normalize_existing_file(worktree, selected_existing_file_write.resource)
     thread = Thread(name, tags, str(worktree), pid=os.getpid())

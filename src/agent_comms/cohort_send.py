@@ -36,7 +36,7 @@ def publish_one(
     comms = Comms(root, private_initial_writes=True)
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()
-    if marker["wire_root_id"] != wire_root_id:
+    if marker.root_id != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
     message = comms.messaging.send_initial_cohort(sender, target, body)
     return message.seq, message.message_id

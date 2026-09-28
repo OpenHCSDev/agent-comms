@@ -192,7 +192,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     assert raised.value.wire_root_id == root_id
     assert captured["id"] == raised.value.message_id
     assert comms.bus.log.full_history() == []
-    assert comms.bus.log._private_marker_unlocked()["last_seq"] == 1
+    assert comms.bus.log._private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
     second = Comms(comms.root)
     user = second.registry.require(captured["from"])
