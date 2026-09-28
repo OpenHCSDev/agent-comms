@@ -133,7 +133,7 @@ def _same_generation_prefix(
     generation: int,
     admission_generation: int,
 ) -> bool:
-    """Reject an old native proof even in a legacy persisted cursor prefix."""
+    """Reject a previous owner's native proof in a persisted cursor prefix."""
     for item in evidence:
         row = NativeRuntimeInput.one(db, input_id=item.input_id)
         if row is None or (

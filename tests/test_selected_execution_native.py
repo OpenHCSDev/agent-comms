@@ -15,6 +15,7 @@ from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_source_cursor import read_current_native_cursor
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -169,6 +170,13 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
             assert execution.assignment.wire_seq == initial.message.seq
+            cursor = read_current_native_cursor(
+                comms.bus, store, wire_root_id=root_id, owner_name="beta"
+            )
+            assert cursor is not None
+            assert cursor.injected_seq == initial.message.seq
+            assert cursor.covered_seq >= cursor.injected_seq
+            assert cursor.input_id == outcome.input_id
             if after_cutover:
                 assert read_historical_native_inputs(
                     store, wire_root_id=root_id,

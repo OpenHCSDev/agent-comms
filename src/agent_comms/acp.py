@@ -573,7 +573,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return marker.root_id
 
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
-        """Selected private wake for this ACP session, never legacy inbox ACK.
+        """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native
         reservation/send boundary. No schema/participant is installed here;
@@ -591,7 +591,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # callbacks may only invalidate a prior client binding, not replace it.
         await self._publish_private_cursor(session_id, thread_name)
         if not self.inputs.auto_wake or not self.sessions.runtime_enabled:
-            return 0  # Explicitly disabled: no legacy path or ACK fallback.
+            return 0  # Explicitly disabled by owner runtime configuration.
         if self._comms.registry.status(thread_name).stopped:
             return 0
         if (
