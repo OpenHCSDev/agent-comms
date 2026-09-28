@@ -20,7 +20,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
@@ -515,15 +515,18 @@ class AttachedChild(ChildProcess):
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
+        input_enabled: bool = True,
+        limit: int = 65536,
     ) -> AttachedChild:
         with _launch_gate(command) as (argv, read_fd, write_fd, error_r, error_w):
             process = await asyncio.create_subprocess_exec(
                 *argv,
                 cwd=cwd,
                 env=env,
-                stdin=subprocess.PIPE,
+                stdin=subprocess.PIPE if input_enabled else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                limit=limit,
                 start_new_session=True,
                 pass_fds=(read_fd, error_w.fileno(), *pass_fds),
             )
@@ -546,7 +549,39 @@ class AttachedChild(ChildProcess):
         return ChildOutcome.from_returncode(await self.process.wait())
 
 
+    def close_input(self) -> None:
+        if self.stdin is not None:
+            with suppress(OSError):
+                self.stdin.close()
+
+    async def finish(self) -> ChildOutcome:
+        """Allow a completed streaming protocol to flush and exit after EOF."""
+        self.close_input()
+        try:
+            async with asyncio.timeout(STOP_GRACE_SECONDS):
+                outcome = await self.wait()
+            await self.stop()  # Also retire descendants of an exited leader.
+            return outcome
+        except TimeoutError:
+            return TimedOutOutcome(await self.stop())
+
+
 class BoundedRun:
+    @classmethod
+    @asynccontextmanager
+    async def session(cls, command: tuple[str, ...], *, timeout: float, **options):
+        """One bounded request/response exchange; caller owns its protocol."""
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("A positive finite timeout is required")
+        child = None
+        try:
+            async with asyncio.timeout(timeout):
+                child = await AttachedChild.start(command, **options)
+                yield child
+        finally:
+            if child is not None:
+                await child.stop()
+
     @classmethod
     async def run(
         cls,

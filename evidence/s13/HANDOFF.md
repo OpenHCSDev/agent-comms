@@ -98,3 +98,47 @@ tests. Scope-wide caller guards remain open until consumer migration completes.
 
 Darwin ABI source: https://raw.githubusercontent.com/apple-oss-distributions/xnu/main/bsd/sys/proc_info.h
 No Darwin/Windows runtime success is claimed from Linux tests.
+
+
+## Backend adoption (same draft, third commit)
+
+Migrated backend.py's persistent/turn children to AttachedChild and both Pi
+model/thinking discovery operations to BoundedRun.session. Deleted backend's
+_terminate_process and _close_child_stdin implementations and all their internal
+calls. turn_inputs.py's three calls now invoke the actual child owner directly.
+Backend source: -137 +42 lines; turn_inputs: -6 +4. Deleted 131 lines of old
+per-module supervision tests. They exercised the removed killpg/close machinery
+or its obsolete one-second grace; real tree retirement is covered at A12.
+First focused run was 9 passed / 1 failed on the retired 1.5-second timing
+assertion: actual new plan-required two-second grace measured 2.288 seconds.
+No weakened assertions were used to claim the old suite passed.
+
+Current acceptance: backend-adoption-tests.log **16 passed, 184 deselected**,
+including actual subprocess cancellation/reap, text exits, RPC stream, real
+persistent-Pi fixture reuse, queue/steer receipts and bounded model discovery.
+Current guards.log **3 passed**: A12 spawn/identity guards plus zero local spawn,
+kill or obsolete helper definitions in backend.py and turn_inputs.py.
+
+Real installed Pi CLI probe: **424 model entries** and the configured
+openai-codex/gpt-6-sol thinking-level response received through candidate
+BoundedRun discovery. This sent no model prompt and changed no installed code.
+Receipt: installed-pi-discovery.log. This is actual CLI process acceptance, not
+full installed-owner/ACP acceptance.
+
+Remaining S10 caller closure is explicitly handed off in its owning PR:
+https://github.com/OpenHCSDev/agent-comms/pull/234#issuecomment-5872525141
+pi_events.py has three `_terminate_process` calls/imports to remove in #234.
+Until those land with this code, #232 is NOT independently mergeable. No alias
+or forwarding bridge was retained to hide that dependency.
+
+`BoundedRun.session(tuple_argv, timeout=..., **AttachedChild.start_options)` is
+an async context for one finite request/response exchange. Caller owns Pi/ACP
+parsing; A12 owns timeout and stop/reap. `AttachedChild.finish()` requests EOF,
+allows the shared grace for normal protocol flush/exit, then returns a typed
+timeout/stop outcome if forced retirement is needed.
+
+Thread cutover clarification: preserve registry names/incarnations/session
+provenance. Only process bindings and runtime owner-release receipts are reset;
+do not discard durable thread/history data by resetting the whole registry.
+Parent's coordinated cutover must update the current runtime identity format
+and relaunch owners. Source gets no pre-cutover reader.

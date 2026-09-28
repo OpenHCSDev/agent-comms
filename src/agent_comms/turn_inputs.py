@@ -53,18 +53,16 @@ class InputForwarding:
             try:
                 command = commands.PiCommand.from_wire(wire)
             except (ValueError, TypeError) as error:
-                from .backend import _terminate_process
 
                 session.record_failure(
                     failures.PromptSendFailed(f"Invalid queued Pi command: {error}")
                 )
-                await _terminate_process(session.proc)
+                await session.proc.stop()
                 return
             if not await command.steer(session, forwarded):
                 return
 
     async def interrupt(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-        from .backend import _terminate_process
 
         while True:
             self.changed.clear()
@@ -93,7 +91,7 @@ class InputForwarding:
             session.record_failure(
                 failures.AuthorityChanged("Input authority changed before immediate steering.")
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             return False
         await session.stdin.drain()
         return True
@@ -101,7 +99,7 @@ class InputForwarding:
     async def send_prompt(
         self, command: commands.Prompt, session: TurnSession, forwarded: ForwardedInput
     ) -> bool:
-        from .backend import _maintenance_send_boundary, _terminate_process
+        from .backend import _maintenance_send_boundary
 
         public_id = forwarded.public_id or f"agent-comms-steer-{uuid4().hex}"
         native_id = secrets.token_hex(16)
@@ -136,7 +134,7 @@ class InputForwarding:
             session.record_failure(
                 failures.AuthorityChanged("Input authority changed before Pi prompt send.")
             )
-            await _terminate_process(session.proc)
+            await session.proc.stop()
             return False
         # None means never sent; preserve the owner's UNKNOWN, not a replay.
         self.pending[:] = [item for item in self.pending if item[3] != native_id]
