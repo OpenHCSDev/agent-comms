@@ -222,5 +222,3 @@ def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root
     assert comms.bus.pending_count(viewer, "peer") == 1
     # A failure at the *final* post-replace sync remains UNKNOWN: absent a
     # separate durable marker commit witness, the row may already be visible.
-
-

@@ -333,7 +333,3 @@ def _publish_active_route_locked(
         if temporary is not None:
             with suppress(OSError):
                 os.unlink(temporary, dir_fd=directory)
-
-
-
-
