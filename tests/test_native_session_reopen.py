@@ -186,7 +186,9 @@ async def test_canonical_manual_route_cannot_use_installed_legacy_compaction(tmp
     async def forbidden(*args, **kwargs):
         raise AssertionError("legacy installed Pi route must not launch")
 
-    monkeypatch.setattr(manual_compaction_bridge.manual_compaction, "compact_session", forbidden)
+    monkeypatch.setattr(
+        manual_compaction_bridge.manual_compaction.ManualCompaction, "run", forbidden
+    )
     result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
     assert result == {
         "ok": False,
@@ -214,7 +216,9 @@ async def test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route
     async def forbidden(*args, **kwargs):
         raise AssertionError("Verified canonical native alias must not reach legacy writer")
 
-    monkeypatch.setattr(manual_compaction_bridge.manual_compaction, "compact_session", forbidden)
+    monkeypatch.setattr(
+        manual_compaction_bridge.manual_compaction.ManualCompaction, "run", forbidden
+    )
     result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
     assert result == {
         "ok": False,
