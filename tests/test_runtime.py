@@ -515,8 +515,8 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         assert comms.registry.require("child").name == "renamed-child"
         assert len(comms.registry.all_threads()) == 2
         comms.owners.stop("parent")
-        deleted = comms.threads.delete("parent")
-        assert deleted.detached_children == ("renamed-child",)
+        detached = comms.registry.remove("parent")
+        assert detached == ("renamed-child",)
         assert comms.registry.require("child").parent is None
         assert comms.registry.require("child").pid == child.pid
         response = await second.prompt("child", [{"type": "text", "text": "after parent deletion"}])
@@ -529,7 +529,7 @@ async def test_fork_owner_survives_turn_and_two_clients_attach_without_duplicate
         # Reap the child started by fork (otherwise /proc retains a zombie).
         with suppress(ChildProcessError):
             await asyncio.to_thread(os.waitpid, child.pid, 0)
-    comms.threads.delete("child")
+    comms.registry.remove("child")
     assert "child" not in comms.registry
     assert "renamed-child" not in comms.registry
 
