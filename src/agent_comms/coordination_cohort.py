@@ -2,7 +2,7 @@
 
 No live wake, context assertion, publication, retry, or cursor advancement.
 Only a MessageBus-owned original raw-row read can enter this writer. A frozen
-pure digest, caller-supplied DTO, or legacy singleton claim is not bus proof.
+pure digest, caller-supplied DTO, or unbound singleton claim is not bus proof.
 """
 
 from __future__ import annotations
@@ -184,7 +184,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
         for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
         if type(decision) is NoWakeDecision
     ):
-        raise IdentityConflict("no-wake observer has a conflicting legacy claim")
+        raise IdentityConflict("no-wake observer has a conflicting unbound claim")
     return AcceptedCohort(
         initial.wire_root_id,
         message.seq,
@@ -356,7 +356,7 @@ def next_sealed_assignment(
 def sealed_cohort_assignments(
     store: MutationStore, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100
 ) -> tuple[WakeAssignment, ...]:
-    """Bounded receipt-backed projection. Never pages legacy singleton claims."""
+    """Bounded receipt-backed projection. Never pages unbound singleton claims."""
     if (
         type(after_seq) is not int
         or after_seq < 0

@@ -56,7 +56,7 @@ def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLa
         )
     if environment.get("PI_PROMPT"):
         raise PublicationActivationBlocked(
-            "private N/K owner cannot start with an unbound legacy prompt"
+            "private N/K owner cannot start with an unbound prompt"
         )
     validated_root = Path(root).expanduser().absolute()  # capture cwd once
     native_package = Path(package)

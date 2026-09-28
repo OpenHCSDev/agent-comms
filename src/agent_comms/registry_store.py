@@ -99,7 +99,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
         The directory, guard file and registry are one private root. A marker
         without its committed guard (or a guard without a marker) is an
-        uncertain cutover, never an invitation to bootstrap old metadata.
+        uncertain migration, never an invitation to bootstrap old metadata.
         """
         from .private_registry_guard import PrivateRegistryGuard
 

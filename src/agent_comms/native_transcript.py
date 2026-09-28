@@ -37,7 +37,7 @@ def _reverse_lines(path: Path, *, max_bytes: int | None = None) -> Iterator[byte
 
 
 def _reverse_records(path: Path, before: int) -> Generator[tuple[int, int, bytes], None, None]:
-    """Seek backwards in chunks; never parse or allocate the preceding history."""
+    """Seek from the end in chunks; never parse or allocate the preceding history."""
     with path.open("rb") as stream:
         position = before
         end = before

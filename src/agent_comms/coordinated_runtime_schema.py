@@ -44,7 +44,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
 
 
 def install_native_runtime_schema(store: MutationStore) -> None:
-    """Explicit fresh schema install. Existing incompatible state is never converted."""
+    """Explicit fresh schema install. Existing state must match the declared schema."""
     if type(store) is not MutationStore:
         raise TypeError("native runtime requires the actual coordinator store")
     with store._transaction() as db:

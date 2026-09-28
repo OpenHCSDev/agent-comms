@@ -644,7 +644,7 @@ class OwnedTurn:
                 )
             except Exception:
                 # A selected adaptive operation may already have paid or
-                # written. Do not turn a fault into ordinary input fallback.
+                # written. Preserve the failed original input outcome.
                 if self.goal_permit is not None:
                     self.runner.comms.goals.block_goal_after_failed_turn(
                         self.thread_name,

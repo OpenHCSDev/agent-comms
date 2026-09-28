@@ -1,7 +1,7 @@
 """Declared native input and cursor rows, never reconstructed native proof.
 
 These are runtime tables in coordination.sqlite3. Installation resets their
-store at a quiet cutover; admission remains fenced by the root authority.
+store at a quiet migration; admission remains fenced by the root authority.
 """
 
 from __future__ import annotations
