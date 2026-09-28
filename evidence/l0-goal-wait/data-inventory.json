@@ -1,0 +1,76 @@
+{
+  "/var/tmp/agent-comms-live-20260927-wzjtqhza": {
+    "registry_threads": 104,
+    "registry_goals": 18,
+    "registry": {
+      "goal_snapshots": 18,
+      "missing_mention_source": 13,
+      "blocked": 4,
+      "blocked_null_or_missing_reason": 3,
+      "blocked_blank_reason": 0,
+      "blocked_noncanonical_reason": 0
+    },
+    "wait_rows": 0,
+    "wait_missing_fields": {
+      "owner_created_at": 0,
+      "target_turn_generations": 0,
+      "report_turn_id": 0,
+      "report_turn_generation": 0
+    },
+    "wait_null_fields": {
+      "owner_created_at": 0,
+      "report_turn_id": 0,
+      "report_turn_generation": 0
+    },
+    "wait_generation_length_mismatch": 0,
+    "wait_idle_target_slots": 0,
+    "history_entries": 2,
+    "history": {
+      "goal_snapshots": 2,
+      "missing_mention_source": 0,
+      "blocked": 2,
+      "blocked_null_or_missing_reason": 0,
+      "blocked_blank_reason": 0,
+      "blocked_noncanonical_reason": 0
+    },
+    "private_goal_db_exists": false,
+    "registry_goals_missing_private_generation": 18
+  },
+  "/home/ts/.agent-comms": {
+    "registry_threads": 104,
+    "registry_goals": 20,
+    "registry": {
+      "goal_snapshots": 20,
+      "missing_mention_source": 13,
+      "blocked": 6,
+      "blocked_null_or_missing_reason": 3,
+      "blocked_blank_reason": 0,
+      "blocked_noncanonical_reason": 0
+    },
+    "wait_rows": 4,
+    "wait_missing_fields": {
+      "owner_created_at": 0,
+      "target_turn_generations": 0,
+      "report_turn_id": 0,
+      "report_turn_generation": 0
+    },
+    "wait_null_fields": {
+      "owner_created_at": 4,
+      "report_turn_id": 4,
+      "report_turn_generation": 4
+    },
+    "wait_generation_length_mismatch": 4,
+    "wait_idle_target_slots": 0,
+    "history_entries": 456,
+    "history": {
+      "goal_snapshots": 887,
+      "missing_mention_source": 516,
+      "blocked": 104,
+      "blocked_null_or_missing_reason": 61,
+      "blocked_blank_reason": 0,
+      "blocked_noncanonical_reason": 0
+    },
+    "private_goal_db_exists": true,
+    "registry_goals_missing_private_generation": 2
+  }
+}

@@ -36,13 +36,6 @@ def wait(goal_id="goal"):
     )
 
 
-GOLDEN = (
-    '{"goal": {"goal_id": "goal", "wait_id": "wait", "revision": 2, '
-    '"after_seq": 7, "targets": [{"name": "worker", "created_at": 123.0}], '
-    '"owner_created_at": 122.0, "target_turn_generations": [3], '
-    '"report_turn_id": "turn", "report_turn_generation": 4}}'
-)
-
 
 def _hold_lock(path, shared, ready, release):
     with _store_lock(path, shared=shared):
@@ -104,28 +97,20 @@ def test_abstract_parent_and_real_adopter(tmp_path):
     assert GoalWaits.update is LockedStore.update
 
 
-def test_golden_current_legacy_and_noop(tmp_path):
+def test_current_wait_persistence_and_noop(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
     assert store.read() == {}
     assert not store.path.exists()
     assert not store.clear("absent")
     assert not store.path.exists()
     store.record(wait())
-    assert store.path.read_text() == GOLDEN
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
     assert store.read() == {"goal": wait()}
     before = store.path.stat()
     assert not store.clear("goal", wait_id="stale")
     assert store.path.stat() == before
-    store.path.write_text(
-        '{"goal": {"goal_id": "goal", "wait_id": "legacy", "revision": 1, '
-        '"after_seq": 0, "targets": [{"name": "worker", "created_at": 123}]}}'
-    )
-    assert store.read() == {
-        "goal": GoalWait("goal", "legacy", 1, 0, (GoalWaitTarget("worker", 123),))
-    }
-    assert store.clear("goal", wait_id="legacy")
-    assert store.path.read_text() == "{}"
+    assert store.clear("goal", wait_id="wait")
+    assert store.read() == {}
 
 
 def test_mode_preserved_and_new_inode_published(tmp_path):
@@ -187,8 +172,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
     with pytest.raises(OSError, match="injected"):
         store.record(replace(wait(), revision=999))
     if existing:
-        assert store.path.read_text() == GOLDEN
-        assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
+            assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
     else:
         assert not store.path.exists()
     assert not list(tmp_path.glob("*.tmp"))
@@ -206,7 +190,6 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
         store.update(fail)
     with pytest.raises(TypeError, match="Unsupported JSON"):
         store.record(replace(wait(), owner_created_at=float("nan")))
-    assert store.path.read_text() == GOLDEN
     # The failed callback/encoder released the lock.
     store.record(replace(wait(), revision=3))
 

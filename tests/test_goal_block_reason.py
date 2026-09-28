@@ -17,7 +17,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_presentation import GoalExecution
-from agent_comms.goal_states import BlockedGoal
+from agent_comms.goal_states import UnrecordedBlockGoal, BlockedGoal
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
@@ -115,11 +115,11 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     assert wire(tmp_path / "another").registry.require("worker").goal == revoked
 
 
-def test_legacy_blocked_row_is_labeled_unavailable_not_inferred_from_progress(tmp_path):
+def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_path):
     comms, goal = _owner(tmp_path)
     thread = comms.registry.require("worker")
-    legacy = Goal(goal.text, goal.id, state=BlockedGoal(), progress="Unrelated old progress")
-    comms.registry.register(replace(thread, goal=legacy), comms.registry.status("worker"))
+    recorded = Goal(goal.text, goal.id, state=UnrecordedBlockGoal(), progress="Unrelated old progress")
+    comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
     observed = wire(tmp_path).goals.goal_execution("worker")
     assert observed is not None
     assert observed.block_reason is None

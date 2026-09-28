@@ -65,43 +65,31 @@ class Goals:
         include_history: bool = False,
         awaiting_keys: frozenset[str] | None = None,
     ) -> dict[str, Any]:
-        """Read current delivery notices and separately counted migration history."""
-        from .input_disposition import AcpDeliveryCursors, InputDispositions
+        """Project durable notices using current owner queue facts when available."""
+        from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            boundary = (
-                AcpDeliveryCursors(self.root / AcpDeliveryCursors.filename)
-                .read()
-                .boundary(aliases)
-                .legacy_through
-            )
             return (
                 InputDispositions(self.root / InputDispositions.filename)
                 .read()
                 .delivery_overview(
-                    aliases, boundary, include_history=include_history, awaiting_keys=awaiting_keys
+                    aliases, include_history=include_history, awaiting_keys=awaiting_keys
                 )
             )
 
     def dismiss_historical_inputs(
         self, name: str, *, awaiting_keys: frozenset[str] | None = None
     ) -> dict[str, Any]:
-        """Clear only migration notices; UNKNOWN remains unresolved and unreplayable."""
-        from .input_disposition import AcpDeliveryCursors, InputDispositions
+        """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
+        from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            boundary = (
-                AcpDeliveryCursors(self.root / AcpDeliveryCursors.filename)
-                .read()
-                .boundary(aliases)
-                .legacy_through
-            )
             return InputDispositions(self.root / InputDispositions.filename).dismiss_historical(
-                aliases, boundary, awaiting_keys=awaiting_keys
+                aliases, awaiting_keys=awaiting_keys
             )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
@@ -195,7 +183,7 @@ class Goals:
             wait = rows.get(goal.id)
             if (
                 wait is None
-                or wait.owner_created_at not in (None, owner.created_at)
+                or wait.owner_created_at != owner.created_at
                 or wait.revision > goal.revision
             ):
                 return ()
@@ -276,12 +264,10 @@ class Goals:
                     wait is None
                     or wait.owner_created_at != owner.created_at
                     or wait.revision > goal.revision
-                    or len(wait.target_turn_generations) != len(wait.targets)
                     or not any(
                         snapshot.aliases.get(target.name, target.name) == canonical
                         and target.created_at == fence.identity.incarnation.created_at
                         and (generation := wait.target_turn_generations[index]) is not None
-                        and type(generation) is int
                         and 0 < generation <= fence.identity.generation
                         for index, target in enumerate(wait.targets)
                     )

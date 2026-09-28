@@ -78,7 +78,7 @@ def rows(store, table):
 
 
 def blocked(owner):
-    return replace(owner, goal=replace(owner.goal, state=BlockedGoal(), revision=3))
+    return replace(owner, goal=replace(owner.goal, state=BlockedGoal("Explicit fixture refusal"), revision=3))
 
 
 def read(store, owner, **kwargs):
@@ -246,7 +246,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"created_at": 11.0},
         {"worktree": "/changed"},
         {"pid": 0},
-        {"goal": Goal("replacement", "replacement", state=BlockedGoal())},
+        {"goal": Goal("replacement", "replacement", state=BlockedGoal("Explicit fixture refusal"))},
         {"goal": Goal("active", "goal")},
         {"turn_generation": 8},
         {"last_finished_turn_id": "b" * 32},

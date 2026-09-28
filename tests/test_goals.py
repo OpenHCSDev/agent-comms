@@ -81,7 +81,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     [
         (ActiveGoal(), PausedGoalAction, "Pause"),
         (PausedGoal(), ActiveGoalAction, "Resume"),
-        (BlockedGoal(), RetryGoalAction, "Retry"),
+        (BlockedGoal("Explicit fixture refusal"), RetryGoalAction, "Retry"),
         (CompletedGoal(), None, "Completed"),
     ],
 )

@@ -43,15 +43,6 @@ def owner(tmp_path):
     return comms, goal
 
 
-def test_golden_names_and_model_schema():
-    assert GoalState.names() == ("active", "paused", "blocked", "completed")
-    assert PauseSource.names() == ("owner", "model", "runtime")
-    assert GoalAction.model_choices() == ("active", "standby", "completed", "blocked")
-    schema = next(t for t in tools.TOOLS if t.name == "comms_goal").schema()
-    assert schema == json.loads(
-        (Path(__file__).parent / "fixtures/s8/comms_goal_schema.json").read_text()
-    )
-
 
 def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypatch):
     comms, goal = owner

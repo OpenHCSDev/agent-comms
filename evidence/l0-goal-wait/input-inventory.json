@@ -1,0 +1,20 @@
+{
+  "/var/tmp/agent-comms-live-20260927-wzjtqhza": {
+    "rows": 27,
+    "unknown": 8,
+    "notice_dismissed": 8,
+    "has_native_id": 19,
+    "goal_review_rows": 0,
+    "bus_rows": 0,
+    "cursor_rows": 0
+  },
+  "/home/ts/.agent-comms": {
+    "rows": 7766,
+    "unknown": 2577,
+    "notice_dismissed": 1059,
+    "has_native_id": 5211,
+    "goal_review_rows": 547,
+    "bus_rows": 7209,
+    "cursor_rows": 96
+  }
+}

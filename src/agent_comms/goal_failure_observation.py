@@ -19,7 +19,7 @@ from .field_codec import FieldCodec
 from .goal_attempt_phase import FailedAttempt
 from .goal_generation import BlockedGeneration
 from .goal_pauses import GoalPauseEvent
-from .goal_states import BlockedGoal, PausedGoal
+from .goal_states import BlockedState, PausedGoal
 from .goals import Goal
 from .recovery_projection import _preflight
 from .thread_status import ThreadStatus
@@ -191,7 +191,7 @@ def read_failed_turn_projection(
         or not owner_status.active
         or owner.pid <= 0
         or goal is None
-        or not isinstance(goal.state, (BlockedGoal, PausedGoal))
+        or not isinstance(goal.state, (BlockedState, PausedGoal))
     ):
         return unavailable("owner_or_goal_changed")
     if type(admission) is not int or admission <= 0:

@@ -11,7 +11,7 @@ from agent_comms.comms import wire
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import StartedInput, UnknownInput
-from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.locked_store import LockedStore
 from agent_comms.threads import Thread
 
@@ -66,12 +66,11 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     assert row.unresolved  # prior snapshot is immutable and unchanged
 
 
-@pytest.mark.parametrize("store_type", [InputDispositions, AcpDeliveryCursors])
 @pytest.mark.parametrize(
     "damage", [{}, {"rows": {}}, {"version": True, "rows": {}}, {"version": 1, "rows": []}]
 )
-def test_invalid_documents_are_not_replaced_by_updates(tmp_path, store_type, damage):
-    store = store_type(tmp_path / store_type.filename)
+def test_invalid_documents_are_not_replaced_by_updates(tmp_path, damage):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
     store.path.write_text(json.dumps(damage))
     original = store.path.read_bytes()
     with pytest.raises((TypeError, ValueError)):

@@ -314,11 +314,14 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     GoalWaits(tmp_path / "goal_waits.json").record(
         GoalWait(
             bob.id,
-            "older-bob-wait",
+            "bob-wait",
             bob.revision,
             0,
             (GoalWaitTarget("alice", peer.created_at),),
             owner_created_at=owner.created_at,
+            target_turn_generations=(peer.turn_generation,),
+            report_turn_id=owner.active_turn.id,
+            report_turn_generation=owner.turn_generation,
         )
     )
     comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
@@ -354,11 +357,12 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     GoalWaits(tmp_path / "goal_waits.json").record(
         GoalWait(
             bob.id,
-            "older-bob-wait",
+            "bob-wait",
             bob.revision,
             0,
             (GoalWaitTarget("alice", peer.created_at),),
             owner_created_at=owner.created_at,
+            target_turn_generations=(peer.turn_generation,),
             report_turn_id="bob-first" if bound_old_turn else None,
             report_turn_generation=owner.turn_generation if bound_old_turn else None,
         )
@@ -389,11 +393,14 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     GoalWaits(tmp_path / "goal_waits.json").record(
         GoalWait(
             bob.id,
-            "older-bob-wait",
+            "bob-wait",
             bob.revision,
             0,
             (GoalWaitTarget("alice", comms.registry.require("alice").created_at),),
             owner_created_at=comms.registry.require("bob").created_at,
+            target_turn_generations=(comms.registry.require("alice").turn_generation,),
+            report_turn_id="bob-turn",
+            report_turn_generation=comms.registry.require("bob").turn_generation,
         )
     )
     comms.agents.finish_turn(comms.registry.require("alice").turn_lease)

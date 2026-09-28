@@ -14,6 +14,7 @@ from .goal_pauses import GoalPauseEvent
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
+    BlockedState,
     CompletedGoal,
     GoalState,
     OwnerPause,
@@ -227,16 +228,15 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         report_turn = ctx.report_turn
         review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
         wait_targets = review.targets
-        from .input_disposition import AcpDeliveryCursors, InputDispositions
+        from .input_disposition import InputDispositions
 
         aliases = review.owners
-        cursor = (
-            AcpDeliveryCursors(ctx.goals.root / AcpDeliveryCursors.filename)
-            .read()
-            .boundary(aliases)
-            .cursor
-        )
         dispositions = InputDispositions(ctx.goals.root / InputDispositions.filename)
+        handled_sequences = {
+            row.sequence
+            for row in dispositions.read().rows.values()
+            if row.owner in aliases and not row.unresolved and row.sequence is not None
+        }
         unknown = {row.key: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
         if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):
@@ -247,7 +247,6 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             for row in unknown.values()
             if goal is not None and row.reviewed_for_goal(goal.id)
         }
-        unresolved = {row.sequence for row in unknown.values() if row.sequence is not None}
         senders = review.senders
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
@@ -255,8 +254,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             lambda message: (
                 message.target in aliases
                 and message.sender in senders
-                and (message.seq > cursor or message.seq in unresolved)
-                and message.seq not in reviewed_sequences | prior_reviews
+                and message.seq not in handled_sequences | reviewed_sequences | prior_reviews
             ),
             before=None,
             after=None,
@@ -433,7 +431,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
 
 
 def required_block_reason(reason: str | None) -> str:
-    """Validate a new block's own reason; prior progress is never a fallback."""
+    """Validate the block's own reason, independently of prior progress."""
     if type(reason) is not str or not reason.strip():
         raise ValueError("Blocking a goal requires a nonempty reason for the needed input.")
     normalized = reason.strip()
@@ -452,15 +450,12 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
-        if not isinstance(goal.state, BlockedGoal):
+        if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.owner_store
         assert store is not None
         generation = store.snapshot(goal.id)
         if generation is None:
-            # Explicit owner decision can adopt a legacy registry-only goal.
-            store.create_goal(goal.id)
-            generation = store.snapshot(goal.id)
-            assert generation is not None
+            raise ValueError("Goal launch authority is missing; Retry cannot create a grant.")
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
         return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)
