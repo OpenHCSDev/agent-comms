@@ -1,5 +1,5 @@
 /** Compaction source traversal and model-sized serialization; no history-sized arrays. */
-import { closeSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { convertToLlm } from '../messages.js';
@@ -64,7 +64,11 @@ export class ReducedSummarySource extends SummarySource {
         const root = process.env.AGENT_COMMS_SESSION_INDEX_DIR ?? join(homedir(), '.cache', 'agent-comms', 'session-indexes');
         mkdirSync(root, {recursive:true, mode:0o700});
         this.#directory = mkdtempSync(join(root,'summary-'));
-        this.#fd = openSync(join(this.#directory,'segments'), 'wx+',0o600);
+        const path = join(this.#directory,'segments');
+        this.#fd = openSync(path, 'wx+',0o600);
+        unlinkSync(path);
+        rmSync(this.#directory);
+        this.#directory = undefined;
     }
     get count() { return this.#count; }
     append(text) {

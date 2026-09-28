@@ -36,6 +36,8 @@ test('both stores preserve branch context, settings, archived input and commit i
             assert.equal([...store.trackedMetadata()][0].id,'a');
             assert.equal([...store.commits('commit')][0].id,'compact');
             assert.deepEqual([...store.entries()],rows);
+            assert.equal(store.commonAncestor('c','sibling'),'a');
+            assert.equal(store.commonAncestor(null,'c'),null);
         }
         const next=entry('d','c');
         appendFileSync(f.file,JSON.stringify(next)+'\n');

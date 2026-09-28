@@ -81,6 +81,16 @@ export class EntryStore {
         for (const meta of this.ancestors(leafId)) if (meta.id === id) return true;
         return false;
     }
+    commonAncestor(leftId, rightId) {
+        let left = leftId === null ? undefined : this.metadata(leftId);
+        let right = rightId === null ? undefined : this.metadata(rightId);
+        while (left && right) {
+            if (left.id === right.id) return left.id;
+            if (left.sequence > right.sequence) left = this.metadata(left.parentId);
+            else right = this.metadata(right.parentId);
+        }
+        return null;
+    }
     latest(leafId, type) {
         for (const meta of this.ancestors(leafId)) if (meta.type === type) return this.get(meta.id);
         return undefined;
@@ -132,6 +142,27 @@ export class EntryStore {
         for (const meta of this.metadataEntries()) if (meta.label?.targetId === id) found = meta.label;
         return found?.label ? found : undefined;
     }
+}
+
+/** A re-iterable branch suffix, excluding its ancestor boundary. */
+export class EntryBranchRange {
+    constructor(store, leafId, ancestorId = null) {
+        this.store = store;
+        this.leafId = leafId;
+        this.start = ancestorId === null ? -1 : store.metadata(ancestorId).sequence;
+    }
+    *[Symbol.iterator]() {
+        for (const meta of this.store.branchMetadata(this.leafId)) {
+            if (meta.sequence > this.start) yield this.store.get(meta.id);
+        }
+    }
+    *reverse() {
+        for (const meta of this.store.ancestors(this.leafId)) {
+            if (meta.sequence <= this.start) break;
+            yield this.store.get(meta.id);
+        }
+    }
+    isEmpty() { return this.leafId === null || this.store.metadata(this.leafId).sequence <= this.start; }
 }
 
 export class MemoryEntryStore extends EntryStore {

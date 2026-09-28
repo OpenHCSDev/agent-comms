@@ -1,14 +1,31 @@
 --- a/dist/core/session-manager.js
 +++ b/dist/core/session-manager.js
-@@ -1,3 +1,4 @@
+@@ -1,7 +1,8 @@
 +import { DiskEntryStore, MemoryEntryStore } from "./session-entry-store.js";
  import { uuidv7 } from "@earendil-works/pi-ai";
  import { randomUUID } from "crypto";
  import { appendFileSync, closeSync, createReadStream, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, statSync, writeFileSync, } from "fs";
-@@ -31,82 +32,13 @@
-     return randomUUID();
+-import { fstatSync, realpathSync, unlinkSync, readFileSync } from "fs";
++import { fstatSync, realpathSync, unlinkSync } from "fs";
+ import { createHash } from "crypto";
+ import { basename } from "path";
+ import { readdir, stat } from "fs/promises";
+@@ -21,146 +22,14 @@
+     }
  }
- /** Migrate v1 → v2: add id/parentId tree structure. Mutates in place. */
+ /** Generate a unique short ID (8 hex chars, collision-checked) */
+-function generateId(byId) {
++function generateId(store) {
+     for (let i = 0; i < 100; i++) {
+         const id = randomUUID().slice(0, 8);
+-        if (!byId.has(id))
++        if (!store.has(id))
+             return id;
+     }
+     // Fallback to full UUID if somehow we have collisions
+     return randomUUID();
+-}
+-/** Migrate v1 → v2: add id/parentId tree structure. Mutates in place. */
 -function migrateV1ToV2(entries) {
 -    const ids = new Set();
 -    let prevId = null;
@@ -33,7 +50,7 @@
 -        }
 -    }
 -}
- /** Migrate v2 → v3: rename hookMessage role to custom. Mutates in place. */
+-/** Migrate v2 → v3: rename hookMessage role to custom. Mutates in place. */
 -function migrateV2ToV3(entries) {
 -    for (const entry of entries) {
 -        if (entry.type === "session") {
@@ -49,10 +66,10 @@
 -        }
 -    }
 -}
- /**
-  * Run all necessary migrations to bring entries to current version.
-  * Mutates entries in place. Returns true if any migration was applied.
-  */
+-/**
+- * Run all necessary migrations to bring entries to current version.
+- * Mutates entries in place. Returns true if any migration was applied.
+- */
 -function migrateToCurrentVersion(entries) {
 -    const header = entries.find((e) => e.type === "session");
 -    const version = header?.version ?? 1;
@@ -64,11 +81,11 @@
 -        migrateV2ToV3(entries);
 -    return true;
 -}
- /** Exported for testing */
+-/** Exported for testing */
 -export function migrateSessionEntries(entries) {
 -    migrateToCurrentVersion(entries);
 -}
- /** Exported for compaction.test.ts */
+-/** Exported for compaction.test.ts */
 -export function parseSessionEntries(content) {
 -    const entries = [];
 -    const lines = content.trim().split("\n");
@@ -85,13 +102,13 @@
 -    }
 -    return entries;
 -}
- export function getLatestCompactionEntry(entries) {
-     for (let i = entries.length - 1; i >= 0; i--) {
-         if (entries[i].type === "compaction") {
-@@ -114,37 +46,6 @@
-         }
-     }
-     return null;
+-export function getLatestCompactionEntry(entries) {
+-    for (let i = entries.length - 1; i >= 0; i--) {
+-        if (entries[i].type === "compaction") {
+-            return entries[i];
+-        }
+-    }
+-    return null;
 -}
 -function buildEntryIndex(entries, byId) {
 -    if (byId)
@@ -123,10 +140,26 @@
 -    }
 -    path.reverse();
 -    return path;
+-}
+-function getSessionContextSettings(path) {
+-    let thinkingLevel = "off";
+-    let model = null;
+-    for (const entry of path) {
+-        if (entry.type === "thinking_level_change") {
+-            thinkingLevel = entry.thinkingLevel;
+-        }
+-        else if (entry.type === "model_change") {
+-            model = { provider: entry.provider, modelId: entry.modelId };
+-        }
+-        else if (entry.type === "message" && entry.message.role === "assistant") {
+-            model = { provider: entry.message.provider, modelId: entry.message.model };
+-        }
+-    }
+-    return { thinkingLevel, model };
  }
- function getSessionContextSettings(path) {
-     let thinkingLevel = "off";
-@@ -198,46 +99,11 @@
+ /**
+  * Project one selected session entry into LLM/runtime messages.
+@@ -198,46 +67,11 @@
   * by the kept entries starting at firstKeptEntryId and all entries after the
   * compaction entry. Older summarized entries are omitted.
   */
@@ -173,7 +206,7 @@
  /**
   * Compute the default session directory for a cwd.
   * Encodes cwd into a safe directory name under ~/.pi/agent/sessions/.
-@@ -277,12 +143,6 @@
+@@ -277,12 +111,6 @@
      }
  }
  /** Exported for testing */
@@ -186,7 +219,15 @@
  /**
   * Inspect a physical line while searching for the first parsed session entry.
   * Blank and malformed lines are skipped to match loadEntriesFromFile().
-@@ -551,8 +411,8 @@
+@@ -544,15 +372,15 @@
+  * Branching moves the leaf to an earlier entry, allowing new branches without
+  * modifying history.
+  *
+- * Use buildSessionContext() to get the resolved message list for the LLM, which
++ * Use entryStore.contextEntries() to get the resolved message list for the LLM, which
+  * handles compaction summaries and follows the path from root to current leaf.
+  */
+ // PR48 local-only prototype: no automatic stale-lock stealing after a crash.
  function pr48DiskRevision(file) {
      if (!file || !existsSync(file)) return null;
      const s = lstatSync(file, { bigint: true });
@@ -197,7 +238,7 @@
      return [s.dev, s.ino, s.size, s.mtimeNs, s.ctimeNs].map(String).join(":");
  }
  function pr48WriterLock(file, write) {
-@@ -572,28 +432,6 @@
+@@ -572,28 +400,6 @@
      }
  }
  
@@ -226,7 +267,7 @@
  
  // Cross-language v1 metadata encoding: UTF-8 path bytes and IEEE-754 cost
  // bytes are hex, counters are safe integers, optional fields have fixed slots.
-@@ -689,10 +527,7 @@
+@@ -689,13 +495,10 @@
      cwd;
      persist;
      flushed = false;
@@ -237,20 +278,24 @@
 +    entryStore;
      leafId = null;
      _pr48LoadedRevision = null;
-     constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions, preloadedFileEntries) {
-@@ -706,7 +541,10 @@
-             this._setSessionFile(sessionFile, preloadedFileEntries);
+-    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions, preloadedFileEntries) {
++    constructor(cwd, sessionDir, sessionFile, persist, newSessionOptions) {
+         this.cwd = resolvePath(cwd);
+         this.sessionDir = normalizePath(sessionDir);
+         this.persist = persist;
+@@ -703,10 +506,7 @@
+             mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
          }
-         else if (preloadedFileEntries?.length) {
+         if (sessionFile) {
+-            this._setSessionFile(sessionFile, preloadedFileEntries);
+-        }
+-        else if (preloadedFileEntries?.length) {
 -            this._loadEntries(preloadedFileEntries, newSessionOptions);
-+            const [header, ...entries] = preloadedFileEntries;
-+            this.entryStore = new MemoryEntryStore(header, entries);
-+            this.sessionId = header.id;
-+            this.leafId = this.entryStore.lastId;
++            this._setSessionFile(sessionFile);
          }
          else {
              this.newSession(newSessionOptions);
-@@ -726,37 +564,22 @@
+@@ -726,37 +526,22 @@
          this._assertLoadedRevision();
          });
      }
@@ -301,7 +346,7 @@
          });
      }
      newSession(options) {
-@@ -774,10 +597,8 @@
+@@ -774,10 +559,8 @@
              cwd: this.cwd,
              parentSession: options?.parentSession,
          };
@@ -314,7 +359,7 @@
          this.leafId = null;
          this.flushed = false;
          if (this.persist) {
-@@ -788,47 +609,8 @@
+@@ -788,67 +571,8 @@
          return this.sessionFile;
          });
      }
@@ -359,21 +404,32 @@
 -        }
 -        });
 -    }
-+
-+
-     _rewriteFile() {
-         return this.#acMutation(() => {
-         if (!this.persist || !this.sessionFile) return;
-@@ -837,7 +619,7 @@
-                 throw new Error("Native session rewrite source changed; no replay");
-             const fd = openSync(this.sessionFile, "w", 0o600);
-             try {
+-    _rewriteFile() {
+-        return this.#acMutation(() => {
+-        if (!this.persist || !this.sessionFile) return;
+-        return pr48WriterLock(this.sessionFile, () => {
+-            if (pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
+-                throw new Error("Native session rewrite source changed; no replay");
+-            const fd = openSync(this.sessionFile, "w", 0o600);
+-            try {
 -                for (const entry of this.fileEntries) {
-+                for (const entry of this.entryStore.fileEntries()) {
-                     writeFileSync(fd, `${JSON.stringify(entry)}\n`);
-                 }
-                 fsyncSync(fd);
-@@ -868,37 +650,20 @@
+-                    writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+-                }
+-                fsyncSync(fd);
+-            } catch { throw new Error("Native session rewrite outcome unknown; no replay"); }
+-            finally { closeSync(fd); }
+-            try { acSyncParents(dirname(this.sessionFile)); }
+-            catch { throw new Error("Native session rewrite outcome unknown; no replay"); }
+-            this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
+-        });
+-        });
+-    }
++
++
+     isPersisted() {
+         return this.persist;
+     }
+@@ -868,37 +592,20 @@
          return this.sessionFile;
      }
      _persist(entry) {
@@ -422,7 +478,7 @@
      }
      _appendEntry(entry) {
          return this.#acMutation(() => {
-@@ -910,8 +675,7 @@
+@@ -910,8 +617,7 @@
                  throw new Error("Native session writer changed; no replay");
              try { this._persist(entry); }
              catch { throw new Error("Native session write outcome unknown; no replay"); }
@@ -432,7 +488,7 @@
              this.leafId = entry.id;
              this._pr48LoadedRevision = this.persist ? pr48DiskRevision(this.sessionFile) : null;
          });
-@@ -959,12 +723,7 @@
+@@ -959,12 +665,7 @@
      /** Find exactly one durable or pending native tracked input, including old branches. */
      getTrackedInput(inputId) {
          this.#acAssertUsable();
@@ -446,7 +502,7 @@
      }
      /**
       * Tracked input durability is explicit: ordinary session autosave behavior is unchanged.
-@@ -977,8 +736,7 @@
+@@ -977,8 +678,7 @@
              if (pr48DiskRevision(this.sessionFile) !== this._pr48LoadedRevision)
                  throw new Error("Native session writer changed; no replay");
          if (inputId === undefined) {
@@ -456,7 +512,7 @@
              if (tracked.length !== 1) throw new Error("Explicit native input ID required");
              inputId = tracked[0].message.inputId;
          }
-@@ -992,7 +750,7 @@
+@@ -992,7 +692,7 @@
          if (!this.flushed) {
              const fd = openSync(this.sessionFile, "wx", 0o600);
              try {
@@ -465,7 +521,7 @@
                      writeFileSync(fd, `${JSON.stringify(item)}\n`);
                  }
                  fsyncSync(fd);
-@@ -1018,6 +776,7 @@
+@@ -1018,6 +718,7 @@
                  closeSync(fd);
              }
          }
@@ -473,7 +529,7 @@
          this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
          return entry.id;
          });
-@@ -1036,7 +795,7 @@
+@@ -1036,7 +737,7 @@
          }
          const entry = {
              type: "message",
@@ -482,7 +538,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              message,
-@@ -1050,7 +809,7 @@
+@@ -1050,7 +751,7 @@
          return this.#acMutation(() => {
          const entry = {
              type: "thinking_level_change",
@@ -491,7 +547,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              thinkingLevel,
-@@ -1064,7 +823,7 @@
+@@ -1064,7 +765,7 @@
          return this.#acMutation(() => {
          const entry = {
              type: "model_change",
@@ -500,7 +556,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              provider,
-@@ -1083,11 +842,11 @@
+@@ -1083,11 +784,11 @@
              throw new Error("Invalid native reconciliation witness");
          return pr48WriterLock(this.sessionFile, () => {
              const revision = pr48DiskRevision(this.sessionFile);
@@ -516,7 +572,7 @@
              if (matches.length === 1) {
                  const entry = matches[0];
                  if (entry.type !== "compaction" ||
-@@ -1104,12 +863,12 @@
+@@ -1104,12 +805,12 @@
                  const fd = openSync(this.sessionFile, "r");
                  try { fsyncSync(fd); } finally { closeSync(fd); }
                  return { status: "committed", entryId: entry.id, revision,
@@ -531,7 +587,7 @@
              return { status: "unknown", reason: "changed-or-duplicate" };
          });
          });
-@@ -1119,7 +878,7 @@
+@@ -1119,7 +820,7 @@
          this.#acAssertUsable();
          if (!this.persist || !this.flushed || !this.sessionFile)
              throw new Error("Persisted native compaction witness required");
@@ -540,7 +596,7 @@
              throw new Error("First kept entry is not on the active branch");
          const revision = pr48DiskRevision(this.sessionFile);
          if (revision !== this._pr48LoadedRevision)
-@@ -1169,18 +928,14 @@
+@@ -1169,18 +870,14 @@
              const revision = pr48DiskRevision(this.sessionFile);
              // Re-read the actual authoritative file *under the writer lock*;
              // an independent SessionManager may have appended since capture.
@@ -565,7 +621,7 @@
                  throw new Error("Native compaction source changed; no replay");
              const commit = details?.agentCommsCommit;
              if (commit !== undefined) {
-@@ -1193,10 +948,10 @@
+@@ -1193,10 +890,10 @@
                  if (commit.metadataDigest !== undefined &&
                      acMetadataDigest(details, usage) !== commit.metadataDigest)
                      throw new Error("Native commit metadata mismatch; no replay");
@@ -578,7 +634,7 @@
                  parentId: this.leafId, timestamp: new Date().toISOString(), summary,
                  firstKeptEntryId: witness.firstKeptEntryId, tokensBefore, details, usage,
                  fromHook: false };
-@@ -1214,8 +969,7 @@
+@@ -1214,8 +911,7 @@
              } finally {
                  if (fd !== undefined) closeSync(fd);
              }
@@ -588,7 +644,7 @@
              this.leafId = entry.id;
              this._pr48LoadedRevision = pr48DiskRevision(this.sessionFile);
              return entry.id;
-@@ -1227,7 +981,7 @@
+@@ -1227,7 +923,7 @@
          return this.#acMutation(() => {
          const entry = {
              type: "compaction",
@@ -597,7 +653,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              summary,
-@@ -1248,7 +1002,7 @@
+@@ -1248,7 +944,7 @@
              type: "custom",
              customType,
              data,
@@ -606,7 +662,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
-@@ -1262,7 +1016,7 @@
+@@ -1262,7 +958,7 @@
          const sanitizedName = name.replace(/[\r\n]+/g, " ").trim();
          const entry = {
              type: "session_info",
@@ -615,7 +671,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              name: sanitizedName,
-@@ -1274,16 +1028,9 @@
+@@ -1274,16 +970,9 @@
      /** Get the current session name from the latest session_info entry, if any. */
      getSessionName() {
          this.#acAssertUsable();
@@ -635,7 +691,7 @@
      }
      /**
       * Append a custom message entry (for extensions) that participates in LLM context.
-@@ -1301,7 +1048,7 @@
+@@ -1301,7 +990,7 @@
              content,
              display,
              details,
@@ -644,7 +700,7 @@
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
-@@ -1317,31 +1064,25 @@
+@@ -1317,31 +1006,25 @@
      }
      getLeafEntry() {
          this.#acAssertUsable();
@@ -680,7 +736,7 @@
      }
      /**
       * Set or clear a label on an entry.
-@@ -1350,26 +1091,18 @@
+@@ -1350,79 +1033,49 @@
       */
      appendLabelChange(targetId, label) {
          return this.#acMutation(() => {
@@ -709,10 +765,11 @@
          return entry.id;
          });
      }
-@@ -1378,51 +1111,29 @@
+     /**
+      * Walk from entry to root, returning all entries in path order.
       * Includes all entry types (messages, compaction, model changes, etc.).
-      * Use buildSessionContext() to get the resolved messages for the LLM.
-      */
+-     * Use buildSessionContext() to get the resolved messages for the LLM.
+-     */
 -    getBranch(fromId) {
 -        this.#acAssertUsable();
 -        const path = [];
@@ -725,6 +782,8 @@
 -        path.reverse();
 -        return path;
 -    }
++     * Use entryStore.contextEntries() to get the resolved messages for the LLM.
++     */
 +
      /**
       * Build the active, compaction-aware entry list for context/rendering.
@@ -766,7 +825,7 @@
      /**
       * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
       * A well-formed session has exactly one root (first entry with parentId === null).
-@@ -1430,17 +1141,17 @@
+@@ -1430,17 +1083,17 @@
       */
      getTree() {
          this.#acAssertUsable();
@@ -789,7 +848,7 @@
              const node = nodeMap.get(entry.id);
              if (entry.parentId === null || entry.parentId === entry.id) {
                  roots.push(node);
-@@ -1477,7 +1188,7 @@
+@@ -1477,7 +1130,7 @@
       */
      branch(branchFromId) {
          return this.#acMutation(() => {
@@ -798,7 +857,7 @@
              throw new Error(`Entry ${branchFromId} not found`);
          }
          this.leafId = branchFromId;
-@@ -1500,14 +1211,14 @@
+@@ -1500,14 +1153,14 @@
       */
      branchWithSummary(branchFromId, summary, details, fromHook, usage) {
          return this.#acMutation(() => {
@@ -815,7 +874,7 @@
              parentId: branchFromId,
              timestamp: new Date().toISOString(),
              fromId,
-@@ -1527,116 +1238,40 @@
+@@ -1527,116 +1180,40 @@
       */
      createBranchedSession(leafId) {
          return this.#acMutation(() => {
@@ -965,7 +1024,7 @@
          });
      }
      /**
-@@ -1656,26 +1291,10 @@
+@@ -1656,26 +1233,10 @@
       */
      static open(path, sessionDir, cwdOverride) {
          const resolvedPath = resolvePath(path);
@@ -996,7 +1055,18 @@
      }
      /**
       * Continue the most recent session, or create new if none.
-@@ -1703,58 +1322,28 @@
+@@ -1692,8 +1253,8 @@
+         return new SessionManager(cwd, dir, undefined, true);
+     }
+     /** Create an in-memory session (no file persistence), optionally from entries held outside the filesystem. */
+-    static inMemory(cwd = process.cwd(), options, entries) {
+-        return new SessionManager(cwd, "", undefined, false, options, entries);
++    static inMemory(cwd = process.cwd(), options) {
++        return new SessionManager(cwd, "", undefined, false, options);
+     }
+     /**
+      * Fork a session from another project directory into the current project.
+@@ -1703,58 +1264,28 @@
       * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
       */
      static forkFrom(sourcePath, targetCwd, sessionDir, options) {
@@ -1682,14 +1752,14 @@
              if (!after || after.id === before?.id)
                  throw new Error("Native threshold compaction did not commit; prompt refused");
              const fresh = this.agent.state.messages.slice();
-@@ -818,6 +820,7 @@
-      * Call this when completely done with the session.
-      */
-     dispose() {
+@@ -832,6 +834,7 @@
+         this._disconnectFromAgent();
+         this._eventListeners = [];
+         cleanupSessionResources(this.sessionId);
 +        this.sessionManager.entryStore.close();
-         try {
-             this.abortRetry();
-             this.abortCompaction();
+     }
+     // =========================================================================
+     // Read-only State Access
 @@ -1116,6 +1119,7 @@
       * @throws Error if no model selected or no API key available (when not streaming)
       */
@@ -1766,6 +1836,15 @@
              if (this._extensionRunner && savedCompactionEntry) {
                  await this._extensionRunner.emit({
                      type: "session_compact",
+@@ -2917,7 +2919,7 @@
+             let summaryText;
+             let summaryDetails;
+             let summaryUsage;
+-            if (options.summarize && entriesToSummarize.length > 0 && !extensionSummary) {
++            if (options.summarize && !entriesToSummarize.isEmpty() && !extensionSummary) {
+                 const model = this.model;
+                 const { model: requestModel, apiKey, headers, env } = await this._getSummarizationRequestAuth(model);
+                 const branchSummarySettings = this.settingsManager.getBranchSummarySettings();
 @@ -2994,8 +2996,8 @@
                  this.sessionManager.appendLabelChange(targetId, label);
              }
@@ -1840,22 +1919,328 @@
          const percent = (estimate.tokens / contextWindow) * 100;
          return {
              tokens: estimate.tokens,
---- a/dist/core/compaction/branch-summarization.js
-+++ b/dist/core/compaction/branch-summarization.js
-@@ -29,8 +29,8 @@
-         return { entries: [], commonAncestorId: null };
+--- a/dist/core/cache-stats.d.ts
++++ b/dist/core/cache-stats.d.ts
+@@ -34,16 +34,16 @@
+  * Cumulative cache waste across a session: prompt tokens that should have been
+  * cache reads (they were in the previous turn's prompt) but were re-billed.
+  */
+-export declare function computeCacheWaste(entries: SessionEntry[], models: ModelPriceSource): CacheWasteTotals;
++export declare function computeCacheWaste(entries: Iterable<SessionEntry>, models: ModelPriceSource): CacheWasteTotals;
+ /**
+  * All counted cache misses across a session, keyed by the assistant message
+  * (by reference) that paid for them. Used to re-derive transcript notices when
+  * rebuilding the chat from entries (resume, post-compaction rebuild).
+  */
+-export declare function collectCacheMisses(entries: SessionEntry[], models: ModelPriceSource): Map<AssistantMessage, CacheMiss>;
++export declare function collectCacheMisses(entries: Iterable<SessionEntry>, models: ModelPriceSource): Map<string, CacheMiss>;
+ /**
+  * Detect a cache miss on a just-completed assistant message.
+  * `entries` must not yet contain `message` (message_end fires before persistence).
+  */
+-export declare function detectCacheMiss(entries: SessionEntry[], message: AssistantMessage, models: ModelPriceSource): CacheMiss | undefined;
++export declare function detectCacheMiss(entries: Iterable<SessionEntry>, message: AssistantMessage, models: ModelPriceSource): CacheMiss | undefined;
+ //# sourceMappingURL=cache-stats.d.ts.map--- a/dist/core/cache-stats.js
++++ b/dist/core/cache-stats.js
+@@ -51,10 +51,9 @@
+         reportedCache: reportedCache || usage.cacheRead + usage.cacheWrite > 0,
+     };
+ }
+-function scan(entries, models) {
++function scan(entries, models, onMiss) {
+     let prev;
+     const totals = { missedTokens: 0, missedCost: 0, missCount: 0 };
+-    const misses = new Map();
+     for (const entry of entries) {
+         if (entry.type === "compaction" || entry.type === "branch_summary") {
+             // The context legitimately changed; the next turn's prompt is new content,
+@@ -69,12 +68,12 @@
+                 totals.missedTokens += miss.missedTokens;
+                 totals.missedCost += miss.missedCost;
+                 totals.missCount += 1;
+-                misses.set(entry.message, miss);
++                onMiss?.(entry.id, miss);
+             }
+             prev = asPreviousRequest(entry.message, prev?.reportedCache ?? false) ?? prev;
+         }
      }
-     // Find common ancestor (deepest node that's on both paths)
+-    return { prev, totals, misses };
++    return { prev, totals };
+ }
+ /**
+  * Cumulative cache waste across a session: prompt tokens that should have been
+@@ -84,12 +83,13 @@
+     return scan(entries, models).totals;
+ }
+ /**
+- * All counted cache misses across a session, keyed by the assistant message
+- * (by reference) that paid for them. Used to re-derive transcript notices when
++ * All counted cache misses across a session, keyed by persisted entry identity. Used to re-derive transcript notices when
+  * rebuilding the chat from entries (resume, post-compaction rebuild).
+  */
+ export function collectCacheMisses(entries, models) {
+-    return scan(entries, models).misses;
++    const misses = new Map();
++    scan(entries, models, (id, miss) => misses.set(id, miss));
++    return misses;
+ }
+ /**
+  * Detect a cache miss on a just-completed assistant message.
+--- a/dist/core/compaction/branch-summarization.d.ts
++++ b/dist/core/compaction/branch-summarization.d.ts
+@@ -1,3 +1,4 @@
++import type { EntryBranchRange } from "../session-entry-store.js";
+ /**
+  * Branch summarization for tree navigation.
+  *
+@@ -33,7 +34,7 @@
+ }
+ export interface CollectEntriesResult {
+     /** Entries to summarize, in chronological order */
+-    entries: SessionEntry[];
++    entries: EntryBranchRange;
+     /** Common ancestor between old and new position, if any */
+     commonAncestorId: string | null;
+ }
+@@ -87,12 +88,12 @@
+  * @param entries - Entries in chronological order
+  * @param tokenBudget - Maximum tokens to include (0 = no limit)
+  */
+-export declare function prepareBranchEntries(entries: SessionEntry[], tokenBudget?: number): BranchPreparation;
++export declare function prepareBranchEntries(entries: EntryBranchRange, tokenBudget?: number): BranchPreparation;
+ /**
+  * Generate a summary of abandoned branch entries.
+  *
+  * @param entries - Session entries to summarize (chronological order)
+  * @param options - Generation options
+  */
+-export declare function generateBranchSummary(entries: SessionEntry[], options: GenerateBranchSummaryOptions): Promise<BranchSummaryResult>;
++export declare function generateBranchSummary(entries: EntryBranchRange, options: GenerateBranchSummaryOptions): Promise<BranchSummaryResult>;
+ //# sourceMappingURL=branch-summarization.d.ts.map--- a/dist/core/compaction/branch-summarization.js
++++ b/dist/core/compaction/branch-summarization.js
+@@ -1,3 +1,4 @@
++import { EntryBranchRange } from '../session-entry-store.js';
+ /**
+  * Branch summarization for tree navigation.
+  *
+@@ -24,34 +25,9 @@
+  * @returns Entries to summarize and the common ancestor
+  */
+ export function collectEntriesForBranchSummary(session, oldLeafId, targetId) {
+-    // If no old position, nothing to summarize
+-    if (!oldLeafId) {
+-        return { entries: [], commonAncestorId: null };
+-    }
+-    // Find common ancestor (deepest node that's on both paths)
 -    const oldPath = new Set(session.getBranch(oldLeafId).map((e) => e.id));
 -    const targetPath = session.getBranch(targetId);
-+    const oldPath = new Set(session.entryStore.branch(oldLeafId).map((e) => e.id));
-+    const targetPath = session.entryStore.branch(targetId);
-     // targetPath is root-first, so iterate backwards to find deepest common ancestor
-     let commonAncestorId = null;
-     for (let i = targetPath.length - 1; i >= 0; i--) {
+-    // targetPath is root-first, so iterate backwards to find deepest common ancestor
+-    let commonAncestorId = null;
+-    for (let i = targetPath.length - 1; i >= 0; i--) {
+-        if (oldPath.has(targetPath[i].id)) {
+-            commonAncestorId = targetPath[i].id;
+-            break;
+-        }
+-    }
+-    // Collect entries from old leaf back to common ancestor
+-    const entries = [];
+-    let current = oldLeafId;
+-    while (current && current !== commonAncestorId) {
+-        const entry = session.getEntry(current);
+-        if (!entry)
+-            break;
+-        entries.push(entry);
+-        current = entry.parentId;
+-    }
+-    // Reverse to get chronological order
+-    entries.reverse();
+-    return { entries, commonAncestorId };
++    const store = session.entryStore;
++    const commonAncestorId = store.commonAncestor(oldLeafId, targetId);
++    return { entries: new EntryBranchRange(store, oldLeafId, commonAncestorId), commonAncestorId };
+ }
+ // ============================================================================
+ // Entry to Message Conversion
+@@ -118,8 +94,7 @@
+         }
+     }
+     // Second pass: walk from newest to oldest, adding messages until token budget
+-    for (let i = entries.length - 1; i >= 0; i--) {
+-        const entry = entries[i];
++    for (const entry of entries.reverse()) {
+         const message = getMessageFromEntry(entry);
+         if (!message)
+             continue;
+--- a/dist/core/compaction/compaction.d.ts
++++ b/dist/core/compaction/compaction.d.ts
+@@ -1,3 +1,5 @@
++import type { EntryStore } from "../session-entry-store.js";
++import type { EntryMessageRange } from "./agent-comms-source.js";
+ /**
+  * Context compaction for long sessions.
+  *
+@@ -50,7 +52,7 @@
+  * Estimate context tokens from messages, using the last assistant usage when available.
+  * If there are messages after the last usage, estimate their tokens with estimateTokens.
+  */
+-export declare function estimateContextTokens(messages: AgentMessage[]): ContextUsageEstimate;
++export declare function estimateContextTokens(messages: Iterable<AgentMessage>): ContextUsageEstimate;
+ /**
+  * Check if compaction should trigger based on context usage.
+  */
+@@ -60,36 +62,6 @@
+  * This is conservative (overestimates tokens).
+  */
+ export declare function estimateTokens(message: AgentMessage): number;
+-/**
+- * Find the context-visible user-role message that starts the turn containing the given entry index.
+- * Returns -1 if no turn start found before the index.
+- */
+-export declare function findTurnStartIndex(entries: SessionEntry[], entryIndex: number, startIndex: number): number;
+-export interface CutPointResult {
+-    /** Index of first entry to keep */
+-    firstKeptEntryIndex: number;
+-    /** Index of user message that starts the turn being split, or -1 if not splitting */
+-    turnStartIndex: number;
+-    /** Whether this cut splits a turn (cut point is not a user message) */
+-    isSplitTurn: boolean;
+-}
+-/**
+- * Find the cut point in session entries that keeps approximately `keepRecentTokens`.
+- *
+- * Algorithm: Walk backwards from newest, accumulating estimated message sizes.
+- * Stop when we've accumulated >= keepRecentTokens. Cut at that point.
+- *
+- * Can cut at user OR assistant messages (never tool results). When cutting at an
+- * assistant message with tool calls, its tool results come after and will be kept.
+- *
+- * Returns CutPointResult with:
+- * - firstKeptEntryIndex: the entry index to start keeping from
+- * - turnStartIndex: if cutting mid-turn, the user message that started that turn
+- * - isSplitTurn: whether we're cutting in the middle of a turn
+- *
+- * Only considers entries between `startIndex` and `endIndex` (exclusive).
+- */
+-export declare function findCutPoint(entries: SessionEntry[], startIndex: number, endIndex: number, keepRecentTokens: number): CutPointResult;
+ /**
+  * Returns an error message when a summarization response cannot safely be persisted.
+  * A length stop contains partial text and must not become a session checkpoint.
+@@ -107,9 +79,9 @@
+  * Generate a summary of the conversation using the LLM.
+  * If previousSummary is provided, uses the update prompt to merge.
+  */
+-export declare function generateSummary(currentMessages: AgentMessage[], model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<string>;
++export declare function generateSummary(currentMessages: Iterable<AgentMessage>, model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<string>;
+ /** Generate or update a conversation summary and return its provider usage. */
+-export declare function generateSummaryWithUsage(currentMessages: AgentMessage[], model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<{
++export declare function generateSummaryWithUsage(currentMessages: Iterable<AgentMessage>, model: Model<any>, reserveTokens: number, apiKey: string | undefined, headers?: Record<string, string>, signal?: AbortSignal, customInstructions?: string, previousSummary?: string, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<{
+     text: string;
+     usage: Usage;
+ }>;
+@@ -117,9 +89,9 @@
+     /** UUID of first entry to keep */
+     firstKeptEntryId: string;
+     /** Messages that will be summarized and discarded */
+-    messagesToSummarize: AgentMessage[];
++    messagesToSummarize: EntryMessageRange;
+     /** Messages that will be turned into turn prefix summary (if splitting) */
+-    turnPrefixMessages: AgentMessage[];
++    turnPrefixMessages: EntryMessageRange;
+     /** Whether this is a split turn (cut point in middle of turn) */
+     isSplitTurn: boolean;
+     tokensBefore: number;
+@@ -130,7 +102,7 @@
+     /** Compaction settions from settings.jsonl	*/
+     settings: CompactionSettings;
+ }
+-export declare function prepareCompaction(pathEntries: SessionEntry[], settings: CompactionSettings): CompactionPreparation | undefined;
++export declare function prepareCompaction(store: EntryStore, settings: CompactionSettings, leafId?: string | null): CompactionPreparation | undefined;
+ /**
+  * Generate summaries for compaction using prepared data.
+  * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
 --- a/dist/core/export-html/index.js
 +++ b/dist/core/export-html/index.js
-@@ -169,7 +169,7 @@
+@@ -1,4 +1,4 @@
+-import { existsSync, readFileSync, writeFileSync } from "fs";
++import { closeSync, existsSync, openSync, readFileSync, writeSync } from "fs";
+ import { basename, join } from "path";
+ import { APP_NAME, getExportTemplateDir } from "../../config.js";
+ import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.js";
+@@ -86,7 +86,7 @@
+ /**
+  * Core HTML generation logic shared by both export functions.
+  */
+-function generateHtml(sessionData, themeName) {
++function* generateHtml(sessionData, themeName) {
+     const templateDir = getExportTemplateDir();
+     const template = readFileSync(join(templateDir, "template.html"), "utf-8");
+     const templateCss = readFileSync(join(templateDir, "template.css"), "utf-8");
+@@ -100,20 +100,60 @@
+     const bodyBg = themeExport.pageBg ?? derivedExportColors.pageBg;
+     const containerBg = themeExport.cardBg ?? derivedExportColors.cardBg;
+     const infoBg = themeExport.infoBg ?? derivedExportColors.infoBg;
+-    // Base64 encode session data to avoid escaping issues
+-    const sessionDataBase64 = Buffer.from(JSON.stringify(sessionData)).toString("base64");
+     // Build the CSS with theme variables injected
+     const css = templateCss
+         .replace("{{THEME_VARS}}", themeVars)
+         .replace("{{BODY_BG}}", bodyBg)
+         .replace("{{CONTAINER_BG}}", containerBg)
+         .replace("{{INFO_BG}}", infoBg);
+-    return template
++    const formatted = template
+         .replace("{{CSS}}", css)
+         .replace("{{JS}}", templateJs)
+-        .replace("{{SESSION_DATA}}", sessionDataBase64)
+         .replace("{{MARKED_JS}}", markedJs)
+         .replace("{{HIGHLIGHT_JS}}", hljsJs);
++    const marker = '{{SESSION_DATA}}';
++    const boundary = formatted.indexOf(marker);
++    if (boundary < 0) throw new Error('Export template has no session-data boundary');
++    yield formatted.slice(0, boundary);
++    // Encode the exact JSON wire shape incrementally, including UTF8/base64
++    // boundaries. No complete history JSON string or base64 copy is allocated.
++    let carry = Buffer.alloc(0);
++    for (const piece of sessionJson(sessionData)) {
++        const data = Buffer.concat([carry, Buffer.from(piece)]);
++        const end = data.length - data.length % 3;
++        if (end) yield data.subarray(0, end).toString('base64');
++        carry = data.subarray(end);
++    }
++    if (carry.length) yield carry.toString('base64');
++    yield formatted.slice(boundary + marker.length);
++}
++
++function* sessionJson({entries, ...fields}) {
++    const prefix = JSON.stringify(fields);
++    yield prefix.slice(0, -1) + ',"entries":[';
++    let first = true;
++    for (const entry of entries) {
++        if (!first) yield ',';
++        yield JSON.stringify(entry);
++        first = false;
++    }
++    yield ']}';
++}
++
++function writeHtml(outputPath, chunks, sessionFile) {
++    if (resolvePath(outputPath) === resolvePath(sessionFile)) throw new Error('Export cannot overwrite session history');
++    const fd = openSync(outputPath, 'w', 0o600);
++    try {
++        for (const chunk of chunks) {
++            const data = Buffer.from(chunk);
++            let offset = 0;
++            while (offset < data.length) {
++                const count = writeSync(fd, data, offset, data.length - offset);
++                if (!count) throw new Error('Incomplete HTML export write');
++                offset += count;
++            }
++        }
++    } finally { closeSync(fd); }
+ }
+ /** Tools rendered directly by the HTML template (not pre-rendered via TUI→ANSI→HTML pipeline) */
+ const TEMPLATE_RENDERED_TOOLS = new Set(["bash", "read", "write", "edit", "ls"]);
+@@ -169,11 +209,11 @@
      if (!existsSync(sessionFile)) {
          throw new Error("Nothing to export yet - start a conversation first");
      }
@@ -1864,8 +2249,25 @@
      // Pre-render custom tools if a tool renderer is provided
      let renderedTools;
      if (opts.toolRenderer) {
-@@ -209,7 +209,7 @@
+-        renderedTools = preRenderCustomTools(entries, opts.toolRenderer);
++        renderedTools = preRenderCustomTools(sm.entryStore.entries(), opts.toolRenderer);
+         // Only include if we actually rendered something
+         if (Object.keys(renderedTools).length === 0) {
+             renderedTools = undefined;
+@@ -193,7 +233,7 @@
+         const sessionBasename = basename(sessionFile, ".jsonl");
+         outputPath = `${APP_NAME}-session-${sessionBasename}.html`;
+     }
+-    writeFileSync(outputPath, html, "utf8");
++    writeHtml(outputPath, html, sessionFile);
+     return outputPath;
+ }
+ /**
+@@ -207,9 +247,10 @@
+         throw new Error(`File not found: ${resolvedInputPath}`);
+     }
      const sm = SessionManager.open(resolvedInputPath);
++    try {
      const sessionData = {
          header: sm.getHeader(),
 -        entries: sm.getEntries(),
@@ -1873,6 +2275,40 @@
          leafId: sm.getLeafId(),
          systemPrompt: undefined,
          tools: undefined,
+@@ -220,7 +261,8 @@
+         const inputBasename = basename(resolvedInputPath, ".jsonl");
+         outputPath = `${APP_NAME}-session-${inputBasename}.html`;
+     }
+-    writeFileSync(outputPath, html, "utf8");
++    writeHtml(outputPath, html, resolvedInputPath);
+     return outputPath;
++    } finally { sm.entryStore.close(); }
+ }
+ //# sourceMappingURL=index.js.map--- a/dist/core/extensions/types.d.ts
++++ b/dist/core/extensions/types.d.ts
+@@ -1,3 +1,4 @@
++import type { EntryBranchRange } from "../session-entry-store.js";
+ /**
+  * Extension system types.
+  *
+@@ -102,7 +103,7 @@
+      *
+      * The factory receives a FooterDataProvider for data not otherwise accessible:
+      * git branch and extension statuses from setStatus(). Context usage is on
+-     * ctx.getContextUsage(), token stats on ctx.sessionManager.getEntries(), model info on ctx.model.
++     * ctx.getContextUsage(), token stats on ctx.sessionManager.entryStore.entries(), model info on ctx.model.
+      */
+     setFooter(factory: ((tui: TUI, theme: Theme, footerData: ReadonlyFooterDataProvider) => Component & {
+         dispose?(): void;
+@@ -486,7 +487,7 @@
+     targetId: string;
+     oldLeafId: string | null;
+     commonAncestorId: string | null;
+-    entriesToSummarize: SessionEntry[];
++    entriesToSummarize: EntryBranchRange;
+     userWantsSummary: boolean;
+     /** Custom instructions for summarization */
+     customInstructions?: string;
 --- a/dist/core/output-guard.js
 +++ b/dist/core/output-guard.js
 @@ -68,7 +68,12 @@
@@ -1943,7 +2379,175 @@
 +    } finally { closeSync(fd); }
      return filePath;
  }
- //# sourceMappingURL=session-export.js.map--- a/dist/index.js
+ //# sourceMappingURL=session-export.js.map--- a/dist/core/session-manager.d.ts
++++ b/dist/core/session-manager.d.ts
+@@ -1,3 +1,4 @@
++import type { EntryStore } from "./session-entry-store.js";
+ import type { AgentMessage } from "@earendil-works/pi-agent-core";
+ import { type ImageContent, type Message, type TextContent, type Usage } from "@earendil-works/pi-ai";
+ import { type BashExecutionMessage, type CustomMessage } from "./messages.ts";
+@@ -63,7 +64,7 @@
+  * Purpose: Persist extension state across session reloads. On reload, extensions can
+  * scan entries for their customType and reconstruct internal state.
+  *
+- * Does NOT participate in LLM context (ignored by buildSessionContext).
++ * Does NOT participate in LLM context (omitted from contextEntries).
+  * For injecting content into context, see CustomMessageEntry.
+  */
+ export interface CustomEntry<T = unknown> extends SessionEntryBase {
+@@ -87,7 +88,7 @@
+  * Use customType to identify your extension's entries.
+  *
+  * Unlike CustomEntry, this DOES participate in LLM context.
+- * The content is converted to a user message in buildSessionContext().
++ * The content is converted to a user message in entryStore.contextEntries().
+  * Use details for extension-specific metadata (not sent to LLM).
+  *
+  * display controls TUI rendering:
+@@ -113,14 +114,6 @@
+     label?: string;
+     /** Timestamp of the latest label change for this entry, if any */
+     labelTimestamp?: string;
+-}
+-export interface SessionContext {
+-    messages: AgentMessage[];
+-    thinkingLevel: string;
+-    model: {
+-        provider: string;
+-        modelId: string;
+-    } | null;
+ }
+ export interface SessionInfo {
+     path: string;
+@@ -137,13 +130,10 @@
+     firstMessage: string;
+     allMessagesText: string;
+ }
+-export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "getBranch" | "buildContextEntries" | "getHeader" | "getEntries" | "getTree" | "getSessionName">;
++export type ReadonlySessionManager = Pick<SessionManager, "getCwd" | "getSessionDir" | "getSessionId" | "getSessionFile" | "getLeafId" | "getLeafEntry" | "getEntry" | "getLabel" | "buildContextEntries" | "getHeader" | "entryStore" | "getTree" | "getSessionName">;
+ export declare function assertValidSessionId(id: string): void;
+ /** Exported for testing */
+-export declare function migrateSessionEntries(entries: FileEntry[]): void;
+ /** Exported for compaction.test.ts */
+-export declare function parseSessionEntries(content: string): FileEntry[];
+-export declare function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEntry | null;
+ /**
+  * Project one selected session entry into LLM/runtime messages.
+  * Plain custom entries are display/state entries and do not participate in context.
+@@ -157,16 +147,13 @@
+  * by the kept entries starting at firstKeptEntryId and all entries after the
+  * compaction entry. Older summarized entries are omitted.
+  */
+-export declare function buildContextEntries(entries: SessionEntry[], leafId?: string | null, byId?: Map<string, SessionEntry>): SessionEntry[];
+ /**
+  * Build the session context from entries using tree traversal.
+  * If leafId is provided, walks from that entry to root.
+  * Handles compaction and branch summaries along the path.
+  */
+-export declare function buildSessionContext(entries: SessionEntry[], leafId?: string | null, byId?: Map<string, SessionEntry>): SessionContext;
+ export declare function getDefaultSessionDir(cwd: string, agentDir?: string): string;
+ /** Exported for testing */
+-export declare function loadEntriesFromFile(filePath: string): FileEntry[];
+ /** Exported for testing */
+ export declare function findMostRecentSession(sessionDir: string, cwd?: string): string | null;
+ export type SessionListProgress = (loaded: number, total: number) => void;
+@@ -178,7 +165,7 @@
+  * Branching moves the leaf to an earlier entry, allowing new branches without
+  * modifying history.
+  *
+- * Use buildSessionContext() to get the resolved message list for the LLM, which
++ * Use entryStore.contextEntries() to get the resolved message list for the LLM, which
+  * handles compaction summaries and follows the path from root to current leaf.
+  */
+ export declare class SessionManager {
+@@ -188,19 +175,13 @@
+     private cwd;
+     private persist;
+     private flushed;
+-    private fileEntries;
+-    private byId;
+-    private labelsById;
+-    private labelTimestampsById;
++    entryStore: EntryStore;
+     private leafId;
+     private constructor();
+     /** Switch to a different session file (used for resume and branching) */
+     setSessionFile(sessionFile: string): void;
+     private _setSessionFile;
+     newSession(options?: NewSessionOptions): string | undefined;
+-    private _loadEntries;
+-    private _buildIndex;
+-    private _rewriteFile;
+     isPersisted(): boolean;
+     getCwd(): string;
+     getSessionDir(): string;
+@@ -247,7 +228,7 @@
+     /**
+      * Get all direct children of an entry.
+      */
+-    getChildren(parentId: string): SessionEntry[];
++    getChildren(parentId: string): IterableIterator<SessionEntry>;
+     /**
+      * Get the label for an entry, if any.
+      */
+@@ -261,19 +242,17 @@
+     /**
+      * Walk from entry to root, returning all entries in path order.
+      * Includes all entry types (messages, compaction, model changes, etc.).
+-     * Use buildSessionContext() to get the resolved messages for the LLM.
+-     */
+-    getBranch(fromId?: string): SessionEntry[];
++     * Use entryStore.contextEntries() to get the resolved messages for the LLM.
++     */
+     /**
+      * Build the active, compaction-aware entry list for context/rendering.
+      * Uses tree traversal from current leaf.
+      */
+-    buildContextEntries(): SessionEntry[];
++    buildContextEntries(): IterableIterator<SessionEntry>;
+     /**
+      * Build the session context (what gets sent to the LLM).
+      * Uses tree traversal from current leaf.
+      */
+-    buildSessionContext(): SessionContext;
+     /**
+      * Get session header.
+      */
+@@ -283,7 +262,6 @@
+      * The session is append-only: use appendXXX() to add entries, branch() to
+      * change the leaf pointer. Entries cannot be modified or deleted.
+      */
+-    getEntries(): SessionEntry[];
+     /**
+      * Get the session as a tree structure. Returns a shallow defensive copy of all entries.
+      * A well-formed session has exactly one root (first entry with parentId === null).
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -2,7 +2,7 @@
+ export { CONFIG_DIR_NAME, getAgentDir, getDocsPath, getExamplesPath, getPackageDir, getReadmePath, VERSION, } from "./config.ts";
+ export { AgentSession, type AgentSessionConfig, type AgentSessionEvent, type AgentSessionEventListener, type ModelCycleResult, type ParsedSkillBlock, type PromptOptions, parseSkillBlock, type SessionStats, } from "./core/agent-session.ts";
+ export { readStoredCredential } from "./core/auth-storage.ts";
+-export { type BranchPreparation, type BranchSummaryResult, type CollectEntriesResult, type CompactionResult, type CutPointResult, calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, type FileOperations, findCutPoint, findTurnStartIndex, type GenerateBranchSummaryOptions, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.ts";
++export { type BranchPreparation, type BranchSummaryResult, type CollectEntriesResult, type CompactionResult, calculateContextTokens, collectEntriesForBranchSummary, compact, DEFAULT_COMPACTION_SETTINGS, estimateTokens, type FileOperations, type GenerateBranchSummaryOptions, generateBranchSummary, generateSummary, generateSummaryWithUsage, getLastAssistantUsage, prepareBranchEntries, serializeConversation, shouldCompact, } from "./core/compaction/index.ts";
+ export { createEventBus, type EventBus, type EventBusController } from "./core/event-bus.ts";
+ export type { AgentEndEvent, AgentSettledEvent, AgentStartEvent, AgentToolResult, AgentToolUpdateCallback, AppKeybinding, AutocompleteProviderFactory, BashToolCallEvent, BeforeAgentStartEvent, BeforeAgentStartEventResult, BeforeProviderHeadersEvent, BeforeProviderRequestEvent, BeforeProviderRequestEventResult, BuildSystemPromptOptions, CompactOptions, ContextEvent, ContextUsage, CustomToolCallEvent, EditToolCallEvent, EntryRenderer, EntryRenderOptions, ExecOptions, ExecResult, Extension, ExtensionActions, ExtensionAPI, ExtensionCommandContext, ExtensionCommandContextActions, ExtensionContext, ExtensionContextActions, ExtensionError, ExtensionEvent, ExtensionFactory, ExtensionFlag, ExtensionHandler, ExtensionRuntime, ExtensionShortcut, ExtensionUIContext, ExtensionUIDialogOptions, ExtensionWidgetOptions, FindToolCallEvent, GrepToolCallEvent, InlineExtension, InputEvent, InputEventResult, InputSource, KeybindingsManager, LoadExtensionsResult, LsToolCallEvent, MarkdownTransformContext, MarkdownTransformer, MessageEndEvent, MessageRenderer, MessageRenderOptions, MessageStartEvent, MessageUpdateEvent, PowerShellToolCallEvent, ProjectTrustContext, ProjectTrustEvent, ProjectTrustEventDecision, ProjectTrustEventResult, ProjectTrustHandler, ProviderConfig, ProviderModelConfig, ReadToolCallEvent, RegisteredCommand, RegisteredTool, ResolvedCommand, SessionBeforeCompactEvent, SessionBeforeForkEvent, SessionBeforeSwitchEvent, SessionBeforeTreeEvent, SessionCompactEvent, SessionInfoChangedEvent, SessionShutdownEvent, SessionStartEvent, SessionTreeEvent, SlashCommandInfo, SlashCommandSource, SourceInfo, TerminalInputHandler, ToolCallEvent, ToolCallEventResult, ToolDefinition, ToolExecutionEndEvent, ToolExecutionMode, ToolExecutionStartEvent, ToolExecutionUpdateEvent, ToolInfo, ToolRenderResultOptions, ToolResultEvent, TurnEndEvent, TurnStartEvent, UIPromptEndEvent, UIPromptKind, UIPromptStartEvent, UserBashEvent, UserBashEventResult, WidgetPlacement, WorkingIndicatorOptions, WriteToolCallEvent, } from "./core/extensions/index.ts";
+ export { createExtensionRuntime, defineTool, discoverAndLoadExtensions, ExtensionRunner, isBashToolResult, isEditToolResult, isFindToolResult, isGrepToolResult, isLsToolResult, isPowerShellToolResult, isReadToolResult, isToolCallEventType, isWriteToolResult, wrapRegisteredTool, wrapRegisteredTools, } from "./core/extensions/index.ts";
+@@ -16,7 +16,7 @@
+ export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/resource-loader.ts";
+ export { DefaultResourceLoader, loadProjectContextFiles } from "./core/resource-loader.ts";
+ export { AgentSessionRuntime, type AgentSessionRuntimeDiagnostic, type AgentSessionServices, type CreateAgentSessionFromServicesOptions, type CreateAgentSessionOptions, type CreateAgentSessionResult, type CreateAgentSessionRuntimeFactory, type CreateAgentSessionRuntimeResult, type CreateAgentSessionServicesOptions, createAgentSession, createAgentSessionFromServices, createAgentSessionRuntime, createAgentSessionServices, createBashTool, createCodingTools, createEditTool, createFindTool, createGrepTool, createLsTool, createPowerShellTool, createReadOnlyTools, createReadTool, createWriteTool, type PromptTemplate, } from "./core/sdk.ts";
+-export { type BranchSummaryEntry, buildContextEntries, buildSessionContext, type CompactionEntry, CURRENT_SESSION_VERSION, type CustomEntry, type CustomMessageEntry, type FileEntry, getLatestCompactionEntry, type ModelChangeEntry, migrateSessionEntries, type NewSessionOptions, parseSessionEntries, type SessionContext, type SessionEntry, type SessionEntryBase, type SessionHeader, type SessionInfo, type SessionInfoEntry, SessionManager, type SessionMessageEntry, type SessionTreeNode, sessionEntryToContextMessages, type ThinkingLevelChangeEntry, } from "./core/session-manager.ts";
++export { type BranchSummaryEntry, type CompactionEntry, CURRENT_SESSION_VERSION, type CustomEntry, type CustomMessageEntry, type FileEntry, type ModelChangeEntry, type NewSessionOptions, type SessionEntry, type SessionEntryBase, type SessionHeader, type SessionInfo, type SessionInfoEntry, SessionManager, type SessionMessageEntry, type SessionTreeNode, sessionEntryToContextMessages, type ThinkingLevelChangeEntry, } from "./core/session-manager.ts";
+ export { type CompactionSettings, type DefaultProjectTrust, type FullscreenExitOutput, type ImageSettings, type PackageSource, type RetrySettings, SettingsManager, type SettingsManagerCreateOptions, type TuiMode, } from "./core/settings-manager.ts";
+ export { formatSkillsForPrompt, type LoadSkillsFromDirOptions, type LoadSkillsResult, loadSkills, loadSkillsFromDir, type Skill, type SkillFrontmatter, } from "./core/skills.ts";
+ export { createSyntheticSourceInfo } from "./core/source-info.ts";
+@@ -33,4 +33,5 @@
+ export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.ts";
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.ts";
+-//# sourceMappingURL=index.d.ts.map+//# sourceMappingURL=index.d.ts.map
++export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
+--- a/dist/index.js
 +++ b/dist/index.js
 @@ -5,7 +5,7 @@
  export { AgentSession, parseSkillBlock, } from "./core/agent-session.js";
@@ -1959,10 +2563,16 @@
  // Tool factories (for custom cwd)
  createCodingTools, createEditTool, createFindTool, createGrepTool, createLsTool, createPowerShellTool, createReadOnlyTools, createReadTool, createWriteTool, } from "./core/sdk.js";
 -export { buildContextEntries, buildSessionContext, CURRENT_SESSION_VERSION, getLatestCompactionEntry, migrateSessionEntries, parseSessionEntries, SessionManager, sessionEntryToContextMessages, } from "./core/session-manager.js";
-+export { CURRENT_SESSION_VERSION, getLatestCompactionEntry, SessionManager, sessionEntryToContextMessages, } from "./core/session-manager.js";
++export { CURRENT_SESSION_VERSION, SessionManager, sessionEntryToContextMessages, } from "./core/session-manager.js";
  export { SettingsManager, } from "./core/settings-manager.js";
  // Skills
  export { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, } from "./core/skills.js";
+@@ -45,4 +45,5 @@
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.js";
+ // Shell utilities
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.js";
+-//# sourceMappingURL=index.js.map+//# sourceMappingURL=index.js.map
++export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
 --- a/dist/main.js
 +++ b/dist/main.js
 @@ -637,7 +637,7 @@
@@ -1987,6 +2597,15 @@
                  const latestPromptTokens = entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
 --- a/dist/modes/interactive/interactive-mode.js
 +++ b/dist/modes/interactive/interactive-mode.js
+@@ -1140,7 +1140,7 @@
+             project: { scope: "project", paths: [], packages: new Map() },
+             path: { scope: "path", paths: [], packages: new Map() },
+         };
+-        for (const item of items) {
++        for (const {entryId, item} of items) {
+             const groupKey = this.getScopeGroup(item.sourceInfo);
+             const group = groups[groupKey];
+             const source = item.sourceInfo?.source ?? "local";
 @@ -2770,12 +2770,12 @@
                  }
                  else if (event.result) {
@@ -2002,7 +2621,7 @@
                      this.addMessageToChat(createCompactionSummaryMessage(event.result.summary, event.result.tokensBefore, new Date().toISOString()));
                      if (event.result.usage) {
                          this.addCompactionCostNotice({
-@@ -2994,7 +2994,7 @@
+@@ -2994,13 +2994,13 @@
          // Cache-miss notices are not persisted; re-derive them from the full entry
          // list and re-inject them after the assistant messages that paid for them.
          const cacheMisses = this.settingsManager.getShowCacheMissNotices()
@@ -2011,7 +2630,40 @@
              : new Map();
          if (options.updateFooter) {
              this.footer.invalidate();
-@@ -3134,7 +3134,7 @@
+             this.updateEditorBorderColor();
+         }
+-        for (const item of items) {
++        for (const {entryId, item} of items) {
+             if (isCustomSessionEntry(item)) {
+                 this.addCustomEntryToChat(item);
+                 continue;
+@@ -3043,7 +3043,7 @@
+                 }
+                 if (message.stopReason !== "aborted" && message.stopReason !== "error") {
+                     this.maybeShowAssistantDiagnostics(message);
+-                    const miss = cacheMisses.get(message);
++                    const miss = cacheMisses.get(entryId);
+                     if (miss)
+                         this.addCacheMissNotice(miss);
+                 }
+@@ -3074,12 +3074,11 @@
+      */
+     renderSessionEntries(entries, options = {}) {
+         const items = entries.flatMap((entry) => {
+-            if (entry.type === "custom") {
+-                return [entry];
+-            }
+-            const messages = sessionEntryToContextMessages(entry);
++            const item = (value) => ({entryId: entry.id, item: value});
++            if (entry.type === "custom") return [item(entry)];
++            const messages = sessionEntryToContextMessages(entry).map(item);
+             if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage && messages.length > 0) {
+-                return [...messages, { type: "compaction_cost", kind: entry.type, usage: entry.usage }];
++                messages.push(item({ type: "compaction_cost", kind: entry.type, usage: entry.usage }));
+             }
+             return messages;
+         });
+@@ -3134,7 +3133,7 @@
          if (!this.settingsManager.getShowCacheMissNotices())
              return;
          // Entries don't contain `message` yet: message_end fires before persistence.
@@ -2020,7 +2672,7 @@
          if (miss)
              this.addCacheMissNotice(miss);
      }
-@@ -3162,8 +3162,8 @@
+@@ -3162,8 +3161,8 @@
          });
          this.renderProjectTrustWarningIfNeeded();
          // Show compaction info if session was compacted
@@ -2031,7 +2683,7 @@
          if (compactionCount > 0) {
              const times = compactionCount === 1 ? "1 time" : `${compactionCount} times`;
              this.showStatus(`Session compacted ${times}`);
-@@ -5194,12 +5194,12 @@
+@@ -5194,12 +5193,12 @@
      handleSessionCommand() {
          const stats = this.session.getSessionStats();
          const sessionName = this.sessionManager.getSessionName();
