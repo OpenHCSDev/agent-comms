@@ -1,0 +1,10 @@
+{
+  "identical_compiled_modules_after_canonical_source_migration": true,
+  "modules": {
+    "agent-comms-extensions/global-agent-comms/index.mjs": "fd1f6eae9cd073bcf7ba0a7c92ff2479a4bb0cc04e1916c858bd41b200fe250b",
+    "agent-comms-extensions/global-project-sync/index.mjs": "04d168d81caba32067af23c6ac0a06443ed475ba9a1caa270e07217242958226",
+    "agent-comms-extensions/global-subagent/index.mjs": "8a07f63d3b0a511a065cc7710c3a4626fec09277043c0f777bf041b3652ba3f4",
+    "agent-comms-extensions/global-web-search/index.mjs": "dc4440284967b597c682e0c9fe6682270f77df44660705e2cb38c72ba0b6bffe"
+  },
+  "exit": 0
+}

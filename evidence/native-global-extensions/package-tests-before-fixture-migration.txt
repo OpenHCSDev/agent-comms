@@ -1,0 +1,97 @@
+....................FFF.....                                             [100%]
+=================================== FAILURES ===================================
+_____ test_node_loader_environment_is_not_package_authority[NODE_OPTIONS] ______
+
+package = PosixPath('/tmp/pytest-of-ts/pytest-179/test_node_loader_environment_i0/package')
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-179/test_node_loader_environment_i0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34fe060050>
+variable = 'NODE_OPTIONS'
+
+    @pytest.mark.parametrize("variable", ["NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"])
+    def test_node_loader_environment_is_not_package_authority(package, tmp_path, monkeypatch, variable):
+        from agent_comms import owner_compaction_commit as commit
+    
+        monkeypatch.setenv(variable, "untrusted-loader")
+        monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
+        monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
+        monkeypatch.setattr(commit.OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
+    
+        def launch(command, *args, **kwargs):
+            assert command[:5] == [shutil.which("env"), "-u", "NODE_OPTIONS", "-u", "NODE_PATH"]
+            assert command[5:8] == ["-u", "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE=1"]
+            assert command[9:12] == ["--no-global-search-paths", "--import", str(bridge.import_fence)]
+            return subprocess.CompletedProcess(command, 1, b'{"status":"unknown","reason":"fixture"}')
+    
+        monkeypatch.setattr(commit, "run_authority_child", launch)
+        with (tmp_path / "authority").open("w") as fd:
+>           assert bridge._call(fd.fileno(), {}, 1)["status"] == "unknown"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: 'NativeOutcome' object is not subscriptable
+
+tests/test_native_package.py:191: TypeError
+_______ test_node_loader_environment_is_not_package_authority[NODE_PATH] _______
+
+package = PosixPath('/tmp/pytest-of-ts/pytest-179/test_node_loader_environment_i1/package')
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-179/test_node_loader_environment_i1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34fdc2a820>
+variable = 'NODE_PATH'
+
+    @pytest.mark.parametrize("variable", ["NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"])
+    def test_node_loader_environment_is_not_package_authority(package, tmp_path, monkeypatch, variable):
+        from agent_comms import owner_compaction_commit as commit
+    
+        monkeypatch.setenv(variable, "untrusted-loader")
+        monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
+        monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
+        monkeypatch.setattr(commit.OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
+    
+        def launch(command, *args, **kwargs):
+            assert command[:5] == [shutil.which("env"), "-u", "NODE_OPTIONS", "-u", "NODE_PATH"]
+            assert command[5:8] == ["-u", "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE=1"]
+            assert command[9:12] == ["--no-global-search-paths", "--import", str(bridge.import_fence)]
+            return subprocess.CompletedProcess(command, 1, b'{"status":"unknown","reason":"fixture"}')
+    
+        monkeypatch.setattr(commit, "run_authority_child", launch)
+        with (tmp_path / "authority").open("w") as fd:
+>           assert bridge._call(fd.fileno(), {}, 1)["status"] == "unknown"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: 'NativeOutcome' object is not subscriptable
+
+tests/test_native_package.py:191: TypeError
+__ test_node_loader_environment_is_not_package_authority[NODE_COMPILE_CACHE] ___
+
+package = PosixPath('/tmp/pytest-of-ts/pytest-179/test_node_loader_environment_i2/package')
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-179/test_node_loader_environment_i2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f34fdc29940>
+variable = 'NODE_COMPILE_CACHE'
+
+    @pytest.mark.parametrize("variable", ["NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"])
+    def test_node_loader_environment_is_not_package_authority(package, tmp_path, monkeypatch, variable):
+        from agent_comms import owner_compaction_commit as commit
+    
+        monkeypatch.setenv(variable, "untrusted-loader")
+        monkeypatch.setattr(commit, "require_deadline_support", lambda: None)
+        monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
+        monkeypatch.setattr(commit.OwnerCompactionCommit, "_verify_native", lambda self: None)
+        bridge = commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
+    
+        def launch(command, *args, **kwargs):
+            assert command[:5] == [shutil.which("env"), "-u", "NODE_OPTIONS", "-u", "NODE_PATH"]
+            assert command[5:8] == ["-u", "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE=1"]
+            assert command[9:12] == ["--no-global-search-paths", "--import", str(bridge.import_fence)]
+            return subprocess.CompletedProcess(command, 1, b'{"status":"unknown","reason":"fixture"}')
+    
+        monkeypatch.setattr(commit, "run_authority_child", launch)
+        with (tmp_path / "authority").open("w") as fd:
+>           assert bridge._call(fd.fileno(), {}, 1)["status"] == "unknown"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: 'NativeOutcome' object is not subscriptable
+
+tests/test_native_package.py:191: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_native_package.py::test_node_loader_environment_is_not_package_authority[NODE_OPTIONS]
+FAILED tests/test_native_package.py::test_node_loader_environment_is_not_package_authority[NODE_PATH]
+FAILED tests/test_native_package.py::test_node_loader_environment_is_not_package_authority[NODE_COMPILE_CACHE]
+3 failed, 25 passed in 0.50s
