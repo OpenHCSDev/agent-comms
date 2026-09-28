@@ -17,8 +17,6 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
-
 import asyncio
 import json
 import os
@@ -47,16 +45,17 @@ from . import backend, manual_compaction_bridge
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials
-from .coordination_cohort import next_sealed_assignment
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
 from .coordination import CoordinationError, WakeAssignment
+from .coordination_cohort import next_sealed_assignment
 from .coordination_store import (
     IdentityConflict,
     MutationStore,
     PublicationActivationBlocked,
     StaleFence,
 )
+from .field_codec import FieldCodec
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
@@ -625,6 +624,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
+        with bus.log.locked():
+            admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
         with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
                 bus,
@@ -636,7 +637,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 native_package=package,
             )
             participant = store.participant(stable_thread_lookup(owner.created_at))
-            candidate = next_sealed_assignment(store, participant.lookup, owner.name)
+            candidate = next_sealed_assignment(
+                store, participant.lookup, owner.name, after_seq=admission_after_seq
+            )
             runnable = candidate is not None and participant.pointer.execution_id is None
         plans = SelectedWritePlans(self._comms, wire_root_id)
 

@@ -23,7 +23,7 @@ def test_explicit_old_root_child_is_witnessed_without_writing_wire(tmp_path):
         (root / "registry.json").write_text(json.dumps({
             "threads": {"child": {"pid": child.pid}},
         }))
-        script = Path(__file__).resolve().parents[1] / "tools/cutover_process_inventory.py"
+        script = Path(__file__).resolve().parents[1] / "tools/cutover/process_inventory.py"
         result = subprocess.run(
             [sys.executable, str(script), "--root", str(root)],
             check=True, capture_output=True, text=True,

@@ -91,6 +91,7 @@ def _accept_visible_initials(
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != root_id:
             raise IdentityConflict("private initial wire root changed")
+        after_seq = max(after_seq, marker.admission_after_seq)
         initials = tuple(
             initial
             for _message, _receipt, initial in bus.log._verified_private_rows_unlocked(marker)

@@ -16,6 +16,7 @@ def setup(root, count=5):
     comms = Comms(root)
     comms.threads.register(Thread("alice", frozenset({"team"}), str(root), created_at=10.0))
     comms.threads.register(Thread("bob", frozenset({"team"}), str(root), created_at=11.0))
+    comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):
         comms.messaging.send("alice", "#team", f"{root.name} channel {i}")

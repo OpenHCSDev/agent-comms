@@ -33,7 +33,6 @@ class Comms:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
-        self.bus.reads.migrate()
         self.channels = ChannelManagement(self.root, self.registry, self.bus)
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)

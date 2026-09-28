@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
 from .channel_targets import is_channel_target
-from .goals import Goal
 from .messages import Message
 
 
@@ -62,30 +61,6 @@ class ScheduledTurn:
     origin: Message | None = None
     goal_id: str | None = None
     goal_wait_id: str | None = None
-    # New ordinary direct DM interrupting an active goal, not a goal attempt.
-    # None distinguishes the ordinary path from all existing goal/wait turns.
-    direct_interrupt_goal_id: str | None = None
-    direct_interrupt_goal_revision: int | None = None
-    direct_interrupt_wait_id: str | None = None
-    direct_interrupt_input_key: str | None = None
-    direct_interrupt_ticket: str | None = None
-
-    def still_current_interrupt(self, goal: Goal | None) -> bool:
-        """A NEW queued DM survives benign same-goal revision bumps.
-
-        Ordinary goal progress or a standby report bumps the revision without
-        changing the goal identity; that must not strand an unattempted input.
-        Only a goal replacement (a different, fresh goal ID) or an inactive
-        goal invalidates the queue entry. Dispatch-time admission separately
-        rechecks the unattempted disposition row before any native start.
-        """
-        return self.direct_interrupt_goal_id is None or (
-            goal is not None and goal.state.active and goal.id == self.direct_interrupt_goal_id
-        )
-
-    @property
-    def reply_target(self) -> str | None:
-        return self.origin.reply_target if self.origin else None
 
     @classmethod
     def incoming(
