@@ -314,7 +314,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 goal.id,
                 uuid4().hex,
                 goal.revision,
-                ctx.goals.bus.latest_sequence(),
+                ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
                 owner_created_at=thread.created_at,
                 report_turn_id=thread.active_turn.id if thread.active_turn else None,

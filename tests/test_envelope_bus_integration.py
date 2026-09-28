@@ -58,7 +58,7 @@ def test_marker_requires_fresh_private_root_and_claim_protocol(tmp_path: Path) -
         comms.messaging.initialize_private_claim_protocol()
         == (json.loads((comms.root / "bus_meta.json").read_text())["wire_root_id"])
     )
-    assert comms.bus.full_history() == []
+    assert comms.bus.log.full_history() == []
 
 
 def test_visible_claim_protocol_flag_after_directory_fsync_error_is_resynced(
@@ -88,7 +88,7 @@ def test_visible_claim_protocol_flag_after_directory_fsync_error_is_resynced(
             comms.messaging.initialize_private_claim_protocol()
     assert failed
     assert json.loads((comms.root / "bus_meta.json").read_text())["claim_envelopes_version"] == 1
-    assert comms.bus.full_history() == []  # bus lock re-fsyncs marker directory
+    assert comms.bus.log.full_history() == []  # bus lock re-fsyncs marker directory
     assert comms.messaging.initialize_private_claim_protocol() == root_id
 
 
@@ -96,7 +96,7 @@ def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms = marked(tmp_path)
-    path = comms.bus._path
+    path = comms.bus.log.path
     path.write_bytes(_sample_line())  # model a full visible row after failed writer fsync
     real_fsync = os.fsync
     calls: list[str] = []
@@ -113,9 +113,9 @@ def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
 
     monkeypatch.setattr(store_files.os, "fsync", fsync)
     with pytest.raises(RelationViolationError, match="UNKNOWN"):
-        comms.bus.full_history()
+        comms.bus.log.full_history()
     assert str(path) in calls
-    assert len(comms.bus.full_history()) == 1
+    assert len(comms.bus.log.full_history()) == 1
     assert calls.count(str(path)) >= 2
     assert str(path.parent) in calls
 
@@ -124,31 +124,31 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
     tmp_path: Path,
 ) -> None:
     comms = marked(tmp_path)
-    comms.bus._path.write_bytes(_sample_line(complete=False))
+    comms.bus.log.path.write_bytes(_sample_line(complete=False))
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.full_history()
+        comms.bus.log.full_history()
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.message_by_id("receipt")
+        comms.bus.log.message_by_id("receipt")
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.latest_sequence()
+        comms.bus.log.latest_sequence()
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.total_messages()
+        comms.bus.log.total_messages()
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.claim_projection()
+        comms.bus.log.claim_projection()
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.relationships._recent_messages()  # independent direct bus-tail reader
     with (
         pytest.raises(RelationViolationError, match="Incomplete"),
-        comms.bus.full_history_snapshot(),
+        comms.bus.log.full_history_snapshot(),
     ):
         pass
 
 
 def test_malformed_complete_row_is_not_an_ordinary_message(tmp_path: Path) -> None:
     comms = marked(tmp_path)
-    comms.bus._path.write_bytes(b'{"seq":1,"seq":2}\n')
+    comms.bus.log.path.write_bytes(b'{"seq":1,"seq":2}\n')
     with pytest.raises(RelationViolationError, match="Malformed"):
-        comms.bus.full_history()
+        comms.bus.log.full_history()
 
 
 def _participants(tmp_path: Path) -> tuple[Comms, Path]:
@@ -177,9 +177,9 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     )
     assert sent.claim_transition.message_id == sent.message_id
     assert sent.claim_transition.seq == sent.seq
-    assert comms.bus.latest_sequence() == sent.seq
+    assert comms.bus.log.latest_sequence() == sent.seq
     assert comms.views.full_history() == [sent]
-    projection = comms.bus.claim_projection()
+    projection = comms.bus.log.claim_projection()
     assert projection.get(str(worktree / "a.py")).owner == "alice"
     assert projection.get(str(worktree / "b.py")).generation == (sent.claim_transition.generation)
     with pytest.raises(ClaimConflict) as loss:
@@ -193,7 +193,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert fresh.views.full_history() == [sent]
     marker_before = (comms.root / "bus_meta.json").read_bytes()
     with pytest.raises(RelationViolationError, match="Legacy append"):
-        fresh.bus.publish(Message("alice", "bob", "old writer cannot append", MessageType.INFO))
+        fresh.bus.publisher.publish(Message("alice", "bob", "old writer cannot append", MessageType.INFO))
     with pytest.raises(RelationViolationError, match="Private bus protocol blocks legacy deletion"):
         fresh.bus.remove_thread("alice")
     assert (comms.root / "bus_meta.json").read_bytes() == marker_before
@@ -205,7 +205,7 @@ def test_whole_set_rejects_conflict_without_partial_ownership(tmp_path: Path) ->
     with pytest.raises(ClaimConflict) as loss:
         comms.messaging.send_message("bob", "alice", "Bob claims both", claims=["a.py", "b.py"])
     assert loss.value.existing.owner == "alice"
-    assert comms.bus.claim_projection().get(str(worktree / "b.py")) is None
+    assert comms.bus.log.claim_projection().get(str(worktree / "b.py")) is None
     assert len(comms.views.full_history()) == 1
 
 
@@ -221,7 +221,7 @@ def test_same_file_double_slash_alias_conflicts_without_second_message(
         comms.messaging.send_message("bob", "alice", "Bob claims alias", claims=[alias])
     assert conflict.value.existing.owner == "alice"
     assert comms.views.full_history() == [first]
-    assert dict(comms.bus.claim_projection()) == {canonical: conflict.value.existing}
+    assert dict(comms.bus.log.claim_projection()) == {canonical: conflict.value.existing}
 
 
 def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
@@ -243,15 +243,15 @@ def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
         "releases": [],
         "generation": "b" * 32,
     }
-    with store_files._store_lock(comms.bus._path):
-        metadata = comms.bus._private_marker_unlocked()
-        comms.bus._append_private_unlocked(metadata, record)
+    with store_files._store_lock(comms.bus.log.path):
+        metadata = comms.bus.log._private_marker_unlocked()
+        comms.bus.log._append_private_unlocked(metadata, record)
     with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
         comms.views.full_history()
     with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
-        comms.bus.claim_projection()
+        comms.bus.log.claim_projection()
     with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
-        comms.bus.message_by_id(second.message_id)
+        comms.bus.log.message_by_id(second.message_id)
 
 
 def test_release_requires_exact_owner_and_preserves_generation(
@@ -263,7 +263,7 @@ def test_release_requires_exact_owner_and_preserves_generation(
         comms.messaging.send_message("bob", "alice", "Wrong release", releases=["a.py"])
     assert len(comms.views.full_history()) == 1
     released = comms.messaging.send_message("alice", "bob", "Released", releases=["a.py"])
-    assert comms.bus.claim_projection().get(str(worktree / "a.py")) is None
+    assert comms.bus.log.claim_projection().get(str(worktree / "a.py")) is None
     assert released.claim_transition is not None
     assert claimed.claim_transition is not None
     assert released.claim_transition.releases[0].generation == (claimed.claim_transition.generation)
@@ -296,7 +296,7 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     assert next_thread.name != "alice" and next_thread.created_at != original.created_at
 
     reopened = Comms(comms.root)
-    assert reopened.bus.claim_projection()[path].owner == "alice"
+    assert reopened.bus.log.claim_projection()[path].owner == "alice"
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.messaging.send_message(
             "bob", "alice-final", "Cannot take renamed owner claim", releases=["a.py"]
@@ -314,16 +314,16 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     assert released.claim_transition.owner == "alice-final"
     assert released.claim_transition.incarnation == claimed.claim_transition.incarnation
     assert released.claim_transition.releases[0].generation == claimed.claim_transition.generation
-    assert path not in reopened.bus.claim_projection()
+    assert path not in reopened.bus.log.claim_projection()
 
     taken = reopened.messaging.send_message("bob", "alice-final", "New owner", claims=["a.py"])
-    assert reopened.bus.claim_projection()[path].owner == "bob"
+    assert reopened.bus.log.claim_projection()[path].owner == "bob"
     assert taken.claim_transition is not None
     assert taken.claim_transition.generation != claimed.claim_transition.generation
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.messaging.send_message("alice", "bob", "Old alias cannot release Bob", releases=["a.py"])
     assert len(reopened.views.full_history()) == 3
-    assert Comms(comms.root).bus.claim_projection()[path].owner == "bob"
+    assert Comms(comms.root).bus.log.claim_projection()[path].owner == "bob"
 
 
 def test_rename_back_to_own_alias_preserves_claim_release(
@@ -341,11 +341,11 @@ def test_rename_back_to_own_alias_preserves_claim_release(
 
     reopened = Comms(comms.root)
     assert reopened.registry.snapshot().aliases == {"alice-new": "alice"}
-    assert reopened.bus.claim_projection()[path].owner == "alice"
+    assert reopened.bus.log.claim_projection()[path].owner == "alice"
     released = reopened.messaging.send_message("alice", "bob", "Release after rename back", releases=["a.py"])
     assert released.claim_transition is not None
     assert released.claim_transition.incarnation == claimed.claim_transition.incarnation
-    assert path not in reopened.bus.claim_projection()
+    assert path not in reopened.bus.log.claim_projection()
 
 
 def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path: Path) -> None:
@@ -363,9 +363,9 @@ def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path:
         )
     assert "same-tick-peer" not in comms.registry
     assert comms.views.full_history() == [claimed]
-    assert comms.bus.claim_projection()[str(worktree / "a.py")].owner == "alice"
+    assert comms.bus.log.claim_projection()[str(worktree / "a.py")].owner == "alice"
     comms.messaging.send_message("alice", "bob", "Legitimate release", releases=["a.py"])
-    assert str(worktree / "a.py") not in comms.bus.claim_projection()
+    assert str(worktree / "a.py") not in comms.bus.log.claim_projection()
 
 
 def test_legacy_colliding_creation_id_blocks_claim_write_before_append(
@@ -398,10 +398,10 @@ def test_owner_release_alias_rejected_before_it_can_relinquish_claim(
     with pytest.raises(RelationViolationError, match="canonical spelling"):
         comms.messaging.send_message("alice", "bob", "Alias release denied", releases=[raw_alias])
     assert comms.views.full_history() == [claimed]
-    assert comms.bus.claim_projection()[canonical].owner == "alice"
+    assert comms.bus.log.claim_projection()[canonical].owner == "alice"
     released = comms.messaging.send_message("alice", "bob", "Exact release", releases=[canonical])
     assert released.claim_transition is not None
-    assert comms.bus.claim_projection().get(canonical) is None
+    assert comms.bus.log.claim_projection().get(canonical) is None
 
 
 def test_owner_can_release_exact_claim_after_file_deletion(tmp_path: Path) -> None:
@@ -409,7 +409,7 @@ def test_owner_can_release_exact_claim_after_file_deletion(tmp_path: Path) -> No
     comms.messaging.send_message("alice", "bob", "Claim before deletion", claims=["a.py"])
     (worktree / "a.py").unlink()
     comms.messaging.send_message("alice", "bob", "Release deleted file", releases=["a.py"])
-    assert comms.bus.claim_projection().get(str(worktree / "a.py")) is None
+    assert comms.bus.log.claim_projection().get(str(worktree / "a.py")) is None
     assert len(comms.views.full_history()) == 2
 
 
@@ -443,7 +443,7 @@ def test_failed_fsync_complete_visible_row_is_unknown_not_replayed(
     def fsync(descriptor: int) -> None:
         nonlocal failed
         target = os.readlink(f"/proc/self/fd/{descriptor}")
-        bus = comms.bus._path
+        bus = comms.bus.log.path
         trigger = (
             target == str(bus)
             if fail_at == "bus"
@@ -476,7 +476,7 @@ def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss
     (worktree / "c.py").write_text("third")
     first = comms.messaging.send_message("alice", "bob", "Alice owns a", claims=["a.py"])
     marker = comms.root / "bus_meta.json"
-    bus = comms.bus._path
+    bus = comms.bus.log.path
     old_marker = marker.read_bytes()
     old_size = bus.stat().st_size
     real_fsync = os.fsync
@@ -515,7 +515,7 @@ def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss
     committed = reopened.views.full_history()
     assert len(committed) == 2 and committed[0] == first
     assert committed[1].seq == 2
-    projection = reopened.bus.claim_projection()
+    projection = reopened.bus.log.claim_projection()
     assert projection[str(worktree / "a.py")].owner == "alice"
     assert projection[str(worktree / "b.py")].owner == "bob"
     with pytest.raises(ClaimConflict):
@@ -524,7 +524,7 @@ def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss
     third = reopened.messaging.send_message("observer", "alice", "Next distinct claim", claims=["c.py"])
     assert third.seq == 3
     assert len(reopened.views.full_history()) == 3
-    assert reopened.bus.claim_projection()[str(worktree / "c.py")].owner == "observer"
+    assert reopened.bus.log.claim_projection()[str(worktree / "c.py")].owner == "observer"
 
 
 def test_oversize_transition_cannot_brick_a_successfully_published_root(
@@ -543,11 +543,11 @@ def test_oversize_transition_cannot_brick_a_successfully_published_root(
     with pytest.raises(RelationViolationError, match="malformed"):
         comms.messaging.send_message("alice", "bob", "Oversize claim", claims=resources)
     assert comms.views.full_history() == []
-    assert dict(comms.bus.claim_projection()) == {}
+    assert dict(comms.bus.log.claim_projection()) == {}
     committed = comms.messaging.send_message("alice", "bob", "Safe claim", claims=["a.py"])
     assert comms.views.full_history() == [committed]
-    assert comms.bus.message_by_id(committed.message_id) == committed
-    assert comms.bus.claim_projection()[str(worktree / "a.py")].owner == "alice"
+    assert comms.bus.log.message_by_id(committed.message_id) == committed
+    assert comms.bus.log.claim_projection()[str(worktree / "a.py")].owner == "alice"
     destination = tmp_path / "safe-export.jsonl"
     receipt = comms.views.export_wire(
         destination,
@@ -565,24 +565,24 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
     comms, _ = _participants(tmp_path)
     public = Message("alice", "bob", "attempt", MessageType.INFO, seq=1).to_wire()
     public["claim_transition"] = {"claims": ["/tmp/a.py"]}
-    comms.bus._path.write_bytes(json.dumps(public).encode() + b"\n")
+    comms.bus.log.path.write_bytes(json.dumps(public).encode() + b"\n")
     with pytest.raises(RelationViolationError, match="Malformed claim"):
-        comms.bus.full_history()
+        comms.bus.log.full_history()
 
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
-    with store_files._store_lock(comms.bus._path):
-        metadata = comms.bus._private_marker_unlocked()
-        return list(comms.bus._verified_private_rows_unlocked(metadata))
+    with store_files._store_lock(comms.bus.log.path):
+        metadata = comms.bus.log._private_marker_unlocked()
+        return list(comms.bus.log._verified_private_rows_unlocked(metadata))
 
 
 def _ordinary_locked_iterator(comms: Comms) -> list[Message]:
-    with store_files._store_lock(comms.bus._path):
-        return list(comms.bus._iter_log_unlocked())
+    with store_files._store_lock(comms.bus.log.path):
+        return list(comms.bus.log._iter_log_unlocked())
 
 
 def _ordinary_snapshot(comms: Comms) -> list[object]:
-    with comms.bus._record_snapshot() as (_, records):
+    with comms.bus.log._record_snapshot() as (_, records):
         return list(records)
 
 
@@ -590,7 +590,7 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms, worktree = _participants(tmp_path)
-    bus = comms.bus._path
+    bus = comms.bus.log.path
     real_fsync = os.fsync
     phase = "writer"
     fsyncs = 0
@@ -613,13 +613,13 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
     receipt = raw["id"]
     phase = "reader_blocked"
     denied = (
-        lambda: comms.bus.message_by_id(receipt),
+        lambda: comms.bus.log.message_by_id(receipt),
         lambda: _ordinary_locked_iterator(comms),
         lambda: _ordinary_snapshot(comms),
         lambda: comms.views.full_history(),
-        lambda: comms.bus.total_messages(),
-        lambda: comms.bus.latest_sequence(),
-        lambda: comms.bus.claim_projection(),
+        lambda: comms.bus.log.total_messages(),
+        lambda: comms.bus.log.latest_sequence(),
+        lambda: comms.bus.log.claim_projection(),
         lambda: _private_verified_rows(comms),
     )
     for read in denied:
@@ -627,31 +627,31 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
             read()
     assert fsyncs == 1 + len(denied)
     phase = "allow"
-    message = comms.bus.message_by_id(receipt)
+    message = comms.bus.log.message_by_id(receipt)
     assert message is not None and message.claim_transition is not None
     assert _ordinary_locked_iterator(comms) == [message]
     assert _ordinary_snapshot(comms)[0][0] == message
     assert comms.views.full_history() == [message]
-    assert comms.bus.total_messages() == 1
-    assert comms.bus.latest_sequence() == message.seq
-    assert comms.bus.claim_projection()[str(worktree / "a.py")].owner == "alice"
+    assert comms.bus.log.total_messages() == 1
+    assert comms.bus.log.latest_sequence() == message.seq
+    assert comms.bus.log.claim_projection()[str(worktree / "a.py")].owner == "alice"
     assert len(_private_verified_rows(comms)) == 1
 
 
 def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path: Path) -> None:
     comms, _ = _participants(tmp_path)
     committed = comms.messaging.send_message("alice", "bob", "Original claim", claims=["a.py"])
-    bus = comms.bus._path
+    bus = comms.bus.log.path
     assert bus.read_bytes().endswith(b"\n")
     bus.write_bytes(bus.read_bytes()[:-1])  # crash left an incomplete but JSON-valid tail
     denied = (
-        lambda: comms.bus.message_by_id(committed.message_id),
+        lambda: comms.bus.log.message_by_id(committed.message_id),
         lambda: _ordinary_locked_iterator(comms),
         lambda: _ordinary_snapshot(comms),
         lambda: comms.views.full_history(),
-        lambda: comms.bus.total_messages(),
-        lambda: comms.bus.latest_sequence(),
-        lambda: comms.bus.claim_projection(),
+        lambda: comms.bus.log.total_messages(),
+        lambda: comms.bus.log.latest_sequence(),
+        lambda: comms.bus.log.claim_projection(),
         lambda: _private_verified_rows(comms),
     )
     for read in denied:
@@ -663,7 +663,7 @@ def test_reserved_metadata_sequence_is_not_a_committed_message(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms, _ = _participants(tmp_path)
-    bus = comms.bus._path
+    bus = comms.bus.log.path
     real_open = os.open
 
     def fail_before_append(
@@ -679,12 +679,12 @@ def test_reserved_metadata_sequence_is_not_a_committed_message(
             comms.messaging.send_message("alice", "bob", "Never appended", claims=["a.py"])
     assert json.loads((comms.root / "bus_meta.json").read_text())["last_seq"] == 1
     assert comms.views.full_history() == []
-    assert comms.bus.latest_sequence() == 0
-    with comms.bus.full_history_snapshot() as (through, rows):
+    assert comms.bus.log.latest_sequence() == 0
+    with comms.bus.log.full_history_snapshot() as (through, rows):
         assert through == 0 and list(rows) == []
     committed = comms.messaging.send_message("bob", "alice", "Next safe claim", claims=["a.py"])
     assert committed.seq == 2  # reserved gaps are never reused
-    assert comms.bus.latest_sequence() == 2
+    assert comms.bus.log.latest_sequence() == 2
 
 
 @pytest.mark.parametrize("phase", ["before_bus_append", "after_bus_append_before_fsync"])

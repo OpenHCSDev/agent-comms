@@ -44,7 +44,7 @@ def verify_selected_wake(
     with _store_lock(comms._wire_lock_path):
         _require_no_private_owner_rename(comms.root)
         try:
-            initial = comms.bus.read_initial_cohort(admission.wire_root_id, admission.source_seq)
+            initial = comms.bus.log.read_initial_cohort(admission.wire_root_id, admission.source_seq)
             owner, generation = comms.registry.live_owner_with_admission(owner_name)
         except (RelationViolationError, ValueError) as error:
             raise IdentityConflict("Wake bus or live owner authority changed") from error
@@ -119,7 +119,7 @@ def _selected_claim_boundary(
     bus = comms.bus
     with (
         _store_lock(comms._wire_lock_path),
-        _store_lock(bus._path),
+        bus.log.locked(),
         _store_lock(comms.registry.store.path),
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
@@ -137,13 +137,13 @@ def _selected_claim_boundary(
         ):
             raise IdentityConflict("Selected wake owner stopped or changed")
         _require_no_private_owner_rename(comms.root)
-        metadata = bus._private_marker_unlocked()
+        metadata = bus.log._private_marker_unlocked()
         if metadata["wire_root_id"] != admission.wire_root_id:
             raise IdentityConflict("Selected wake belongs to another wire root")
         initial = next(
             (
                 row
-                for _message, _receipt, row in bus._verified_private_rows_unlocked(metadata)
+                for _message, _receipt, row in bus.log._verified_private_rows_unlocked(metadata)
                 if row is not None and row.message.seq == admission.source_seq
             ),
             None,
@@ -176,7 +176,7 @@ def publish_selected_resource_claim(
         initial,
     ):
         resource = normalize_claim_file(Path(owner.worktree), resource_path)
-        projection, _ = bus._claim_projection_unlocked(metadata)
+        projection, _ = bus.log._claim_projection_unlocked(metadata)
         existing = projection.get(resource)
         if existing is not None:
             if (
@@ -186,7 +186,7 @@ def publish_selected_resource_claim(
             ):
                 return existing
             raise ClaimConflict(existing)
-        for prior, _receipt, _initial in bus._verified_private_rows_unlocked(metadata):
+        for prior, _receipt, _initial in bus.log._verified_private_rows_unlocked(metadata):
             transition = prior.claim_transition
             if (
                 transition is not None
@@ -197,7 +197,7 @@ def publish_selected_resource_claim(
         target = initial.message.sender
         if target == owner.name:
             target = "#all"
-        committed = bus.publish_claim_envelope(
+        committed = bus.publisher.publish_claim_envelope(
             Message(owner.name, target, "Resource claim admitted", MessageType.INFO, notice=True),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
@@ -234,12 +234,12 @@ def release_selected_resources(
         owner,
         initial,
     ):
-        projection, _ = bus._claim_projection_unlocked(metadata)
+        projection, _ = bus.log._claim_projection_unlocked(metadata)
         if any(projection.get(claim.resource) != claim for claim in claims):
             raise IdentityConflict("Coding claim changed before release")
         if claims:
             target = initial.message.sender if initial.message.sender != owner.name else "#all"
-            bus.publish_claim_envelope(
+            bus.publisher.publish_claim_envelope(
                 Message(
                     owner.name,
                     target,
@@ -349,7 +349,7 @@ def write_selected_claimed_file(
     bus = comms.bus
     with (
         _store_lock(comms._wire_lock_path),
-        _store_lock(bus._path),
+        bus.log.locked(),
         _store_lock(comms.registry.store.path),
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
@@ -368,13 +368,13 @@ def write_selected_claimed_file(
         ):
             raise IdentityConflict("Selected write owner stopped or changed")
         _require_no_private_owner_rename(comms.root)
-        marker = bus._private_marker_unlocked()
+        marker = bus.log._private_marker_unlocked()
         if marker["wire_root_id"] != admission.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
         initial = next(
             (
                 row
-                for _message, _receipt, row in bus._verified_private_rows_unlocked(marker)
+                for _message, _receipt, row in bus.log._verified_private_rows_unlocked(marker)
                 if row is not None and row.message.seq == admission.source_seq
             ),
             None,
@@ -387,7 +387,7 @@ def write_selected_claimed_file(
         with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = normalize_existing_file(Path(owner.worktree), claimed.resource)
-            projection, _ = bus._claim_projection_unlocked(marker)
+            projection, _ = bus.log._claim_projection_unlocked(marker)
             if claimed.admission != admission or projection.get(normalized) != claimed:
                 raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):

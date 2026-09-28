@@ -70,7 +70,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "owner" if direct else "#team"
     original = comms.messaging.send_initial_cohort("sender", target, "Need owner to consider and reply.")
-    original_record = comms.bus.read_initial_cohort(root_id, original.seq)
+    original_record = comms.bus.log.read_initial_cohort(root_id, original.seq)
     assert len(original_record.audience.recipients) == 1
     recipient = original_record.audience.recipients[0]
     bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
@@ -144,10 +144,10 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         intent = result.value
         assert intent.exact_target == case.reply_target
         assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
-        assert case.bus.read_keyed_response(intent) is None
+        assert case.bus.log.read_keyed_response(intent) is None
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence)
-        assert case.comms.bus.latest_sequence() == case.origin_seq
+        assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert isinstance(
             prepare_fenced_response(
                 case.store, case.bus, case.fence, intent.payload, timestamp=intent.timestamp
@@ -160,7 +160,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         assert published.publication_receipt is not None
         assert type(published.claims[0].lifecycle) is CompletedClaim
         assert published.publication_receipt.seq == case.origin_seq + 1
-        response = case.bus.read_keyed_response(intent)
+        response = case.bus.log.read_keyed_response(intent)
         assert response is not None and response.target == case.reply_target
         assert "_agent_comms_private_v1" not in response.to_wire()
         assert isinstance(
@@ -194,7 +194,7 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
         with pytest.raises(IdentityConflict, match="different trusted roots"):
             prepare_fenced_response(case.store, alien_bus, case.fence, "not allowed")
         assert type(case.store.snapshot("exec").obligation.lifecycle) is PendingResponse
-        assert case.comms.bus.latest_sequence() == case.origin_seq
+        assert case.comms.bus.log.latest_sequence() == case.origin_seq
     finally:
         case.close()
 
@@ -209,11 +209,11 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
         def crash_before_append(_intent, *, registry_snapshot=None):
             raise OSError("injected process death before append")
 
-        monkeypatch.setattr(case.bus, "_publish_keyed_response_unlocked", crash_before_append)
+        monkeypatch.setattr(case.bus.publisher, '_publish_keyed_response_unlocked', crash_before_append)
         with pytest.raises(OSError):
             publish_fenced_response(case.store, case.bus, case.fence)
-        assert case.bus.read_keyed_response(intent) is None
-        assert case.comms.bus.latest_sequence() == case.origin_seq
+        assert case.bus.log.read_keyed_response(intent) is None
+        assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert (
             case.store._connection.execute(
                 "SELECT COUNT(*) FROM publication_append_dispatches"
@@ -225,7 +225,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
             publish_fenced_response(case.store, case.bus, case.fence)
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence)
-        assert case.comms.bus.latest_sequence() == case.origin_seq
+        assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
     finally:
         case.close()
@@ -237,16 +237,16 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
     case = _ready(tmp_path)
     try:
         intent = prepare_fenced_response(case.store, case.bus, case.fence, "reply").value
-        real_append = case.bus._publish_keyed_response_unlocked
+        real_append = case.bus.publisher._publish_keyed_response_unlocked
 
         def committed_then_lost_ack(frozen, *, registry_snapshot=None):
             real_append(frozen, registry_snapshot=registry_snapshot)
             raise OSError("injected loss after bus fsync")
 
-        monkeypatch.setattr(case.bus, "_publish_keyed_response_unlocked", committed_then_lost_ack)
+        monkeypatch.setattr(case.bus.publisher, '_publish_keyed_response_unlocked', committed_then_lost_ack)
         with pytest.raises(OSError):
             publish_fenced_response(case.store, case.bus, case.fence)
-        assert case.bus.read_keyed_response(intent) is not None
+        assert case.bus.log.read_keyed_response(intent) is not None
         assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
         monkeypatch.undo()
         case.store.close()
@@ -257,7 +257,7 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
             assert isinstance(
                 publish_fenced_response(reopened, case.bus, case.fence), AlreadyApplied
             )
-            assert case.comms.bus.latest_sequence() == case.origin_seq + 1
+            assert case.comms.bus.log.latest_sequence() == case.origin_seq + 1
     finally:
         case.close()
 
@@ -271,7 +271,7 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
         stale = replace(case.fence, revision=case.fence.revision - 1)
         with pytest.raises(StaleRevision):
             publish_fenced_response(case.store, case.bus, stale)
-        assert case.bus.read_keyed_response(intent) is None
+        assert case.bus.log.read_keyed_response(intent) is None
         assert (
             case.store._connection.execute(
                 "SELECT COUNT(*) FROM publication_append_dispatches"
@@ -293,7 +293,7 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
             threading.Event(),
             threading.Event(),
         )
-        real_append = case.bus._publish_keyed_response_unlocked
+        real_append = case.bus.publisher._publish_keyed_response_unlocked
 
         def blocking_append(frozen, *, registry_snapshot=None):
             entered.set()
@@ -301,7 +301,7 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
             assert not wire_done.is_set(), "registry writer raced an in-flight append"
             return real_append(frozen, registry_snapshot=registry_snapshot)
 
-        monkeypatch.setattr(case.bus, "_publish_keyed_response_unlocked", blocking_append)
+        monkeypatch.setattr(case.bus.publisher, '_publish_keyed_response_unlocked', blocking_append)
         outcomes: list[str] = []
 
         def revoke():
@@ -346,7 +346,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
     child: subprocess.Popen[str] | None = None
     try:
         prepare_fenced_response(case.store, case.bus, case.fence, "reply")
-        actual_append = case.bus._publish_keyed_response_unlocked
+        actual_append = case.bus.publisher._publish_keyed_response_unlocked
         env = os.environ.copy()
         for name in ("PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD"):
             env.pop(name, None)
@@ -379,7 +379,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
                 child.wait(timeout=0.15)
             return actual_append(frozen, registry_snapshot=registry_snapshot)
 
-        monkeypatch.setattr(case.bus, "_publish_keyed_response_unlocked", concurrent_stop)
+        monkeypatch.setattr(case.bus.publisher, '_publish_keyed_response_unlocked', concurrent_stop)
         result = publish_fenced_response(case.store, case.bus, case.fence)
         assert child is not None
         output, errors = child.communicate(timeout=5)
@@ -387,7 +387,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
         assert not case.comms.registry.status("owner").active
         assert type(result.value.execution.lifecycle) is CompletedExecution
         assert type(result.value.obligation.lifecycle) is PublishedResponse
-        assert case.comms.bus.latest_sequence() == case.origin_seq + 1
+        assert case.comms.bus.log.latest_sequence() == case.origin_seq + 1
     finally:
         if child is not None and child.poll() is None:
             child.kill()

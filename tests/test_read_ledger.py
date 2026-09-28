@@ -152,7 +152,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
         comms.messaging.send("alice", "#team", str(i))
     scope = AlternateMessages("alternating", None)
     page = comms.bus.channel_display_page(scope)
-    basis = comms.bus.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus._path)
+    basis = comms.bus.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path)
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
     assert comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot()) == {2, 4, 6}
@@ -170,7 +170,7 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
     )
     replacement = tmp_path / "replacement.jsonl"
     replacement.write_text(json.dumps(replace(message, body="never painted").to_wire()) + "\n")
-    replacement.replace(comms.bus._path)
+    replacement.replace(comms.bus.log.path)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
     assert not comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
 

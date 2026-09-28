@@ -76,10 +76,10 @@ def _page(
 def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
     first = comms.messaging.send_initial_cohort("sender", "member000", "first")
-    before = comms.bus._path.read_bytes()
+    before = comms.bus.log.path.read_bytes()
     hint = index.notify_committed_append(root_id=root_id, through_seq=first.seq)
     assert hint == CommittedAppendHint(root_id, 1)
-    assert comms.bus._path.read_bytes() == before and not index.path.exists()
+    assert comms.bus.log.path.read_bytes() == before and not index.path.exists()
     with pytest.raises(ProjectionRebuildRequiredError, match="initial build"):
         index.catch_up_committed_append(hint)
     with pytest.raises(ProjectionUnavailableError):
@@ -91,7 +91,7 @@ def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) 
     assert outcome == CandidateCatchUp(first.seq, True, False)
     assert [row.source_seq for row in _page(reopened, root_id, lookup, first.seq).entries] == [1]
     assert reopened.catch_up_committed_append(hint) == outcome  # no WAL rewrite/duplicate
-    assert comms.bus._path.read_bytes() == before
+    assert comms.bus.log.path.read_bytes() == before
 
 
 def test_deferred_catch_up_refuses_zero_progress_budget_until_explicitly_enlarged(
@@ -134,7 +134,7 @@ def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, da
         bootstrap_new=True,
     ).caught_up
     second = comms.messaging.send_initial_cohort("sender", "member000", "second")
-    path = comms.bus._path
+    path = comms.bus.log.path
     if damage == "truncate":
         path.write_bytes(b"")
     elif damage == "replace":
@@ -236,7 +236,7 @@ def test_bounded_101_initials_and_150_frozen_recipients(tmp_path: Path) -> None:
                 "recipients": 150,
                 "initials": 101,
                 "rounds": rounds,
-                "bus_bytes": comms.bus._path.stat().st_size,
+                "bus_bytes": comms.bus.log.path.stat().st_size,
                 "send_p99_ms": p99(send_times),
                 "candidate_batch_p99_ms": p99(builds),
                 "candidate_page_p99_ms": p99(pages),

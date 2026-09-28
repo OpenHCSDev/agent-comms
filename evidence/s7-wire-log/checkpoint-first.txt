@@ -1,0 +1,2500 @@
+FFFFFFFFFFFFFFFFFFFFFFF...F.........                                     [100%]
+=================================== FAILURES ===================================
+__________________ test_marker_bound_complete_addressed_pages __________________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_marker_bound_complete_add0')
+
+    def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
+        comms, root_id = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+        with pytest.raises(RelationViolationError, match="already installed"):
+>           install_private_bus_checkpoint(comms.bus.log)
+
+tests/test_private_bus_checkpoint.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/private_bus_checkpoint.py:286: in install_private_bus_checkpoint
+    with _store_lock(bus.path):
+         ^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bf89550>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+__________ test_crash_after_bus_fsync_before_checkpoint_cold_recovers __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_crash_after_bus_fsync_bef0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c353490>
+
+    def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, monkeypatch) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c165860>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+____________ test_claim_and_keyed_response_append_share_certificate ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_claim_and_keyed_response_0')
+
+    def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+        resource = tmp_path / "owned.py"
+        resource.write_text("owned\n")
+>       initial = comms.messaging.send_initial_cohort("sender", "Alice", "task")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfee580>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+__________ test_early_prefix_edit_plus_complete_lagged_suffix_denied ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_early_prefix_edit_plus_co0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c0ea8b0>
+
+    def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, monkeypatch) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "prefix A" + "x" * 6000)
+
+tests/test_private_bus_checkpoint.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfedf90>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_____________ test_checkpoint_faults_deny_without_rebuild[shrink] ______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi0')
+fault = 'shrink'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfee620>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_____________ test_checkpoint_faults_deny_without_rebuild[replace] _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi1')
+fault = 'replace'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfeff70>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_____________ test_checkpoint_faults_deny_without_rebuild[partial] _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi2')
+fault = 'partial'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfee030>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_____________ test_checkpoint_faults_deny_without_rebuild[missing] _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi3')
+fault = 'missing'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bf10f50>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_____________ test_checkpoint_faults_deny_without_rebuild[schema] ______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi4')
+fault = 'schema'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bf12300>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+______________ test_checkpoint_faults_deny_without_rebuild[ahead] ______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi5')
+fault = 'ahead'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bf132a0>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+______________ test_checkpoint_faults_deny_without_rebuild[root] _______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi6')
+fault = 'root'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bf13390>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+______________ test_checkpoint_faults_deny_without_rebuild[tail] _______________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi7')
+fault = 'tail'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bf12350>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_____________ test_checkpoint_faults_deny_without_rebuild[corrupt] _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi8')
+fault = 'corrupt'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfcb660>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+___________ test_checkpoint_faults_deny_without_rebuild[replace_db] ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_checkpoint_faults_deny_wi9')
+fault = 'replace_db'
+
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "shrink",
+            "replace",
+            "partial",
+            "missing",
+            "schema",
+            "ahead",
+            "root",
+            "tail",
+            "corrupt",
+            "replace_db",
+        ],
+    )
+    def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+
+tests/test_private_bus_checkpoint.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfcbd40>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+________ test_unknown_public_writer_cannot_make_initial_absent_audience ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_unknown_public_writer_can0')
+
+    def test_unknown_public_writer_cannot_make_initial_absent_audience(tmp_path: Path) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
+
+tests/test_private_bus_checkpoint.py:239: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfcb070>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_________ test_deleted_sql_index_cannot_certify_absent_selected_source _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_deleted_sql_index_cannot_0')
+
+    def test_deleted_sql_index_cannot_certify_absent_selected_source(tmp_path: Path) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       source = comms.messaging.send_initial_cohort("sender", "Alice", "mandatory selected")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:252: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfed4f0>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_________ test_sql_index_change_plus_complete_bus_suffix_still_denies __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_sql_index_change_plus_com0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c3f1ef0>
+
+    def test_sql_index_change_plus_complete_bus_suffix_still_denies(
+        tmp_path: Path, monkeypatch
+    ) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
+
+tests/test_private_bus_checkpoint.py:268: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfec870>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+___________ test_sql_index_change_during_page_is_not_exhaustiveness ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_sql_index_change_during_p0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c42e850>
+
+    def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monkeypatch) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "source")
+
+tests/test_private_bus_checkpoint.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c078780>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_ test_pending_marker_recovers_only_after_canonical_cold_parse[before_db_commit] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_pending_marker_recovers_o0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26bfd9910>
+phase = 'before_db_commit'
+
+    @pytest.mark.parametrize("phase", ["before_db_commit", "after_db_commit"])
+    def test_pending_marker_recovers_only_after_canonical_cold_parse(
+        tmp_path: Path, monkeypatch, phase: str
+    ) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "first")
+
+tests/test_private_bus_checkpoint.py:311: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26bfec230>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+_ test_pending_marker_recovers_only_after_canonical_cold_parse[after_db_commit] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_pending_marker_recovers_o1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c1b17d0>
+phase = 'after_db_commit'
+
+    @pytest.mark.parametrize("phase", ["before_db_commit", "after_db_commit"])
+    def test_pending_marker_recovers_only_after_canonical_cold_parse(
+        tmp_path: Path, monkeypatch, phase: str
+    ) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "first")
+
+tests/test_private_bus_checkpoint.py:311: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c2362b0>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+__________ test_pending_checkpoint_does_not_repair_corrupt_sql_schema __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_pending_checkpoint_does_n0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c0396d0>
+
+    def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, monkeypatch) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                checkpoint,
+                "_final_seal",
+                lambda *_: (_ for _ in ()).throw(OSError("after commit")),
+            )
+            with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+>               comms.messaging.send_initial_cohort("sender", "Alice", "pending")
+
+tests/test_private_bus_checkpoint.py:345: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c2c3610>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+____________ test_failed_marker_binding_does_not_promote_checkpoint ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_failed_marker_binding_doe0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff26c41e9e0>
+
+    def test_failed_marker_binding_does_not_promote_checkpoint(tmp_path: Path, monkeypatch) -> None:
+        from agent_comms import store_files
+    
+        comms, _ = _root(tmp_path)
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                store_files,
+                "_atomic_write_text",
+                lambda *args, **kwargs: (_ for _ in ()).throw(OSError("marker sync failed")),
+            )
+            with pytest.raises(OSError, match="marker sync failed"):
+                install_private_bus_checkpoint(comms.bus.log)
+        assert (comms.root / "private_bus_checkpoint.sqlite3").exists()
+        with pytest.raises(RelationViolationError, match="marker binding"):
+>           comms.bus.log.full_history()
+
+tests/test_private_bus_checkpoint.py:366: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/wire_log.py:54: in full_history
+    with self.locked():
+         ^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c0f9db0>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+___ test_existing_root_explicit_install_preserves_source_and_supports_append ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_existing_root_explicit_in0')
+
+    def test_existing_root_explicit_install_preserves_source_and_supports_append(
+        tmp_path: Path,
+    ) -> None:
+        comms, root_id = _root(tmp_path)
+        one = comms.messaging.send_initial_cohort("sender", "Alice", "already committed")
+        two = comms.messaging.send_initial_cohort("sender", "outsider", "other audience")
+        original = comms.bus.log.path.read_bytes()
+        inode = comms.bus.log.path.stat().st_ino
+        reopened = Comms(comms.root)
+        assert not (comms.root / "private_bus_checkpoint.sqlite3").exists()
+        witness = install_private_bus_checkpoint(reopened.bus.log)
+        assert (witness.root_id, witness.through_seq, witness.offset) == (
+            root_id,
+            two.seq,
+            len(original),
+        )
+        assert comms.bus.log.path.read_bytes() == original
+        assert comms.bus.log.path.stat().st_ino == inode
+>       assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [one.seq]
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:432: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_private_bus_checkpoint.py:47: in _page
+    with _store_lock(comms.bus.log.path):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c264be0>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+______ test_warm_witness_rejects_changed_revision_even_with_complete_row _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-wire-log-20260928/.artifacts/s7-wire-log/checkpoint/test_warm_witness_rejects_chan0')
+
+    def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: Path) -> None:
+        comms, _ = _root(tmp_path)
+        install_private_bus_checkpoint(comms.bus.log)
+>       comms.messaging.send_initial_cohort("sender", "Alice", "first")
+
+tests/test_private_bus_checkpoint.py:473: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/messaging.py:124: in send_initial_cohort
+    committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/publisher.py:334: in publish_initial_cohort
+    with nullcontext() if _bus_locked else self.log.locked():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:50: in locked
+    with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff26c2671b0>
+
+    def verify_before_read_unlocked(self) -> None:
+        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+    
+        The marker is fsynced before the first claim send. A failed bus append may
+        leave a complete, visible row: another cooperating process must fsync the
+        opened inode and its directory, then reject incomplete/corrupt rows, before
+        treating either the announcement or the claim as committed. This hook is
+        entered by the shared bus lock, including ordinary inbox/history readers.
+        """
+        if not self.claim_gate_enabled():
+            return
+        marker = self.metadata_path
+        marker_info = marker.lstat()
+        if (
+            os.name != "posix"
+            or not stat.S_ISREG(marker_info.st_mode)
+            or marker_info.st_uid != os.geteuid()
+            or stat.S_IMODE(marker_info.st_mode) != 0o600
+        ):
+            raise RelationViolationError("Claim bus read barrier is not durable and private.")
+        try:
+            # The private marker's source of truth is its single fsynced JSON file.
+            # The root identity/sequence/claim flag are validated again by private
+            # writers; this preflight protects all ordinary readers on marked roots.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(self.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                (self.path.with_name("private_bus_checkpoint.sqlite3")).exists()
+                or (self.path.with_name("private_bus_checkpoint.sqlite3")).is_symlink()
+                or any(
+                    key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                    for key in ("checkpoint_version", "checkpoint_seal")
+                )
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            if descriptor is not None:
+                with os.fdopen(descriptor, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise RelationViolationError("Claim bus is not a regular file.")
+                    os.fsync(stream.fileno())
+                    from .private_bus_checkpoint import (
+                        certificate_enabled,
+                        verify_private_bus_checkpoint_unlocked,
+                    )
+    
+                    if certificate_enabled(self.path) or any(
+                        key in json.loads(marker.read_text(), object_pairs_hook=unique_wire_object)
+                        for key in ("checkpoint_version", "checkpoint_seal")
+                    ):
+                        # The caller already owns the bus lock. Do not instantiate
+                        # a registry (or recursively acquire a store lock) here.
+                        from .message_bus import MessageBus
+    
+                        bus = MessageBus.__new__(MessageBus)
+                        bus._path = self.path
+>                       private_marker = bus._private_marker_unlocked()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'MessageBus' object has no attribute '_private_marker_unlocked'. Did you mean: '_read_markers_unlocked'?
+
+src/agent_comms/wire_log.py:702: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_private_bus_checkpoint.py::test_marker_bound_complete_addressed_pages
+FAILED tests/test_private_bus_checkpoint.py::test_crash_after_bus_fsync_before_checkpoint_cold_recovers
+FAILED tests/test_private_bus_checkpoint.py::test_claim_and_keyed_response_append_share_certificate
+FAILED tests/test_private_bus_checkpoint.py::test_early_prefix_edit_plus_complete_lagged_suffix_denied
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[shrink]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[replace]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[partial]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[missing]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[schema]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[ahead]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[root]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[tail]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[corrupt]
+FAILED tests/test_private_bus_checkpoint.py::test_checkpoint_faults_deny_without_rebuild[replace_db]
+FAILED tests/test_private_bus_checkpoint.py::test_unknown_public_writer_cannot_make_initial_absent_audience
+FAILED tests/test_private_bus_checkpoint.py::test_deleted_sql_index_cannot_certify_absent_selected_source
+FAILED tests/test_private_bus_checkpoint.py::test_sql_index_change_plus_complete_bus_suffix_still_denies
+FAILED tests/test_private_bus_checkpoint.py::test_sql_index_change_during_page_is_not_exhaustiveness
+FAILED tests/test_private_bus_checkpoint.py::test_pending_marker_recovers_only_after_canonical_cold_parse[before_db_commit]
+FAILED tests/test_private_bus_checkpoint.py::test_pending_marker_recovers_only_after_canonical_cold_parse[after_db_commit]
+FAILED tests/test_private_bus_checkpoint.py::test_pending_checkpoint_does_not_repair_corrupt_sql_schema
+FAILED tests/test_private_bus_checkpoint.py::test_failed_marker_binding_does_not_promote_checkpoint
+FAILED tests/test_private_bus_checkpoint.py::test_existing_root_explicit_install_preserves_source_and_supports_append
+FAILED tests/test_private_bus_checkpoint.py::test_warm_witness_rejects_changed_revision_even_with_complete_row
+24 failed, 12 passed, 1 deselected in 6.42s

@@ -14,6 +14,13 @@ from agent_comms.compaction_journal import (
     CompactionJournalError,
     CompactionJournalUnknownError,
 )
+from agent_comms.compaction_states import (
+    AbortedNoWriteOperation,
+    CommittedOperation,
+    OperationState,
+    RefusedOperation,
+    UnknownOperation,
+)
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX production bridge")
 
@@ -45,7 +52,7 @@ def test_every_commit_syncs_directory_after_constructor(journal, monkeypatch):
     monkeypatch.setattr(os, "fsync", observed)
     commit_id = journal.begin(session, {})
     assert len(directories) == 1
-    journal.resolve(commit_id, "unknown", {})
+    journal.resolve(commit_id, UnknownOperation(), {})
     assert len(directories) == 2
     journal.get(commit_id)
     assert len(directories) == 3
@@ -62,7 +69,7 @@ def test_postcommit_sync_fault_is_unknown_not_accepted_intent(journal, monkeypat
     with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
         journal.begin(session, {}, commit_id="a" * 32)
     monkeypatch.setattr(os, "fsync", fsync)
-    assert journal.get("a" * 32).status == "intent"
+    assert journal.get("a" * 32).state.declared_name == "intent"
     with pytest.raises(CompactionJournalError, match="never replay"):
         journal.begin(session, {})
 
@@ -108,7 +115,7 @@ os._exit(17)
     assert result.returncode == 17
     journal = CompactionJournal(db)
     operation = journal.get("a" * 32)
-    assert operation.status == "intent"
+    assert operation.state.declared_name == "intent"
     assert json.loads(operation.intent_json) == {"payloadDigest": "digest"}
     with pytest.raises(CompactionJournalError, match="never replay"):
         journal.begin(str(session), {})
@@ -118,9 +125,9 @@ os._exit(17)
 def test_terminal_is_immutable_and_id_never_reusable(journal, outcome):
     journal, session = journal
     commit_id = journal.begin(session, {})
-    journal.resolve(commit_id, outcome, {"proof": "fixture"})
+    journal.resolve(commit_id, OperationState.decode(outcome)(), {"proof": "fixture"})
     with pytest.raises(CompactionJournalError):
-        journal.resolve(commit_id, "unknown", {})
+        journal.resolve(commit_id, UnknownOperation(), {})
     with pytest.raises(CompactionJournalError, match="reused commit ID"):
         journal.begin(session, {}, commit_id=commit_id)
     assert journal.begin(session, {}) != commit_id
@@ -129,23 +136,23 @@ def test_terminal_is_immutable_and_id_never_reusable(journal, outcome):
 def test_unknown_requires_reconciliation_not_refusal(journal):
     journal, session = journal
     commit_id = journal.begin(session, {})
-    journal.resolve(commit_id, "unknown", {})
+    journal.resolve(commit_id, UnknownOperation(), {})
     with pytest.raises(CompactionJournalError):
-        journal.resolve(commit_id, "refused", {})
+        journal.resolve(commit_id, RefusedOperation(), {})
     with pytest.raises(CompactionJournalError):
         journal.begin(session, {})
-    journal.resolve(commit_id, "committed", {"entryId": "native"})
-    assert journal.get(commit_id).status == "committed"
+    journal.resolve(commit_id, CommittedOperation(), {"entryId": "native"})
+    assert journal.get(commit_id).state.declared_name == "committed"
 
 
 def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     journal, session = journal
     commit_id = journal.begin(session, {"summary": "secret never published"})
     assert journal.pending_publications(session) == ()
-    journal.resolve(commit_id, "unknown", {"status": "unknown", "reason": "deadline"})
+    journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "deadline"})
     assert journal.pending_publications(session) == ()
     metadata = {"status": "committed", "entryId": "entry-1", "revision": "r1", "leafId": "leaf"}
-    journal.resolve(commit_id, "committed", metadata, publication=True)
+    journal.resolve(commit_id, CommittedOperation(), metadata, publication=True)
     reopened = CompactionJournal(journal.path)
     pending = reopened.pending_publications(session)
     assert len(pending) == 1 and pending[0].commit_id == commit_id
@@ -166,7 +173,7 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     second = journal.begin(session, {})
     journal.resolve(
         second,
-        "committed",
+        CommittedOperation(),
         {"status": "committed", "entryId": "entry-2", "revision": "r2", "leafId": "leaf-2"},
         publication=True,
     )
@@ -178,7 +185,7 @@ def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal
     commit_id = journal.begin(session, {})
     journal.resolve(
         commit_id,
-        "committed",
+        CommittedOperation(),
         {"status": "committed", "entryId": "native", "revision": "r", "leafId": "leaf"},
         publication=True,
     )
@@ -202,7 +209,7 @@ def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal
         assert db.execute(
             "SELECT status FROM publications WHERE commit_id = ?", (commit_id,)
         ).fetchone() == ("observed",)
-    assert reopened.get(commit_id).status == "committed"
+    assert reopened.get(commit_id).state.declared_name == "committed"
 
 
 def test_changed_publication_metadata_refuses_local_projection(journal):
@@ -210,7 +217,7 @@ def test_changed_publication_metadata_refuses_local_projection(journal):
     commit_id = journal.begin(session, {})
     journal.resolve(
         commit_id,
-        "committed",
+        CommittedOperation(),
         {"status": "committed", "entryId": "native", "revision": "r", "leafId": "leaf"},
         publication=True,
     )
@@ -228,10 +235,13 @@ def test_no_publication_without_exact_committed_native_evidence(journal):
     commit_id = journal.begin(session, {})
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.resolve(
-            commit_id, "committed", {"status": "committed", "entryId": "x"}, publication=True
+            commit_id,
+            CommittedOperation(),
+            {"status": "committed", "entryId": "x"},
+            publication=True,
         )
-    assert journal.get(commit_id).status == "intent"
-    journal.resolve(commit_id, "aborted-no-write", {"status": "aborted-no-write"})
+    assert journal.get(commit_id).state.declared_name == "intent"
+    journal.resolve(commit_id, AbortedNoWriteOperation(), {"status": "aborted-no-write"})
     assert journal.pending_publications(session) == ()
 
 

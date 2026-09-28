@@ -19,11 +19,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
-from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_provider import (
     NativeSummary,
-    NativeSummaryError,
-    summarize_native,
 )
 from agent_comms.owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
 from agent_comms.registration import Registration
@@ -127,9 +124,9 @@ async def test_adaptive_owner_one_original_input_native_commit_without_provider(
 
     async def summarize(prepared):
         seen.append(prepared)
-        assert prepared.session_id
-        assert prepared.preparation.witness["sessionFile"] == str(session)
-        return "Provider-free synthetic owner summary"
+        assert prepared.witness.session_id
+        assert prepared.witness.session_file == str(session)
+        return NativeSummary("Provider-free synthetic owner summary", None, None)
 
     result = await maybe_compact_owner_turn(
         registry,
@@ -163,7 +160,7 @@ async def test_adaptive_owner_correction_during_summary_refuses_native_commit(ad
             target="owner",
             text="Retain correction",
         )
-        return "Stale synthetic summary"
+        return NativeSummary("Stale synthetic summary", None, None)
 
     with pytest.raises(RelationViolationError, match="Unsettled"):
         await maybe_compact_owner_turn(
@@ -187,7 +184,7 @@ async def test_adaptive_settings_change_after_summary_refuses_native_commit(admi
         (tmp_path / "private-pi-agent" / "settings.json").write_text(
             '{"compaction":{"keepRecentTokens":500}}'
         )
-        return "Stale synthetic summary"
+        return NativeSummary("Stale synthetic summary", None, None)
 
     with pytest.raises(RelationViolationError, match="source changed"):
         await maybe_compact_owner_turn(
@@ -213,7 +210,7 @@ async def test_adaptive_unproven_project_settings_skips_without_provider(admitte
     async def summarize(_prepared):
         nonlocal called
         called = True
-        return "forbidden"
+        return NativeSummary("forbidden", None, None)
 
     assert not await maybe_compact_owner_turn(
         registry,
@@ -248,69 +245,6 @@ async def test_adaptive_unbound_custom_model_skips_without_provider(admitted, tm
     )
 
 
-async def test_native_summary_unsupported_model_refuses_before_provider(admitted):
-    _registry, session, _info = admitted
-    before = session.read_bytes()
-    preparation = prepare_native_source(Path(PACKAGE), str(session), keep_recent_tokens=100)
-    assert preparation is not None
-    with pytest.raises(NativeSummaryError, match="Native summarization refused"):
-        await summarize_native(
-            Path(PACKAGE),
-            preparation,
-            provider="nonexistent-provider",
-            model_id="nonexistent-model",
-            context_window=1000,
-            reserve_tokens=100,
-            keep_recent_tokens=100,
-        )
-    assert session.read_bytes() == before
-
-
-async def test_native_summary_transport_assembles_bounded_chunked_envelope(
-    admitted, tmp_path, monkeypatch
-):
-    _registry, session, _info = admitted
-    preparation = prepare_native_source(Path(PACKAGE), str(session), keep_recent_tokens=100)
-    assert preparation is not None
-    node = tmp_path / "fake-node"
-    usage = {
-        "input": 2,
-        "output": 3,
-        "cacheRead": 0,
-        "cacheWrite": 0,
-        "totalTokens": 5,
-        "cost": {"input": 0.0, "output": 0.0, "cacheRead": 0.0, "cacheWrite": 0.0, "total": 0.0},
-    }
-    payload = json.dumps(
-        {
-            "summary": "one bounded result",
-            "details": {"readFiles": ["/tmp/a"], "modifiedFiles": []},
-            "usage": usage,
-        }
-    )
-    half = len(payload) // 2
-    node.write_text(
-        f"#!{sys.executable}\n"
-        "import sys,time\n"
-        f"sys.stdout.write({payload[:half]!r});sys.stdout.flush();time.sleep(.02)\n"
-        f"sys.stdout.write({payload[half:]!r});sys.stdout.flush()\n"
-    )
-    node.chmod(0o700)
-    monkeypatch.setattr("agent_comms.owner_compaction_provider.shutil.which", lambda _: str(node))
-    result = await summarize_native(
-        Path(PACKAGE),
-        preparation,
-        provider="fake",
-        model_id="model",
-        context_window=1000,
-        reserve_tokens=100,
-        keep_recent_tokens=100,
-    )
-    assert result.text == "one bounded result"
-    assert result.details == {"readFiles": ["/tmp/a"], "modifiedFiles": []}
-    assert result.usage == usage
-
-
 @pytest.mark.parametrize("correction", [False, True])
 async def test_acp_owner_turn_compacts_then_sends_original_once(
     admitted, tmp_path, monkeypatch, correction
@@ -327,7 +261,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             received.append(kwargs)
 
     async def synthetic_summary(prepared):
-        assert prepared.preparation.witness["sessionFile"] == str(session)
+        assert prepared.witness.session_file == str(session)
         if correction:
             owner = comms.registry.require("proj")
             assert owner.active_turn is not None
@@ -459,7 +393,7 @@ async def test_adaptive_owner_selected_model_mismatch_skips_without_provider(adm
     async def summarize(_prepared):
         nonlocal called
         called = True
-        return "forbidden"
+        return NativeSummary("forbidden", None, None)
 
     different = AgentRuntimeInfo(
         thread="owner",

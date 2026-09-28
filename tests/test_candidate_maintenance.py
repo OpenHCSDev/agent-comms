@@ -71,7 +71,7 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
             def probe():
                 with (
                     _store_lock(comms._wire_lock_path, blocking=False),
-                    _store_lock(bus._path, blocking=False),
+                    _store_lock(bus.log.path, blocking=False),
                 ):
                     witnessed.append(True)
 
@@ -87,4 +87,4 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
         # Even an unexpected scheduler error after the durable bus commit
         # cannot report the original send as failed or invite a retry.
         committed = comms.messaging.send_message("sender", "beta", "still committed")
-        assert committed.seq == 1 and comms.bus.latest_sequence() == 1
+        assert committed.seq == 1 and comms.bus.log.latest_sequence() == 1

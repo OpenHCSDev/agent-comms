@@ -297,7 +297,7 @@ def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
         comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "captured")
 
-    with comms.bus.full_history_snapshot() as (through, messages):
+    with comms.bus.log.full_history_snapshot() as (through, messages):
         comms.messaging.send("bob", "#team", "too late")
         snapshot = list(messages)
 
@@ -389,7 +389,7 @@ def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
     for name in ("alice", "bob"):
         comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send("alice", "bob", "unread")
-    bus_before = comms.bus._path.read_bytes()
+    bus_before = comms.bus.log.path.read_bytes()
     markers = comms.root / "read_markers.json"
     markers_before = markers.read_bytes() if markers.exists() else None
 
@@ -400,7 +400,7 @@ def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
         limit=FullLimit(),
     )
 
-    assert comms.bus._path.read_bytes() == bus_before
+    assert comms.bus.log.path.read_bytes() == bus_before
     assert (markers.read_bytes() if markers.exists() else None) == markers_before
     assert comms.bus.pending_count("bob") == 1
 

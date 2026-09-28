@@ -15,7 +15,7 @@ import stat
 import struct
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from .backend import _session_revision
@@ -27,12 +27,14 @@ from .compaction_journal import (
     CompactionOperation,
     SelectedSummaryAttempt,
 )
+from .compaction_states import NativeOutcome
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, projected
 from .input_disposition import FutureInputQueue, InputDispositions
 from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
 from .owner_compaction_gate import OwnerCompactionAttestation
-from .owner_compaction_prepare import NativePreparation, prepare_native_source
+from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source
 from .owner_compaction_process import (
     CompactionTransportUnknownError,
     require_deadline_support,
@@ -51,7 +53,7 @@ from .threads import Thread
 class CompactionSource:
     """Pre-summary observations, never authority or an accepted JSON receipt."""
 
-    native_json: str
+    native: NativeWitness = field(metadata={"journal_exclude": True})
     wire_root: str
     thread: str
     owner_epoch: int
@@ -63,6 +65,10 @@ class CompactionSource:
     pending_input_key: str | None = None
     settings_paths: tuple[str, ...] | None = None
     settings_revision: tuple[str, ...] | None = None
+
+    @projected(view="journal", name="native_json")
+    def encoded_native(self) -> str:
+        return json.dumps(FieldCodec.encode(self.native), sort_keys=True, separators=(",", ":"))
 
 
 class OwnerCompactionCommit:
@@ -106,16 +112,11 @@ class OwnerCompactionCommit:
             raise ValueError("Native import boundary unavailable")
 
     @staticmethod
-    def _guard_arguments(owner: Thread, witness: dict) -> dict:
+    def _guard_arguments(owner: Thread, witness: NativeWitness) -> dict:
         if owner.active_turn is None or owner.session_file is None:
             raise ValueError("Claimed owner with canonical session required")
-        keys = {"sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"}
-        if set(witness) != keys or any(
-            type(value) is not str or not value for value in witness.values()
-        ):
-            raise ValueError("Exact native witness required")
         session = str(Path(owner.session_file).resolve(strict=True))
-        if witness["sessionFile"] != session:
+        if witness.session_file != session:
             raise ValueError("Native witness does not identify owner's canonical session")
         return dict(
             turn_id=owner.active_turn.id,
@@ -125,8 +126,8 @@ class OwnerCompactionCommit:
             # actual native history plus canonical bus/input revisions below.
             correction_revision=0,
             session_file=session,
-            session_leaf=witness["leafId"],
-            session_revision=witness["revision"],
+            session_leaf=witness.leaf_id,
+            session_revision=witness.revision,
         )
 
     @contextmanager
@@ -134,7 +135,7 @@ class OwnerCompactionCommit:
         self,
         owner: Thread,
         epoch: int,
-        witness: dict,
+        witness: NativeWitness,
         *,
         settled: bool = True,
         pending_input_key: str | None = None,
@@ -213,7 +214,7 @@ class OwnerCompactionCommit:
     def _source(
         self,
         receipt: OwnerCompactionAttestation,
-        witness: dict,
+        witness: NativeWitness,
         pending_input_key: str | None,
         settings_paths: tuple[str, ...] | None,
     ) -> CompactionSource:
@@ -227,7 +228,7 @@ class OwnerCompactionCommit:
         )
         rows = self.inputs._compaction_rows_unlocked(owner, pending_input_key, self.future_queue)
         return CompactionSource(
-            json.dumps(witness, sort_keys=True, separators=(",", ":")),
+            witness,
             f"{self.root}:{root.st_dev}:{root.st_ino}",
             receipt.thread,
             receipt.owner_epoch,
@@ -245,7 +246,7 @@ class OwnerCompactionCommit:
         self,
         owner: Thread,
         epoch: int,
-        witness: dict,
+        witness: NativeWitness,
         *,
         pending_input_key: str | None = None,
         settings_paths: tuple[str, ...] | None = None,
@@ -255,13 +256,12 @@ class OwnerCompactionCommit:
         Owner-relevant ingress remains fenced. Exact live future queue receipts
         may wait through the summary; no UNKNOWN input is replayed or resolved.
         """
-        witness = dict(witness)
         with self._boundary(owner, epoch, witness, pending_input_key=pending_input_key) as (
             receipt,
             _,
             _retained,
         ):
-            if self.journal.unresolved(witness["sessionFile"]):
+            if self.journal.unresolved(witness.session_file):
                 raise CompactionJournalError(
                     "Unresolved native commit; reconcile before preparation"
                 )
@@ -300,7 +300,7 @@ class OwnerCompactionCommit:
 
     def _call(
         self, fd: int, request: dict, timeout: float, retained_fds: tuple[int, ...] = ()
-    ) -> dict:
+    ) -> NativeOutcome:
         self._verify_native()
         held = os.fstat(fd)
         request = dict(
@@ -340,35 +340,16 @@ class OwnerCompactionCommit:
             raise CompactionTransportUnknownError(
                 "Unparseable native outcome; never replay"
             ) from error
-        if not isinstance(evidence, dict) or evidence.get("status") not in {
-            "committed",
-            "aborted-no-write",
-            "unknown",
-        }:
-            raise CompactionTransportUnknownError("Invalid native outcome; never replay")
-        fields = {
-            "committed": {"entryId", "revision", "leafId", "metadataDigest"},
-            "aborted-no-write": {"revision", "leafId"},
-            "unknown": {"reason"},
-        }[evidence["status"]]
-        if set(evidence) != fields | {"status"} or any(
-            type(evidence.get(key)) is not str or not evidence[key] for key in fields
-        ):
-            raise CompactionTransportUnknownError("Incomplete native outcome; never replay")
-        if result.returncode != 0 and evidence["status"] != "unknown":
-            raise CompactionTransportUnknownError("Inconsistent native outcome; never replay")
-        if evidence["status"] == "committed" and (
-            len(evidence["metadataDigest"]) != 64
-            or any(c not in "0123456789abcdef" for c in evidence["metadataDigest"])
-        ):
-            raise CompactionTransportUnknownError("Invalid native metadata receipt; never replay")
-        return evidence
+        try:
+            return NativeOutcome.from_wire(evidence, result.returncode)
+        except (ValueError, TypeError) as error:
+            raise CompactionTransportUnknownError(str(error)) from error
 
     def commit(
         self,
         owner: Thread,
         epoch: int,
-        witness: dict,
+        witness: NativeWitness,
         summary: str,
         tokens_before: int,
         *,
@@ -379,7 +360,6 @@ class OwnerCompactionCommit:
         timeout: float = 5,
     ) -> CompactionOperation:
         """Journal intent under authority, dispatch once, persist observed outcome."""
-        witness = dict(witness)
         if type(source) is not CompactionSource:
             raise ValueError("Owner-captured pre-summary source required")
         if (
@@ -449,7 +429,7 @@ class OwnerCompactionCommit:
             + json.dumps(metadata, separators=(",", ":")).encode("ascii")
         ).hexdigest()
         payload = json.dumps(
-            [summary, witness["firstKeptEntryId"], tokens_before],
+            [summary, witness.first_kept_entry_id, tokens_before],
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -464,17 +444,17 @@ class OwnerCompactionCommit:
             ):
                 raise RelationViolationError("Compaction source changed; derive fresh evidence")
             intent = dict(
-                witness=witness,
+                witness=FieldCodec.encode(witness),
                 payloadDigest=digest,
                 metadataDigest=metadata_digest,
                 owner=asdict(receipt),
-                source=asdict(source),
+                source=FieldCodec.project(source, "journal"),
             )
             if selected_attempt is not None:
                 if (
                     self.journal.selected_summary(selected_attempt.operation_id) != selected_attempt
-                    or selected_attempt.status != "reserved"
-                    or selected_attempt.session_file != witness["sessionFile"]
+                    or not selected_attempt.state.reservable_commit
+                    or selected_attempt.session_file != witness.session_file
                 ):
                     raise CompactionJournalError(
                         "Selected summary reservation changed before commit"
@@ -487,7 +467,7 @@ class OwnerCompactionCommit:
                     or selected_source.get("turnId") != source.turn_id
                     or selected_source.get("ingressKey") != source.pending_input_key
                     or selected_source.get("reservedRevision")
-                    != json.loads(json.dumps(_session_revision(witness["sessionFile"])))
+                    != json.loads(json.dumps(_session_revision(witness.session_file)))
                 ):
                     raise CompactionJournalError("Selected summary owner or saved source differs")
                 intent.update(
@@ -496,10 +476,10 @@ class OwnerCompactionCommit:
                         selected_attempt.source_json.encode()
                     ).hexdigest(),
                 )
-            commit_id = self.journal.begin(witness["sessionFile"], intent)
+            commit_id = self.journal.begin(witness.session_file, intent)
             request = dict(
                 action="commit",
-                witness=witness,
+                witness=FieldCodec.encode(witness),
                 summary=summary,
                 tokensBefore=tokens_before,
                 commit=dict(
@@ -509,21 +489,14 @@ class OwnerCompactionCommit:
                 **({"usage": usage} if usage is not None else {}),
             )
             try:
-                evidence = self._call(fd, request, timeout, retained)
+                outcome = self._call(fd, request, timeout, retained)
             except Exception as error:
                 # Includes launch/protocol errors: conservative even where no
                 # write probably occurred. Cancellation leaves durable intent.
-                evidence = dict(status="unknown", reason=str(error)[:1024])
-            if (
-                evidence["status"] == "committed"
-                and evidence.get("metadataDigest") != metadata_digest
-            ):
-                evidence = {"status": "unknown", "reason": "native-metadata-mismatch"}
+                outcome = NativeOutcome.unknown(str(error)[:1024])
+            outcome = outcome.bind_metadata(metadata_digest)
             self.journal.resolve(
-                commit_id,
-                evidence["status"],
-                evidence,
-                publication=evidence["status"] == "committed",
+                commit_id, outcome.state, outcome.evidence, publication=outcome.state.committed
             )
             return self.journal.get(commit_id)
 
@@ -537,7 +510,7 @@ class OwnerCompactionCommit:
         reason: str,
     ) -> SelectedSummaryAdmission:
         """Continue one original after a correlated, unchanged prestart decline."""
-        witness = json.loads(source.native_json)
+        witness = source.native
         with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
             receipt,
             _fd,
@@ -549,8 +522,8 @@ class OwnerCompactionCommit:
                 raise RelationViolationError("Selected source changed before decline admission")
             if (
                 self.journal.selected_summary(attempt.operation_id) != attempt
-                or attempt.session_file != witness["sessionFile"]
-                or _session_revision(witness["sessionFile"]) != identity.reserved_revision
+                or attempt.session_file != witness.session_file
+                or _session_revision(witness.session_file) != identity.reserved_revision
             ):
                 raise CompactionJournalError("Selected decline source changed")
             admission = self.journal.decline_selected_summary_prestart(
@@ -568,10 +541,10 @@ class OwnerCompactionCommit:
         identity: SelectedAdmissionIdentity,
     ) -> SelectedSummaryAdmission:
         """Link one committed result after rechecking the same owner and ingress."""
-        if operation.status != "committed":
+        if not operation.state.committed:
             raise CompactionJournalError("Selected native commit is not complete")
         intent = json.loads(operation.intent_json)
-        witness = intent["witness"]
+        witness = FieldCodec.decode(NativeWitness, intent["witness"])
         with self._boundary(owner, epoch, witness, pending_input_key=source.pending_input_key) as (
             receipt,
             _fd,
@@ -584,7 +557,7 @@ class OwnerCompactionCommit:
             current = self.journal.get(operation.commit_id)
             if current != operation:
                 raise CompactionJournalError("Selected native commit changed")
-            revision = _session_revision(witness["sessionFile"])
+            revision = _session_revision(witness.session_file)
             evidence = json.loads(operation.evidence_json or "null")
             if (
                 revision is None
@@ -606,20 +579,20 @@ class OwnerCompactionCommit:
     ) -> CompactionOperation:
         """Explicit exact-ID observation. NEVER sends summary or a commit action."""
         operation = self.journal.get(commit_id)
-        if operation.status not in {"intent", "unknown"}:
+        if operation.state.terminal:
             return operation
         intent = json.loads(operation.intent_json)
-        witness = intent["witness"]
+        witness = FieldCodec.decode(NativeWitness, intent["witness"])
         with self._boundary(owner, epoch, witness, settled=False) as (_, fd, retained):
             # Re-read after acquiring authority; a prior resolver may have won.
             current = self.journal.get(commit_id)
-            if current.status not in {"intent", "unknown"}:
+            if current.state.terminal:
                 return current
             if current.intent_json != operation.intent_json:
                 raise CompactionJournalError("Compaction intent changed")
             request = dict(
                 action="reconcile",
-                witness=witness,
+                witness=FieldCodec.encode(witness),
                 commit=dict(
                     commitId=commit_id,
                     payloadDigest=intent["payloadDigest"],
@@ -627,18 +600,11 @@ class OwnerCompactionCommit:
                 ),
             )
             try:
-                evidence = self._call(fd, request, timeout, retained)
+                outcome = self._call(fd, request, timeout, retained)
             except Exception as error:
-                evidence = dict(status="unknown", reason=str(error)[:1024])
-            if (
-                evidence["status"] == "committed"
-                and evidence.get("metadataDigest") != intent["metadataDigest"]
-            ):
-                evidence = {"status": "unknown", "reason": "native-metadata-mismatch"}
+                outcome = NativeOutcome.unknown(str(error)[:1024])
+            outcome = outcome.bind_metadata(intent["metadataDigest"])
             self.journal.resolve(
-                commit_id,
-                evidence["status"],
-                evidence,
-                publication=evidence["status"] == "committed",
+                commit_id, outcome.state, outcome.evidence, publication=outcome.state.committed
             )
             return self.journal.get(commit_id)

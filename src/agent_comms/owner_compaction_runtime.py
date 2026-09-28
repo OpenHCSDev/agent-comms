@@ -67,22 +67,12 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
         )
 
 
-@dataclass(frozen=True)
-class PreparedOwnerSummary:
-    """Only native cutpoint metadata; source content stays with the native Pi."""
-
-    tokens_before: int
-    is_split_turn: bool
-    session_id: str
-    preparation: NativePreparation
-
-
 async def compact_owner_once(
     bridge: OwnerCompactionCommit,
     owner: Thread,
     epoch: int,
     persistent: PersistentPiSession,
-    summarize: Callable[[PreparedOwnerSummary], Awaitable[str | OwnerSummaryOutcome]],
+    summarize: Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]],
     *,
     keep_recent_tokens: int | None = None,
     pending_input_key: str | None = None,
@@ -108,18 +98,11 @@ async def compact_owner_once(
     if prepared_source is None:
         return None
     prepared, source = prepared_source
-    assert isinstance(prepared, NativePreparation)
     if prepared.is_split_turn and not allow_split_turn:
         # The current native writer persists one summary but no separate turn
         # prefix summary. Never discard a split turn's unsummarized prefix.
         return None
-    result = await summarize(
-        PreparedOwnerSummary(
-            prepared.tokens_before, prepared.is_split_turn, prepared.session_id, prepared
-        )
-    )
-    if isinstance(result, str):
-        result = NativeSummary(result, None, None)
+    result = await summarize(prepared)
 
     async def write(summary: NativeSummary) -> CompactionOperation:
         return await _commit_native_summary(
@@ -149,7 +132,7 @@ async def _commit_native_summary(
         raise ValueError("Bounded owner summary required")
     # No native write can begin until this returns; closing under the borrow
     # lock makes an old RPC manager unusable even if commit is later refused.
-    await persistent.discard_for_external_write(prepared.witness["sessionFile"])
+    await persistent.discard_for_external_write(prepared.witness.session_file)
     # Do not use asyncio.to_thread in a named inner Task: all-tasks shutdown
     # can cancel that Task and mark it done while its real OS worker still
     # holds the native writer. Retain the concurrent.futures.Future itself,

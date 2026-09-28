@@ -77,7 +77,7 @@ class TestMessaging:
         page = wired.views.channel_history_page("#all", limit=2)
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
-        assert wired.bus.latest_sequence() == 5
+        assert wired.bus.log.latest_sequence() == 5
 
 
 class TestThreadOps:
@@ -1160,7 +1160,7 @@ class TestThreadOps:
         wired.messaging.send("PR111", "#all", "unrelated retained row")
         wired.messaging.send("fixer", "PR111", "subject to legacy purge")
         wired.owners.stop("fixer")
-        path = wired.bus._path
+        path = wired.bus.log.path
         sequence_path = path.parent / "bus_meta.json"
         aliases = wired.registry.aliases_for("fixer")
         if authority == "unrelated_sideband":

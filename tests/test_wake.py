@@ -400,8 +400,8 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     message = comms.messaging.send_message("sender", "#team", "status update")
     manifest = audience(message, MEMBERS[:1])
     before = message.to_wire()
-    bus_before = comms.bus._path.read_bytes()
-    high_water = comms.bus.latest_sequence()
+    bus_before = comms.bus.log.path.read_bytes()
+    high_water = comms.bus.log.latest_sequence()
     pending = comms.bus.pending_count("alpha")
     live_policy = message.response_policy
     live_starts = message.starts_turn_for("alpha")
@@ -414,8 +414,8 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     ) == WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake())
     assert derive_exact_reply_target(message) == "#team"
     assert message.to_wire() == before
-    assert comms.bus._path.read_bytes() == bus_before
-    assert comms.bus.latest_sequence() == high_water
+    assert comms.bus.log.path.read_bytes() == bus_before
+    assert comms.bus.log.latest_sequence() == high_water
     assert comms.bus.pending_count("alpha") == pending
     assert (message.response_policy, message.starts_turn_for("alpha"), message.reply_target) == (
         live_policy,

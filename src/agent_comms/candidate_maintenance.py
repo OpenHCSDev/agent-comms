@@ -12,7 +12,6 @@ import threading
 from pathlib import Path
 
 from .message_bus import MessageBus
-from .store_files import _store_lock
 from .wake_candidate_index import WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
@@ -25,7 +24,7 @@ _pending: dict[Path, tuple[MessageBus, int]] = {}
 def schedule_private_candidate_after_commit(bus: MessageBus, committed_seq: int) -> None:
     """Ignore legacy roots and never let optional maintenance fail a committed send."""
     try:
-        marker = bus._path.parent / "bus_meta.json"
+        marker = bus.log.path.parent / "bus_meta.json"
         info = marker.stat()
         if info.st_size > 4096 or b'"writer_protocol_version"' not in marker.read_bytes():
             return
@@ -40,7 +39,7 @@ def schedule_candidate_catchup(bus: MessageBus, committed_seq: int) -> None:
     """A bounded memory-only signal; never wait for WAL or a wire lock here."""
     if type(bus) is not MessageBus or type(committed_seq) is not int or committed_seq <= 0:
         raise ValueError("candidate notification needs an actual committed bus sequence")
-    root = bus._path.parent
+    root = bus.log.path.parent
     with _guard:
         current = _pending.get(root)
         if current is not None:
@@ -69,8 +68,8 @@ def _drain_candidate(root: Path) -> None:
         # This check is deliberately off the producer path. A private marker
         # may not exist on a legacy send; never create one or activate private
         # processing by merely scheduling derived maintenance.
-        with _store_lock(bus._path):
-            metadata = bus._private_marker_unlocked()
+        with bus.log.locked():
+            metadata = bus.log._private_marker_unlocked()
         root_id = str(metadata["wire_root_id"])
         index = WakeCandidateIndex(bus)
         for _ in range(_MAX_BATCHES):

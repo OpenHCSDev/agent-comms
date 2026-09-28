@@ -544,7 +544,7 @@ def stage_private_participants(
     # A claim read barrier can only be installed while the private bus is
     # empty. Selected owner writes on this route need it before any USER row.
     private.messaging.initialize_private_claim_protocol()
-    install_private_bus_checkpoint(private.bus)
+    install_private_bus_checkpoint(private.bus.log)
     with _store_lock(private._wire_lock_path):
         new_waits = GoalWaits(private.root / "goal_waits.json")
         for wait in migrated_waits:

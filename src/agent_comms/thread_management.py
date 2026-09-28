@@ -167,7 +167,7 @@ class ThreadManagement:
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry.register(thread, StoppedThreadStatus())
-                self.bus.mark_delivered_through(name, self.bus.latest_sequence())
+                self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
             except Exception:
                 if name in self.registry:
                     self.registry.remove(name)
@@ -335,7 +335,7 @@ class ThreadManagement:
             self.channels._require_available_new_tags(thread.tags)
             self.registry.register(thread)
             if start_at_latest:
-                self.bus.mark_delivered_through(thread.name, self.bus.latest_sequence())
+                self.bus.mark_delivered_through(thread.name, self.bus.log.latest_sequence())
             return thread
 
     def rename_self(self, new_name: str) -> RenameThreadResult:
@@ -426,7 +426,7 @@ class ThreadManagement:
             raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
         private = False
         if private_meta.exists():
-            with _store_lock(self.bus._path):
+            with self.bus.log.locked():
                 try:
                     metadata = json.loads(private_meta.read_text())
                 except (OSError, ValueError, UnicodeError) as error:
@@ -434,7 +434,7 @@ class ThreadManagement:
                 if type(metadata) is not dict:
                     raise RelationViolationError("Invalid bus protocol metadata.")
                 if "writer_protocol_version" in metadata:
-                    self.bus._private_marker_unlocked()
+                    self.bus.log._private_marker_unlocked()
                     private = True
         if private:
             _require_no_private_owner_rename(self.root)
@@ -606,7 +606,7 @@ class ThreadManagement:
             canonical = self.registry.require(name).name
             if not self.registry.status(canonical).stopped:
                 raise RelationViolationError("Stop a running thread before deleting it.")
-            self.bus.assert_legacy_rewrite_allowed()
+            self.bus.log.assert_legacy_rewrite_allowed()
             self.registry.begin_delete(canonical)
             messages_removed, markers_removed = self.bus.remove_thread(canonical)
             activity_removed = self.agents.activity.remove_thread(canonical)
@@ -660,7 +660,7 @@ class ThreadManagement:
         )
         self.channels._require_available_new_tags(child.tags)
         self.registry.register(child)
-        self.bus.mark_delivered_through(child.name, self.bus.latest_sequence())
+        self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
         # Non-interactive pi refuses to run without an explicit model, so pass
         # the parent's last model choice through to the child.

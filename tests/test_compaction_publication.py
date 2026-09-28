@@ -17,6 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.compaction_publication_lease import publication_identity_fence
+from agent_comms.compaction_states import CommittedOperation
 from agent_comms.errors import RelationViolationError
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
@@ -40,7 +41,7 @@ def owner(tmp_path):
     commit_id = journal.begin(str(session), {"summary": "private summary must not publish"})
     journal.resolve(
         commit_id,
-        "committed",
+        CommittedOperation(),
         {"status": "committed", "entryId": "entry", "revision": "rev", "leafId": "leaf"},
         publication=True,
     )
@@ -156,9 +157,9 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
         assert await publish_pending_local(agent, "project", "project") == 1
         assert delivered[0][0] == str(first)
         # Rebinding after a fully completed handoff is not permanently blocked.
-        assert comms.threads.attach_session("project", str(second), pid=os.getpid()).session_file == str(
-            second
-        )
+        assert comms.threads.attach_session(
+            "project", str(second), pid=os.getpid()
+        ).session_file == str(second)
     finally:
         await agent.shutdown()
 
@@ -397,9 +398,9 @@ async def test_stalled_local_client_releases_identity_only_after_transport_clean
         # later socket leaves the exact ID pending: no false observed mark.
         # Only after cleanup may owner identity mutate. A future publication
         # can reproject this exact metadata ID, never resend a native summary.
-        assert comms.threads.attach_session("project", str(second), pid=os.getpid()).session_file == str(
-            second
-        )
+        assert comms.threads.attach_session(
+            "project", str(second), pid=os.getpid()
+        ).session_file == str(second)
         comms.threads.attach_session("project", str(first), pid=os.getpid())
         received = []
 

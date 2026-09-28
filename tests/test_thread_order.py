@@ -14,16 +14,16 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.threads.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path), created_at=100))
     comms.threads.register(Thread(name="beta", tags=frozenset(), worktree=str(tmp_path), created_at=200))
     comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
-    comms.bus.send(
+    comms.bus.publisher.publish(
         Message(
             sender="alpha", target="beta", body="outgoing", type=MessageType.INFO, timestamp=400
         )
-    )
-    comms.bus.send(
+    ).message_id
+    comms.bus.publisher.publish(
         Message(
             sender="beta", target="alpha", body="incoming", type=MessageType.INFO, timestamp=500
         )
-    )
+    ).message_id
     assert comms.views.last_sent_timestamps() == {"alpha": 400, "beta": 500}
     comms.owners.acquire_thread("alpha", owner_pid=0)
     comms.threads.heartbeat("alpha")

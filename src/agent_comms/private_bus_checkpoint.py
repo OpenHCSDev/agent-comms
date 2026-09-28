@@ -1,6 +1,6 @@
 """Opt-in, append-writer-maintained private bus prefix certificate.
 
-The JSONL bus remains authoritative. Only the canonical private MessageBus writer may
+The JSONL bus remains authoritative. Only the canonical private WireLog writer may
 advance this certificate, after bus and directory fsync under the bus lock. The
 fsynced bus marker independently seals the SQLite inode revision and certificate;
 SQL index contents are never trusted on bus revision alone. A pending writer
@@ -25,8 +25,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedInitial
-    from .message_bus import MessageBus
     from .messages import Message
+    from .wire_log import WireLog
 
 _VERSION = 1
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
@@ -100,13 +100,13 @@ def _pending_seal(
 
 
 def _write_seal(
-    bus: MessageBus, marker: dict[str, int | str | object], seal: dict[str, object]
+    bus: WireLog, marker: dict[str, int | str | object], seal: dict[str, object]
 ) -> None:
     from .store_files import _atomic_write_text
 
     marker["checkpoint_seal"] = seal
     _atomic_write_text(
-        bus._path.parent / "bus_meta.json", json.dumps(marker, indent=2), fsync_parent=True
+        bus.path.parent / "bus_meta.json", json.dumps(marker, indent=2), fsync_parent=True
     )
 
 
@@ -269,7 +269,7 @@ def _index_row(
             )
 
 
-def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
+def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
     """Explicitly certify the complete current private bus without rewriting it.
 
     The canonical writer lock excludes appenders throughout the one-time scan.
@@ -278,23 +278,23 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
     sidecar; after publication an uncertain marker write retains the sidecar and
     existing read barrier denies access rather than trusting an unsealed index.
     """
-    from .message_bus import MessageBus
-    from .store_files import _atomic_write_text, _store_lock
+    from .store_files import _atomic_write_text
+    from .wire_log import WireLog
 
-    if type(bus) is not MessageBus or bus._path.name != "bus.jsonl":
-        raise TypeError("Canonical private MessageBus required")
-    with _store_lock(bus._path):
+    if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
+        raise TypeError("Canonical private WireLog required")
+    with bus.locked():
         marker = bus._private_marker_unlocked()
         if marker.get("claim_envelopes_version") != 1:
             raise _failure("Checkpoint installation needs a claim-enabled private root.")
-        path = _path(bus._path)
+        path = _path(bus.path)
         if path.exists() or path.is_symlink() or "checkpoint_version" in marker:
             raise _failure("Private bus checkpoint is already installed.")
-        if not bus._path.exists():
+        if not bus.path.exists():
             if marker["last_seq"] != 0:
                 raise _failure("Private bus is missing its reserved publication.")
             fd = os.open(
-                bus._path,
+                bus.path,
                 os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
                 0o600,
             )
@@ -302,7 +302,7 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
                 os.fsync(fd)
             finally:
                 os.close(fd)
-        _directory_sync(bus._path)
+        _directory_sync(bus.path)
         # Staging beside the destination makes publication atomic and never
         # exposes a partially built index to current readers or appenders.
         with tempfile.TemporaryDirectory(prefix=".checkpoint-install-", dir=path.parent) as stage:
@@ -322,7 +322,7 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
                     "CREATE TABLE addressed(lookup TEXT NOT NULL,seq INTEGER NOT NULL,"
                     "PRIMARY KEY(lookup,seq));"
                 )
-                with bus._path.open("rb") as stream:
+                with bus.path.open("rb") as stream:
                     info = os.fstat(stream.fileno())
                     digest = _SEED
                     through_seq = 0
@@ -339,7 +339,7 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
                         if through_seq != marker["last_seq"]:
                             raise _failure("Private bus has an unsettled publication sequence.")
                         if _revision(os.fstat(stream.fileno())) != _revision(info) or _revision(
-                            bus._path.stat()
+                            bus.path.stat()
                         ) != _revision(info):
                             raise _failure("Private bus changed during checkpoint installation.")
                         db.execute(
@@ -365,7 +365,7 @@ def install_private_bus_checkpoint(bus: MessageBus) -> PrefixWitness:
             marker["checkpoint_version"] = _VERSION
             marker["checkpoint_seal"] = _final_seal(witness, path)
             _atomic_write_text(
-                bus._path.parent / "bus_meta.json",
+                bus.path.parent / "bus_meta.json",
                 json.dumps(marker, indent=2),
                 fsync_parent=True,
             )
@@ -378,7 +378,7 @@ def certificate_enabled(bus_path: Path) -> bool:
 
 
 def _recover_pending_unlocked(
-    bus: MessageBus,
+    bus: WireLog,
     marker: dict[str, int | str | object],
     db: sqlite3.Connection,
     db_path: Path,
@@ -431,9 +431,9 @@ def _recover_pending_unlocked(
             pass
         if not prior_seen or (prior["revision"][2] == 0 and prior["digest"] != _SEED.hex()):
             raise _failure("Private bus checkpoint old prefix is unavailable.")
-        if _revision(bus._path.stat()) != _revision(info):
+        if _revision(bus.path.stat()) != _revision(info):
             raise _failure("Private bus changed during pending recovery.")
-        with bus._path.open("rb") as stream:
+        with bus.path.open("rb") as stream:
             expected = PrefixWitness(
                 str(marker["wire_root_id"]),
                 info.st_dev,
@@ -453,15 +453,15 @@ def _recover_pending_unlocked(
 
 
 def verify_private_bus_checkpoint_unlocked(
-    bus: MessageBus, marker: Mapping[str, int | str]
+    bus: WireLog, marker: Mapping[str, int | str]
 ) -> PrefixWitness:
     """Check an exact revision or cold-validate every old byte on a changed revision.
 
     Caller holds the bus lock and has fsynced the bus inode and directory.
     """
-    path = _path(bus._path)
+    path = _path(bus.path)
     try:
-        with closing(_connect(path)) as db, bus._path.open("rb") as stream:
+        with closing(_connect(path)) as db, bus.path.open("rb") as stream:
             saved = _saved(db)
             info = os.fstat(stream.fileno())
             if (
@@ -524,7 +524,7 @@ def verify_private_bus_checkpoint_unlocked(
             if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
                 raise _failure("Private bus checkpoint prefix is unavailable.")
             if _revision(os.fstat(stream.fileno())) != _revision(info) or _revision(
-                bus._path.stat()
+                bus.path.stat()
             ) != _revision(info):
                 raise _failure("Private bus changed during checkpoint validation.")
             # Full parser above checked all cross-prefix response key duplicates.
@@ -552,7 +552,7 @@ def verify_private_bus_checkpoint_unlocked(
 
 
 def append_private_bus_checkpoint_unlocked(
-    bus: MessageBus,
+    bus: WireLog,
     marker: Mapping[str, int | str],
     raw: bytes,
     message: Message,
@@ -560,9 +560,9 @@ def append_private_bus_checkpoint_unlocked(
     initial: CommittedInitial | None,
 ) -> PrefixWitness:
     """Append one certified row only AFTER the canonical bus/parent fsync."""
-    path = _path(bus._path)
+    path = _path(bus.path)
     try:
-        with closing(_connect(path)) as db, bus._path.open("rb") as stream:
+        with closing(_connect(path)) as db, bus.path.open("rb") as stream:
             saved = _saved(db)
             info = os.fstat(stream.fileno())
             offset = info.st_size - len(raw)
@@ -601,7 +601,7 @@ def append_private_bus_checkpoint_unlocked(
 
 
 def certified_initial_page_unlocked(
-    bus: MessageBus,
+    bus: WireLog,
     marker: Mapping[str, int | str],
     lookup: str,
     *,
@@ -633,8 +633,8 @@ def certified_initial_page_unlocked(
     witness = verify_private_bus_checkpoint_unlocked(bus, marker)
     try:
         with (
-            closing(_connect(_path(bus._path), readonly=True)) as db,
-            bus._path.open("rb") as stream,
+            closing(_connect(_path(bus.path), readonly=True)) as db,
+            bus.path.open("rb") as stream,
         ):
             rows = db.execute(
                 "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
@@ -670,11 +670,11 @@ def certified_initial_page_unlocked(
                     raise _failure("Certified initial lookup differs from bus row.")
                 initials.append(initial)
             if (
-                _revision(_path(bus._path).stat())
+                _revision(_path(bus.path).stat())
                 != tuple(marker["checkpoint_seal"]["db_revision"])
                 or bus._private_marker_unlocked().get("checkpoint_seal")
                 != marker["checkpoint_seal"]
-                or _revision(bus._path.stat()) != witness.revision
+                or _revision(bus.path.stat()) != witness.revision
             ):
                 raise _failure("Certified page changed during its read fence.")
             return (
