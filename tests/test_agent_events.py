@@ -94,7 +94,13 @@ async def test_new_activity_declaration_reaches_both_real_consumers(comms, tmp_p
     participant = ParticipantEventConsumer(comms, "bot", "task")
     await participant.dispatch(ContextWarning("context warning"))
     assert comms.agents.activity_of("bot").detail == "context warning"
-    owner = CommsAgent(comms, agent_bin="unused")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    owner = CommsAgent(
+        comms,
+        agent_bin="unused",
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     observed = []
 

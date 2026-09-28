@@ -24,6 +24,7 @@ from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nk_foreground import reserve_foreground_owner
 from agent_comms.threads import Thread
 from test_cohort_foreground import _configured_thread, _fake_package
@@ -173,9 +174,9 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
                 == 1
             )
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
-                    0
-                ]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 1
             )
         assert comms.views.channel_history("#team")[-1].sender == "beta"
@@ -238,9 +239,9 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             )
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
-                    0
-                ]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 1
             )
         assert not (root / "read_markers.json").exists()

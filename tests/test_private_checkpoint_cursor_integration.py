@@ -23,6 +23,7 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
@@ -154,7 +155,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
         assert (
             reopened._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name} WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
             == 0
@@ -209,7 +210,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
             )
         assert (
             reopened._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
+                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"
             ).fetchone()[0]
             == 0
         )

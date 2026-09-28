@@ -16,3 +16,15 @@ The reported missing test_goal_direct_interrupt helper import is removed: test_a
 - Failure logs are retained; earlier mixed-version/snapshot collection failures are not claimed as production failures. Integration tests run in our owned .artifacts/integration snapshot, not a shared worktree; no installs or live restarts.
 
 A12 repeated-cancellation, inherited direct-parent launch, Windows, owner lifecycle and recovery behavior remain as previously published; no redundant rerun of completed child acceptance here. Full test caller closure remains open until current native followup seam and remaining bus fixtures are migrated.
+
+## Follow-on closure
+
+Canonical ACP fixtures now install the explicit bus marker and bind their native package/root, retaining the existing stream/event assertions. Goal failure, activity delivery, headless diagnostics, ordinary N/K, foreground N/K and optional awareness focused batch: **88 passed in30.66s** (canonical-fixtures-followup.log). This supersedes the eight missing-marker failures above; it is a fixture/API acceptance result, not provider proof.
+
+Nine remaining fixture modules now derive native runtime input/cursor table names from NativeRuntimeInput/CurrentNativeCursor declarations, use current sent_owner_admission_generation, and read the cursor source through its typed owner. Retired table aliases were not restored. Canonical refusal test now matches the actual missing-marker reason and still asserts byte-for-byte no append.
+
+Known integration dependencies retained:
+- Native recovery requires S12's current OwnerReleaseStore adoption: parentbb1892e still calls deleted _read_owner_release_receipts. Current native recovery failures are recorded, not rewritten to pass.
+- Current foreground model fake calls prompt_send_boundary once and does not implement the raw writer's pre-send PromptAdmissionBusy retry; the two-recipient cases expose lock contention. Real production/raw writer owner remains S10; no relaxation of no-overlap assertions.
+- Passive-awareness tests still target removed acp_passive_channel_awareness.json; migrate to parent's current InputDrain/awareness projection, never recreate that ledger.
+- Owner interruption/followup acceptance still needs the current native steering API from S10. Reproducer source is retained as canonical_followup_probe.py with explicit model-fake boundary. Original behavior assertions were not removed.
