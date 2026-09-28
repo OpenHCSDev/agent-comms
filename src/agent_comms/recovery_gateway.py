@@ -233,7 +233,7 @@ class RecoveryGateway:
             raise GatewayUnavailableError("gateway platform or privileges unsupported")
         _validate_paths(self.root, self.database)
         if len(os.fsencode(self.path)) >= 100:
-            raise GatewayUnavailableError("socket path is too long; no /tmp fallback")
+            raise GatewayUnavailableError("socket path is too long for this endpoint")
         with suppress(FileExistsError):
             self.directory.mkdir(mode=0o700)
         _owned(self.directory, stat.S_IFDIR, 0o700)

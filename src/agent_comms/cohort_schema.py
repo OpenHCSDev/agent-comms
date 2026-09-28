@@ -347,7 +347,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
                 "wire_seq=NEW.wire_seq\n"
                 "              AND d.kind='unmentioned_observer')\n"
                 "        BEGIN SELECT RAISE(ABORT, 'no-wake observer cannot gain "
-                "a legacy wake claim'); END"
+                "an unbound wake claim'); END"
             ),
             "cohort_delivery_update_guard": (
                 "CREATE TRIGGER cohort_delivery_update_guard BEFORE UPDATE ON coh"

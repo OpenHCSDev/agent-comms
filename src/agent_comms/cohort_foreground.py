@@ -4,7 +4,7 @@ Start this process *before* publishing an initial cohort. It registers a fresh
 recipient under its own PID, prints a ready receipt, accepts at most one
 selected claim, then exits. The sender must separately initialize the private
 protocol and publish the cohort after readiness. No inbox ACK, daemon, retry,
-monitor, production cutover, or recovery decision is made here.
+monitor, production migration, or recovery decision is made here.
 
     python -m agent_comms.cohort_foreground --root /var/tmp/my-private-wire \\
         --wire-root-id ID --name recipient --worktree /path/to/project \\
@@ -133,7 +133,7 @@ async def run_foreground_once(
 ) -> CoordinatedTurn | NoWakeReceipt | None:
     """Register THIS PID as a new recipient; wait boundedly for one claim.
 
-    A preexisting name is rejected, even if stopped: takeover/cutover needs a
+    A preexisting name is rejected, even if stopped: takeover/migration needs a
     separate verified all-old-writers-stop protocol. A failed or uncertain
     model attempt propagates immediately and is never invoked a second time.
     """

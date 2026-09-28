@@ -426,7 +426,7 @@ def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject
     projection = comms.relationships.contact_projection(owner)
     result: JsonObject = {
         "collaborations": [asdict(edge) for edge in projection.explicit]
-    }  # Legacy explicit declarations remain independently editable.
+    }  # Explicit collaboration links remain independently editable.
     if any(entry.goal_contacts for entry in projection.visible):
         result["visible_collaborators"] = [
             {
@@ -793,7 +793,7 @@ TOOLS = (
     ToolDeclaration(
         "comms_goal_history",
         "Goal history",
-        "Read recorded goal revisions and clearly labeled legacy baselines or observation gaps.",
+        "Read recorded goal revisions and recorded provenance and observation gaps.",
         (
             ToolParameter(
                 "goal_id",

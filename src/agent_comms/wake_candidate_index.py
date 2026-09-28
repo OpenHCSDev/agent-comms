@@ -492,7 +492,7 @@ class WakeCandidateIndex:
 
         Run outside publisher locks and off its latency path. An absent
         derived index may be explicitly bootstrapped in bounded batches; an
-        incompatible schema, missing checkpoint, changed/truncated source or corrupt
+        mismatched schema, missing checkpoint, changed/truncated source or corrupt
         WAL never gets an implicit rebuild. If ``caught_up`` is false and
         ``more_source_bytes`` is true, a deferred worker may schedule another
         finite batch. Pages remain unavailable for required high-water until

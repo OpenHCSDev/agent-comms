@@ -137,7 +137,7 @@ class TodoStore:
             if not tables:
                 Todo.create(db)
             elif tables != [_TodoTable(Todo.declared_name)]:
-                raise TodoError("Todo storage requires the one-shot durable cutover.")
+                raise TodoError("Todo storage requires the one-shot durable migration.")
             # Decode exactly the current declared columns; no runtime converters.
             Todo.select(db, where="0")
             db.execute("COMMIT")

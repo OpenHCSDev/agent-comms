@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .active_route import guard_original_root_write
-from .candidate_maintenance import schedule_private_candidate_after_commit
+from .candidate_maintenance import schedule_candidate_catchup
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -84,7 +84,7 @@ class Messaging:
         # canonical wire/bus publication locks are released. Projection errors
         # can never turn a committed original into an apparent failed send.
         try:
-            schedule_private_candidate_after_commit(self.bus, committed.seq)
+            schedule_candidate_catchup(self.bus, committed.seq)
         except Exception as error:
             _LOG.warning(
                 "Candidate notification omitted after committed send (%s)", error.__class__.__name__
@@ -118,7 +118,7 @@ class Messaging:
                 Message(sender=sender, target=target, body=body, type=type, notice=notice)
             )
         try:
-            schedule_private_candidate_after_commit(self.bus, committed.seq)
+            schedule_candidate_catchup(self.bus, committed.seq)
         except Exception as error:
             _LOG.warning(
                 "Candidate notification omitted after committed initial (%s)",
@@ -166,7 +166,7 @@ class Messaging:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         from .bus_publication import HumanOrigin
 
-        # The PR116 legacy retirement fence precedes identity creation and
+        # The historical root write fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
@@ -177,7 +177,7 @@ class Messaging:
         # Never turn a committed row into an apparent failed send because a
         # best-effort notification failed. No notification runs on UNKNOWN.
         try:
-            schedule_private_candidate_after_commit(self.bus, committed.seq)
+            schedule_candidate_catchup(self.bus, committed.seq)
         except Exception as error:
             _LOG.warning(
                 "Candidate notification omitted after committed human send (%s)",

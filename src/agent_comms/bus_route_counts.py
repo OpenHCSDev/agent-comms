@@ -1,7 +1,7 @@
 """Disposable, declaration-owned route counts over the canonical bus.
 
 The bus owns timestamps and publication identities. This index stores their
-projections, advances across complete appended rows, and is reset at cutover.
+projections, advances across complete appended rows, and is reset at migration.
 """
 
 from __future__ import annotations

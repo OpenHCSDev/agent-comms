@@ -104,7 +104,7 @@ async def read_gateway_projection(path: Path, thread: str) -> dict[str, object]:
     """Get one bounded DTO; all transport/schema failures are unavailable.
 
     The UI caller MUST schedule this after first paint. No implicit gateway
-    start, local SQLite fallback, retry action, monitor, or secret logging.
+    start, local SQLite substitute, retry action, monitor, or secret logging.
     """
     try:
         query = FieldCodec.decode(RecoveryRequest, {"thread": thread})

@@ -1,7 +1,7 @@
 """Optional local file notification for idle wire owners.
 
 The bus and registry remain authoritative. A notification only prompts a
-normal read; the periodic fallback recovers missed events and checks model
+normal read; the periodic polling recovers missed events and checks model
 configuration that can change outside the wire directory.
 """
 
@@ -69,7 +69,7 @@ class WireChangeWatch:
 
 
 def open_wire_watcher(root: Path) -> WireChangeWatch | None:
-    """Use Linux notifications when available; callers retain a poll fallback."""
+    """Use Linux notifications when available; callers retain periodic polling."""
     if sys.platform != "linux":
         return None
     try:

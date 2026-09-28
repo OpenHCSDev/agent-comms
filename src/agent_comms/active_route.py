@@ -1,4 +1,4 @@
-"""Owner-installed default route for a supervised private-root cutover.
+"""Owner-installed default route for a supervised private-root migration.
 
 An absent route retains the historical default. A present but invalid route
 fails closed; it never sends a message to a guessed root.
@@ -87,7 +87,7 @@ _route_write_owner = threading.local()
 
 @contextmanager
 def guard_original_root_write(root: Path) -> Iterator[None]:
-    """Fence a cooperating write through the historical root after cutover."""
+    """Fence a cooperating write through the historical root after migration."""
     original_root = Path.home() / ".agent-comms"
     if root.expanduser().resolve() == original_root.resolve():
         with guard_default_route_write(original_root):
@@ -212,9 +212,9 @@ def guard_default_route_write(expected_root: Path) -> Iterator[None]:
 
 
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
-    """Atomically install the first private default after owner cutover.
+    """Atomically install the first private default after owner migration.
 
-    Existing routes are never overwritten by a stale cutover. Publication
+    Existing routes are never overwritten by a stale migration. Publication
     uses the same no-replace hardlink pattern as the private store initializer;
     a reader fails closed during the brief two-link staging window.
     """

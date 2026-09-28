@@ -4,7 +4,7 @@ SelectedExecution performs at most one sealed assignment. Before launching Pi it
 reserves the input ID and leaves the claim/attempt in a non-auto-retryable state.
 Only the pinned native Pi executor's *live* returned event plus its verified
 session/journal can fill the same-DB context receipt. No recovery from a bare
-journal, no legacy cursor ACK, no monitor/SILENT, no automatic resend.
+journal, without cursor acknowledgements, monitoring or automatic resend.
 """
 
 from __future__ import annotations

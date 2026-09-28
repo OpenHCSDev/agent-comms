@@ -3,7 +3,7 @@
 The controlling process must create the owner-only /var/tmp root, initialize the
 private cohort/schema, start this process and wait for READY, publish/accept the
 initial cohort, then send exactly one ``GO <last-seen-seq>`` line on stdin. This
-is not a daemon, monitor, production cutover, legacy inbox ACK or retry loop.
+runs one bounded foreground operation without scheduling retries.
 An uncertain attempt and its private root remain for manual disposition.
 The explicit CLI switches are NOT an output/spend cap. Never invoke a paid
 provider until a separate reviewed enforced cap exists; tests use a fake model.

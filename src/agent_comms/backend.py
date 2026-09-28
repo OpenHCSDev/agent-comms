@@ -1,12 +1,8 @@
 """Agent communications — streaming agent backend runner.
 
-Runs a headless agent (pi by default) and yields structured events. Two
-modes:
-
-- **rpc**: pi's ``--mode rpc`` JSON-lines stream gives real-time events —
-  text deltas, tool calls with arguments, tool results. These drive
-  opencode-style feedback (thinking spinners, tool-call cards).
-- **text** (fallback): any other backend; output arrives as raw chunks.
+Runs the selected native Pi process through its verified RPC launch contract.
+Pi's JSON-lines events carry text deltas, tool arguments and tool results for
+thinking indicators and tool-call cards.
 
 Events are frozen nominal values declared in :mod:`agent_events`.
 

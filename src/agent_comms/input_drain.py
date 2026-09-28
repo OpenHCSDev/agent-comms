@@ -38,7 +38,7 @@ from .wire_watch import open_wire_watcher
 
 AGENT_PREFIX = "!agent "
 LIVE_DRAIN_INTERVAL = 0.05
-WATCH_FALLBACK_INTERVAL = 1.0
+WATCH_POLL_INTERVAL = 1.0
 GOAL_WAIT_RECHECK_INTERVAL = 60.0
 
 
@@ -311,7 +311,7 @@ class InputDrain(FutureInputQueue):
                             watcher = None
                         else:
                             with suppress(TimeoutError):
-                                async with asyncio.timeout(WATCH_FALLBACK_INTERVAL):
+                                async with asyncio.timeout(WATCH_POLL_INTERVAL):
                                     await watcher.changed.wait()
             finally:
                 if watcher is not None:
