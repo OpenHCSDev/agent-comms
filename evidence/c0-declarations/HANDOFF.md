@@ -1,5 +1,7 @@
 # C0 declaration and current-import closure — Darwin
 
+Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/179
+
 Branch `codex/c0-declarations-20260928`, persistent tree `/home/ts/wt/comms-c0-declarations-20260928`.
 Based on merged lease174 (`b5ec95a`); integrated parent checkpoint176/main `4216214`.
 Parent owns paired Toad import migration, Pascal operations integration and installed activation.
@@ -49,3 +51,5 @@ Original audit committed/pushed as `e3ee932`, included here as `c9e035d`. `evide
 3. Build/install/test the combined paired candidate using parent's existing activation path. This worker has not changed the installed runtime. Existing-root checkpoint176 and its saved data remain authoritative.
 
 The direct `codex queue` message to Pascal was rejected because the spawned subagent was unloaded; parent was notified with the file map. No coordination hold or duplicate worker was introduced. Owned test/scanner processes finished; disposable fixtures/cache are cleaned after retaining these receipts and the useful scripts.
+
+Cleanup completed: removed163MiB owned scanner/test artifacts plus the624KiB short native fixture directory. Native bundles, original histories and shared worktrees untouched. Commands are retained in COMMANDS.md.
