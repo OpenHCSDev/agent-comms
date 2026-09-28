@@ -308,7 +308,7 @@ async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission
 
 async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
-    owner = CommsAgent(wire(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
+    owner = canonical_agent(wire(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
     await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     session_id = "project"
     calls = [[], []]
