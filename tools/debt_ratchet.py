@@ -65,7 +65,7 @@ class StringSubscript(Measure):
 
 
 def git(repo: Path, *args: str) -> bytes:
-    return subprocess.check_output(["git", "-C", str(repo), *args])
+    return subprocess.check_output(["git", "-C", str(repo), *args], timeout=20)
 
 
 def revision(repo: Path, ref: str) -> str:

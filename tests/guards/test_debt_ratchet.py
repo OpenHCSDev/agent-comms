@@ -19,7 +19,9 @@ class Repository:
         self.git("config", "user.name", "Ratchet test")
 
     def git(self, *args: str) -> str:
-        return subprocess.check_output(["git", "-C", str(self.path), *args], text=True).strip()
+        return subprocess.check_output(
+            ["git", "-C", str(self.path), *args], text=True, timeout=10
+        ).strip()
 
     def commit(self, files: dict[str, str | None]) -> str:
         for name, source in files.items():
