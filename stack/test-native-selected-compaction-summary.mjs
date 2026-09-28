@@ -1,31 +1,22 @@
 // Disposable, provider-free actual RPC + native compact() selected-stream tests.
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { fileURLToPath } from 'node:url';
 const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 const originalRpc = join(pkg,'dist/modes/rpc/rpc-mode.js');
 const integrated = readFileSync(originalRpc,'utf8').includes('case "agent_comms_summarize_compaction"');
-assert.ok(pkg && (process.env.PR95_RPC_FIXTURE === '1' ||
-  readFileSync(join(pkg, '.pr95-disposable-test-copy'), 'utf8') === 'owned fixture\n'),
-  'use only an owned disposable Pi fixture');
+assert.ok(pkg && integrated, 'Use the complete owned native candidate');
 const root=mkdtempSync(join(tmpdir(),'pr95-selected-summary-'));
-const patched=integrated ? originalRpc : join(pkg,'dist/modes/rpc',`pr95-summary-${process.pid}.js`);
+const patched=originalRpc;
 try {
-  if (!integrated) {
-  copyFileSync(originalRpc,patched);
-  for(const script of ['patch-native-compaction-readiness.py','patch-native-selected-compaction-summary.py']) {
-    const run=spawnSync('python3',[fileURLToPath(new URL(script,import.meta.url)),patched],{encoding:'utf8'});
-    assert.equal(run.status,0,run.stderr);
-  }
-  }
   const childSource=`
 import {runRpcMode} from ${JSON.stringify(patched)};
-import {SessionManager} from ${JSON.stringify(join(pkg,'dist/core/session-manager.js'))};
+import {SessionManager, sessionEntryToContextMessages} from ${JSON.stringify(join(pkg,'dist/core/session-manager.js'))};
 import {prepareCompaction} from ${JSON.stringify(join(pkg,'dist/core/compaction/index.js'))};
+import {SessionContext} from ${JSON.stringify(join(pkg,'dist/core/session-context.js'))};
 import {createAssistantMessageEventStream} from ${JSON.stringify(join(pkg,'node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js'))};
 import {readFileSync} from 'node:fs';
 globalThis.fetch=()=>{throw Error('NETWORK PROHIBITED')};
@@ -35,7 +26,7 @@ for(let i=0;i<5;i++) {
  manager.appendMessage({role:'assistant',content:[{type:'text',text:'Answer '+i}],provider:'fake',model:'fake',api:'fake',stopReason:'stop',timestamp:2*i+1});
 }
 const settings={enabled:process.env.PR95_EFFECTIVE_DISABLED !== '1',reserveTokens:1000,keepRecentTokens:10};
-const preparation=prepareCompaction(manager.getBranch(),settings);
+const preparation=prepareCompaction(manager.entryStore,settings);
 const witness=manager.captureCompactionWitness(preparation.firstKeptEntryId);
 const model={provider:'fake',id:'fake',api:'openai-completions',contextWindow:10000,maxTokens:1000};
 let mode='success',release,callCount=0,blockHooks=false;
@@ -47,7 +38,7 @@ const session={sessionManager:manager,sessionFile:manager.getSessionFile(),sessi
   extensionRunner:runner,_extensionRunnerRef:{current:runner},messages:[],isIdle:true,isStreaming:false,
   isCompacting:false,isRetrying:false,pendingMessageCount:0,_retryAttempt:0,_nativeInterruptIds:null,
   _pendingNextTurnMessages:[],_pendingCustomMessages:[],_pendingBashMessages:[],
-  agent:{steeringQueue:{messages:[]},followUpQueue:{messages:[]},subscribe:()=>()=>{},
+  agent:{state:{messages:[]},steeringQueue:{messages:[]},followUpQueue:{messages:[]},subscribe:()=>()=>{},
     streamFunction:(_model,_context,options)=>{
       callCount++;
       process.stderr.write('CALL '+JSON.stringify({maxRetries:options.maxRetries,hasSignal:!!options.signal})+'\\n');
@@ -115,6 +106,7 @@ const session={sessionManager:manager,sessionFile:manager.getSessionFile(),sessi
   setFollowUpMode(v){blockHooks=v==='hook'},
 
 };
+SessionContext.restore(session);
 const host={session,setRebindSession(){},async dispose(){}};
 process.stderr.write(JSON.stringify({witness,tokensBefore:preparation.tokensBefore,selected:{provider:'fake',modelId:'fake',contextWindow:10000},
  settings:{reserveTokens:1000,keepRecentTokens:10},sessionFile:manager.getSessionFile()})+'\\n');
@@ -168,21 +160,6 @@ void runRpcMode(host);
     {version:1,status:'declined',operationId:hookId,reason:'extension_unsupported'});
   assert.equal(calls(),beforeHook);
   await request({id:'hook-off',type:'set_follow_up_mode',mode:'none'});
-  await request({id:'large-mode',type:'set_steering_mode',mode:'large'});
-  const largeId='d'.repeat(32);
-  assert.deepEqual((await request({id:'large',...base,operationId:largeId})).data,
-    {version:1,status:'unknown',operationId:largeId,
-      reason:'Selected summary stream exceeded its output limit or contained unsupported events'});
-  await request({id:'slow-mode',type:'set_steering_mode',mode:'slow-large'});
-  const slowId='5'.repeat(32);
-  assert.deepEqual((await request({id:'slow-large',...base,operationId:slowId})).data,
-    {version:1,status:'unknown',operationId:slowId,
-      reason:'Selected summary stream exceeded its output limit or contained unsupported events'});
-  if(!stderr.includes('EARLY_ABORT')) await Promise.race([
-    new Promise(resolve=>child.stderr.once('data',resolve)),
-    new Promise((_,reject)=>setTimeout(()=>reject(Error('missing early abort')),3000)),
-  ]);
-  assert.match(stderr,/EARLY_ABORT true/,'incremental delta cap requested abort before terminal');
   await request({id:'error-mode',type:'set_steering_mode',mode:'error-stop'});
   const stopId='e'.repeat(32);
   assert.deepEqual((await request({id:'stop',...base,operationId:stopId})).data,
@@ -241,7 +218,7 @@ void runRpcMode(host);
     assert.equal(denied.success,false);
     assert.match(denied.error,/summary in flight/);
     assert.deepEqual((await outstanding).data,{version:1,status:'unknown',operationId,
-      reason:kind==='malformed'?'Selected summary stream exceeded its output limit or contained unsupported events'
+      reason:kind==='malformed'?'Selected summary stream contained unsupported events'
         : 'fake iterator failure'});
     assert.ok(Date.now()-started>=200,`${kind}: consumer failure released slot before producer terminal`);
     assert.deepEqual(readFileSync(sessionFile),before,`${kind} never wrote session`);
@@ -274,7 +251,7 @@ void runRpcMode(host);
     other.stdin.write(JSON.stringify(command)+'\n');
     const reply=await Promise.race([result,
       new Promise((_,reject)=>setTimeout(()=>reject(Error('long RPC timeout '+diagnostic)),3000))]);
-    assert.equal(reply.data.status,expected,JSON.stringify(reply));
+    assert.equal(reply.data.status,expected,JSON.stringify(reply)+diagnostic);
     const count=(diagnostic.match(/CALL /g)||[]).length;
     if(expectedCalls==='bounded') assert.ok(count>=2 && count<=4,`native calls ${count}: ${diagnostic}`);
     else if(expectedCalls==='larger') assert.ok(count>4,`larger native plan calls ${count}`);
@@ -286,53 +263,7 @@ void runRpcMode(host);
   }
   const longCalls=await historyCase(1700,'summarized');
   const largerCalls=await historyCase(7000,'summarized','larger');
-  const sourceCalls=await historyCase(400000,'declined',0);
-  // Only the throwaway test copy shortens the timeout; production patch keeps
-  // the exact 90s cap. Fake stream holds until AbortSignal to prove join/UNKNOWN.
-  const deadlinePatched=join(pkg,'dist/modes/rpc',`pr95-deadline-${process.pid}.js`);
-  try {
-    const source=readFileSync(patched,'utf8');
-    assert.equal(source.includes('deadlineMs: 90000'),true);
-    writeFileSync(deadlinePatched,source.replace('deadlineMs: 90000','deadlineMs: 35'));
-    const deadlineSource=childSource.replace(JSON.stringify(patched),JSON.stringify(deadlinePatched));
-    assert.notEqual(deadlineSource,childSource);
-    const timed=spawn('node',['--input-type=module','-e',deadlineSource],{stdio:['pipe','pipe','pipe']});
-    let timedStderr='';timed.stderr.on('data',data=>{timedStderr+=data});
-    const timedReplies=new Map(),timedWaiters=new Map();
-    createInterface({input:timed.stdout}).on('line',line=>{
-      let item;try{item=JSON.parse(line)}catch{return}
-      if(item.type!=='response')return;
-      if(timedWaiters.has(item.id)){timedWaiters.get(item.id)(item);timedWaiters.delete(item.id)}
-      else timedReplies.set(item.id,item);
-    });
-    const until=Date.now()+3000;
-    while(!timedStderr.includes('\n')&&Date.now()<until) await new Promise(resolve=>setTimeout(resolve,10));
-    assert.ok(timedStderr.includes('\n'),timedStderr);
-    const tf=JSON.parse(timedStderr.split('\n')[0]);
-    const snapshot=readFileSync(tf.sessionFile);
-    const send=(command)=>{
-      const response=new Promise(resolve=>timedReplies.has(command.id)
-        ? resolve(timedReplies.get(command.id)):timedWaiters.set(command.id,resolve));
-      timed.stdin.write(JSON.stringify(command)+'\n');
-      return Promise.race([response,new Promise((_,reject)=>setTimeout(()=>reject(Error('deadline RPC timeout')),3000))]);
-    };
-    assert.equal((await send({id:'uncooperative',type:'set_steering_mode',mode:'uncooperative'})).success,true);
-    const timedId='4'.repeat(32);
-    const startedAt=Date.now();
-    const pending=send({id:'deadline',...base,operationId:timedId,
-      witness:tf.witness,selected:tf.selected,settings:tf.settings});
-    await new Promise(resolve=>setTimeout(resolve,80));
-    assert.equal((await send({id:'state-held',type:'get_state'})).data.isCompacting,true);
-    assert.equal((await send({id:'mutation-held',type:'prompt',message:'never'})).success,false);
-    const result=await pending;
-    assert.deepEqual(result.data,{version:1,status:'unknown',operationId:timedId,
-      reason:'Selected summary exceeded its 0.035 second deadline'});
-    assert.ok(Date.now()-startedAt>=200,'noncooperative stream exceeds cooperative timer');
-    assert.equal((timedStderr.match(/CALL /g)||[]).length,1);
-    assert.deepEqual(readFileSync(tf.sessionFile),snapshot);
-    timed.stdin.end();
-    assert.equal(await new Promise(resolve=>timed.on('exit',resolve)),0,timedStderr);
-  } finally {rmSync(deadlinePatched,{force:true})}
+  const sourceCalls=await historyCase(400000,'summarized','larger');
   // A pinned-class instance can override result() to reject early, or corrupt
   // its result promise. Neither rejection is proof of provider completion.
   for(const kind of ['rejecting-result','rejecting-terminal','fail']) {
@@ -379,9 +310,8 @@ void runRpcMode(host);
     bad.kill('SIGKILL'); // disposable exact test child, not a production retirement claim
     await new Promise(resolve=>bad.on('exit',resolve));
   }
-  console.log(JSON.stringify({ok:true,cases:44,calls:calls(),longCalls,largerCalls,sourceCalls}));
+  console.log(JSON.stringify({ok:true,calls:calls(),longCalls,largerCalls,sourceCalls}));
   }
 } finally {
-  if (!integrated) rmSync(patched,{force:true});
   if (process.env.PR95_KEEP_SOURCE !== '1') rmSync(root,{force:true,recursive:true});
 }

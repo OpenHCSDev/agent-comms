@@ -1,0 +1,2 @@
+CAPACITY_MEMORY {"rss_limit_mib": 240, "v8_old_space_mib": 128, "processes": [{"pid": 415152, "phase": "small-cli-fixture", "peak_rss_kib": 157796, "memory": {"rss": 161583104, "heapTotal": 67649536, "heapUsed": 50441216, "external": 4881861, "arrayBuffers": 896678}}], "sampled_peak_rss_kib": {"415152": 158352}, "exceeded": [], "monitor_errors": []}
+Actual native CLI fixture/get_state/get_messages PASS; no provider requests

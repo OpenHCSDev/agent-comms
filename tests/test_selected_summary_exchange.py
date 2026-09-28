@@ -401,3 +401,24 @@ async def test_selected_frame_uses_transport_without_retired_file_count_budget(t
         assert len(result.summary.details.read_files) == 3800
         assert persistent.proc.returncode is None
         assert journal.blocking_selected_summary(str(file))
+
+
+async def test_refusal_recovery_rechecks_exact_record_and_never_reattempts(tmp_path):
+    from agent_comms.compaction_states import RetiredRefusalSummary
+
+    async with selected(tmp_path, "limit") as (run, _, journal, file, _):
+        result = await run()
+        attempt = journal.selected_summary(result.operation_id)
+        journal.refuse_selected_summary(result.operation_id, result.decline_reason)
+        assert journal.selected_summary(result.operation_id) == attempt
+        with pytest.raises(CompactionJournalError, match="refusal transition"):
+            journal.refuse_selected_summary(result.operation_id, "different native reason")
+        with pytest.raises(CompactionJournalError, match="commit reservation"):
+            attempt.state.require_commit_reservation()
+        journal.retire_refused_summary(attempt)
+        retired = journal.selected_summary(result.operation_id)
+        assert isinstance(retired.state, RetiredRefusalSummary)
+        assert retired.state.decline_reason == result.decline_reason
+        with pytest.raises(CompactionJournalError, match="changed"):
+            journal.retire_refused_summary(attempt)
+        assert journal.selected_summary(result.operation_id) == retired

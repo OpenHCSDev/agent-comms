@@ -1,3 +1,38 @@
+## D22 operator integration — 2026-09-28 19:05 UTC
+
+253 compaction barrier conversion integrated; current journal retained instead of
+reset. Actual copied-root install now passes135+8420messages104threads13UNKNOWN,
+including original301-file backup, converted database rows and transcript inode
+read positions. Parent installation tools remain pending final coupled deployment.
+Native243/244 full302/604MB journaled CLI/reopen acceptance completed by232c6b1e70;
+parent integrates matching receiver next. No full refactor live-install claim.
+
+## Current integration and installation — 2026-09-28 19:00 UTC
+
+- Main252 is merged; all five normal launchers select runtime-peer-close-20260928
+  (core1b98037, Toad6662485, Textual16ede00). Installed native watcher512-event
+  peer-close test passed. Existing user UI and native owners were not restarted.
+- Parent229 now includes251 at58bfad3: alternate source readers and ACP public-mode
+  branches deleted.57 checkpoint cases and actual native/ACP compaction checks pass;
+  full retained history preserved.248 remains the combined local suite owner.
+- D22 atomic directory exchange passed on a complete disposable live-root copy:
+  134 current +8420 archived messages,104threads,13UNKNOWNinputs; original301-file
+  backup, human read memberships, native sessions and diagnostics retained. This
+  is copied-root acceptance, not live activation. All owned copies were removed.
+- Installer review found remaining compaction-journal barrier/goal-private authority
+  migration: Cicero owns tools/cutover/compaction_journal.py in251; parent owns
+  installation, converted SQLite sidecar removal, transcript inode rebinding,
+  admission/archive validation and final coupled acceptance. Do not reset unresolved
+  compaction barriers merely because input dispositions were preserved.
+- Native243/244 package is published at2c03f7f; compact/commit/reopen tests pass.
+  Lovelace owns final >256MiB combined CLI acceptance. It is not installed.
+- Toad107ready7e26f90 now combines114/T7(02a8be5) and115/T8(142feb1), ownerCopernicus.
+  T7:44 tests and mounted stream pilot,5.29s to5.17s median. T8:6 focused plus
+  mounted PTY/ACP tests;46saved sessions preserved. Combined candidate remains open.
+- Next independent assignments: DarwinT1 settings, PascalTR0 shared checks;
+  CopernicusTL0A after combined107. Existing Comms acceptance retains priority.
+  Draft implementation PRs for these new assignments are pending, not claimed done.
+
 ## Live installation checkpoint — 2026-09-28 18:23 UTC
 
 - Main249 + Toad112 + stack250 are merged and installed. Actual installed archived

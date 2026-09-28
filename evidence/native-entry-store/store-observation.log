@@ -1,0 +1,10 @@
+✔ both stores preserve branch context, settings, archived input and commit identity (9.387543ms)
+✔ strict disk scan refuses malformed UTF8, incomplete tail, duplicated IDs and forward parent without modifying history (4.668047ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 74.038491

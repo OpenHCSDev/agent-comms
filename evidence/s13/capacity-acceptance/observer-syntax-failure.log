@@ -1,0 +1,126 @@
+file:///home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/observe-native.mjs:1
+import {appendFileSync} from 'node:fs';globalThis.fetch=()=>{throw Error('NETWORK_PROHIBITED_IN_CAPACITY_ACCEPTANCE')};appendFileSync("/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/native-starts.jsonl",JSON.stringify({pid:process.pid,phase:process.env.AC_CAPACITY_PHASE}})+'\n');process.on('exit',()=>{appendFileSync("/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/native-exits.jsonl",JSON.stringify({pid:process.pid,phase:process.env.AC_CAPACITY_PHASE,peak_rss_kib:process.resourceUsage().maxRSS,memory:process.memoryUsage()})+'\n')});
+                                                                                                                                                                                                                                                                                                                                             ^
+
+SyntaxError: missing ) after argument list
+    at compileSourceTextModule (node:internal/modules/esm/utils:355:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)
+    at #translate (node:internal/modules/esm/loader:441:20)
+    at afterLoad (node:internal/modules/esm/loader:509:29)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:514:12)
+    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:567:36)
+    at afterResolve (node:internal/modules/esm/loader:614:52)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:620:12)
+    at node:internal/modules/esm/loader:639:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:539:22)
+
+Node.js v26.5.0
+
+CAPACITY_MEMORY {"rss_limit_mib": 240, "v8_old_space_mib": 128, "processes": [], "sampled_peak_rss_kib": {}, "exceeded": [], "monitor_errors": []}
+CAPACITY_RESULT {"phases": [], "provider_calls": 0, "session_id": "capacity-session", "old_commit": {"commitId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "payloadDigest": "589c2539c06c80a1a75c264ac9867a9d953c6d31ce7be29ac5662228b8cc0e28", "metadataDigest": "28f74fd90b97f11dfce6cea7200df11885589c426ca0be9ad63198a18c5284c6"}, "old_summary": "historical commit outside the retained context", "historical_pairs": 4563, "source_bytes": 302041843, "generated_data_removed": true}
+F
+=================================== FAILURES ===================================
+_______ test_large_history_cli_prepare_commit_reopen_under_memory_budget _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe6079aa8b0>
+
+    @pytest.mark.skipif(
+        os.environ.get("AC_NATIVE_LARGE_HISTORY") != "1",
+        reason="Explicit >256MiB disk/native memory acceptance",
+    )
+    def test_large_history_cli_prepare_commit_reopen_under_memory_budget(tmp_path, monkeypatch):
+        """No external calls or retained user data; exercise the production chain."""
+        package = Path(PACKAGE).resolve()
+        launcher = os.environ["AC_NATIVE_STACK_BIN"]
+        minimum = 288 * 1024**2
+        assert shutil.disk_usage(tmp_path).free > minimum * 3, "Insufficient owned disk fixture space"
+        root = tmp_path / "capacity"
+        root.mkdir(mode=0o700)
+        session = root / "capacity.jsonl"
+        receipt = {"phases": [], "provider_calls": 0}
+        try:
+            fixture = write_capacity_history(session, minimum)
+            fixture_path = root / "capacity-fixture.json"
+            fixture_path.write_text(json.dumps(fixture))
+            receipt.update(fixture, source_bytes=session.stat().st_size)
+            with session.open("rb") as stream:
+                before = hashlib.file_digest(stream, "sha256").hexdigest()
+            config = root / "config"
+            config.mkdir()
+            monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
+            monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
+            monkeypatch.setenv("PI_OFFLINE", "1")
+            with native_memory_budget(root, monkeypatch) as memory:
+                monkeypatch.setenv("AC_CAPACITY_PHASE", "cli-open")
+>               asyncio.run(capacity_native_cli(package, session, root))
+
+tests/test_owner_compaction_prepare.py:420: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/asyncio/runners.py:205: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/asyncio/runners.py:128: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent')
+session = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/capacity.jsonl')
+root = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity')
+
+    async def capacity_native_cli(package: Path, session: Path, root: Path):
+        """Actual CLI startup/reopen and correlated state; never send a prompt."""
+        child = await AttachedChild.start(
+            (
+                "node",
+                str(package / "dist/cli.js"),
+                "--mode",
+                "rpc",
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-prompt-templates",
+                "--no-context-files",
+                "--no-tools",
+                "--session",
+                str(session),
+            ),
+            cwd=root,
+        )
+        stderr = asyncio.create_task(child.stderr.read())
+        try:
+            async with asyncio.timeout(25):
+                for command in ("get_state", "get_messages"):
+                    child.stdin.write(json.dumps({"type": command, "id": command}).encode() + b"\n")
+                    await child.stdin.drain()
+                    while True:
+                        raw = await child.stdout.readline()
+>                       assert raw, (await stderr).decode(errors="replace")
+E                       AssertionError: file:///home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/observe-native.mjs:1
+E                         import {appendFileSync} from 'node:fs';globalThis.fetch=()=>{throw Error('NETWORK_PROHIBITED_IN_CAPACITY_ACCEPTANCE')};appendFileSync("/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/native-starts.jsonl",JSON.stringify({pid:process.pid,phase:process.env.AC_CAPACITY_PHASE}})+'\n');process.on('exit',()=>{appendFileSync("/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/run/test_large_history_cli_prepare0/capacity/native-exits.jsonl",JSON.stringify({pid:process.pid,phase:process.env.AC_CAPACITY_PHASE,peak_rss_kib:process.resourceUsage().maxRSS,memory:process.memoryUsage()})+'\n')});
+E                                                                                                                                                                                                                                                                                                                                                                      ^
+E                         
+E                         SyntaxError: missing ) after argument list
+E                             at compileSourceTextModule (node:internal/modules/esm/utils:355:16)
+E                             at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)
+E                             at #translate (node:internal/modules/esm/loader:441:20)
+E                             at afterLoad (node:internal/modules/esm/loader:509:29)
+E                             at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:514:12)
+E                             at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:567:36)
+E                             at afterResolve (node:internal/modules/esm/loader:614:52)
+E                             at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:620:12)
+E                             at node:internal/modules/esm/loader:639:32
+E                             at TracingChannel.tracePromise (node:diagnostics_channel:539:22)
+E                         
+E                         Node.js v26.5.0
+E                         
+E                       assert b''
+
+tests/test_owner_compaction_prepare.py:375: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_owner_compaction_prepare.py::test_large_history_cli_prepare_commit_reopen_under_memory_budget
+1 failed in 1.82s
