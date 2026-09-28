@@ -84,10 +84,11 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
     import os
 
     from agent_comms.comms import wire
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.threads import Thread
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread(name="kid", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread(name="kid", tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     store = InputDispositions(comms.root / InputDispositions.filename)
     store.record("bus:7", seq=7, owner="kid", admission=1, target="#review", text="exact source")
     store.record("bus:8", seq=8, owner="peer", admission=1, target="#review", text="other owner")

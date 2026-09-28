@@ -25,6 +25,7 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_drain import InputDrain
 from agent_comms.store_files import _store_lock
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
@@ -39,7 +40,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    comms.threads.register(Thread("child", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("child", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("child", "child-review-in-flight")
     comms.threads.register(Thread("other", frozenset(), str(tmp_path)))
     store = agent.turns.open_goal_store()
@@ -164,7 +165,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     if changed == "admission":
         admission += 1
     else:
-        owner = replace(owner, pid=owner.pid + 1)
+        owner = replace(owner, process_identity=ProcessIdentity(owner.pid + 1, owner.process_identity.start_time))
     old_grant = store.ready_grant(goal.id, 1)
     try:
         with (
@@ -195,7 +196,7 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
 def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
@@ -221,7 +222,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
 def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob", "carol"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
@@ -242,7 +243,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
 def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob", "carol"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     for name in ("alice", "bob"):
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
@@ -266,16 +267,16 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
 def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-turn")
-    comms.threads.register(Thread("carol", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("carol", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("carol", "carol-turn")
     carol_thread = comms.registry.require("carol")
     assert carol_thread.active_turn is not None
     comms.registry.register(
         replace(
             carol_thread,
-            pid=999999999,
+            process_identity=ProcessIdentity(999999999, 1),
             active_turn=replace(carol_thread.active_turn, owner_pid=999999999),
         ),
         comms.registry.status("carol"),
@@ -298,7 +299,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
 def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
@@ -344,7 +345,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
 def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-first")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
@@ -382,7 +383,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
 def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
     bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))

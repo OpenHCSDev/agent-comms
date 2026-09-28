@@ -69,7 +69,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.send("peer", "#team", "Channel input")
     comms.messaging.send("owner", "peer", "Output")
     comms.messaging.acknowledge("owner")
-    marker = (comms.root / "read_markers.json").read_bytes()
+    pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
     groups = {group.key: group for group in snapshot.groups}
     assert [row.target for row in groups["inbound"].entries] == ["peer", "#team"]
@@ -77,7 +77,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     assert groups["parent"].entries[0].target == "origin"
     assert groups["children"].entries[0].target == "child"
     assert groups["collaborating"].entries == ()
-    assert (comms.root / "read_markers.json").read_bytes() == marker
+    assert comms.bus.pending_count("owner") == pending
     assert not snapshot.history_limited
     assert "Current delivery scope" in snapshot.incoming_basis
 

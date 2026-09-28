@@ -12,6 +12,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import locked_store
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_pauses import GoalPauseEvent, GoalPauseEvents
 from agent_comms.goal_presentation import GoalWaitTarget
@@ -130,7 +131,7 @@ def test_mode_preserved_and_new_inode_published(tmp_path):
 
 def test_unknown_wait_fields_are_rejected_without_rewriting_saved_data(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
-    data = json.loads(GOLDEN)
+    data = FieldCodec.encode({"goal": wait()})
     data["goal"]["future_field"] = {"not_authoritative_here": True}
     store.path.write_text(json.dumps(data))
     before = store.path.read_bytes()
@@ -188,7 +189,7 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
     with pytest.raises(RuntimeError, match="change failed"):
         store.update(fail)
-    with pytest.raises(TypeError, match="Unsupported JSON"):
+    with pytest.raises(ValueError, match="owner incarnation"):
         store.record(replace(wait(), owner_created_at=float("nan")))
     # The failed callback/encoder released the lock.
     store.record(replace(wait(), revision=3))
@@ -196,7 +197,7 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
 def test_invalid_boundary_is_not_overwritten(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
-    data = json.loads(GOLDEN)
+    data = FieldCodec.encode({"goal": wait()})
     data["goal"]["revision"] = True
     text = json.dumps(data)
     store.path.write_text(text)
@@ -278,16 +279,9 @@ def test_pause_store_golden_and_shared_algorithm(tmp_path):
     )
 
 
-def test_history_codec_preserves_sorted_golden_and_legacy_defaults():
+def test_history_codec_roundtrips_current_goal_and_rejects_invalid_revision():
     goal = Goal("Work", "goal")
-    golden = (
-        '{"block_reason": null, "id": "goal", "mention_source": null, '
-        '"pause_source": null, "progress": "", '
-        '"reported_turn": null, "revision": 0, "status": "active", "text": "Work"}'
-    )
-    assert GoalHistoryStore._encode(goal) == golden
-    assert GoalHistoryStore._decode(golden) == goal
-    assert GoalHistoryStore._decode('{"text": "Work", "id": "goal"}') == goal
+    assert GoalHistoryStore._decode(GoalHistoryStore._encode(goal)) == goal
     assert GoalHistoryStore._encode(None) is None
     assert GoalHistoryStore._decode(None) is None
     with pytest.raises(GoalHistoryError, match="invalid goal snapshot"):

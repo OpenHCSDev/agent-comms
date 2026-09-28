@@ -34,6 +34,7 @@ from agent_comms.thread_status import (
     IdleThreadStatus,
     StoppedThreadStatus,
 )
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import TurnLeaseFence
 
@@ -48,7 +49,7 @@ def bound(tmp_path):
         "owner",
         frozenset(),
         "/private-worktree",
-        pid=123,
+        process_identity=ProcessIdentity(123, 1),
         created_at=10.0,
         goal=goal,
         turn_generation=7,

@@ -20,11 +20,12 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
 def _thread(comms, name, worktree):
-    comms.threads.register(Thread(name, frozenset(), str(worktree), pid=os.getpid()))
+    comms.threads.register(Thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())))
 
 
 def _begin(comms, name, turn_id):
@@ -380,14 +381,13 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     assert another.registry.require("owner").goal.state.active
 
 
-def test_legacy_wait_without_turn_generation_cannot_infer_terminal_authority(tmp_path):
+def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
     comms, _goal = _waiting(tmp_path)
     wait = comms.goals.goal_wait("owner")
-    assert wait is not None
-    GoalWaits(comms.root / "goal_waits.json").record(replace(wait, target_turn_generations=()))
-    fence = _finish(comms, "child", "child-turn")
-    assert comms.goals.release_waits_after_terminal_turn(fence) == ()
-    assert comms.registry.require("owner").goal.state.active
+    before = GoalWaits(comms.root / "goal_waits.json").path.read_bytes()
+    with pytest.raises(ValueError, match="aligned target turns"):
+        GoalWaits(comms.root / "goal_waits.json").record(replace(wait, target_turn_generations=()))
+    assert GoalWaits(comms.root / "goal_waits.json").path.read_bytes() == before
 
 
 async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
