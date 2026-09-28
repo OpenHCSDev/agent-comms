@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.messages import Message
 
 
 def _expected(wired, *, active_only: bool = False) -> dict[str, int]:
@@ -27,7 +28,7 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.messaging.send("fixer", "PR111", "reverse direct")
     wired.messaging.send("PR111", "#all", "global")
     wired.messaging.send("fixer", "#base", "tagged")
-    wired.messaging.send("third", "broadcast", "legacy broadcast")
+    wired.messaging.send("third", "#all", "global from third")
     assert _listed(wired) == _expected(wired)
     assert wired.messaging.acknowledge("fixer", "PR111") == 1
     assert _listed(wired) == _expected(wired)
@@ -39,13 +40,13 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     # A fresh CLI process uses the durable projection without parsing history.
     fresh = wire(wired.root)
     calls = []
-    original = fresh.bus._pending_route_fields
+    original = Message.from_wire
 
     def measured(record):
         calls.append("scan")
         return original(record)
 
-    monkeypatch.setattr(fresh.bus, "_pending_route_fields", measured)
+    monkeypatch.setattr(Message, "from_wire", measured)
     assert _listed(fresh) == _expected(wired)
     assert calls == []
 
@@ -57,17 +58,18 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
 
     fresh = wire(wired.root)
     parsed = []
-    original = fresh.bus._pending_route_fields
+    original = Message.from_wire
 
     def measured(record):
         parsed.append(record["seq"])
         return original(record)
 
-    monkeypatch.setattr(fresh.bus, "_pending_route_fields", measured)
+    monkeypatch.setattr(Message, "from_wire", measured)
     assert _listed(fresh)["fixer"] == 100
     assert parsed == []
 
     wired.messaging.send("PR111", "fixer", "new message")
+    parsed.clear()  # Measure the read projection, separately from publisher validation.
     assert _listed(fresh)["fixer"] == 101
     assert parsed == [101]
 
@@ -161,11 +163,10 @@ def test_route_projection_detects_rewrite_before_append(wired):
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
     wired.threads.register(Thread(name="broadcast", tags=frozenset(), worktree="/tmp/broadcast"))
-    wired.messaging.send("PR111", "broadcast", "channel alias also names a real thread")
+    wired.messaging.send("PR111", "broadcast", "direct message to the named thread")
     wired.messaging.send("fixer", "broadcast", "second sender")
     wired.messaging.send("PR111", "fixer", "old direct")
     wired.registry.rename("PR111", "renamed")
-    wired.bus.rename_thread("PR111", "renamed")
     assert _listed(wired) == _expected(wired)
     wired.messaging.acknowledge("broadcast", "PR111")
     assert _listed(wired) == _expected(wired)
@@ -204,14 +205,14 @@ def test_projection_sync_holds_bus_lock_against_concurrent_append(wired, monkeyp
     wired.messaging.send("PR111", "fixer", "before")
     entered = threading.Event()
     release = threading.Event()
-    original = wired.bus._pending_route_fields
+    original = Message.from_wire
 
     def gated(record):
         entered.set()
         assert release.wait(5)
         return original(record)
 
-    monkeypatch.setattr(wired.bus, "_pending_route_fields", gated)
+    monkeypatch.setattr(Message, "from_wire", gated)
     results: list[dict[str, int]] = []
     writer_done = threading.Event()
     reader = threading.Thread(target=lambda: results.append(_listed(wired)), daemon=True)
@@ -238,14 +239,14 @@ def test_owner_tag_mutation_during_sync_cannot_ack_or_change_captured_audience(w
     wired.messaging.send("PR111", "#auth", "eligible when listing began")
     entered = threading.Event()
     release = threading.Event()
-    original = wired.bus._pending_route_fields
+    original = Message.from_wire
 
     def gated(record):
         entered.set()
         assert release.wait(5)
         return original(record)
 
-    monkeypatch.setattr(wired.bus, "_pending_route_fields", gated)
+    monkeypatch.setattr(Message, "from_wire", gated)
     results: list[dict[str, int]] = []
     reader = threading.Thread(target=lambda: results.append(_listed(wired)), daemon=True)
     writer = threading.Thread(

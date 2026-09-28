@@ -48,7 +48,6 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         # BOTH barriers must be installed while the private bus is empty.
-        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as coordinator:
             install_private_cohort_schema(coordinator)
             for name in ("Alice", "Bob"):

@@ -42,9 +42,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert active.state.active and reopened.goals.goal_pause("worker") is None
 
 
-def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(
-    tmp_path, monkeypatch
-):
+def test_model_cannot_pause(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
@@ -55,10 +53,6 @@ def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(
             PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
             actor=ModelInvocable,
         )
-    from agent_comms.goals import Goal
-
-    saved = Goal.from_wire({"text": "saved objective", "id": "saved", "status": "paused"})
-    assert saved.state.source.protects_pause
 
 
 def test_failed_pause_attribution_cannot_authorize_model_resume(tmp_path, monkeypatch):

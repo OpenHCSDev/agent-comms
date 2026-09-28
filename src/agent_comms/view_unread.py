@@ -13,7 +13,7 @@ from weakref import WeakValueDictionary
 from .native_entries import NativeEntry
 from .read_ledger import ReadLedger
 from .store_files import file_revision
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 
 _INDEX_VERSION = 3
 
@@ -37,11 +37,6 @@ class TranscriptReply(ReplyIndexTable, TypedTable):
     end: int = field(metadata={"sql": Column(primary_key=True)})
     ordinal: int
     without_rowid = True
-
-
-@dataclass(frozen=True)
-class _IndexVersion(TypedRow):
-    user_version: int
 
 
 @dataclass(frozen=True)
@@ -132,7 +127,7 @@ class TranscriptReadState:
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
                 connection.execute("BEGIN IMMEDIATE")
-                (version,) = _IndexVersion.read(connection.execute("PRAGMA user_version"))
+                (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
                 if version.user_version == 0:
                     if _IndexTable.read(
                         connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -162,9 +157,7 @@ class TranscriptReadState:
         if revision is None:
             return ReplyIndex(complete=True)
         database = self._database()
-        cached = next(
-            iter(ReplyIndex.select(database, where="source=?", parameters=(source,))), ReplyIndex()
-        )
+        cached = ReplyIndex.one(database, source=source) or ReplyIndex()
         unchanged = cached.revision == revision
         if unchanged and cached.complete:
             return cached
@@ -208,8 +201,7 @@ class TranscriptReadState:
                         TranscriptReply(source, through, total).insert(database)
             complete = complete or through == revision[1]
             index = ReplyIndex(revision, through, total, source, complete)
-            database.execute(f"DELETE FROM {ReplyIndex.declared_name} WHERE source=?", (source,))
-            index.insert(database)
+            index.upsert(database)
         return index
 
     def counts(self, viewer: str, sources: Mapping[str, str]) -> TranscriptUnread:

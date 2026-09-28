@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from collections.abc import Sequence
@@ -25,7 +24,6 @@ from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal
 from .message_bus import MessageBus
 from .messages import Message
-from .owner_lifecycle import OwnerLifecycle
 from .store_files import _store_lock
 from .threads import Thread
 from .turn_lease import FinishedTurnFence
@@ -66,43 +64,31 @@ class Goals:
         include_history: bool = False,
         awaiting_keys: frozenset[str] | None = None,
     ) -> dict[str, Any]:
-        """Read current delivery notices and separately counted migration history."""
-        from .input_disposition import AcpDeliveryCursors, InputDispositions
+        """Project durable notices using current owner queue facts when available."""
+        from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            boundary = (
-                AcpDeliveryCursors(self.root / AcpDeliveryCursors.filename)
-                .read()
-                .boundary(aliases)
-                .legacy_through
-            )
             return (
                 InputDispositions(self.root / InputDispositions.filename)
                 .read()
                 .delivery_overview(
-                    aliases, boundary, include_history=include_history, awaiting_keys=awaiting_keys
+                    aliases, include_history=include_history, awaiting_keys=awaiting_keys
                 )
             )
 
     def dismiss_historical_inputs(
         self, name: str, *, awaiting_keys: frozenset[str] | None = None
     ) -> dict[str, Any]:
-        """Clear only migration notices; UNKNOWN remains unresolved and unreplayable."""
-        from .input_disposition import AcpDeliveryCursors, InputDispositions
+        """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
+        from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            boundary = (
-                AcpDeliveryCursors(self.root / AcpDeliveryCursors.filename)
-                .read()
-                .boundary(aliases)
-                .legacy_through
-            )
             return InputDispositions(self.root / InputDispositions.filename).dismiss_historical(
-                aliases, boundary, awaiting_keys=awaiting_keys
+                aliases, awaiting_keys=awaiting_keys
             )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
@@ -135,33 +121,49 @@ class Goals:
         senders = frozenset(
             alias for target in resolved for alias in self.registry.aliases_for(target.name)
         )
-        unknown = tuple(
-            InputDispositions(self.root / InputDispositions.filename).read().unknown(owners)
-        )
-        sequences = {row.sequence for row in unknown if row.sequence is not None}
+        document = InputDispositions(self.root / InputDispositions.filename).read()
+        unknown = {row.key: row for row in document.unknown(owners)}
         eligible = set()
-        if sequences:
-            selected = self.bus._history_page(
-                lambda message: (
-                    message.seq in sequences
+        snapshot = self.registry.snapshot()
+        delivery = self.bus._delivery_scope(thread.name, snapshot)
+        from .input_attempt import UnknownInput
+
+        # The canonical delivery scope excludes previous incarnations, while
+        # viewer read ACKs deliberately have no bearing on native handling.
+        with self.bus.log.locked():
+            for item in self.bus._iter_delivery_messages_unlocked():
+                message = item.message
+                if not (
+                    delivery.current(item, snapshot)
                     and message.target in owners
                     and message.sender in senders
-                ),
-                before=None,
-                after=min(sequences) - 1,
-                limit=len(sequences),
-                max_bytes=max(
-                    256 * 1024, sum(len(json.dumps(row.public()).encode()) for row in unknown)
-                ),
-            )
-            eligible = {message.seq for message in selected.messages}
+                    and not message.notice
+                    and message.membership is None
+                ):
+                    continue
+                key = InputDispositions.bus_key(message, thread)
+                row = document.rows.get(key)
+                if row is None:
+                    # Read-only inspection of a canonical input. Only an
+                    # explicit successful review persists this observation.
+                    row = UnknownInput(
+                        key,
+                        message.seq,
+                        thread.name,
+                        snapshot.admission_generations[thread.name],
+                        message.target,
+                        message.body,
+                    )
+                if row.owner in owners and row.unresolved:
+                    unknown[key] = row
+                    eligible.add(key)
         return GoalInputReview(
             goal_id,
             targets,
             owners,
             senders,
-            unknown,
-            frozenset(row.key for row in unknown if row.sequence in eligible),
+            tuple(sorted(unknown.values(), key=lambda row: row.order)),
+            frozenset(eligible),
         )
 
     def goal_history(
@@ -196,13 +198,11 @@ class Goals:
             wait = rows.get(goal.id)
             if (
                 wait is None
-                or wait.owner_created_at not in (None, owner.created_at)
+                or wait.owner_created_at != owner.created_at
                 or wait.revision > goal.revision
             ):
                 return ()
-            closed = GoalWaits.closed_wait_group(
-                canonical, wait.targets, rows, snapshot, OwnerLifecycle._process_alive
-            )
+            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
             if not closed:
                 return ()
             owner_aliases = frozenset(
@@ -279,12 +279,10 @@ class Goals:
                     wait is None
                     or wait.owner_created_at != owner.created_at
                     or wait.revision > goal.revision
-                    or len(wait.target_turn_generations) != len(wait.targets)
                     or not any(
                         snapshot.aliases.get(target.name, target.name) == canonical
                         and target.created_at == fence.identity.incarnation.created_at
                         and (generation := wait.target_turn_generations[index]) is not None
-                        and type(generation) is int
                         and 0 < generation <= fence.identity.generation
                         for index, target in enumerate(wait.targets)
                     )

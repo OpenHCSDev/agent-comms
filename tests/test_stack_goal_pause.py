@@ -182,9 +182,12 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
             if not path.exists():
                 return []
             with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
-                return db.execute(
-                    "SELECT generation,phase,progress_witness FROM attempts ORDER BY generation"
-                ).fetchall()
+                from agent_comms.goal_attempts import AttemptRecord
+
+                return [
+                    (row.reservation.generation, row.phase.declared_name, row.progress_witness)
+                    for row in AttemptRecord.select(db, order_by=("generation",))
+                ]
 
         try:
             async with app.run_test(size=(120, 40)) as pilot:

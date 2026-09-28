@@ -13,13 +13,9 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.goals import Goal
-from agent_comms.owner_compaction_process import (
-    CompactionTransportUnknownError,
-    run_authority_child,
-)
 from agent_comms.registration import Registration
-from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX inherited flock contract")
@@ -27,7 +23,13 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX inherited floc
 
 def owner_guard(root: Path):
     registry = Registration(root / "registry.json")
-    owner = Thread("owner", frozenset(), str(root), pid=os.getpid(), goal=Goal("task", "g"))
+    owner = Thread(
+        "owner",
+        frozenset(),
+        str(root),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        goal=Goal("task", "g"),
+    )
     registry.register(owner)
     owner, owner_generation = registry.live_owner_with_generation("owner")
     owner, owner_generation = registry.lease_live_turn_with_generation(
@@ -39,7 +41,6 @@ def owner_guard(root: Path):
         "turn",
         expected_goal_id="g",
         expected_goal_revision=owner.goal.revision,
-        correction_revision=0,
         session_file=str(root / "native.jsonl"),
         session_leaf="leaf",
         session_revision="revision",
@@ -72,6 +73,7 @@ def test_registry_writers_wait_through_mutation(tmp_path, mutation):
 import fcntl, sys
 from dataclasses import replace
 from pathlib import Path
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 root = Path(sys.argv[1])
@@ -143,68 +145,6 @@ def test_child_retains_authority_after_scope_exception(tmp_path):
             child.wait()
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
-def test_bounded_child_inherits_authority_and_releases(tmp_path):
-    with owner_guard(tmp_path) as (_, fd):
-        result = run_authority_child(
-            [
-                sys.executable,
-                "-c",
-                "import os,sys; os.fstat(int(sys.argv[1])); print('done')",
-                str(fd),
-            ],
-            b"request",
-            authority_fd=fd,
-            timeout=5,
-        )
-        assert result.returncode == 0
-        assert result.stdout == b"done\n"
-        assert_locked(tmp_path, True)
-    assert_locked(tmp_path, False)
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
-def test_timeout_kills_child_before_authority_release(tmp_path):
-    with owner_guard(tmp_path) as (_, fd):
-        with pytest.raises(CompactionTransportUnknownError, match="never replay"):
-            run_authority_child(
-                [sys.executable, "-c", "import signal; signal.pause()"],
-                b"request",
-                authority_fd=fd,
-                timeout=0.1,
-            )
-        assert_locked(tmp_path, True)
-    assert_locked(tmp_path, False)
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
-def test_cancellation_reaps_child_before_unwind(tmp_path, monkeypatch):
-    children = []
-    real_popen = subprocess.Popen
-
-    def popen(*args, **kwargs):
-        child = real_popen(*args, **kwargs)
-        children.append(child)
-        return child
-
-    def cancelled(*args, **kwargs):
-        raise KeyboardInterrupt()
-
-    monkeypatch.setattr(subprocess, "Popen", popen)
-    monkeypatch.setattr(real_popen, "communicate", cancelled)
-    with pytest.raises(KeyboardInterrupt), owner_guard(tmp_path) as (_, fd):
-        run_authority_child(
-            [sys.executable, "-c", "import signal; signal.pause()"],
-            b"request",
-            authority_fd=fd,
-            timeout=5,
-        )
-    assert len(children) == 2  # Gated native child plus independent watchdog.
-    assert children[0].returncode == -signal.SIGKILL
-    assert children[1].returncode is not None
-    assert_locked(tmp_path, False)
-
-
 def test_parent_sigkill_cannot_release_child_authority(tmp_path):
     read_fd, write_fd = os.pipe()
     script = """
@@ -254,96 +194,5 @@ with _store_lock(root / 'registry.json') as fd:
         if child_pid is not None:
             with suppress(ProcessLookupError):
                 os.kill(child_pid, signal.SIGKILL)
-        parent.stdout.close()
-        parent.stderr.close()
-
-
-@pytest.mark.parametrize("deadline", [0, -1, 31, float("nan"), float("inf")])
-def test_bad_deadline_refuses_before_spawn(tmp_path, deadline):
-    with _store_lock(tmp_path / "registry.json") as fd, pytest.raises(ValueError):
-        run_authority_child(["must-not-execute"], b"", authority_fd=fd, timeout=deadline)
-
-
-def test_unsupported_deadline_platform_refuses_before_spawn(tmp_path, monkeypatch):
-    monkeypatch.setattr(sys, "platform", "darwin")
-    with _store_lock(tmp_path / "registry.json") as fd, pytest.raises(NotImplementedError):
-        run_authority_child(["must-not-execute"], b"", authority_fd=fd, timeout=1)
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
-def test_unarmed_watchdog_cannot_release_native_exec_gate(tmp_path, monkeypatch):
-    real_popen = subprocess.Popen
-    marker = tmp_path / "must-not-exist"
-
-    def broken_watchdog(command, **kwargs):
-        if command[1].endswith("compaction_child_watchdog.py"):
-            command = [sys.executable, "-c", "print('not-armed')"]
-        return real_popen(command, **kwargs)
-
-    monkeypatch.setattr(subprocess, "Popen", broken_watchdog)
-    with owner_guard(tmp_path) as (_, fd), pytest.raises(CompactionTransportUnknownError):
-        run_authority_child(
-            [sys.executable, "-c", "import sys; open(sys.argv[1],'w').write('bad')", str(marker)],
-            b"request",
-            authority_fd=fd,
-            timeout=5,
-        )
-    assert not marker.exists()
-    assert_locked(tmp_path, False)
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux pidfd watchdog")
-def test_parent_sigkill_during_watchdog_setup_never_execs_native(tmp_path):
-    script = """
-import os,signal,sys
-from pathlib import Path
-from agent_comms.store_files import _store_lock
-import agent_comms.owner_compaction_process as transport
-root = Path(sys.argv[1])
-open_pidfd = transport.open_pidfd
-def pause_before_watchdog(pid):
-    if pid != os.getpid():
-        print('gated',flush=True)
-        signal.pause()
-    return open_pidfd(pid)
-transport.open_pidfd = pause_before_watchdog
-with _store_lock(root / 'registry.json') as fd:
-    transport.run_authority_child(
-        [sys.executable,'-c',"import sys; open(sys.argv[1],'w').write('bad')",
-         str(root / 'must-not-exist')],b'request',authority_fd=fd,timeout=5)
-"""
-    parent = subprocess.Popen(
-        [sys.executable, "-c", script, str(tmp_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=0,
-    )
-    try:
-        assert line(parent.stdout) == b"gated\n"
-        parent.kill()
-        assert parent.wait(timeout=5) == -signal.SIGKILL
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                """
-from pathlib import Path
-import sys
-from agent_comms.store_files import _store_lock
-with _store_lock(Path(sys.argv[1]) / 'registry.json'):
-    print('released')
-""",
-                str(tmp_path),
-            ],
-            capture_output=True,
-            timeout=5,
-            check=True,
-        )
-        assert result.stdout == b"released\n"
-        assert not (tmp_path / "must-not-exist").exists()
-    finally:
-        if parent.poll() is None:
-            parent.kill()
-        parent.wait()
         parent.stdout.close()
         parent.stderr.close()

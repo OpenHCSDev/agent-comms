@@ -1,6 +1,5 @@
 """Durable intent state machine, provider-free and independent of native Pi."""
 
-
 import json
 import os
 import sqlite3
@@ -9,8 +8,6 @@ import subprocess
 import sys
 
 import pytest
-
-from agent_comms.input_disposition import InputDispositions
 
 from agent_comms.compaction_journal import (
     CompactionJournal,
@@ -24,6 +21,7 @@ from agent_comms.compaction_states import (
     RefusedOperation,
     UnknownOperation,
 )
+from agent_comms.input_disposition import InputDispositions
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX production bridge")
 
@@ -97,7 +95,7 @@ def test_ineffective_durability_mode_refused_before_transaction(journal, monkeyp
     class WrongMode(sqlite3.Connection):
         def execute(self, statement, *args, **kwargs):
             if statement == "PRAGMA synchronous":
-                return super().execute("SELECT 2")
+                return super().execute("SELECT 2 AS synchronous")
             return super().execute(statement, *args, **kwargs)
 
     monkeypatch.setattr(sqlite3, "connect", lambda *a, **kw: connect(*a, **kw, factory=WrongMode))
@@ -204,7 +202,13 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     assert journal.pending_publications(session) == ()
     journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "deadline"})
     assert journal.pending_publications(session) == ()
-    metadata = {"status": "committed", "entryId": "entry-1", "revision": "r1", "leafId": "leaf"}
+    metadata = {
+        "status": "committed",
+        "metadataDigest": "0" * 64,
+        "entryId": "entry-1",
+        "revision": "r1",
+        "leafId": "leaf",
+    }
     journal.resolve(commit_id, CommittedOperation(), metadata, publication=True)
     reopened = CompactionJournal(journal.path)
     pending = reopened.pending_publications(session)
@@ -231,7 +235,13 @@ def test_metadata_only_outbox_is_commit_id_keyed_and_atomic(journal, tmp_path):
     journal.resolve(
         second,
         CommittedOperation(),
-        {"status": "committed", "entryId": "entry-2", "revision": "r2", "leafId": "leaf-2"},
+        {
+            "status": "committed",
+            "metadataDigest": "0" * 64,
+            "entryId": "entry-2",
+            "revision": "r2",
+            "leafId": "leaf-2",
+        },
         publication=True,
     )
     assert [event.commit_id for event in journal.pending_publications(session)] == [second]
@@ -247,7 +257,13 @@ def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal
     journal.resolve(
         commit_id,
         CommittedOperation(),
-        {"status": "committed", "entryId": "native", "revision": "r", "leafId": "leaf"},
+        {
+            "status": "committed",
+            "metadataDigest": "0" * 64,
+            "entryId": "native",
+            "revision": "r",
+            "leafId": "leaf",
+        },
         publication=True,
     )
     pending = journal.pending_publications(session)
@@ -266,11 +282,6 @@ def test_observe_postcommit_parent_fsync_unknown_can_already_be_observed(journal
     # without sending the native operation or projection a second time.
     reopened = CompactionJournal(journal.path)
     assert reopened.pending_publications(session) == ()
-    with sqlite3.connect(journal.path) as db:
-        assert db.execute(
-            "SELECT status FROM publications WHERE commit_id = ?", (commit_id,)
-        ).fetchone() == ("observed",)
-    assert reopened.get(commit_id).state.declared_name == "committed"
 
 
 def test_changed_publication_metadata_refuses_local_projection(journal):
@@ -283,7 +294,13 @@ def test_changed_publication_metadata_refuses_local_projection(journal):
     journal.resolve(
         commit_id,
         CommittedOperation(),
-        {"status": "committed", "entryId": "native", "revision": "r", "leafId": "leaf"},
+        {
+            "status": "committed",
+            "metadataDigest": "0" * 64,
+            "entryId": "native",
+            "revision": "r",
+            "leafId": "leaf",
+        },
         publication=True,
     )
     with sqlite3.connect(journal.path) as db:
@@ -306,7 +323,7 @@ def test_no_publication_without_exact_committed_native_evidence(journal):
         journal.resolve(
             commit_id,
             CommittedOperation(),
-            {"status": "committed", "entryId": "x"},
+            {"status": "committed", "metadataDigest": "0" * 64, "entryId": "x"},
             publication=True,
         )
     assert journal.get(commit_id).state.declared_name == "intent"

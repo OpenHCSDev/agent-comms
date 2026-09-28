@@ -1,7 +1,7 @@
 """Ordinary Comms sends on explicitly marked private roots execute selected N/K.
 
-Fake model responses exercise pipeline state only; no native/provider acceptance
-is inferred. Public roots remain legacy and no cutover is performed by send.
+Model fixtures exercise pipeline state; actual native acceptance is checked
+separately. Every ordinary send uses the canonical publication protocol.
 """
 
 from __future__ import annotations
@@ -12,14 +12,16 @@ import os
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.assignment_states import CompletedAssignment, IgnoredAssignment
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_store import MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.messages import Message, MessageType
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
@@ -43,9 +45,20 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 ):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     alpha = Thread(
-        "alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
+        "alpha",
+        frozenset({"team"}),
+        str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        model="openai-codex/gpt-6-sol",
     )
     comms.threads.register(alpha)
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -101,7 +114,8 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
         assert len(rows) == expected_calls
         assert all(row.expected_prompt_equality_established for row in rows)
         assert (
-            db.execute("SELECT COUNT(*) FROM native_runtime_inputs").fetchone()[0] == expected_calls
+            db.execute(f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}").fetchone()[0]
+            == expected_calls
         )
     # A no-wake observer cannot be turned into a selected run by an inbox ACK.
     comms.messaging.acknowledge_through("beta", message.seq)
@@ -110,29 +124,72 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     assert PRIVATE_WIRE_FIELD not in message.to_wire()
 
 
-def test_unmarked_ordinary_send_does_not_install_or_infer_cohort(tmp_path):
+def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
-    message = comms.messaging.send_message("sender", "beta", "legacy ordinary send")
-    meta = json.loads((comms.root / "bus_meta.json").read_text())
-    assert "writer_protocol_version" not in meta
-    assert not (comms.root / "coordination.sqlite3").exists()
-    assert comms.bus.log.message_by_id(message.message_id) == message
-
-
-def test_legacy_writer_and_explicitly_disabled_private_writer_still_refuse(tmp_path):
-    comms = Comms(tmp_path / "wire")
-    for name in ("sender", "beta"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    with pytest.raises(RelationViolationError, match="Legacy append"):
-        comms.bus.publisher.publish(
-            Message(sender="sender", target="beta", body="old writer", type=MessageType.INFO)
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
         )
+    message = comms.messaging.send_message("sender", "beta", "ordinary send")
+    metadata = comms.bus.log.read_metadata_unlocked(required=True)
+    assert metadata.private and metadata.claims
+    initial = comms.bus.log.read_initial_cohort(metadata.root_id, message.seq)
+    assert initial.message == message
+    assert initial.audience.canonical_members == frozenset({"beta"})
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    reply = comms.messaging.send_message("sender", viewer, "human notification")
+    human = comms.bus.log.read_initial_cohort(metadata.root_id, reply.seq)
+    assert human.message.notice
+    assert human.audience.recipients == ()
+    assert human.decisions == ()
+    assert comms.views.dm_display_page("sender", worktree=str(tmp_path)).messages[-1] == reply
+
+
+def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
+    comms = Comms(tmp_path / "wire")
+    for name in ("sender", "beta"):
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+    stored = Message(
+        sender="sender", target="beta", body="preserved history", type=MessageType.INFO, seq=1
+    )
+    comms.bus.log.path.write_text(json.dumps(stored.to_wire()) + "\n")
+    before = comms.bus.log.path.read_bytes()
+    with pytest.raises(
+        RelationViolationError, match="Bus protocol marker is missing or redirected"
+    ):
+        comms.messaging.send_message("sender", "beta", "must not append")
+    assert comms.bus.log.path.read_bytes() == before
+    assert not comms.bus.log.metadata_path.exists()
+
+
+def test_explicitly_disabled_private_writer_refuses(tmp_path):
+    comms = Comms(tmp_path / "wire")
+    for name in ("sender", "beta"):
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    before = comms.bus.log.path.read_bytes()
     disabled = Comms(comms.root, private_initial_writes=False)
     with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):
         disabled.messaging.send_message("sender", "beta", "disabled writer")
     meta = json.loads((comms.root / "bus_meta.json").read_text())
     assert meta["wire_root_id"] == root_id and meta["last_seq"] == 0
-    assert not (comms.root / "bus.jsonl").exists()
+    assert comms.bus.log.path.read_bytes() == before

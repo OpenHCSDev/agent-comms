@@ -27,7 +27,7 @@ const stream=async (_model, context) => ({result: async()=>{
   const index=requestCount++;
   assert.ok(Buffer.byteLength(prompt,'utf8') <= (128000-16384)*.75);
   assert.ok(prompt.includes('PRESERVE_CUSTOM_INSTRUCTION'));
-  if(prompt.includes('Combine these chronological segment summaries')){
+  if(phaseStarts.at(-1)?.summaryPhase === 'synthesis'){
     assert.equal(active,0,'synthesis waits for all map responses');
     assert.equal(phaseStarts.at(-1)?.summaryPhase,'synthesis','phase starts before provider work');
     for(let i=0;i<mapped.length;i++) assert.ok(prompt.includes(`MAP_${i}`));
@@ -86,14 +86,14 @@ const abortedBeforeStart = new AbortController();abortedBeforeStart.abort(new Er
 let afterStopCalls=0;
 await assert.rejects(()=>run(async()=>{afterStopCalls++;throw new Error('must not run');},{},abortedBeforeStart.signal),/OWNER_STOP/);
 assert.equal(afterStopCalls,0);
-let hierarchyCalls=0,synthesisCalls=0;
+let hierarchyCalls=0,synthesisCalls=0,hierarchyPhase='map';
 await run(async(_model,context)=>({result:async()=>{
   hierarchyCalls++;
   const prompt=context.messages[0].content[0].text;
-  const synth=prompt.includes('Combine these chronological segment summaries');
+  const synth=hierarchyPhase==='synthesis';
   if(synth)synthesisCalls++;
   return {stopReason:'stop',content:[{type:'text',text:synth?'bounded intermediate summary':'preserve reference '.repeat(2000)}],usage};
-}}));
+}}),{onSummaryStart:progress=>{hierarchyPhase=progress.summaryPhase;}});
 assert.ok(synthesisCalls>1,'large map outputs require bounded hierarchy, never truncation');
 console.log(`policy/hierarchy PASS serialPeak=${serialPeak} synthesisRequests=${synthesisCalls} total=${hierarchyCalls}`);
 // Three successive compactions prove adapter plumbing preserves the supplied
@@ -117,10 +117,10 @@ for(let round=1;round<=3;round++){
 console.log('three-round source/summary plumbing PASS');
 // Reproduce a saved compaction whose entire retained context is one split
 // turn: history messages are empty, but its prior summary is still required.
-const { SessionManager } = await import(pathToFileURL(resolve(path,'../../session-manager.js')).href);
+const { SessionManager, sessionEntryToContextMessages } = await import(pathToFileURL(resolve(path,'../../session-manager.js')).href);
 const { prepareCompaction, compact } = await import(pathToFileURL(path).href);
 const { mkdtempSync, rmSync } = await import('node:fs');
-const repeatedRoot=mkdtempSync('/var/tmp/ac-parallel-repeat-');
+const repeatedRoot=mkdtempSync(resolve(process.env.TMPDIR ?? '/var/tmp','ac-parallel-repeat-'));
 try {
   const manager=SessionManager.create(repeatedRoot,resolve(repeatedRoot,'sessions'));
   manager.appendMessage({role:'user',content:'earlier request',timestamp:1});
@@ -130,9 +130,9 @@ try {
   const previous='PRIOR_GOAL_984 EXACT_PATH_src/domain.py UNRESOLVED_FAILURE_431';
   manager.appendCompaction(previous,kept,200000);
   manager.appendMessage({role:'assistant',content:[{type:'text',text:`retained ${'r'.repeat(120000)}`}],timestamp:5,provider:'openrouter',model:'fake',api:'openai-completions',stopReason:'stop',usage});
-  const preparation=prepareCompaction(manager.getBranch(),{reserveTokens:16384,keepRecentTokens:20000});
+  const preparation=prepareCompaction(manager.entryStore,{reserveTokens:16384,keepRecentTokens:20000});
   assert.equal(preparation.isSplitTurn,true);
-  assert.equal(preparation.messagesToSummarize.length,0);
+  assert.equal(preparation.messagesToSummarize.isEmpty(),true);
   assert.equal(preparation.previousSummary,previous);
   const seen=[];
   const repeated=await compact(preparation,model,'local-only',{},'CUSTOM_KEEP_REQUEST_727',undefined,undefined,
@@ -144,7 +144,7 @@ try {
   assert.ok(seen.length>1);
   assert.ok(repeated.summary.includes(previous),'prior summary must survive byte-for-byte when there is no new history to summarize');
   manager.appendCompaction(repeated.summary,repeated.firstKeptEntryId,repeated.tokensBefore,repeated.details,false,repeated.usage);
-  assert.ok(JSON.stringify(manager.buildSessionContext()).includes('PRIOR_GOAL_984'));
+  assert.ok(JSON.stringify(manager.buildContextEntries().toArray()).includes('PRIOR_GOAL_984'));
   console.log('saved repeated split-turn prior-summary/custom-instruction PASS');
 } finally {rmSync(repeatedRoot,{recursive:true,force:true});}
 // Valid individually configurable maxima must still fit Pi's output reserve.

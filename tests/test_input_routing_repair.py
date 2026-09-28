@@ -1,7 +1,6 @@
 """Historical attribution requires owner-bound native IDs plus committed envelopes."""
 
 import json
-import sqlite3
 
 from agent_comms.cli import main
 from agent_comms.comms import wire
@@ -65,28 +64,6 @@ def test_preview_is_read_only_and_apply_is_idempotent_without_ack(tmp_path):
     assert dispositions.path.read_bytes() == before
     assert dispositions.read().rows[f"bus:{message.seq}"].declared_name == "unknown"
     assert comms.bus.pending_count("worker") == pending
-
-
-def test_old_display_schema_survives_and_dry_run_does_not_upgrade_it(tmp_path):
-    comms, message, _, source, _ = fixture(tmp_path)
-    comms.transcripts.routes.record_input_display("a" * 32, source)
-    with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
-        connection.execute("DROP TABLE input_routing")
-    comms = wire(comms.root)
-    assert comms.transcripts.repair_input_routing()["eligible"] == 1
-    with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
-        assert (
-            connection.execute(
-                "SELECT name FROM sqlite_master WHERE name='input_routing'"
-            ).fetchone()
-            is None
-        )
-    assert comms.transcripts.repair_input_routing(dry_run=False)["repaired"] == 1
-    # A running old writer's exact two-value insert remains valid.
-    with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
-        connection.execute("INSERT INTO input_display VALUES (?, ?)", ("b" * 32, "old writer"))
-    event = comms.transcripts.thread_transcript_page("worker").events[0]
-    assert event.routing.requests[0].message_id == message.message_id
 
 
 def test_ambiguous_native_id_or_mismatched_receipt_is_not_repaired(tmp_path):

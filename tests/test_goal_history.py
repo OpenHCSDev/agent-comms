@@ -78,7 +78,9 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
 def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     comms = _wire(tmp_path)
     current = comms.goals.update_goal("worker", SetGoalAction(text="Existing goal"))
-    (comms.root / "goal_history.sqlite3").unlink()  # model a pre-history registry
+    (
+        comms.root / "goal_history.sqlite3"
+    ).unlink()  # model missing history beside an existing current goal
 
     reopened = Comms(comms.root)
     baseline = reopened.goals.goal_history("worker")
@@ -151,12 +153,12 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
     assert entries[-1].before == current and entries[-1].after == paused
 
 
-def test_old_registry_writer_goal_change_is_labeled_observed_gap(tmp_path):
+def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
     comms = _wire(tmp_path)
     current = comms.goals.update_goal("worker", SetGoalAction(text="Known version"))
     registry_path = comms.registry.store.path
     raw = json.loads(registry_path.read_text())
-    raw["threads"]["worker"]["goal"]["text"] = "Old writer changed this"
+    raw["threads"]["worker"]["goal"]["text"] = "Unjournaled change"
     raw["threads"]["worker"]["goal"]["revision"] = current.revision + 2
     registry_path.write_text(json.dumps(raw))
 
@@ -164,5 +166,5 @@ def test_old_registry_writer_goal_change_is_labeled_observed_gap(tmp_path):
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition", "observed_gap"]
     assert entries[-1].before == current
-    assert entries[-1].after.text == "Old writer changed this"
+    assert entries[-1].after.text == "Unjournaled change"
     assert len(Comms(comms.root).goals.goal_history("worker")) == 2

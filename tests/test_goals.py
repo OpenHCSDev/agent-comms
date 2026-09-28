@@ -3,6 +3,7 @@
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -15,6 +16,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
+from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
@@ -37,7 +39,9 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         tool.invoke(comms, {"goal_id": goal.id, "status": "active", "progress": "late update"})
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="New objective"))
     with pytest.raises(ValueError, match="replaced"):
-        comms.goals.update_goal("worker", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+        comms.goals.update_goal(
+            "worker", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+        )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())
     assert wire(tmp_path).registry.require("worker").goal is None
@@ -61,12 +65,14 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
         comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}
     )
     assert result["goal"]["id"] == goal.id
-    assert result["goal"]["status"] == "active"
+    assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
     assert comms.registry.require("worker").goal.progress == "Explicitly resumed by the user"
 
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale duplicate"})
-    comms.goals.update_goal("worker", BlockedGoalAction(block_reason="Need owner input before retry."))
+    comms.goals.update_goal(
+        "worker", BlockedGoalAction(block_reason="Need owner input before retry.")
+    )
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale blocked update"})
     comms.goals.update_goal("worker", SetGoalAction(text="Replacement goal"))
@@ -79,7 +85,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     [
         (ActiveGoal(), PausedGoalAction, "Pause"),
         (PausedGoal(), ActiveGoalAction, "Resume"),
-        (BlockedGoal(), RetryGoalAction, "Retry"),
+        (BlockedGoal("Explicit fixture refusal"), RetryGoalAction, "Retry"),
         (CompletedGoal(), None, "Completed"),
     ],
 )

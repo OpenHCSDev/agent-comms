@@ -20,10 +20,11 @@ from agent_comms.runtime_requests import (
     RuntimeRequest,
     SubscribeRuntimeRequest,
 )
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
-def test_all_cli_help_and_flags_match_before_refactor(monkeypatch):
+def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
     monkeypatch.setenv("NO_COLOR", "1")
     monkeypatch.delenv("AGENT_COMMS_AGENT_ARGS", raising=False)
@@ -146,7 +147,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = SimpleNamespace(_comms=comms, sessions=SimpleNamespace(bindings={"session": "owner"}))
     server = RuntimeServer(agent)
     await server.start()

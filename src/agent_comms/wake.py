@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import is_channel_target
 from .coordination import MessageAudience
 from .messages import Message
 from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
@@ -64,11 +64,7 @@ class WakeDecision:
 
 
 def _require_stored(message: Message) -> None:
-    if (
-        not isinstance(message, Message)
-        or message.seq <= 0
-        or BuiltinChannel.is_alias(message.target)
-    ):
+    if not isinstance(message, Message) or message.seq <= 0:
         raise ValueError("Wake and response routes require a stored canonical Message.")
 
 
@@ -98,7 +94,7 @@ def _validated_context(
     if candidate.wire_envelope_digest != frozen_audience.wire_envelope_digest:
         raise ValueError("message does not match the frozen audience envelope.")
     channel = is_channel_target(message.target)
-    if not channel:
+    if not channel and not (message.notice and not frozen_audience.recipients):
         if len(frozen_audience.recipients) != 1:
             raise ValueError("a direct message must have exactly one frozen eligible recipient.")
         if frozen_audience.recipients[0].canonical_thread != message.target:

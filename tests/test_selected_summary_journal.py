@@ -1,6 +1,5 @@
 """Provider-free durable pre-send selected-summary operation IDs and input gate."""
 
-
 import json
 import os
 import sqlite3
@@ -11,15 +10,20 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.input_disposition import InputDispositions
-
 from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionJournalUnknownError,
+    SelectedSummaryAttempt,
 )
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.compaction_states import AbortedNoWriteOperation, CommittedOperation
+from agent_comms.compaction_states import (
+    AbortedNoWriteOperation,
+    CommittedOperation,
+    DeclinedPrestartSummary,
+    ReservedSummary,
+)
+from agent_comms.input_disposition import InputDispositions
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
@@ -43,7 +47,7 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     assert operation_id == "a" * 32
     reopened = CompactionJournal(journal.path)
     attempt = reopened.selected_summary(operation_id)
-    assert attempt.state.declared_name == "reserved" and attempt.state.commit_id is None
+    assert attempt.state == ReservedSummary()
     assert json.loads(attempt.source_json) == source
     assert reopened.unresolved_selected_summary(session) == (attempt,)
     assert not native_input_admitted(journal.path.parent, session)
@@ -71,10 +75,11 @@ def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved)
         elif status == "declined-prestart":
             # An apparent terminal row is still not ordinary send authority.
             with journal._transaction() as db:
-                db.execute(
-                    "UPDATE selected_summary_attempts SET status = 'declined-prestart', decline_reason = 'split_turn' "
-                    "WHERE operation_id = ?",
-                    (operation_id,),
+                SelectedSummaryAttempt.update(
+                    db,
+                    where="operation_id=?",
+                    parameters=(operation_id,),
+                    state=DeclinedPrestartSummary("split_turn"),
                 )
         with (
             pytest.raises(CompactionJournalError, match="blocks native input"),
@@ -267,46 +272,6 @@ def test_link_requires_exact_committed_native_intent_binding(reserved):
         journal.mark_selected_summary_unknown(operation_id)
 
 
-def test_predecessor_multiple_terminal_rows_migrate_without_wire_wide_denial(reserved):
-    journal, session, source = reserved
-    first = journal.reserve_selected_summary(session, source, operation_id="a" * 32)
-    journal.decline_selected_summary_prestart(first, "split_turn")
-    # Exact 47c8 permitted a second terminal after the first. Reconstruct its
-    # valid partial-index schema/rows; never delete historical operation IDs.
-    with sqlite3.connect(journal.path) as db:
-        db.execute("DROP INDEX IF EXISTS selected_summary_session")
-        db.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS unresolved_selected_summary_session "
-            "ON selected_summary_attempts(session_file) "
-            "WHERE status IN ('reserved','unknown')"
-        )
-        db.execute(
-            "INSERT INTO selected_summary_attempts VALUES (?, ?, ?, 'declined-prestart', NULL, ?)",
-            ("b" * 32, str(session), json.dumps(source), "unsupported"),
-        )
-    migrated = CompactionJournal(journal.path)
-    assert {row.operation_id for row in migrated.blocking_selected_summary(session)} == {
-        "a" * 32,
-        "b" * 32,
-    }
-    assert not native_input_admitted(journal.path.parent, session)
-    other = journal.path.parent / "other-session.jsonl"
-    other.write_text("{}\n")
-    assert native_input_admitted(journal.path.parent, str(other))
-    with pytest.raises(CompactionJournalError, match="never replay"):
-        migrated.reserve_selected_summary(session, source)
-    with pytest.raises(CompactionJournalError, match="unrelated native commit"):
-        migrated.begin(
-            session,
-            {"selectedSummaryOperationId": first},
-            inputs=InputDispositions(migrated.path.parent / InputDispositions.filename).read(),
-        )
-    assert {row.operation_id for row in migrated.blocking_selected_summary(session)} == {
-        "a" * 32,
-        "b" * 32,
-    }
-
-
 def test_selected_reservation_two_process_race_has_exactly_one_winner(reserved):
     journal, session, source = reserved
     script = """
@@ -388,7 +353,7 @@ def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(re
     assert not native_input_admitted(journal.path.parent, session)
     journal.resolve(commit_id, AbortedNoWriteOperation(), {"status": "aborted-no-write"})
     journal.mark_selected_summary_unknown(operation_id)
-    with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+    with pytest.raises(CompactionJournalError, match="not a commit reservation"):
         journal.begin(
             session,
             {"selectedSummaryOperationId": operation_id},
@@ -512,8 +477,8 @@ def test_reservation_survives_crash_and_never_repeats_id(tmp_path):
     session.write_text("{}\n")
     source = {
         "source": {"witnessRevision": "r"},
-        "selected": {"provider": "fixture"},
-        "settings": {"reserveTokens": 100},
+        "selected": {"provider": "fixture", "modelId": "fixture", "contextWindow": 1000},
+        "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
     }
     path = tmp_path / "compaction-commits.sqlite3"
     result = subprocess.run(
@@ -542,7 +507,7 @@ os._exit(17)
 
 def test_invalid_source_or_id_refuses_before_reservation(reserved):
     journal, session, source = reserved
-    with pytest.raises(ValueError, match="source|Source"):
+    with pytest.raises((ValueError, TypeError)):
         journal.reserve_selected_summary(session, {})
     with pytest.raises(ValueError, match="operation ID"):
         journal.reserve_selected_summary(session, source, operation_id="not-hex")

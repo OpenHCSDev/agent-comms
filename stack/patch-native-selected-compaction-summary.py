@@ -9,7 +9,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-BASE_SHA = "4c42e792577d25d9a97a13c9b7d82959d2f90aa05938409f54f0a220326d453e"
+BASE_SHA = "172029a0e81facc0d609257a89bced07f3d11aa31b4ac1547aaef23d9397172c"
 
 
 def replace_once(source: str, old: str, new: str) -> str:

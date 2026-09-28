@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.errors import RelationViolationError
-from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions, DeliveryCursor
+from agent_comms.input_disposition import InputDispositions
+
 
 def test_batch_sources_are_one_snapshot_in_requested_order(tmp_path, monkeypatch):
     store = InputDispositions(tmp_path / InputDispositions.filename)
@@ -80,34 +80,22 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     )
 
 
-def test_cursor_is_durable_and_independent_of_ui_read_marker(tmp_path: Path) -> None:
-    cursor = AcpDeliveryCursors(tmp_path / AcpDeliveryCursors.filename)
-    assert cursor.initialize(frozenset({"kid"}), "kid", high_water=4, fresh=True) == DeliveryCursor(
-        4, 0
-    )
-    cursor.advance(frozenset({"kid"}), 7)
-    assert AcpDeliveryCursors(tmp_path / AcpDeliveryCursors.filename).initialize(
-        frozenset({"kid", "old-kid"}), "kid", high_water=9, fresh=False
-    ) == DeliveryCursor(7, 0)
-
-
-def test_legacy_cursor_does_not_authorize_old_inputs(tmp_path: Path) -> None:
-    cursor = AcpDeliveryCursors(tmp_path / AcpDeliveryCursors.filename)
-    assert cursor.initialize(
-        frozenset({"kid"}), "kid", high_water=9, fresh=False
-    ) == DeliveryCursor(0, 9)
-    with pytest.raises(ValueError):
-        cursor.advance(frozenset({"kid"}), -1)
-
-
 def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path: Path) -> None:
     import os
 
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import wire
     from agent_comms.threads import Thread
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread(name="kid", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            name="kid",
+            tags=frozenset(),
+            worktree=str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     store = InputDispositions(comms.root / InputDispositions.filename)
     store.record("bus:7", seq=7, owner="kid", admission=1, target="#review", text="exact source")
     store.record("bus:8", seq=8, owner="peer", admission=1, target="#review", text="other owner")

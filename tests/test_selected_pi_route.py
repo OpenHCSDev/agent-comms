@@ -2,11 +2,14 @@
 
 import asyncio
 import json
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.selected_pi_route import SelectedPiProbeUnknownError, probe_idle_selected_pi
 
@@ -58,7 +61,10 @@ def request_case(tmp_path, response):
     persistent.session_file = str(session)
     persistent.session_id = "session-id"
     persistent.revision = _session_revision(str(session))
-    persistent.launch_key = ("pi-native",)
+    persistent.launch_key = (
+        NativePiRpcLaunch(("node",), tmp_path, {}, tmp_path, session, tmp_path),
+        (0, 0),
+    )
     witness = FieldCodec.decode(
         NativeWitness,
         {
@@ -94,7 +100,12 @@ def ready(request):
 async def probe(case, **kwargs):
     persistent, _, _, witness, selected, settings, _ = case
     return await probe_idle_selected_pi(
-        persistent, witness, selected, settings, expected_launcher="pi-native", **kwargs
+        persistent,
+        witness,
+        selected,
+        settings,
+        expected_package=Path(witness.session_file).parent,
+        **kwargs,
     )
 
 
@@ -199,9 +210,14 @@ async def test_cancelled_sent_probe_poisoned_without_retry(tmp_path):
     assert case[2].calls == 1
 
 
-async def test_stale_child_refuses_before_rpc(tmp_path):
+@pytest.mark.parametrize("changed", ["revision", "package"])
+async def test_stale_child_refuses_before_rpc(tmp_path, changed):
     case = request_case(tmp_path, ready)
-    case[0].revision = None
+    if changed == "revision":
+        case[0].revision = None
+    else:
+        launch, auth = case[0].launch_key
+        case[0].launch_key = (replace(launch, package=tmp_path / "changed-package"), auth)
     with pytest.raises(SelectedPiProbeUnknownError, match="stale"):
         await probe(case)
     assert case[1].stdin.request is None
@@ -237,7 +253,7 @@ async def settings_probe(case):
     return await read_selected_compaction_decision(
         persistent,
         session_file=witness.session_file,
-        expected_launcher="pi-native",
+        expected_package=Path(witness.session_file).parent,
         provider=selected["provider"],
         model_id=selected["modelId"],
         context_tokens=950,

@@ -12,7 +12,7 @@ if (!packageDir ||
     !['pending', 'external-append', 'hold-lock', 'append-burst', 'operator-recover']
       .includes(mode) || !target)
   throw new Error('Provide PI_NATIVE_PACKAGE_DIR and pending <root> or a mode with <session-file>');
-const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);
+const { SessionManager, sessionEntryToContextMessages } = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);
 const message = text => ({ role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() });
 
 if (mode === 'hold-lock') {
@@ -73,7 +73,7 @@ if (mode === 'hold-lock') {
     timestamp: Date.now(),
   });
   const capturedLeaf = manager.getLeafId();
-  const capturedBranch = manager.getBranch();
+  const capturedBranch = manager.entryStore.branch(manager.getLeafId()).toArray();
   const sessionFile = manager.getSessionFile();
   if (!sessionFile) throw new Error('A persisted native session file is required');
   const witness = manager.captureCompactionWitness?.(firstKeptEntryId);
@@ -120,5 +120,5 @@ if (mode === 'hold-lock') {
   }
   console.log(JSON.stringify({ phase: 'committed', capturedLeaf, leafBeforeCommit,
     leafAfterCommit: manager.getLeafId(), commitId, commitError, subsequentError,
-    sessionFile, nativeBranchTail: manager.getBranch().at(-1)?.type }));
+    sessionFile, nativeBranchTail: manager.getLeafEntry()?.type }));
 }

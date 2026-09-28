@@ -1,58 +1,41 @@
 """Bounded native file traversal; decode once per visited record, no extra index."""
 
 from __future__ import annotations
-from collections.abc import Generator, Iterator
+
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
+
 from .native_entries import NativeEntry
 
 
-def _reverse_lines(path: Path, *, max_bytes: int | None = None) -> Iterator[bytes]:
-    """Read JSONL newest-first without allocating the file or oversized lines."""
-    try:
-        with path.open("rb") as stream:
-            position = stream.seek(0, 2)
-            floor = max(0, position - max_bytes) if max_bytes is not None else 0
-            pending = b""
-            oversized = False
-            while position > floor:
-                count = min(65536, position - floor)
-                position -= count
-                stream.seek(position)
-                parts = (stream.read(count) + pending).split(b"\n")
-                pending = parts.pop(0)
-                for line in reversed(parts):
-                    if oversized:
-                        oversized = False
-                        continue
-                    if line:
-                        yield line
-                if len(pending) > 256 * 1024:
-                    pending = b""
-                    oversized = True
-            if floor == 0 and pending and not oversized:
-                yield pending
-    except OSError:
-        return
+def _reverse_records(
+    path: Path, before: int, *, floor: int = 0
+) -> Generator[tuple[int, int, bytes], None, None]:
+    """Scan offsets in fixed chunks, then read each complete record exactly once.
 
-
-def _reverse_records(path: Path, before: int) -> Generator[tuple[int, int, bytes], None, None]:
-    """Seek backwards in chunks; never parse or allocate the preceding history."""
+    Record size is independent of scan-buffer size. In particular, images/tool
+    output exceeding a buffer are neither dropped nor repeatedly concatenated.
+    """
     with path.open("rb") as stream:
-        position = before
-        end = before
-        pending = b""
-        while position:
-            count = min(position, 65536)
+        position = end = before
+        while position > floor:
+            count = min(position - floor, 65536)
             position -= count
             stream.seek(position)
-            pending = stream.read(count) + pending
-            while (boundary := pending.rfind(b"\n", 0, len(pending) - 1)) >= 0:
+            block = stream.read(count)
+            stop = len(block)
+            while (boundary := block.rfind(b"\n", 0, stop)) >= 0:
                 start = position + boundary + 1
-                yield start, end, pending[boundary + 1 :]
-                pending, end = pending[: boundary + 1], start
-        if pending:
-            yield 0, end, pending
+                stop = boundary
+                if start == end:
+                    continue
+                stream.seek(start)
+                yield start, end, stream.read(end - start)
+                end = start
+        if floor == 0 and end:
+            stream.seek(0)
+            yield 0, end, stream.read(end)
 
 
 @dataclass(frozen=True)
@@ -80,11 +63,16 @@ class NativeTranscript:
         self.path = path
 
     def tail(self, *, max_bytes: int | None = None):
-        for raw in _reverse_lines(self.path, max_bytes=max_bytes):
-            try:
-                yield NativeEntry.read(raw)
-            except (ValueError, TypeError, UnicodeError):
-                continue
+        try:
+            end = self.path.stat().st_size
+            floor = max(0, end - max_bytes) if max_bytes is not None else 0
+            for _, _, raw in _reverse_records(self.path, end, floor=floor):
+                try:
+                    yield NativeEntry.read(raw)
+                except (ValueError, TypeError, UnicodeError):
+                    continue
+        except OSError:
+            return
 
     def forward(self, after: int, through: int):
         with self.path.open("rb") as stream:

@@ -22,12 +22,17 @@ from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
     ACPClientConnectivity,
+    CurrentExecutions,
     ExecutionOrigin,
+    ExecutionRecord,
     OwnerConnectivity,
+    OwnerGenerations,
+    SchemaMeta,
 )
 from .execution_states import ExecutionState
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition
+from .typed_table import SQLiteJournalMode, SQLiteUserVersion, TypedRow
 
 # All fields returned to a caller are enumerated below. In particular, never
 # serialize FieldCodec.project(snapshot, "snapshot"): it includes a publication key.
@@ -82,7 +87,7 @@ class ProjectedExecution:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedRecovery:
+class ProjectedRecovery(TypedRow):
     kind: type[RecoveryCondition]
     attempt: int
     elapsed_ms: int = field(metadata={"wire_name": "elapsedMs"})
@@ -95,7 +100,7 @@ class ProjectedRecovery:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectedConnectivity:
+class ProjectedConnectivity(TypedRow):
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity = field(metadata={"wire_name": "acpClient"})
     observed_at_ms: int = field(metadata={"wire_name": "observedAtMs"})
@@ -133,21 +138,36 @@ class UnavailableRecoveryProjection:
 RecoveryProjection = AvailableRecoveryProjection | UnavailableRecoveryProjection
 
 
-def _sqlite_integer(value: object, *, minimum: int, maximum: int | None = None) -> bool:
-    """SQLite facts must have their exact stored integer domain, never truthiness."""
-    return (
-        isinstance(value, int)
-        and type(value) is int
-        and value >= minimum
-        and (maximum is None or value <= maximum)
-    )
+@dataclass(frozen=True)
+class RecoverySelection(TypedRow):
+    """One joined coordinator selection, decoded once before redacted presentation."""
+
+    execution_id: str
+    origin: ExecutionOrigin
+    status: type[ExecutionState]
+    current_attempt_ordinal: int | None
+    attempt_ordinal: int | None
+    phase: type[AttemptState] | None
+    backend_done: bool | None
+    process_dead: bool | None
+    state: type[ResponseState] | None
+    receipts: Literal[0, 1]
+    retry_authorized: bool
+
+    def __post_init__(self):
+        if self.current_attempt_ordinal != self.attempt_ordinal:
+            raise ValueError("execution and attempt ordinals differ")
+        if self.attempt_ordinal is not None:
+            _nonnegative(self.attempt_ordinal, minimum=1)
+            if self.phase is None or self.backend_done is None or self.process_dead is None:
+                raise ValueError("selected attempt is incomplete")
 
 
 def _preflight(path: Path) -> ProjectionFailure | None:
     """Never let a read-only SQLite open create a WAL shared-memory sidecar.
 
     WAL-mode SQLite can create -shm even when opened with mode=ro. Refuse such a
-    database *before* opening SQLite; rollback-journal mode is the frozen v2
+    database *before* opening SQLite; rollback-journal mode is the current
     coordinator configuration. Do not create directories, chmod, or recover a
     hot journal. A concurrent WAL conversion is outside this schema contract.
     """
@@ -171,117 +191,98 @@ def _preflight(path: Path) -> ProjectionFailure | None:
 def _read_in_transaction(
     connection: sqlite3.Connection, owner_lookup: str, owner_thread: str
 ) -> RecoveryProjection:
-    version = connection.execute("PRAGMA user_version").fetchone()[0]
-    if version != COORDINATION_SCHEMA_VERSION:
+    versions = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
+    if versions != [SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)]:
         return UnavailableRecoveryProjection("unsupported_schema")
-    meta = connection.execute(
-        "SELECT schema_version, snapshot_version FROM schema_meta WHERE singleton = 1"
-    ).fetchone()
-    if meta is None or tuple(meta) != (COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION):
+    meta = SchemaMeta.one(connection, singleton=1)
+    if meta != SchemaMeta(
+        singleton=1,
+        schema_version=COORDINATION_SCHEMA_VERSION,
+        snapshot_version=COORDINATION_SNAPSHOT_VERSION,
+    ):
         return UnavailableRecoveryProjection("unsupported_schema")
 
-    # Owner-name validation is *not* authentication. An authenticated gateway
-    # must bind this lookup/thread tuple to its viewer before calling us.
-    owner = connection.execute(
-        "SELECT 1 FROM owner_generations g JOIN participants p "
-        "ON p.participant_lookup = g.owner_lookup "
-        "WHERE g.owner_lookup = ? AND g.owner_thread = ? AND p.committed = 1",
-        (owner_lookup, owner_thread),
-    ).fetchone()
-    if owner is None:
+    # Canonical owner scoping remains distinct from gateway peer authentication.
+    owners = OwnerGenerations.read(
+        connection.execute(
+            "SELECT g.* FROM owner_generations g JOIN participants p "
+            "ON p.participant_lookup=g.owner_lookup "
+            "WHERE g.owner_lookup=? AND g.owner_thread=? AND p.committed=1",
+            (owner_lookup, owner_thread),
+        )
+    )
+    if not owners:
         return UnavailableRecoveryProjection("unknown_owner")
-    pointer = connection.execute(
-        "SELECT execution_id, attempt_ordinal FROM current_executions WHERE owner_lookup = ?",
-        (owner_lookup,),
-    ).fetchone()
+    pointer = CurrentExecutions.one(connection, owner_lookup=owner_lookup)
     if pointer is None:
         return UnavailableRecoveryProjection("invalid_store")
-    if (pointer[0] is None) != (pointer[1] is None) or (
-        pointer[1] is not None and not _sqlite_integer(pointer[1], minimum=1)
-    ):
-        return UnavailableRecoveryProjection("invalid_store")
-    # The pointer and all ACTIVE executions must agree. A corrupt store with a
-    # cleared pointer cannot present an ACTIVE row as noncurrent or apparently
-    # idle. The (owner_lookup, status) index bounds this existence check.
-    active = connection.execute(
-        "SELECT execution_id, current_attempt_ordinal FROM executions "
-        "INDEXED BY execution_owner_status_idx "
-        "WHERE owner_lookup = ? AND status = 'active' LIMIT 2",
-        (owner_lookup,),
-    ).fetchall()
-    if (pointer[0] is None and active) or (
-        pointer[0] is not None
-        and (len(active) != 1 or tuple(active[0]) != (pointer[0], pointer[1]))
+    active = ExecutionRecord.read(
+        connection.execute(
+            "SELECT * FROM executions WHERE owner_lookup=? AND status='active' LIMIT 2",
+            (owner_lookup,),
+        )
+    )
+    if (pointer.execution_id is None and active) or (
+        pointer.execution_id is not None
+        and (
+            len(active) != 1
+            or (active[0].execution_id, active[0].current_attempt_ordinal)
+            != (pointer.execution_id, pointer.attempt_ordinal)
+        )
     ):
         return UnavailableRecoveryProjection("invalid_store")
 
     # A current pointer wins. Otherwise display precisely the latest execution
     # with a deterministic tie-break; no unbounded history or cross-owner rows.
-    selected = connection.execute(
-        "SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, "
-        "a.attempt_ordinal, a.phase, a.backend_done, a.process_dead, "
-        "o.state, (SELECT count(*) FROM publication_receipts r "
-        "WHERE r.execution_id = e.execution_id) AS receipts, "
-        "(SELECT authorized FROM retry_disposition_basis b "
-        "WHERE b.execution_id = e.execution_id) AS retry_authorized "
-        "FROM executions e "
-        "LEFT JOIN attempts a ON a.execution_id = e.execution_id "
-        "AND a.attempt_ordinal = e.current_attempt_ordinal AND a.owner_lookup = e.owner_lookup "
-        "LEFT JOIN obligations o ON o.execution_id = e.execution_id "
-        "WHERE e.owner_lookup = ? "
-        "ORDER BY (e.execution_id = ?) DESC, e.updated_at_ms DESC, e.execution_id ASC LIMIT 1",
-        (owner_lookup, pointer[0]),
-    ).fetchone()
+    rows = RecoverySelection.read(
+        connection.execute(
+            "SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, "
+            "a.attempt_ordinal, a.phase, a.backend_done, a.process_dead, "
+            "o.state, (SELECT count(*) FROM publication_receipts r "
+            "WHERE r.execution_id = e.execution_id) AS receipts, "
+            "(SELECT authorized FROM retry_disposition_basis b "
+            "WHERE b.execution_id = e.execution_id) AS retry_authorized "
+            "FROM executions e "
+            "LEFT JOIN attempts a ON a.execution_id = e.execution_id "
+            "AND a.attempt_ordinal = e.current_attempt_ordinal AND a.owner_lookup = e.owner_lookup "
+            "LEFT JOIN obligations o ON o.execution_id = e.execution_id "
+            "WHERE e.owner_lookup = ? "
+            "ORDER BY (e.execution_id = ?) DESC, e.updated_at_ms DESC, e.execution_id ASC LIMIT 1",
+            (owner_lookup, pointer.execution_id),
+        )
+    )
+    selected = next(iter(rows), None)
     projected: ProjectedExecution | None = None
     last_recovery: ProjectedRecovery | None = None
     connectivity: ProjectedConnectivity | None = None
     if selected is not None:
-        (
-            execution_id,
-            origin_text,
-            status_text,
-            ordinal,
-            attempt_ordinal,
-            phase,
-            done,
-            dead,
-            obligation,
-            receipts,
-            retry,
-        ) = selected
-        origin = ExecutionOrigin(origin_text)
-        status = ExecutionState.decode(status_text)
-        if not _sqlite_integer(receipts, minimum=0, maximum=1) or not _sqlite_integer(
-            retry, minimum=0, maximum=1
+        execution_id = selected.execution_id
+        origin, status = selected.origin, selected.status
+        is_current = (
+            execution_id == pointer.execution_id
+            and selected.current_attempt_ordinal == pointer.attempt_ordinal
+        )
+        if (pointer.execution_id is not None and not is_current) or (
+            is_current and not status.active
         ):
             return UnavailableRecoveryProjection("invalid_store")
-        if (ordinal is None) != (attempt_ordinal is None) or ordinal != attempt_ordinal:
-            return UnavailableRecoveryProjection("invalid_store")
-        if ordinal is not None and not _sqlite_integer(ordinal, minimum=1):
-            return UnavailableRecoveryProjection("invalid_store")
-        if attempt_ordinal is not None and not _sqlite_integer(attempt_ordinal, minimum=1):
-            return UnavailableRecoveryProjection("invalid_store")
-        is_current = execution_id == pointer[0] and ordinal == pointer[1]
-        if (pointer[0] is not None and not is_current) or (is_current and not status.active):
-            return UnavailableRecoveryProjection("invalid_store")
-        if attempt_ordinal is not None:
-            if not _sqlite_integer(done, minimum=0, maximum=1) or not _sqlite_integer(
-                dead, minimum=0, maximum=1
-            ):
-                return UnavailableRecoveryProjection("invalid_store")
-            attempt = ProjectedAttempt(
-                attempt_ordinal, AttemptState.decode(phase), done == 1, dead == 1
+        attempt = (
+            ProjectedAttempt(
+                selected.attempt_ordinal,
+                selected.phase,
+                selected.backend_done,
+                selected.process_dead,
             )
-        else:
-            attempt = None
+            if selected.attempt_ordinal is not None
+            else None
+        )
         publication: str | None
         if origin is ExecutionOrigin.WIRE:
-            if obligation is None or (obligation == "published") != (receipts == 1):
+            if selected.state is None or selected.state.published != (selected.receipts == 1):
                 return UnavailableRecoveryProjection("invalid_store")
-            state = ResponseState.decode(obligation)
-            publication = state.publication()
+            publication = selected.state.publication()
         else:
-            if obligation is not None or receipts != 0:
+            if selected.state is not None or selected.receipts != 0:
                 return UnavailableRecoveryProjection("invalid_store")
             publication = None
         projected = ProjectedExecution(
@@ -289,7 +290,7 @@ def _read_in_transaction(
             origin,
             is_current,
             attempt,
-            retry == 1
+            selected.retry_authorized
             and status.retry
             and attempt is not None
             and attempt.phase.failed
@@ -298,34 +299,23 @@ def _read_in_transaction(
             and not is_current,
             publication,
         )
-        audit = connection.execute(
-            "SELECT kind, attempt, elapsed_ms, observed_at_ms "
-            "FROM recovery_audit WHERE execution_id = ? "
-            "ORDER BY audit_id DESC LIMIT 1",
-            (execution_id,),
-        ).fetchone()
-        if audit is not None:
-            if not (
-                _sqlite_integer(audit[1], minimum=1)
-                and _sqlite_integer(audit[2], minimum=0)
-                and _sqlite_integer(audit[3], minimum=0)
-            ):
-                return UnavailableRecoveryProjection("invalid_store")
-            last_recovery = ProjectedRecovery(
-                RecoveryCondition.decode(audit[0]), audit[1], audit[2], audit[3]
+        audits = ProjectedRecovery.read(
+            connection.execute(
+                "SELECT kind, attempt, elapsed_ms, observed_at_ms "
+                "FROM recovery_audit WHERE execution_id=? ORDER BY audit_id DESC LIMIT 1",
+                (execution_id,),
             )
-        facet = connection.execute(
-            "SELECT owner_state, acp_client_state, observed_at_ms FROM connectivity "
-            "WHERE execution_id = ?",
-            (execution_id,),
-        ).fetchone()
-        if facet is not None:
-            if not _sqlite_integer(facet[2], minimum=0):
-                return UnavailableRecoveryProjection("invalid_store")
-            connectivity = ProjectedConnectivity(
-                OwnerConnectivity(facet[0]), ACPClientConnectivity(facet[1]), facet[2]
+        )
+        last_recovery = next(iter(audits), None)
+        facets = ProjectedConnectivity.read(
+            connection.execute(
+                "SELECT owner, acp_client, observed_at_ms "
+                "FROM connectivity WHERE execution_id=?",
+                (execution_id,),
             )
-    elif pointer[0] is not None:
+        )
+        connectivity = next(iter(facets), None)
+    elif pointer.execution_id is not None:
         return UnavailableRecoveryProjection("invalid_store")
     return AvailableRecoveryProjection(
         owner_thread, int(time.time() * 1000), projected, last_recovery, connectivity
@@ -357,7 +347,9 @@ def read_recovery_projection(
         ) as connection:
             connection.execute("PRAGMA query_only = ON")
             connection.execute("PRAGMA busy_timeout = 250")
-            if connection.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
+            if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode")) != [
+                SQLiteJournalMode("delete")
+            ]:
                 return UnavailableRecoveryProjection("invalid_store")
             connection.execute("BEGIN")
             try:

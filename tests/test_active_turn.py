@@ -2,13 +2,21 @@ import os
 import time
 
 from agent_comms.activity import Activity, ActivityState
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 
 
 def test_silent_active_turn_does_not_age_into_ready(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "worker",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     first = comms.agents.begin_turn("worker", "first", "Long-running work")
     before = comms.registry.snapshot()
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))

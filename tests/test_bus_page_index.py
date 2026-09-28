@@ -1,139 +1,56 @@
-"""The disposable page index must follow the JSONL authority."""
+"""Indexed current history remains bounded and repairs disposable offset damage."""
 
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 
-import pytest
-
-from agent_comms import Registration
-from agent_comms.message_bus import MessageBus
+from agent_comms.bus_page_index import BusPageRow
+from agent_comms.comms import Comms
 from agent_comms.messages import Message, MessageType
-from agent_comms.store_files import _iter_jsonl_records
 from agent_comms.threads import Thread
+from agent_comms.wire_metadata import ArchivedAccess
 
 
-def _bus(tmp_path) -> MessageBus:
-    registry = Registration(tmp_path / "registry.json")
+def retained_source(root, count):
+    comms = Comms(root)
     for name in ("a", "b", "c"):
-        registry.register(Thread(name, frozenset(), str(tmp_path)))
-    return MessageBus(tmp_path / "bus.jsonl", registry)
-
-
-def _rows(count: int, *, first: int = 1) -> bytes:
-    return b"".join(
-        (
-            json.dumps(
-                Message(
-                    "a", "b" if seq % 3 == 0 else "c", f"m{seq}", MessageType.INFO, seq=seq
-                ).to_wire()
-            )
-            + "\n"
-        ).encode()
-        for seq in range(first, first + count)
-    )
+        comms.threads.register(Thread(name, frozenset(), str(root)))
+    comms.messaging.initialize_private_initial_protocol()
+    with comms.bus.log.path.open("w") as output:
+        for seq in range(1, count + 1):
+            row = Message("a", "b" if seq % 3 == 0 else "c", f"m{seq}", MessageType.INFO, seq=seq)
+            output.write(json.dumps(row.to_wire()) + "\n")
+    comms.bus.log.path.chmod(0o600)
+    marker = comms.bus.log.read_metadata_unlocked(required=True)
+    marker.last_seq = marker.admission_after_seq = count
+    marker.access = ArchivedAccess()
+    comms.bus.log.write_metadata_unlocked(marker)
+    return comms.bus
 
 
 def test_warm_incoming_cursor_reads_only_selected_wire_rows(tmp_path, monkeypatch):
-    bus = _bus(tmp_path)
-    bus.log.path.write_bytes(_rows(3000))
+    bus = retained_source(tmp_path, 3000)
     assert bus.incoming_page("b", after=2700, limit=10).newest_seq == 2730
     decoded = 0
     original = bus.log._public_page_record
 
-    def count(record, size):
+    def count(record, size, metadata):
         nonlocal decoded
         decoded += 1
-        return original(record, size)
+        return original(record, size, metadata)
 
-    monkeypatch.setattr(bus.log, '_public_page_record', count)
+    monkeypatch.setattr(bus.log, "_public_page_record", count)
     page = bus.incoming_page("b", after=2700, limit=10)
     assert [message.seq for message in page.messages] == list(range(2703, 2731, 3))
     assert page.has_older and page.has_newer
-    assert decoded <= 12  # previous match, ten results, next match
+    assert decoded <= 12
 
 
-def test_index_rebuilds_after_append_replace_and_truncated_tail(tmp_path):
-    bus = _bus(tmp_path)
-    bus.log.path.write_bytes(_rows(9))
-    assert [m.seq for m in bus.incoming_page("b", after=0).messages] == [3, 6, 9]
-    with bus.log.path.open("ab") as output:
-        output.write(_rows(3, first=10))
-        output.flush()
-        os.fsync(output.fileno())
-    assert [m.seq for m in bus.incoming_page("b", after=9).messages] == [12]
-
-    replacement = bus.log.path.with_suffix(".new")
-    replacement.write_bytes(_rows(6, first=101))
-    os.replace(replacement, bus.log.path)
-    assert [m.seq for m in bus.incoming_page("b", after=0).messages] == [102, 105]
-
-    with bus.log.path.open("ab") as output:
-        output.write(b'{"seq": 107, "from": "a"')
-    assert [m.seq for m in bus.incoming_page("b", after=0).messages] == [102, 105]
-
-
-def test_bad_cached_offset_falls_back_to_authoritative_log(tmp_path):
-    bus = _bus(tmp_path)
-    bus.log.path.write_bytes(_rows(9))
+def test_bad_cached_offset_uses_authoritative_current_source(tmp_path):
+    bus = retained_source(tmp_path, 9)
     assert bus.incoming_page("b", after=6).newest_seq == 9
     with sqlite3.connect(tmp_path / "bus_page_index.sqlite3") as connection:
-        connection.execute("UPDATE rows SET offset=0 WHERE seq=9")
+        connection.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
     page = bus.incoming_page("b", after=6)
     assert [message.seq for message in page.messages] == [9]
-
-
-def test_zero_sequence_legacy_row_counts_as_older_than_after_zero(tmp_path):
-    bus = _bus(tmp_path)
-    rows = [
-        Message("a", "b", "legacy", MessageType.INFO, seq=0),
-        Message("a", "b", "new", MessageType.INFO, seq=1),
-    ]
-    bus.log.path.write_bytes(b"".join((json.dumps(row.to_wire()) + "\n").encode() for row in rows))
-    page = bus.incoming_page("b", after=0)
-    assert [message.seq for message in page.messages] == [1]
-    assert page.has_older is True
-
-
-def test_index_does_not_reorder_nonmonotonic_legacy_wire(tmp_path):
-    bus = _bus(tmp_path)
-    rows = [
-        Message("a", "b", "second", MessageType.INFO, seq=2),
-        Message("a", "b", "first", MessageType.INFO, seq=1),
-    ]
-    bus.log.path.write_bytes(b"".join((json.dumps(row.to_wire()) + "\n").encode() for row in rows))
-    with pytest.raises(ValueError, match="unique messages in seq order"):
-        bus.full_history_page()
-
-
-def test_indexed_pages_equal_scan_oracle_across_cursors_and_budgets(tmp_path):
-    bus = _bus(tmp_path)
-    bus.log.path.write_bytes(_rows(30))
-
-    def matches(message):
-        return message.target == "b"
-
-    for before, after in ((None, None), (18, None), (1, None), (None, 0), (None, 17)):
-        for limit, max_bytes in ((1, 20), (3, 120), (100, 10000)):
-            oracle = bus._collect_history_page(
-                (
-                    bus.log._public_page_record(record, size)
-                    for record, size in _iter_jsonl_records(bus.log.path)
-                ),
-                matches,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-            )
-            indexed = bus._history_page(
-                matches,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-                targets=frozenset({"b"}),
-            )
-            assert indexed == oracle

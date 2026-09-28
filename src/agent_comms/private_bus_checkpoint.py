@@ -1,4 +1,4 @@
-"""Opt-in, append-writer-maintained private bus prefix certificate.
+"""Append-writer-maintained private bus prefix certificate.
 
 The JSONL bus remains authoritative. Only the canonical private WireLog writer may
 advance this certificate, after bus and directory fsync under the bus lock. The
@@ -18,14 +18,15 @@ import sqlite3
 import stat
 import tempfile
 from collections.abc import Mapping
-from contextlib import closing
-from dataclasses import dataclass, field, fields, replace
+from contextlib import closing, nullcontext
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .typed_table import Column, SQLiteSchemaObject, TypedTable
 from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
@@ -58,12 +59,35 @@ class PrefixWitness(PrefixSeal):
         return FieldCodec.decode(PrefixSeal, FieldCodec.project(self, "seal"))
 
 
+class CheckpointTable:
+    """Source-derived rows bound by the canonical writer's durable seal."""
+
+
 @dataclass(frozen=True)
-class PrefixCertificate:
+class ResponseKeys(CheckpointTable, TypedTable):
+    key: str = field(metadata={"sql": Column(primary_key=True)})
+
+
+@dataclass(frozen=True)
+class Initials(CheckpointTable, TypedTable):
+    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
+    message_id: str
+    offset: int = field(metadata={"sql": Column(check="offset>=0")})
+    length: int = field(metadata={"sql": Column(check="length>0")})
+
+
+@dataclass(frozen=True)
+class Addressed(CheckpointTable, TypedTable):
+    lookup: str = field(metadata={"sql": Column(primary_key=True)})
+    seq: int = field(metadata={"sql": Column(primary_key=True, references=(Initials, "seq"))})
+
+
+@dataclass(frozen=True)
+class PrefixCertificate(CheckpointTable, TypedTable):
     """The existing SQLite row, decoded once at its persistence boundary."""
 
-    singleton: Literal[1] = field(metadata={"sqlite_constraint": "PRIMARY KEY CHECK(singleton=1)"})
-    version: Literal[1]
+    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    version: Literal[2]
     root_id: str
     device: int
     inode: int
@@ -89,7 +113,7 @@ class PrefixCertificate:
     ) -> PrefixCertificate:
         return cls(
             1,
-            1,
+            2,
             root_id,
             info.st_dev,
             info.st_ino,
@@ -99,31 +123,6 @@ class PrefixCertificate:
             tail,
             info.st_mtime_ns,
             info.st_ctime_ns,
-        )
-
-    @classmethod
-    def create_table(cls, db: sqlite3.Connection) -> None:
-        kinds = FieldCodec._types(cls)
-        columns = [
-            f"{item.name} {'TEXT' if kinds[item.name] is str else 'INTEGER'} "
-            + item.metadata.get("sqlite_constraint", "NOT NULL")
-            for item in fields(cls)
-        ]
-        db.execute(f"CREATE TABLE certificate({','.join(columns)})")
-
-    def insert(self, db: sqlite3.Connection) -> None:
-        values = FieldCodec.encode(self)
-        db.execute(
-            f"INSERT INTO certificate ({','.join(values)}) "
-            f"VALUES ({','.join('?' for _ in values)})",
-            tuple(values.values()),
-        )
-
-    def update(self, db: sqlite3.Connection) -> None:
-        values = FieldCodec.encode(self)
-        db.execute(
-            f"UPDATE certificate SET {','.join(f'{name}=?' for name in values)} WHERE singleton=1",
-            tuple(values.values()),
         )
 
 
@@ -169,14 +168,21 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 
 def _saved(db: sqlite3.Connection) -> PrefixWitness:
-    tables = {item[0] for item in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if tables != {"certificate", "response_keys", "initials", "addressed"}:
-        raise RelationViolationError("Private bus checkpoint schema is unavailable.")
-    row = db.execute("SELECT * FROM certificate WHERE singleton=1").fetchone()
-    if row is None:
+    schema = {
+        name: sql
+        for table in TypedTable.members_with(CheckpointTable)
+        for name, sql in table.schema_objects().items()
+    }
+    actual = SQLiteSchemaObject.read(
+        db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
+    )
+    if {row.name: row.sql for row in actual} != schema:
         raise RelationViolationError("Private bus checkpoint schema is unavailable.")
     try:
-        return FieldCodec.decode(PrefixCertificate, dict(row)).witness()
+        row = PrefixCertificate.one(db, singleton=1)
+        if row is None:
+            raise RelationViolationError("Private bus checkpoint certificate is missing.")
+        return row.witness()
     except (TypeError, ValueError) as error:
         raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
 
@@ -189,25 +195,15 @@ def _index_row(
     receipt: Mapping[str, object] | None,
     initial: CommittedInitial | None,
 ) -> None:
-    if receipt is None and initial is None and message.claim_transition is None:
-        raise RelationViolationError(
-            "Unattested public initial cannot enter a certified private root."
-        )
     if receipt is not None:
-        db.execute("INSERT INTO response_keys(key) VALUES (?)", (receipt["publication_key"],))
+        ResponseKeys(receipt["publication_key"]).insert(db)
     if initial is not None:
-        db.execute(
-            "INSERT INTO initials(seq,message_id,offset,length) VALUES(?,?,?,?)",
-            (message.seq, message.message_id, offset, len(raw)),
-        )
+        Initials(message.seq, message.message_id, offset, len(raw)).insert(db)
         for recipient in initial.audience.recipients:
-            db.execute(
-                "INSERT INTO addressed(lookup,seq) VALUES(?,?)",
-                (recipient.recipient_lookup, message.seq),
-            )
+            Addressed(recipient.recipient_lookup, message.seq).insert(db)
 
 
-def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
+def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -> PrefixWitness:
     """Explicitly certify the complete current private bus without rewriting it.
 
     The canonical writer lock excludes appenders throughout the one-time scan.
@@ -220,7 +216,7 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
 
     if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
         raise TypeError("Canonical private WireLog required")
-    with bus.locked():
+    with nullcontext() if _bus_locked else bus.locked():
         marker = bus._private_marker_unlocked()
         if not marker.claims:
             raise RelationViolationError(
@@ -249,14 +245,8 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
             fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
             os.close(fd)
             with closing(_connect(staged)) as db:
-                PrefixCertificate.create_table(db)
-                db.executescript(
-                    "CREATE TABLE response_keys(key TEXT PRIMARY KEY);"
-                    "CREATE TABLE initials(seq INTEGER PRIMARY KEY,message_id TEXT NOT NULL,"
-                    "offset INTEGER NOT NULL,length INTEGER NOT NULL);"
-                    "CREATE TABLE addressed(lookup TEXT NOT NULL,seq INTEGER NOT NULL,"
-                    "PRIMARY KEY(lookup,seq));"
-                )
+                for table in TypedTable.members_with(CheckpointTable):
+                    table.create(db)
                 with bus.path.open("rb") as stream:
                     info = os.fstat(stream.fileno())
                     digest = _SEED
@@ -356,7 +346,7 @@ def _recover_pending_unlocked(
             raise RelationViolationError(
                 "Private bus checkpoint pending suffix differs from intent."
             )
-        PrefixCertificate.capture(expected.root_id, info, last_seq, digest, expected.tail).update(
+        PrefixCertificate.capture(expected.root_id, info, last_seq, digest, expected.tail).upsert(
             db
         )
     _directory_sync(db_path)
@@ -411,10 +401,6 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                 initial: CommittedInitial | None,
             ) -> None:
                 nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
-                if receipt is None and initial is None and message.claim_transition is None:
-                    raise RelationViolationError(
-                        "Unattested public initial blocks certified prefix."
-                    )
                 digest = _chain(digest, raw)
                 end = offset + len(raw)
                 if end == saved.offset:
@@ -460,7 +446,7 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                     _index_row(db, offset, raw, message, receipt, initial)
                 PrefixCertificate.capture(
                     saved.root_id, info, last_seq, digest, expected.tail
-                ).update(db)
+                ).upsert(db)
             _directory_sync(path)
             marker.seal_with(FinalSeal.capture(expected, path))
             bus.write_metadata_unlocked(marker)
@@ -511,7 +497,7 @@ def append_private_bus_checkpoint_unlocked(
                 _index_row(db, offset, raw, message, receipt, initial)
                 PrefixCertificate.capture(
                     saved.root_id, info, message.seq, digest, expected.tail
-                ).update(db)
+                ).upsert(db)
             _directory_sync(path)
             marker.seal_with(FinalSeal.capture(expected, path))
             bus.write_metadata_unlocked(marker)
@@ -555,35 +541,32 @@ def certified_initial_page_unlocked(
             closing(_connect(_path(bus.path), readonly=True)) as db,
             bus.path.open("rb") as stream,
         ):
-            rows = db.execute(
-                "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
-                "JOIN initials i ON i.seq=a.seq "
-                "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
-                (lookup, after, limit + 1),
-            ).fetchall()
+            rows = Initials.read(
+                db.execute(
+                    "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
+                    "JOIN initials i ON i.seq=a.seq "
+                    "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
+                    (lookup, after, limit + 1),
+                )
+            )
             has_more = len(rows) > limit
-            latest_initial_seq = db.execute("SELECT MAX(seq) FROM initials").fetchone()[0]
-            if latest_initial_seq is None:
-                latest_initial_seq = 0
-            if (
-                type(latest_initial_seq) is not int
-                or latest_initial_seq < 0
-                or latest_initial_seq > witness.through_seq
-            ):
+            last = Initials.read(db.execute("SELECT * FROM initials ORDER BY seq DESC LIMIT 1"))
+            latest_initial_seq = last[0].seq if last else 0
+            if latest_initial_seq < 0 or latest_initial_seq > witness.through_seq:
                 raise RelationViolationError("Certified initial high-water is invalid.")
             initials = []
             for row in rows[:limit]:
-                stream.seek(row["offset"])
-                raw = stream.read(row["length"])
-                if len(raw) != row["length"] or not raw.endswith(b"\n"):
+                stream.seek(row.offset)
+                raw = stream.read(row.length)
+                if len(raw) != row.length or not raw.endswith(b"\n"):
                     raise RelationViolationError("Certified initial row changed.")
                 record = json.loads(raw, object_pairs_hook=unique_wire_object)
                 if not isinstance(record, dict) or PRIVATE_WIRE_FIELD not in record:
                     raise RelationViolationError("Certified initial row is unavailable.")
                 initial = validate_initial_record(record, witness.root_id)
                 if (
-                    initial.message.seq != row["seq"]
-                    or initial.message.message_id != row["message_id"]
+                    initial.message.seq != row.seq
+                    or initial.message.message_id != row.message_id
                     or not any(r.recipient_lookup == lookup for r in initial.audience.recipients)
                 ):
                     raise RelationViolationError("Certified initial lookup differs from bus row.")
@@ -603,3 +586,36 @@ def certified_initial_page_unlocked(
         raise
     except (sqlite3.Error, OSError, ValueError, TypeError) as error:
         raise RelationViolationError("Certified initial page is unavailable.") from error
+
+
+def addressed_source_pointers_unlocked(
+    bus: WireLog, marker: WireMetadata, lookup: str, *, limit: int = 4
+) -> tuple[Initials, ...]:
+    """Latest source pointers for natural-turn awareness, never delivery evidence.
+
+    Caller holds the bus lock. Read only the current sealed index: no payload
+    decode, historical scan, index repair, recovery, or native cursor advancement.
+    Frozen audience membership includes unmentioned NoWake observers.
+    """
+    path = _path(bus.path)
+    with closing(_connect(path, readonly=True)) as db:
+        saved = _saved(db)
+        marker.seal.check_final(saved, path)
+        if (
+            saved.root_id != marker.root_id
+            or saved.through_seq != marker.last_seq
+            or file_revision(bus.path.stat()) != saved.revision
+        ):
+            raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
+        rows = Initials.read(
+            db.execute(
+                "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
+                "JOIN initials i ON i.seq=a.seq "
+                "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
+                (lookup, marker.admission_after_seq, limit),
+            )
+        )
+        marker.seal.check_final(saved, path)
+        if file_revision(bus.path.stat()) != saved.revision:
+            raise RelationViolationError("Source changed during awareness read.")
+        return tuple(reversed(rows))

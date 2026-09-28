@@ -161,7 +161,7 @@ class FieldCodec:
     @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
         if target is Any:
-            cls.encode(data)  # still require JSON-compatible data
+            cls.encode(data)  # still require valid JSON data
             return data
         origin, args = get_origin(target), get_args(target)
         if origin is type and args and issubclass(args[0], DeclaredFamily):

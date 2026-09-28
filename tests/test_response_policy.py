@@ -3,14 +3,13 @@ from dataclasses import dataclass
 from agent_comms.messages import Message, MessageType
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
-from agent_comms.threads import Thread
 
 
 def test_golden_policy_names():
     assert ResponsePolicy.names() == ("direct", "collective", "mentioned_only", "informational")
 
 
-def test_new_policy_derives_all_five_consumers_without_new_cases(tmp_path):
+def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
     class ReviewPolicy(ResponsePolicy):
         starts_turn = True
         separate_turn = True
@@ -20,9 +19,6 @@ def test_new_policy_derives_all_five_consumers_without_new_cases(tmp_path):
 
         def guidance(self, message, *, aliases=None):
             return "review; only reviewers respond"
-
-        def disposition_key(self, message, owner):
-            return f"review:{message.seq}:{owner.name}"
 
     try:
         policy = ReviewPolicy()
@@ -41,9 +37,6 @@ def test_new_policy_derives_all_five_consumers_without_new_cases(tmp_path):
         turn = ScheduledTurn.incoming(message)
         assert "review; only reviewers respond" in turn.prompt
         assert ScheduledTurn.take_batch([turn, turn]) == ([turn], [turn])
-        assert (
-            InputDispositions.bus_key(message, Thread("reviewer1", frozenset(), str(tmp_path)))
-            == "review:17:reviewer1"
-        )
+
     finally:
         del ResponsePolicy.__registry__["review"]

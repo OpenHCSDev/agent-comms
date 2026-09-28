@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination import ExecutionOrigin
@@ -69,7 +70,12 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.threads.register(
-            Thread(name, frozenset({"team"}), worktree=str(tmp_path), pid=os.getpid())
+            Thread(
+                name,
+                frozenset({"team"}),
+                worktree=str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "owner" if direct else "#team"

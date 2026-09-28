@@ -1,4 +1,4 @@
-"""Typed durable ACP attempts and transport cursors; never replay authority."""
+"""Typed durable input evidence and notices; never replay authority."""
 
 from __future__ import annotations
 
@@ -79,7 +79,6 @@ class InputDocument:
     def delivery_overview(
         self,
         owners: frozenset[str],
-        legacy_through: int,
         *,
         include_history: bool = False,
         awaiting_keys: frozenset[str] | None = None,
@@ -87,7 +86,7 @@ class InputDocument:
         current, historical = [], []
         dismissed = historical_count = 0
         for row in self.unknown(owners):
-            if row.earlier(legacy_through, awaiting_keys):
+            if row.historical_notice(awaiting_keys):
                 dismissed += int(row.notice_dismissed)
                 historical_count += int(not row.notice_dismissed)
                 if include_history:
@@ -99,7 +98,7 @@ class InputDocument:
             "historicalCount": historical_count,
             "dismissedHistoricalCount": dismissed,
             "historicalInputs": historical,
-            **({"currentScope": "owner_queue"} if awaiting_keys is not None else {}),
+            "currentScope": "owner_queue" if awaiting_keys is not None else "unobserved",
         }
 
 
@@ -172,14 +171,18 @@ class InputDispositions(LockedStore[InputDocument]):
         goal_id: str,
         goal_revision: int,
         turn_id: str,
+        observed: tuple[InputAttempt, ...] = (),
     ) -> None:
         decision = GoalInputDecision(goal_revision, turn_id)
 
         def review(document: InputDocument) -> InputDocument:
+            rows = dict(document.rows)
+            for row in observed:
+                if row.key not in keys or (row.key in rows and rows[row.key] != row):
+                    raise ValueError("Reviewed inputs changed; inspect them again.")
+                rows.setdefault(row.key, row)
             if any(
-                key not in document.rows
-                or document.rows[key].owner not in owners
-                or not document.rows[key].unresolved
+                key not in rows or rows[key].owner not in owners or not rows[key].unresolved
                 for key in keys
             ):
                 raise ValueError("Reviewed inputs changed; inspect them again.")
@@ -187,10 +190,7 @@ class InputDispositions(LockedStore[InputDocument]):
                 return document
             return replace(
                 document,
-                rows={
-                    **document.rows,
-                    **{key: document.rows[key].review(goal_id, decision) for key in keys},
-                },
+                rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
             )
 
         self.update(review)
@@ -198,7 +198,6 @@ class InputDispositions(LockedStore[InputDocument]):
     def dismiss_historical(
         self,
         owners: frozenset[str],
-        legacy_through: int,
         *,
         awaiting_keys: frozenset[str] | None = None,
     ) -> dict:
@@ -206,83 +205,8 @@ class InputDispositions(LockedStore[InputDocument]):
             changed = {
                 row.key: replace(row, notice_dismissed=True)
                 for row in document.unknown(owners)
-                if row.earlier(legacy_through, awaiting_keys) and not row.notice_dismissed
+                if row.historical_notice(awaiting_keys) and not row.notice_dismissed
             }
             return replace(document, rows={**document.rows, **changed}) if changed else document
 
-        return self.update(dismiss).delivery_overview(
-            owners, legacy_through, awaiting_keys=awaiting_keys
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryCursor:
-    cursor: int = 0
-    legacy_through: int = 0
-
-    def __post_init__(self) -> None:
-        if self.cursor < 0 or self.legacy_through < 0:
-            raise ValueError("Invalid ACP delivery cursor")
-
-    def advance(self, through: int) -> DeliveryCursor:
-        if through < 0:
-            raise ValueError("Invalid ACP delivery cursor")
-        return replace(self, cursor=through) if through > self.cursor else self
-
-
-@dataclass(frozen=True, slots=True)
-class DeliveryDocument:
-    rows: dict[str, DeliveryCursor] = field(default_factory=dict, metadata={"wire_required": True})
-    version: Literal[1] = field(default=1, metadata={"wire_required": True})
-
-    def __post_init__(self) -> None:
-        if any(not name for name in self.rows):
-            raise ValueError("Empty ACP delivery cursor owner")
-
-    def owner_key(self, aliases: frozenset[str]) -> str | None:
-        matches = self.rows.keys() & aliases
-        if len(matches) > 1:
-            raise RelationViolationError("Ambiguous ACP delivery cursor after rename")
-        return next(iter(matches), None)
-
-    def boundary(self, aliases: frozenset[str]) -> DeliveryCursor:
-        key = self.owner_key(aliases)
-        return self.rows[key] if key is not None else DeliveryCursor()
-
-
-@dataclass(frozen=True, slots=True)
-class AcpDeliveryCursors(LockedStore[DeliveryDocument]):
-    filename: ClassVar[str] = "acp_delivery_cursors.json"
-    json_sort_keys = True
-
-    @property
-    def record_type(self) -> type[DeliveryDocument]:
-        return DeliveryDocument
-
-    def empty(self) -> DeliveryDocument:
-        return DeliveryDocument()
-
-    def initialize(
-        self, aliases: frozenset[str], owner: str, *, high_water: int, fresh: bool
-    ) -> DeliveryCursor:
-        def initialize(document: DeliveryDocument) -> DeliveryDocument:
-            if document.owner_key(aliases) is not None:
-                return document
-            row = DeliveryCursor(high_water if fresh else 0, 0 if fresh else high_water)
-            return replace(document, rows={**document.rows, owner: row})
-
-        return self.update(initialize).boundary(aliases | {owner})
-
-    def advance(self, aliases: frozenset[str], through: int) -> None:
-
-        def advance(document: DeliveryDocument) -> DeliveryDocument:
-            key = document.owner_key(aliases)
-            if key is None:
-                raise RelationViolationError("Missing or ambiguous ACP delivery cursor")
-            previous = document.rows[key]
-            row = previous.advance(through)
-            return (
-                document if row is previous else replace(document, rows={**document.rows, key: row})
-            )
-
-        self.update(advance)
+        return self.update(dismiss).delivery_overview(owners, awaiting_keys=awaiting_keys)

@@ -7,8 +7,16 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+from agent_comms.coordination_response import install_private_response_schema
+from agent_comms.coordination_store import MutationStore
+from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CompletedGoalAction,
@@ -18,6 +26,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
+from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -29,7 +38,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     entered, release = asyncio.Event(), asyncio.Event()
     settled, finish = asyncio.Event(), asyncio.Event()
     continued = asyncio.Event()
@@ -44,6 +53,17 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
 
     owner.on_connect(Client())
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
+    # The live drain requires the same installed stores and participant as the
+    # production root. Merely issuing the bus marker is insufficient.
+    with MutationStore(str(comms.root / "coordination.sqlite3")) as coordination:
+        install_private_cohort_schema(coordination)
+        install_private_response_schema(coordination)
+        install_native_runtime_schema(coordination)
+        install_prompt_binding_schema(coordination)
+        coordination.register_participant(
+            stable_thread_lookup(comms.registry.require(session).created_at),
+            session, session, committed=True,
+        )
     store = owner.turns.open_goal_store()
     goal = comms.goals.update_goal(
         session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
@@ -125,7 +145,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         rejected = [result for result in results if isinstance(result, RuntimeError)]
         assert len(accepted) == len(rejected) == 1
         assert "changed" in str(rejected[0])
-        assert accepted[0]["goal"]["status"] == "active"
+        assert FieldCodec.decode(Goal, accepted[0]["goal"]).state.declared_name == "active"
         assert accepted[0]["goal"]["revision"] == blocked.revision + 1
         generation = GoalAttemptStore(store.root).snapshot(goal.id)
         assert (generation.number, generation.lifecycle, generation.attempt_id) == (
@@ -137,11 +157,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         owner.turns.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
-            (getattr(update, "field_meta", None) or {})
-            .get("agentComms", {})
-            .get("goal", {})
-            .get("status")
-            == "active"
+            FieldCodec.decode(Goal, update.field_meta["agentComms"]["goal"]).state.active
             for update in updates
             if (getattr(update, "field_meta", None) or {}).get("agentComms", {}).get("goal")
         )
@@ -187,7 +203,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
 async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner.turns.open_goal_store()
@@ -216,7 +232,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
 
         def replaced_owner(session_id):
             comms.registry.register(
-                replace(comms.registry.require(session), pid=os.getpid() + 100000)
+                replace(comms.registry.require(session), process_identity=ProcessIdentity(os.getpid() + 100000, 1))
             )
             return original(session_id)
 

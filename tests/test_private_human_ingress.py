@@ -16,7 +16,11 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import Applied, MutationStore
-from agent_comms.errors import HumanInitialUnknownError, RelationViolationError
+from agent_comms.errors import (
+    HumanInitialUnknownError,
+    RelationViolationError,
+    UnregisteredThreadError,
+)
 from agent_comms.messages import Message, MessageType
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
@@ -66,26 +70,6 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     accepted = accept_initial_cohort(comms.bus, root_id, dm.seq, store)
     assert isinstance(accepted, Applied)
     assert accepted.value.member_count == accepted.value.assignment_count == 1
-
-
-def test_legacy_user_append_stays_public_without_private_marker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from agent_comms import candidate_maintenance
-
-    called = []
-
-    def no_private_schedule(*_args):
-        called.append(True)
-
-    monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", no_private_schedule)
-    comms = Comms(tmp_path / "legacy")
-    comms.registry.register(Thread("alice", frozenset(), str(tmp_path)))
-    sent = comms.messaging.send_user_message("alice", "legacy", worktree=str(tmp_path))
-    assert sent.sender_role is ThreadRole.USER
-    assert comms.bus.log.full_history() == [sent]
-    assert "_agent_comms_private_v1" not in (comms.root / "bus.jsonl").read_text()
-    assert not called
 
 
 def test_explicit_root_override_preserves_private_user_receipt(
@@ -177,7 +161,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     original_append = comms.bus.log._append_private_unlocked
 
     def fail_bus_open(path, *args, **kwargs):
-        if Path(path) == comms.bus.log.path:
+        if Path(path) == comms.bus.log.path and args[0] & os.O_WRONLY:
             raise OSError("bus open failed after durable marker reservation")
         return original_open(path, *args, **kwargs)
 
@@ -234,9 +218,9 @@ def test_cancellation_after_append_entry_is_typed_unknown(
 
 def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
-    with pytest.raises(RelationViolationError, match="not routable"):
+    with pytest.raises(RelationViolationError, match="not a routable"):
         comms.messaging.send_user_message("#any", "wrong route", worktree=str(tmp_path))
-    with pytest.raises(RelationViolationError, match="Initial direct target"):
+    with pytest.raises(UnregisteredThreadError, match="not a registered thread"):
         comms.messaging.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
     assert comms.bus.log.latest_sequence() == 0
 

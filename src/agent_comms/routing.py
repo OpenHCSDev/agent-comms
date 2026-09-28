@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
-from .goals import Goal
 from .messages import Message
+from .wake import derive_exact_reply_target
+
+if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,30 +66,6 @@ class ScheduledTurn:
     origin: Message | None = None
     goal_id: str | None = None
     goal_wait_id: str | None = None
-    # New ordinary direct DM interrupting an active goal, not a goal attempt.
-    # None distinguishes the ordinary path from all existing goal/wait turns.
-    direct_interrupt_goal_id: str | None = None
-    direct_interrupt_goal_revision: int | None = None
-    direct_interrupt_wait_id: str | None = None
-    direct_interrupt_input_key: str | None = None
-    direct_interrupt_ticket: str | None = None
-
-    def still_current_interrupt(self, goal: Goal | None) -> bool:
-        """A NEW queued DM survives benign same-goal revision bumps.
-
-        Ordinary goal progress or a standby report bumps the revision without
-        changing the goal identity; that must not strand an unattempted input.
-        Only a goal replacement (a different, fresh goal ID) or an inactive
-        goal invalidates the queue entry. Dispatch-time admission separately
-        rechecks the unattempted disposition row before any native start.
-        """
-        return self.direct_interrupt_goal_id is None or (
-            goal is not None and goal.state.active and goal.id == self.direct_interrupt_goal_id
-        )
-
-    @property
-    def reply_target(self) -> str | None:
-        return self.origin.reply_target if self.origin else None
 
     @classmethod
     def incoming(
@@ -105,7 +85,7 @@ class ScheduledTurn:
 
     @staticmethod
     def take_batch(pending: list[ScheduledTurn]) -> tuple[list[ScheduledTurn], list[ScheduledTurn]]:
-        """Combine compatible channel turns, keeping each direct input separate."""
+        """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
         if pending[0].origin and pending[0].origin.response_policy.separate_turn:
@@ -114,12 +94,31 @@ class ScheduledTurn:
             (
                 index
                 for index, turn in enumerate(pending)
-                if turn.reply_target != pending[0].reply_target
+                if derive_exact_reply_target(turn.origin)
+                != derive_exact_reply_target(pending[0].origin)
                 or (turn.origin and turn.origin.response_policy.separate_turn)
             ),
             len(pending),
         )
         return pending[:boundary], pending[boundary:]
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryMessage:
+    """The current Message decoder plus its existing publication identity."""
+
+    message: Message
+    sender_lookup: str = ""
+
+    @classmethod
+    def from_wire(cls, record: Mapping, root_id: str | None) -> DeliveryMessage:
+        from .bus_publication import PRIVATE_WIRE_FIELD, validate_initial_record
+
+        private = record.get(PRIVATE_WIRE_FIELD, {})
+        if "initial" in private:
+            initial = validate_initial_record(record, root_id)
+            return cls(initial.message, initial.audience.sender_lookup)
+        return cls(Message.from_wire(record))
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +134,28 @@ class DeliveryScope:
         return self.canonical(sender) != self.actor and (
             target in self.channels or self.canonical(target) == self.actor
         )
+
+    def minimum_timestamp(
+        self, sender: str, target: str, sender_lookup: str, snapshot: RegistrySnapshot
+    ) -> float | None:
+        """Require current identities while preserving aliases of one incarnation."""
+        from .bus_publication import stable_thread_lookup
+
+        if not self.delivers(sender, target):
+            return None
+        source = snapshot.threads.get(self.canonical(sender))
+        if source is None:
+            return None
+        if sender_lookup and sender_lookup != stable_thread_lookup(source.created_at):
+            return None
+        return max(source.created_at, snapshot.threads[self.actor].created_at)
+
+    def current(self, delivery: DeliveryMessage, snapshot: RegistrySnapshot) -> bool:
+        message = delivery.message
+        since = self.minimum_timestamp(
+            message.sender, message.target, delivery.sender_lookup, snapshot
+        )
+        return since is not None and message.timestamp >= since
 
     def conversation(self, sender: str, target: str) -> str:
         if is_channel_target(target):

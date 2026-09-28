@@ -9,7 +9,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-BASE_SHA = "424066056076cbe2861c12277cb745428b13bf3308a8b9873d3064b62dc740d7"
+BASE_SHA = "b2460a2e6fbd64ed3d9a09a0dc7b3c40546ff9deeebaa8531722ccd5cf46c10a"
 INSTALL_ANCHOR = "        this._installAgentNextTurnRefresh();\n"
 INSTALL = "        this._installNativeCompactionBeforeProvider();\n"
 METHOD_ANCHOR = "    _installAgentNextTurnRefresh() {\n"
@@ -33,9 +33,9 @@ METHOD = """    _installNativeCompactionBeforeProvider() {
                 this._nativeInputClaims.has(message.inputId));
             if (currentInput && estimateTokens(currentInput) > budget)
                 throw new Error("Native input is oversized and cannot be compacted; prompt refused");
-            const before = getLatestCompactionEntry(this.sessionManager.getBranch());
+            const before = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
             await this._runAutoCompaction("threshold", false);
-            const after = getLatestCompactionEntry(this.sessionManager.getBranch());
+            const after = this.sessionManager.entryStore.latest(this.sessionManager.getLeafId(), "compaction");
             if (!after || after.id === before?.id)
                 throw new Error("Native threshold compaction did not commit; prompt refused");
             const fresh = this.agent.state.messages.slice();

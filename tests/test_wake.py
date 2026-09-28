@@ -262,8 +262,6 @@ def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
             frozen_audience=manifest,
             control=ControlClassification.ORDINARY,
         )
-    with pytest.raises(ValueError, match="stored canonical"):
-        derive_exact_reply_target(stored("broadcast"))
 
 
 @pytest.mark.parametrize("field", ["seq", "body", "target", "sender"])
@@ -370,16 +368,16 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
         )
 
 
-def test_exact_stored_channel_and_alias_routes_no_wildcard_or_silence_inference(
+def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
     tmp_path: Path,
 ) -> None:
     comms = wire(tmp_path / "wire")
     for name in ("sender", "alpha", "beta"):
         comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
     channel = comms.messaging.send_message("sender", "#team", "channel note")
-    broadcast = comms.messaging.send_message("sender", "broadcast", "everyone please respond")
+    broadcast = comms.messaging.send_message("sender", "#all", "everyone please respond")
     dm = comms.messaging.send_message("sender", "alpha", "direct note")
-    assert broadcast.target == "#all"  # Alias was canonicalized by bus, not wake.
+    assert broadcast.target == "#all"
     assert [derive_exact_reply_target(item) for item in (channel, broadcast, dm)] == [
         "#team",
         "#all",

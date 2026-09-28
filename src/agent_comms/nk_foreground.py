@@ -3,7 +3,7 @@
 The controlling process must create the owner-only /var/tmp root, initialize the
 private cohort/schema, start this process and wait for READY, publish/accept the
 initial cohort, then send exactly one ``GO <last-seen-seq>`` line on stdin. This
-is not a daemon, monitor, production cutover, legacy inbox ACK or retry loop.
+runs one bounded foreground operation without scheduling retries.
 An uncertain attempt and its private root remain for manual disposition.
 The explicit CLI switches are NOT an output/spend cap. Never invoke a paid
 provider until a separate reviewed enforced cap exists; tests use a fake model.
@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .child_process import ProcessIdentity
 from .comms import Comms
 from .coordinated_runtime import CoordinatedTurn, SelectedExecution
 from .coordination_store import PublicationActivationBlocked
@@ -97,7 +98,9 @@ def reserve_foreground_owner(
         marker = comms.bus.log._private_marker_unlocked()
     if marker.root_id != wire_root_id:
         raise RelationViolationError("Private wire root changed before owner reservation")
-    owner = Thread(name, tags, str(worktree), pid=os.getpid(), task=task)
+    owner = Thread(
+        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=task
+    )
     # Ordinary Comms.register intentionally supports replacing idle owners. That
     # is NOT safe for a private foreground attempt: serialize the exact fresh
     # check and registry write against every public Comms.register/send caller

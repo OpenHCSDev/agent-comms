@@ -142,7 +142,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert renamed_rows[0].target == "reviewer"
     assert _rows(comms, "reviewer")[0][0].target == "owner"
     comms.owners.stop("reviewer")
-    comms.threads.delete("reviewer")
+    comms.registry.remove("reviewer")
     comms.threads.register(Thread("peer", frozenset(), str(tmp_path), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
     assert _rows(comms, "owner")[0] == ()
@@ -268,7 +268,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
     assert goal is not None
     comms.owners.stop("owner")
-    comms.threads.delete("owner")
+    comms.registry.remove("owner")
     comms.threads.register(Thread("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0))
     assert _rows(comms, "peer")[0] == ()
     assert _rows(comms, "owner")[0] == ()

@@ -14,9 +14,9 @@ import os
 import sqlite3
 import time
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
@@ -30,9 +30,9 @@ from .coordination import CoordinationError, PublicationReceipt
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .messages import Message
+from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .wake import NoWakeDecision, WakeDecision
 
-_SCHEMA = 2
 _MAX_ROW = 8 * 1024 * 1024
 _TIMEOUT = 0.05  # Busy readers/writers must not stall a wake for seconds.
 
@@ -45,14 +45,41 @@ class ProjectionRebuildRequiredError(ProjectionUnavailableError):
     """A changed source or checkpoint needs explicit bounded maintenance."""
 
 
-@dataclass(frozen=True, slots=True)
-class Candidate:
-    source_seq: int
+class CandidateTable:
+    """Disposable projections: source identity, recipient hints, and duplicate response keys."""
+
+
+@dataclass(frozen=True)
+class CandidateCheckpoint(CandidateTable, TypedTable):
+    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    version: Literal[3]
+    root_id: str
+    device: int
+    inode: int
+    byte_offset: int = field(metadata={"sql": Column(check="byte_offset>=0")})
+    tail_digest: str
+    last_seq: int = field(metadata={"sql": Column(check="last_seq>=0")})
+
+
+@dataclass(frozen=True)
+class CandidateResponseKey(CandidateTable, TypedTable):
+    publication_key: str = field(metadata={"sql": Column(primary_key=True)})
+    without_rowid = True
+
+
+@dataclass(frozen=True)
+class Candidate(CandidateTable, TypedTable):
+    source_seq: int = field(metadata={"sql": Column(primary_key=True)})
     message_id: str
-    recipient_lookup: str
+    recipient_lookup: str = field(metadata={"sql": Column(primary_key=True)})
     sender: str
     target: str
     wake_mode: str | None  # None means a delivery-only/no-wake member.
+    without_rowid = True
+    indexes = (
+        Index(("recipient_lookup", "source_seq"), where="wake_mode IS NOT NULL"),
+        Index(("recipient_lookup", "source_seq"), where="wake_mode IS NULL"),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +115,10 @@ class _IndexedResponse:
     envelope_digest: str
 
 
-_RecipientRow = tuple[int, str, str, str, str, str | None]
-
-
 @dataclass(frozen=True, slots=True)
 class _ParsedRow:
     seq: int
-    recipients: tuple[_RecipientRow, ...]
+    recipients: tuple[Candidate, ...]
     response: _IndexedResponse | None
 
 
@@ -102,8 +126,8 @@ class _ParsedRow:
 class _ReplayBatch:
     next_offset: int
     last_seq: int
-    recipients: tuple[_RecipientRow, ...]
-    response_keys: tuple[tuple[str], ...]
+    recipients: tuple[Candidate, ...]
+    response_keys: tuple[CandidateResponseKey, ...]
 
 
 def _parse_response(message: Message, private: dict[str, Any]) -> _IndexedResponse:
@@ -161,7 +185,9 @@ class WakeCandidateIndex:
             db.execute("PRAGMA query_only=ON")
         else:
             db = sqlite3.connect(path, timeout=_TIMEOUT)
-            if db.execute("PRAGMA journal_mode=WAL").fetchone()[0] != "wal":
+            if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode=WAL")) != [
+                SQLiteJournalMode("wal")
+            ]:
                 db.close()
                 raise ProjectionUnavailableError("candidate index requires WAL")
             db.execute("PRAGMA synchronous=FULL")
@@ -169,43 +195,28 @@ class WakeCandidateIndex:
         return db
 
     @staticmethod
-    def _schema(db: sqlite3.Connection, *, create: bool, allow_v1_rebuild: bool = False) -> None:
-        if create:
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS checkpoint ("
-                "singleton INTEGER PRIMARY KEY CHECK(singleton=1),"
-                "version INTEGER NOT NULL,root_id TEXT NOT NULL,device INTEGER NOT NULL,"
-                "inode INTEGER NOT NULL,byte_offset INTEGER NOT NULL,"
-                "tail_digest TEXT NOT NULL,last_seq INTEGER NOT NULL) STRICT"
-            )
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS recipients ("
-                "source_seq INTEGER NOT NULL,message_id TEXT NOT NULL,"
-                "recipient_lookup TEXT NOT NULL,sender TEXT NOT NULL,target TEXT NOT NULL,"
-                "wake_mode TEXT,PRIMARY KEY(source_seq,recipient_lookup)) WITHOUT ROWID"
-            )
-            db.execute(
-                "CREATE INDEX IF NOT EXISTS selected_recipient_seq "
-                "ON recipients(recipient_lookup,source_seq) WHERE wake_mode IS NOT NULL"
-            )
-            db.execute(
-                "CREATE INDEX IF NOT EXISTS passive_recipient_seq "
-                "ON recipients(recipient_lookup,source_seq) WHERE wake_mode IS NULL"
-            )
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS response_keys ("
-                "publication_key TEXT PRIMARY KEY) WITHOUT ROWID"
-            )
+    def _schema(db: sqlite3.Connection, *, create: bool) -> None:
+        schema = {
+            name: sql
+            for table in TypedTable.members_with(CandidateTable)
+            for name, sql in table.schema_objects().items()
+        }
         try:
-            version = db.execute("SELECT version FROM checkpoint WHERE singleton=1").fetchone()
-        except sqlite3.DatabaseError as error:
+            actual = SQLiteSchemaObject.read(
+                db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
+            )
+            if not actual and create:
+                with db:
+                    for table in TypedTable.members_with(CandidateTable):
+                        table.create(db)
+                return
+            if {row.name: row.sql for row in actual} != schema:
+                raise ProjectionRebuildRequiredError(
+                    "candidate index schema changed; reset required"
+                )
+            CandidateCheckpoint.one(db, singleton=1)
+        except (sqlite3.DatabaseError, ValueError, TypeError) as error:
             raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
-        if (
-            version is not None
-            and version[0] != _SCHEMA
-            and not (create and allow_v1_rebuild and version[0] == 1)
-        ):
-            raise ProjectionRebuildRequiredError("candidate index schema version changed")
 
     @staticmethod
     def _validate_limits(max_rows: int, max_bytes: int) -> None:
@@ -225,29 +236,20 @@ class WakeCandidateIndex:
         rebuild: bool,
     ) -> tuple[int, int]:
         """Check the committed source identity and its bounded prefix fingerprint."""
-        checkpoint = db.execute(
-            "SELECT root_id,device,inode,byte_offset,tail_digest,last_seq "
-            "FROM checkpoint WHERE singleton=1"
-        ).fetchone()
+        checkpoint = CandidateCheckpoint.one(db, singleton=1)
         if checkpoint is None and not rebuild:
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
         if rebuild:
             return 0, 0
-        saved_root, dev, ino, offset, tail, last_seq = checkpoint
         if (
-            saved_root != root_id
-            or dev != stat.st_dev
-            or ino != stat.st_ino
-            or type(offset) is not int
-            or offset < 0
-            or offset > stat.st_size
-            or type(last_seq) is not int
-            or last_seq < 0
-            or type(tail) is not str
-            or cls._tail(stream, offset) != tail
+            checkpoint.root_id != root_id
+            or checkpoint.device != stat.st_dev
+            or checkpoint.inode != stat.st_ino
+            or checkpoint.byte_offset > stat.st_size
+            or cls._tail(stream, checkpoint.byte_offset) != checkpoint.tail_digest
         ):
             raise ProjectionRebuildRequiredError("candidate bus prefix changed")
-        return offset, last_seq
+        return checkpoint.byte_offset, checkpoint.last_seq
 
     @staticmethod
     def _parse_row(record: dict[str, Any], root_id: str, last_seq: int) -> _ParsedRow:
@@ -275,14 +277,14 @@ class WakeCandidateIndex:
                 raise ProjectionUnavailableError("unknown candidate private row")
         if isinstance(private, dict) and set(private) == {"version", "initial"}:
             initial = validate_initial_record(record, root_id)
-            rows: list[_RecipientRow] = []
+            rows: list[Candidate] = []
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
                 if type(decision) not in {WakeDecision, NoWakeDecision}:
                     raise ProjectionUnavailableError("unknown candidate wake decision")
                 rows.append(
-                    (
+                    Candidate(
                         message.seq,
                         message.message_id,
                         recipient.recipient_lookup,
@@ -317,8 +319,8 @@ class WakeCandidateIndex:
         max_bytes: int,
     ) -> _ReplayBatch:
         """Read only a bounded complete prefix; yield parsed receipts to SQL."""
-        rows: list[_RecipientRow] = []
-        response_keys: list[tuple[str]] = []
+        rows: list[Candidate] = []
+        response_keys: list[CandidateResponseKey] = []
         stream.seek(offset)
         start = time.monotonic()
         for _ in range(max_rows):
@@ -342,7 +344,7 @@ class WakeCandidateIndex:
             last_seq = parsed.seq
             rows.extend(parsed.recipients)
             if parsed.response is not None:
-                response_keys.append((parsed.response.receipt.publication_key,))
+                response_keys.append(CandidateResponseKey(parsed.response.receipt.publication_key))
         return _ReplayBatch(stream.tell(), last_seq, tuple(rows), tuple(response_keys))
 
     def _source_end(self, stream: Any, next_offset: int) -> tuple[os.stat_result, str]:
@@ -366,27 +368,27 @@ class WakeCandidateIndex:
         """Replace derived rows and checkpoint together, or expose neither."""
         with db:
             if rebuild:
-                db.execute("DELETE FROM recipients")
-                db.execute("DELETE FROM response_keys")
-            db.executemany("INSERT INTO recipients VALUES (?,?,?,?,?,?)", batch.recipients)
+                db.execute(f'DELETE FROM "{Candidate.declared_name}"')
+                db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
+            for row in batch.recipients:
+                row.insert(db)
             try:
-                db.executemany("INSERT INTO response_keys VALUES (?)", batch.response_keys)
+                for row in batch.response_keys:
+                    row.insert(db)
             except sqlite3.IntegrityError as error:
                 raise ProjectionUnavailableError(
                     "duplicate private response publication key"
                 ) from error
-            db.execute(
-                "INSERT OR REPLACE INTO checkpoint VALUES (1,?,?,?,?,?,?,?)",
-                (
-                    _SCHEMA,
-                    root_id,
-                    stat.st_dev,
-                    stat.st_ino,
-                    batch.next_offset,
-                    tail,
-                    batch.last_seq,
-                ),
-            )
+            CandidateCheckpoint(
+                1,
+                3,
+                root_id,
+                stat.st_dev,
+                stat.st_ino,
+                batch.next_offset,
+                tail,
+                batch.last_seq,
+            ).upsert(db)
 
     def maintain(
         self, *, rebuild: bool = False, max_rows: int = 64, max_bytes: int = 256 * 1024
@@ -399,9 +401,9 @@ class WakeCandidateIndex:
             with self.bus.log.path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
-                    # Only explicit bounded rebuild may discard old v1 derived
-                    # state; v2 and its response keys commit together.
-                    self._schema(db, create=True, allow_v1_rebuild=rebuild)
+                    # Rebuild replays current-format projections only; old schemas
+                    # require the explicit store reset outside runtime code.
+                    self._schema(db, create=True)
                     offset, last_seq = self._checkpoint_start(
                         db, stream, stat, root_id, rebuild=rebuild
                     )
@@ -490,7 +492,7 @@ class WakeCandidateIndex:
 
         Run outside publisher locks and off its latency path. An absent
         derived index may be explicitly bootstrapped in bounded batches; an
-        existing v1, missing checkpoint, changed/truncated source or corrupt
+        mismatched schema, missing checkpoint, changed/truncated source or corrupt
         WAL never gets an implicit rebuild. If ``caught_up`` is false and
         ``more_source_bytes`` is true, a deferred worker may schedule another
         finite batch. Pages remain unavailable for required high-water until
@@ -568,14 +570,11 @@ class WakeCandidateIndex:
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
                 db.execute("BEGIN")
-                checkpoint = db.execute(
-                    "SELECT root_id,device,inode,byte_offset,tail_digest,last_seq "
-                    "FROM checkpoint WHERE singleton=1"
-                ).fetchone()
+                checkpoint = CandidateCheckpoint.one(db, singleton=1)
                 if (
                     checkpoint is None
-                    or checkpoint[0] != root_id
-                    or checkpoint[5] < required_through_seq
+                    or checkpoint.root_id != root_id
+                    or checkpoint.last_seq < required_through_seq
                 ):
                     raise ProjectionUnavailableError("candidate projection is stale or unrelated")
                 with self.bus.log.path.open("rb") as stream:
@@ -587,24 +586,30 @@ class WakeCandidateIndex:
                                 "candidate source has an incomplete tail"
                             )
                     if (
-                        (stat.st_dev, stat.st_ino) != tuple(checkpoint[1:3])
-                        or stat.st_size < checkpoint[3]
-                        or self._tail(stream, checkpoint[3]) != checkpoint[4]
+                        (stat.st_dev, stat.st_ino) != (checkpoint.device, checkpoint.inode)
+                        or stat.st_size < checkpoint.byte_offset
+                        or self._tail(stream, checkpoint.byte_offset) != checkpoint.tail_digest
                     ):
                         raise ProjectionRebuildRequiredError(
                             "candidate source changed; omit supplement"
                         )
-                data = db.execute(
-                    "SELECT source_seq,message_id,recipient_lookup,sender,target,wake_mode "
-                    "FROM recipients WHERE recipient_lookup=? AND source_seq>? "
-                    + ("AND wake_mode IS NULL " if delivery_only else "AND wake_mode IS NOT NULL ")
-                    + "ORDER BY source_seq LIMIT ?",
-                    (recipient_lookup, after_seq, limit + 1),
-                ).fetchall()
+                data = Candidate.read(
+                    db.execute(
+                        f'SELECT * FROM "{Candidate.declared_name}" '
+                        "WHERE recipient_lookup=? AND source_seq>? "
+                        + (
+                            "AND wake_mode IS NULL "
+                            if delivery_only
+                            else "AND wake_mode IS NOT NULL "
+                        )
+                        + "ORDER BY source_seq LIMIT ?",
+                        (recipient_lookup, after_seq, limit + 1),
+                    )
+                )
                 return CandidatePage(
-                    checkpoint[5],
-                    tuple(Candidate(*row) for row in data[:limit]),
+                    checkpoint.last_seq,
+                    tuple(data[:limit]),
                     len(data) > limit,
                 )
-        except (OSError, sqlite3.DatabaseError) as error:
+        except (OSError, sqlite3.DatabaseError, ValueError, TypeError) as error:
             raise ProjectionUnavailableError("candidate projection read unavailable") from error

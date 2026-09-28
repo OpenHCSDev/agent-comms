@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .private_registry_guard import PrivateRegistryGuard
 from .registry_document import RegistryDocument
@@ -48,34 +49,25 @@ class RegistryStore(LockedStore[RegistryDocument]):
         return RegistryDocument()
 
     def _read_unlocked(self) -> RegistryDocument:
-        guard = self.private_guard_unlocked()  # before even a cache hit
+        self.private_guard_unlocked()  # before even a cache hit
         revision = file_revision(self.path)
         if revision is not None and revision == self.cache.revision:
             return self.cache.document
         self.cache.revision = None
-        raw = json.loads(self.path.read_text()) if revision is not None else {}
-        if (
-            guard is not None
-            and revision is not None
-            and not any(
-                key in raw
-                for key in (
-                    "owner_epochs",
-                    "owner_epoch_counter",
-                )
-            )
-        ):
-            raise RelationViolationError("private owner epoch metadata was lost")
-        document = self._decode(raw)
+        document = (
+            self._decode(json.loads(self.path.read_text()))
+            if revision is not None
+            else self.empty()
+        )
         self.cache.document = document
         self.cache.revision = revision
         return document
 
     def _encode(self, value: RegistryDocument) -> dict:
-        return value.to_wire()
+        return FieldCodec.encode(value)
 
     def _decode(self, data: object) -> RegistryDocument:
-        return self.record_type.from_wire(data, self.path.parent)
+        return self.record_type.from_wire(data)
 
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
@@ -84,7 +76,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
             yield RegistryEdit(self, original.copy(), original)
 
     def save_unlocked(self, document: RegistryDocument) -> None:
-        self._write_unlocked(json.dumps(document.to_wire(), indent=2))
+        self._write_unlocked(json.dumps(self._encode(document), indent=2))
         self.cache.document = document.copy()
 
     def _write_unlocked(self, text: str) -> None:
@@ -107,7 +99,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
         The directory, guard file and registry are one private root. A marker
         without its committed guard (or a guard without a marker) is an
-        uncertain cutover, never an invitation to bootstrap old metadata.
+        uncertain migration, never an invitation to bootstrap old metadata.
         """
         from .private_registry_guard import PrivateRegistryGuard
 

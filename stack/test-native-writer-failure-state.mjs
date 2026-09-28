@@ -9,7 +9,8 @@ import { pathToFileURL } from 'node:url';
 
 const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(packageDir, 'provide a disposable PI_NATIVE_PACKAGE_DIR');
-const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/core/session-manager.js')));
+const { SessionManager, sessionEntryToContextMessages } = await import(pathToFileURL(join(packageDir, 'dist/core/session-manager.js')));
+const { DiskEntryStore } = await import(pathToFileURL(join(packageDir,"dist/core/session-entry-store.js")));
 const root = fs.mkdtempSync(join(tmpdir(), 'pr48-failure-state-'));
 const inputId = '1'.repeat(32);
 const user = text => ({ role: 'user', content: text, timestamp: 1 });
@@ -25,7 +26,7 @@ function fixture() {
     const summary = 'summary';
     const commit = { commitId: '3'.repeat(32), payloadDigest:
         createHash('sha256').update(JSON.stringify([summary, kept, 42])).digest('hex') };
-    return { dir, manager, kept, file, witness, summary, commit, entries: manager.getEntries() };
+    return { dir, manager, kept, file, witness, summary, commit, entries: manager.entryStore.entries().toArray() };
 }
 function inject(method, replacement, action) {
     const original = fs[method];
@@ -73,9 +74,6 @@ function continuations(f) {
         flushInputDurably: () => m.flushInputDurably(inputId),
         reconcileCompactionCommit: () => m.reconcileCompactionCommit(f.commit, f.witness),
         _setSessionFile: () => m._setSessionFile(f.file),
-        _loadEntries: () => m._loadEntries(f.entries),
-        _buildIndex: () => m._buildIndex(),
-        _rewriteFile: () => m._rewriteFile(),
         _persist: () => m._persist(f.entries[0]),
         _appendEntry: () => m._appendEntry(f.entries[0]),
         _assertLoadedRevision: () => m._assertLoadedRevision(),
@@ -85,13 +83,12 @@ function continuations(f) {
         getSessionName: () => m.getSessionName(),
         getLeafEntry: () => m.getLeafEntry(),
         getEntry: () => m.getEntry(f.kept),
-        getChildren: () => m.getChildren(f.kept),
+        getChildren: () => m.getChildren(f.kept).toArray(),
         getLabel: () => m.getLabel(f.kept),
-        getBranch: () => m.getBranch(),
-        buildContextEntries: () => m.buildContextEntries(),
-        buildSessionContext: () => m.buildSessionContext(),
+        branchEntries: () => m.entryStore.branch(m.getLeafId()).toArray(),
+        buildContextEntries: () => m.buildContextEntries().toArray(),
         getHeader: () => m.getHeader(),
-        getEntries: () => m.getEntries(),
+        allEntries: () => m.entryStore.entries().toArray(),
         getTree: () => m.getTree(),
     };
 }
@@ -147,24 +144,23 @@ const scenarios = {
                 throw new Error('injected branch partial write');
             }
             return original(fd, data, ...args);
-        }, () => assert.throws(() => f.manager.createBranchedSession(f.manager.getLeafId()), /rewrite outcome unknown/));
+        }, () => assert.throws(() => f.manager.createBranchedSession(f.manager.getLeafId()), /branch outcome unknown/));
     },
     'branch-directory-sync': f => {
         inject('fsyncSync', (original, fd) => {
             if (fs.fstatSync(fd).isDirectory()) throw new Error('injected directory sync');
             return original(fd);
-        }, () => assert.throws(() => f.manager.createBranchedSession(f.manager.getLeafId()), /rewrite outcome unknown/));
+        }, () => assert.throws(() => f.manager.createBranchedSession(f.manager.getLeafId()), /branch outcome unknown/));
     },
     'switch-index-failure': f => {
         const target = join(f.dir, 'valid-target.jsonl');
         fs.writeFileSync(target, fs.readFileSync(f.file));
-        const build = SessionManager.prototype._buildIndex;
-        SessionManager.prototype._buildIndex = function () {
-            this.byId.clear();
+        const build = DiskEntryStore.prototype.refresh;
+        DiskEntryStore.prototype.refresh = function () {
             throw new Error('injected index rebuild');
         };
         try { assert.throws(() => f.manager.setSessionFile(target), /injected index/); }
-        finally { SessionManager.prototype._buildIndex = build; }
+        finally { DiskEntryStore.prototype.refresh = build; }
     },
     'append-partial-write': f => {
         inject('appendFileSync', (original, path, data, ...args) => {
@@ -195,10 +191,9 @@ for (const name of selected) {
     assert.ok(scenarios[name], `unknown scenario ${name}`);
     const f = fixture();
     scenarios[name](f);
-    f.manager._acUnusable = false; // A public lookalike cannot clear the private latch.
     const beforeDisk = disk(f.dir, true), beforeBytes = disk(f.dir), beforeState = state(f.manager);
     for (const [method, action] of Object.entries(continuations(f))) {
-        assert.throws(action, /manager unusable after failed mutation/, `${name}: ${method}`);
+        assert.throws(action, /store unusable/, `${name}: ${method}`);
         assert.equal(state(f.manager), beforeState, `${name}: ${method} changed memory`);
         assert.deepEqual(disk(f.dir, true), beforeDisk, `${name}: ${method} changed disk`);
         controls++;
@@ -208,13 +203,13 @@ for (const name of selected) {
         // Explicit fresh validated instance, not reuse/reset or replay of the failed operation.
         const fresh = SessionManager.open(f.file);
         fresh.appendMessage(user('new explicitly authorized input'));
-        assert.equal(fresh.getEntries().at(-1).message.content, 'new explicitly authorized input');
-        assert.throws(() => f.manager.newSession(), /manager unusable/);
+        assert.equal(fresh.entryStore.entries().toArray().at(-1).message.content, 'new explicitly authorized input');
+        assert.throws(() => f.manager.newSession(), /store unusable/);
     }
     if (name === 'commit-sync-failure') {
         const fresh = SessionManager.open(f.file);
         assert.equal(fresh.reconcileCompactionCommit(f.commit, f.witness).status, 'committed');
-        assert.equal(fresh.getEntries().filter(e => e.details?.agentCommsCommit?.commitId === f.commit.commitId).length, 1);
+        assert.equal(fresh.entryStore.entries().toArray().filter(e => e.details?.agentCommsCommit?.commitId === f.commit.commitId).length, 1);
         assert.deepEqual(disk(f.dir), beforeBytes, 'reconciliation is not a resend');
     }
 }

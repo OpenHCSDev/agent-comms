@@ -19,28 +19,47 @@ from .field_codec import FieldCodec
 from .goal_attempt_phase import FailedAttempt
 from .goal_generation import BlockedGeneration
 from .goal_pauses import GoalPauseEvent
-from .goal_states import BlockedGoal, PausedGoal
+from .goal_states import BlockedState, PausedGoal
 from .goals import Goal
 from .recovery_projection import _preflight
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnLeaseFence
+from .typed_table import Column, ForeignKey, TypedTable
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation
 
 
-@dataclass(frozen=True, slots=True)
-class FailedTurnObservation:
-    reservation: Reservation = field(repr=False)
+class GoalLedgerTable:
+    """Declarations in the durable goal-attempt and passive evidence ledger."""
+
+
+@dataclass(frozen=True)
+class FailedTurnEvidence(GoalLedgerTable, TypedTable):
+    attempt_id: str = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: str
+    generation: int = field(metadata={"sql": Column(check="generation>0")})
     owner: str
     owner_created_at: float
     worktree: str
-    admission: int
-    turn_generation: int
-    goal_revision: int
-    turn_id: str
+    admission: int = field(metadata={"sql": Column(check="admission>0")})
+    turn_generation: int = field(metadata={"sql": Column(check="turn_generation>0")})
+    goal_revision: int = field(metadata={"sql": Column(check="goal_revision>=0")})
+    turn_id: str = field(metadata={"sql": Column(unique=True, check="length(turn_id)=32")})
     reason: FailureReason
+
+    @classmethod
+    def references(cls):
+        from .goal_attempts import AttemptRecord
+
+        return (ForeignKey(("attempt_id",), AttemptRecord, ("attempt_id",)),)
+
+
+@dataclass(frozen=True)
+class FailedTurnObservation:
+    reservation: Reservation = field(repr=False)
+    evidence: FailedTurnEvidence
 
     @classmethod
     def from_terminal(
@@ -63,7 +82,7 @@ class FailedTurnObservation:
             or current_owner.name != owner.name
             or current_owner.created_at != owner.created_at
             or current_owner.worktree != owner.worktree
-            or current_owner.pid != owner.pid
+            or current_owner.process_identity != owner.process_identity
             or current_owner.goal is None
             or current_owner.goal.id != goal.id
             or current_owner.goal.revision < goal.revision
@@ -91,44 +110,20 @@ class FailedTurnObservation:
             return None
         return cls(
             reservation,
-            owner.name,
-            owner.created_at,
-            owner.worktree,
-            admission,
-            lease.identity.generation,
-            goal.revision,
-            turn_id,
-            reason,
+            FailedTurnEvidence(
+                reservation.attempt_id,
+                reservation.goal_id,
+                reservation.generation,
+                owner.name,
+                owner.created_at,
+                owner.worktree,
+                admission,
+                lease.identity.generation,
+                goal.revision,
+                turn_id,
+                reason,
+            ),
         )
-
-    def values(self) -> tuple[object, ...]:
-        # Never store the reservation token or free-form diagnostic.
-        return (
-            self.reservation.attempt_id,
-            self.reservation.goal_id,
-            self.reservation.generation,
-            self.owner,
-            self.owner_created_at,
-            self.worktree,
-            self.admission,
-            self.turn_generation,
-            self.goal_revision,
-            self.turn_id,
-            self.reason.value,
-        )
-
-
-def create_observation_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        "CREATE TABLE failed_turn_observations ("
-        "attempt_id TEXT PRIMARY KEY REFERENCES attempts(attempt_id), "
-        "goal_id TEXT NOT NULL, generation INTEGER NOT NULL CHECK(generation>0), "
-        "owner TEXT NOT NULL, owner_created_at REAL NOT NULL, worktree TEXT NOT NULL, "
-        "admission INTEGER NOT NULL CHECK(admission>0), "
-        "turn_generation INTEGER NOT NULL CHECK(turn_generation>0), "
-        "goal_revision INTEGER NOT NULL CHECK(goal_revision>=0), "
-        "turn_id TEXT NOT NULL UNIQUE CHECK(length(turn_id)=32), reason TEXT NOT NULL)"
-    )
 
 
 def record_observation(
@@ -139,14 +134,15 @@ def record_observation(
     Savepoint errors which cannot be rolled back still escape to the store's
     normal StorageUncertainError path. They never yield a successful execution.
     """
-    if observation.reservation != reservation:
+    if observation.reservation != reservation or (
+        observation.evidence.attempt_id,
+        observation.evidence.goal_id,
+        observation.evidence.generation,
+    ) != (reservation.attempt_id, reservation.goal_id, reservation.generation):
         return
     conn.execute("SAVEPOINT passive_observation")
     try:
-        conn.execute(
-            "INSERT INTO failed_turn_observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            observation.values(),
-        )
+        observation.evidence.insert(conn)
     except sqlite3.Error:
         conn.execute("ROLLBACK TO passive_observation")
     finally:
@@ -191,7 +187,7 @@ def read_failed_turn_projection(
         or not owner_status.active
         or owner.pid <= 0
         or goal is None
-        or not isinstance(goal.state, (BlockedGoal, PausedGoal))
+        or not isinstance(goal.state, (BlockedState, PausedGoal))
     ):
         return unavailable("owner_or_goal_changed")
     if type(admission) is not int or admission <= 0:
@@ -207,49 +203,45 @@ def read_failed_turn_projection(
             conn.execute("PRAGMA query_only=ON")
             conn.execute("BEGIN")
             try:
-                if conn.execute(
-                    "SELECT value FROM metadata WHERE key='schema_version'"
-                ).fetchone() != ("5",):
+                from .goal_attempts import (
+                    AttemptRecord,
+                    Generation,
+                    StorageUncertainError,
+                    assert_goal_attempt_schema,
+                )
+
+                try:
+                    assert_goal_attempt_schema(conn)
+                except StorageUncertainError:
                     return unavailable("unsupported_schema")
-                row = conn.execute(
-                    "SELECT o.owner,o.owner_created_at,o.worktree,o.admission,"
-                    "o.goal_revision,o.reason,o.turn_id,o.turn_generation FROM goals g "
-                    "JOIN attempts a ON a.attempt_id=g.attempt_id "
-                    "AND a.goal_id=g.goal_id AND a.generation=g.generation "
-                    "JOIN failed_turn_observations o ON o.attempt_id=a.attempt_id "
-                    "AND o.goal_id=a.goal_id AND o.generation=a.generation "
-                    "WHERE g.goal_id=? AND g.state=? AND a.phase=?",
-                    (goal.id, BlockedGeneration.declared_name, FailedAttempt.declared_name),
-                ).fetchone()
-                if row is None:
+                generation = Generation.one(conn, goal_id=goal.id)
+                if generation is None or not isinstance(generation.lifecycle, BlockedGeneration):
                     return unavailable("missing_binding")
-                (
-                    name,
-                    created_at,
-                    worktree,
-                    observed_admission,
-                    revision,
-                    reason,
-                    turn_id,
-                    turn_generation,
-                ) = row
+                attempt = AttemptRecord.one(conn, attempt_id=generation.attempt_id)
+                if attempt is None or not isinstance(attempt.phase, FailedAttempt):
+                    return unavailable("missing_binding")
+                row = FailedTurnEvidence.one(conn, attempt_id=generation.attempt_id)
+                if row is None or (row.goal_id, row.generation) != (goal.id, generation.number):
+                    return unavailable("missing_binding")
+                if (attempt.reservation.goal_id, attempt.reservation.generation) != (
+                    goal.id,
+                    generation.number,
+                ):
+                    return unavailable("missing_binding")
                 if (
-                    (name, created_at, worktree, observed_admission)
+                    (row.owner, row.owner_created_at, row.worktree, row.admission)
                     != (owner.name, owner.created_at, owner.worktree, admission)
-                    or type(revision) is not int
-                    or revision > goal.revision
-                    or revision < 0
-                    or type(turn_generation) is not int
-                    or turn_generation != owner.turn_generation
+                    or row.goal_revision > goal.revision
+                    or row.turn_generation != owner.turn_generation
                     or (
                         owner.active_turn.id
                         if owner.active_turn is not None
                         else owner.last_finished_turn_id
                     )
-                    != turn_id
+                    != row.turn_id
                 ):
                     return unavailable("owner_or_goal_changed")
-                reason = FailureReason(reason).value
+                reason = row.reason.value
             finally:
                 conn.execute("ROLLBACK")
     except (sqlite3.Error, OSError, ValueError, TypeError):

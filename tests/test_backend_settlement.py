@@ -11,6 +11,7 @@ from agent_comms import backend
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 
 
+@pytest.mark.usefixtures("native_rpc_fixture")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("start_before_settlement", [False, True])
 @pytest.mark.parametrize("inject_during_stats", [False, True])

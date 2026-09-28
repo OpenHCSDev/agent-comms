@@ -9,10 +9,13 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal
+
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 
 class StaleBusPageIndexError(ValueError):
@@ -23,24 +26,56 @@ class OversizedIndexedBusRowError(StaleBusPageIndexError):
     """A warm indexed row exceeds an optional projection's byte budget."""
 
 
+class PageIndexTable:
+    """Disposable row offsets and their exact source revision."""
+
+
+@dataclass(frozen=True)
+class BusPageSource(PageIndexTable, TypedTable):
+    identity: tuple[int, int, int, int]
+    offset: int = field(metadata={"sql": Column(check="offset>=0")})
+    tail: str
+    singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
+
+
+@dataclass(frozen=True)
+class BusPageRow(PageIndexTable, TypedTable):
+    seq: int
+    offset: int
+    sender: str
+    target: str
+    id: int | None = field(default=None, metadata={"sql": Column(primary_key=True)})
+    indexes = (Index(("seq", "id")), Index(("target", "seq", "id")))
+
+
 class BusPageIndex:
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_page_index.sqlite3")
         self.connection = sqlite3.connect(self.path, timeout=30)
         self.connection.execute("PRAGMA synchronous=FULL")
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-        )
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS rows ("
-            "id INTEGER PRIMARY KEY, seq INTEGER NOT NULL, offset INTEGER NOT NULL, "
-            "sender TEXT NOT NULL, target TEXT NOT NULL)"
-        )
-        self.connection.execute("CREATE INDEX IF NOT EXISTS rows_seq ON rows(seq, id)")
-        self.connection.execute(
-            "CREATE INDEX IF NOT EXISTS rows_target_seq ON rows(target, seq, id)"
-        )
+        try:
+            with self.connection:
+                self.connection.execute("BEGIN IMMEDIATE")
+                actual = SQLiteSchemaObject.read(
+                    self.connection.execute(
+                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
+                        "AND name NOT LIKE 'sqlite_%'"
+                    )
+                )
+                schema = {
+                    name: sql
+                    for table in TypedTable.members_with(PageIndexTable)
+                    for name, sql in table.schema_objects().items()
+                }
+                if not actual:
+                    for statement in schema.values():
+                        self.connection.execute(statement)
+                elif {row.name: row.sql for row in actual} != schema:
+                    raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
+        except BaseException:
+            self.connection.close()
+            raise
 
     def __enter__(self) -> BusPageIndex:
         return self
@@ -67,41 +102,35 @@ class BusPageIndex:
                 stream.seek(size - 1)
                 if stream.read(1) != b"\n":
                     return False
-            identity = [stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns]
-            saved_row = self.connection.execute(
-                "SELECT value FROM metadata WHERE key='source'"
-            ).fetchone()
+            identity = (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns)
             try:
-                saved = json.loads(saved_row[0]) if saved_row else None
-            except (TypeError, ValueError):
-                saved = None
-            offset = saved.get("offset") if isinstance(saved, dict) else None
-            previous = saved.get("identity") if isinstance(saved, dict) else None
+                saved = BusPageSource.one(self.connection, singleton=1)
+            except (ValueError, TypeError):
+                saved = None  # Rebuild damaged current-format derived evidence from its source.
+            offset = saved.offset if saved is not None else 0
             valid = (
-                isinstance(saved, dict)
-                and saved.get("version") == 1
-                and type(offset) is int
+                saved is not None
                 and 0 <= offset <= size
-                and isinstance(previous, list)
-                and len(previous) == 4
-                and previous[:2] == identity[:2]
-                and (offset != size or previous[2:] == identity[2:])
-                and saved.get("tail") == self._tail(stream, offset)
+                and saved.identity[:2] == identity[:2]
+                and (offset != size or saved.identity[2:] == identity[2:])
+                and saved.tail == self._tail(stream, offset)
             )
             if not valid:
                 offset = 0
             if valid and offset == size:
                 return True
-            assert isinstance(offset, int)
             with self.connection:
                 if not valid:
-                    self.connection.execute("DELETE FROM rows")
+                    self.connection.execute(f"DELETE FROM {BusPageRow.declared_name}")
                     last_sequence = None
                 else:
-                    last_row = self.connection.execute(
-                        "SELECT seq FROM rows ORDER BY id DESC LIMIT 1"
-                    ).fetchone()
-                    last_sequence = last_row[0] if last_row else None
+                    last_rows = BusPageRow.read(
+                        self.connection.execute(
+                            f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
+                            f"FROM {BusPageRow.declared_name} ORDER BY id DESC LIMIT 1"
+                        )
+                    )
+                    last_sequence = last_rows[0].seq if last_rows else None
                 stream.seek(offset)
                 while stream.tell() < size:
                     row_offset = stream.tell()
@@ -120,26 +149,13 @@ class BusPageIndex:
                     message = Message.from_wire(record)
                     if last_sequence is not None and message.seq <= last_sequence:
                         # The page collector uses wire order. A cache sorted
-                        # by sequence must not hide malformed legacy order.
+                        # by sequence must not hide malformed source order.
                         raise StaleBusPageIndexError("Wire sequences are not increasing.")
-                    self.connection.execute(
-                        "INSERT INTO rows(seq,offset,sender,target) VALUES(?,?,?,?)",
-                        (message.seq, row_offset, message.sender, message.target),
+                    BusPageRow(message.seq, row_offset, message.sender, message.target).insert(
+                        self.connection
                     )
                     last_sequence = message.seq
-                self.connection.execute(
-                    "INSERT OR REPLACE INTO metadata VALUES('source',?)",
-                    (
-                        json.dumps(
-                            {
-                                "version": 1,
-                                "identity": identity,
-                                "offset": size,
-                                "tail": self._tail(stream, size),
-                            }
-                        ),
-                    ),
-                )
+                BusPageSource(identity, size, self._tail(stream, size)).upsert(self.connection)
             return True
 
     def current(self) -> bool:
@@ -152,18 +168,11 @@ class BusPageIndex:
                     stream.seek(size - 1)
                     if stream.read(1) != b"\n":
                         return False
-                saved_row = self.connection.execute(
-                    "SELECT value FROM metadata WHERE key='source'"
-                ).fetchone()
-                saved = json.loads(saved_row[0]) if saved_row else None
-                if not isinstance(saved, dict):
-                    return False
-                return (
-                    saved.get("version") == 1
-                    and saved.get("offset") == size
-                    and saved.get("identity")
-                    == [stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns]
-                    and saved.get("tail") == self._tail(stream, size)
+                saved = BusPageSource.one(self.connection, singleton=1)
+                return saved is not None and saved == BusPageSource(
+                    (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns),
+                    size,
+                    self._tail(stream, size),
                 )
         except (OSError, ValueError, TypeError, sqlite3.DatabaseError):
             return False
@@ -175,7 +184,7 @@ class BusPageIndex:
         upper: int | None,
         descending: bool,
         targets: frozenset[str] | None,
-    ) -> sqlite3.Cursor:
+    ) -> Generator[BusPageRow, None, None]:
         clauses: list[str] = []
         params: list[object] = []
         if lower is not None:
@@ -186,24 +195,27 @@ class BusPageIndex:
             params.append(upper)
         if targets is not None:
             if not targets:
-                return self.connection.execute("SELECT seq,offset,sender,target FROM rows WHERE 0")
+                return
             clauses.append("target IN (" + ",".join("?" for _ in targets) + ")")
             params.extend(sorted(targets))
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         direction = "DESC" if descending else "ASC"
         query = (
-            "SELECT seq,offset,sender,target FROM rows"
+            f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
+            f"FROM {BusPageRow.declared_name}"
             + where
             + f" ORDER BY seq {direction}, id {direction}"
         )
-        return self.connection.execute(query, params)
+        try:
+            yield from BusPageRow.iterate(self.connection.execute(query, params))
+        except (ValueError, TypeError) as error:
+            raise StaleBusPageIndexError("Indexed row has invalid fields") from error
 
     @staticmethod
     def record(
-        stream: BinaryIO, row: tuple[int, int, str, str], *, max_bytes: int | None = None
+        stream: BinaryIO, row: BusPageRow, *, max_bytes: int | None = None
     ) -> tuple[Mapping, int]:
-        seq, offset, sender, target = row
-        stream.seek(offset)
+        stream.seek(row.offset)
         raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
         if max_bytes is not None and len(raw) > max_bytes:
             raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
@@ -213,9 +225,9 @@ class BusPageIndex:
             raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
         if (
             not isinstance(record, Mapping)
-            or int(record.get("seq", 0)) != seq
-            or record.get("from") != sender
-            or record.get("to") != target
+            or int(record.get("seq", 0)) != row.seq
+            or record.get("from") != row.sender
+            or record.get("to") != row.target
         ):
             raise StaleBusPageIndexError("Indexed bus row changed.")
         return record, len(raw)

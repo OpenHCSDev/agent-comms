@@ -5,7 +5,8 @@ import os
 
 import pytest
 
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     OwnerInvocable,
@@ -19,7 +20,7 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))
     session = response.session_id
@@ -31,7 +32,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         async def session_update(self, session_id, update):
             updates.append(update)
 
-    observer = CommsAgent(comms)
+    observer = canonical_agent(comms)
     observer.on_connect(Client())
     proxy = RuntimeProxy(observer, session, socket_path(comms.root, os.getpid()))
     try:

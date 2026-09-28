@@ -1,47 +1,12 @@
 """Declaration extension and public-format tests for S4 ownership boundaries."""
 
 import ast
-import json
 from pathlib import Path
 
-import pytest
 
-from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
-from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
-from agent_comms.thread_identity import ThreadRole
-from agent_comms.threads import Thread
-
-
-def test_alias_declaration_drives_lookup_delivery_history_and_audience(monkeypatch, tmp_path):
-    original = BuiltinChannel.aliases.fget
-    monkeypatch.setattr(
-        BuiltinChannel,
-        "aliases",
-        property(
-            lambda member: (
-                (*original(member), "everyone")
-                if member is BuiltinChannel.ALL
-                else original(member)
-            )
-        ),
-    )
-    assert BuiltinChannel.lookup("everyone") is BuiltinChannel.ALL
-    comms = wire(tmp_path)
-    for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
-    assert "everyone" in comms.channels.catalog.read().targets_for(frozenset())
-    assert "everyone" in comms.channels.catalog.read().history_targets("everyone")
-    message = Message("alice", "everyone", "hello", MessageType.INFO, sender_role=ThreadRole.USER)
-    assert message.response_policy.starts_turn
-    comms.bus.publisher.publish(message).message_id
-    assert comms.views.channel_history("everyone")[0].target == BuiltinChannel.ALL.value
-    assert comms.bus.pending_count("bob") == 1
-    assert not BuiltinChannel.exact_stored_target("everyone")
-    assert not BuiltinChannel.exact_stored_target(BuiltinChannel.ANY.value)
-    assert BuiltinChannel.exact_stored_target(BuiltinChannel.ALL.value)
 
 
 def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
@@ -56,6 +21,7 @@ def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
         "kind": "activity",
         "predicate": {"match": "any_of", "tags": ["a", "z"]},
         "created_at": 7.0,
+        "original_targets": [],
     }
     assert FieldCodec.encode(view) == expected
     assert FieldCodec.decode(SavedView, expected) == view
@@ -81,23 +47,6 @@ def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
         "sender_role",
     ]
     assert Message.from_wire(message.to_wire()) == message
-
-
-@pytest.mark.parametrize("key", ["user", '["user","#team"]', '["view2","user","#team","exact",[]]'])
-def test_legacy_markers_without_shown_membership_reset_with_visible_notice(tmp_path, key):
-    comms = wire(tmp_path)
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("alice", "#team", "not proved shown by a legacy maximum")
-    comms.bus.reads.path.unlink()  # Model upgrade from a pre-ledger root.
-    legacy = comms.bus.reads.path.with_name(comms.bus.reads.legacy_filename)
-    legacy.write_text(json.dumps({key: 1}))
-    original = legacy.read_bytes()
-    reopened = wire(tmp_path)
-    snapshot = reopened.views.viewer_snapshot(str(tmp_path))
-    assert snapshot.read_marker_notice and snapshot.channel_unread["#team"] == 1
-    assert not reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
-    assert legacy.read_bytes() == original  # Executor compatibility bytes preserved.
 
 
 def test_authorities_do_not_import_presentation_or_recover_policy_cases():

@@ -18,21 +18,24 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.assignment_states import (
     CompletedAssignment,
     FailedAssignment,
     IgnoredAssignment,
     TriagePendingAssignment,
 )
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionJournalUnknownError,
+    SelectedSummaryAttempt,
 )
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.compaction_states import ReservedSummary
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
@@ -93,12 +96,17 @@ def _root(
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()),
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
         Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             task="release notes; ignore arithmetic tasks",
             model="openai-codex/gpt-6-sol",
         ),
@@ -106,7 +114,7 @@ def _root(
             "beta",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             task="arithmetic answers",
             model="openai-codex/gpt-6-sol",
             thinking_level="high",
@@ -115,8 +123,6 @@ def _root(
     for person in people:
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    if claims:
-        comms.messaging.initialize_private_claim_protocol()
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = comms.messaging.send_initial_cohort("sender", target, body)
@@ -347,7 +353,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert store.participant(lookups["beta"]).pointer.execution_id is None
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 3
         )
@@ -473,7 +479,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     with journal._transaction() as db:
         coverage = db.execute(
-            "SELECT session_id,device,inode,owner_generation,admission_epoch "
+            "SELECT session_id,device,inode,owner_generation,admission_generation "
             "FROM enrolled_private_sessions WHERE session_file=?",
             (str(fresh.path),),
         ).fetchone()
@@ -496,8 +502,8 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
                     "ownerPid": os.getpid(),
                     "admissionGeneration": coverage[3],
                 },
-                "selected": {"provider": "openrouter"},
-                "settings": {"keepRecentTokens": 2000},
+                "selected": {"provider": "openrouter", "modelId": "test", "contextWindow": 200000},
+                "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
             fresh_session=fresh,
             admission_generation=coverage[4],
@@ -634,8 +640,8 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
             str(visible[0]),
             {
                 "source": {"ownerName": "beta"},
-                "selected": {"provider": "openrouter"},
-                "settings": {"keepRecentTokens": 2000},
+                "selected": {"provider": "openrouter", "modelId": "test", "contextWindow": 200000},
+                "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
         )
 
@@ -668,7 +674,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
+                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
                 (outcome.assignment_id,),
             ).fetchone()[0]
             == 1
@@ -709,7 +715,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_inputs WHERE claim_id=?",
+                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
                 (outcome.assignment_id,),
             ).fetchone()[0]
             == 1
@@ -891,19 +897,22 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             )
 
 
-def _legacy_private_selected_row(journal: CompactionJournal, session_file: Path) -> str:
-    """A persisted pre-coverage selected row must still block the raw writer."""
+def _reserved_private_selected_row(journal: CompactionJournal, session_file: Path) -> str:
+    """An unresolved current reservation must block the raw writer."""
     operation_id = "a" * 32
     source = json.dumps(
-        {"source": {"witness": "fake"}, "selected": {"provider": "fake"}, "settings": {"limit": 1}},
+        {
+            "source": {"witness": "fake"},
+            "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
+            "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
+        },
         sort_keys=True,
         separators=(",", ":"),
     )
     with journal._transaction() as db:
-        db.execute(
-            "INSERT INTO selected_summary_attempts VALUES (?, ?, ?, 'reserved', NULL, NULL)",
-            (operation_id, str(session_file.resolve(strict=True)), source),
-        )
+        SelectedSummaryAttempt(
+            operation_id, str(session_file.resolve(strict=True)), source, ReservedSummary()
+        ).insert(db)
     return operation_id
 
 
@@ -920,7 +929,7 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     session_file.write_text(original)
     session_file.chmod(0o600)
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    operation_id = _legacy_private_selected_row(journal, session_file)
+    operation_id = _reserved_private_selected_row(journal, session_file)
     if status == "unknown":
         journal.mark_selected_summary_unknown(operation_id)
     elif status == "declined-prestart":
@@ -942,7 +951,7 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     assert not Path(str(session_file) + ".input-proof").exists()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         rows = store._connection.execute(
-            "SELECT sent_owner_admission_epoch, session_id FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation, session_id FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and tuple(rows[0]) == (None, None)
         assert (
@@ -1010,8 +1019,8 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
             str(saved),
             {
                 "source": {"witness": "fake"},
-                "selected": {"provider": "fake"},
-                "settings": {"limit": 1},
+                "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
+                "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
             },
         )
     assert (
@@ -1045,7 +1054,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     async def renamed(*args, **kwargs):
         saved.rename(moved)
         journal = CompactionJournal(root / "compaction-commits.sqlite3")
-        _legacy_private_selected_row(journal, moved)
+        _reserved_private_selected_row(journal, moved)
         return await base(*args, **kwargs)
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", renamed)
@@ -1061,7 +1070,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     assert calls == [] and not saved.exists() and moved.exists()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
-            "SELECT sent_owner_admission_epoch,session_id FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation,session_id FROM native_runtime_input"
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (
@@ -1095,7 +1104,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NULL"
             ).fetchone()[0]
             == 1
         )
@@ -1142,7 +1151,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
-            "JOIN native_runtime_inputs i ON i.claim_id=c.claim_id "
+            "JOIN native_runtime_input i ON i.assignment_id=c.assignment_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
         assert tuple(row) == ("deferred", None)
@@ -1299,7 +1308,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 0
         )
@@ -1355,7 +1364,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     assert len(comms.bus.dm_history("sender", "beta")) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[0]
+            store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
             == 0
         )
 
@@ -1403,7 +1412,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         assert len(comms.bus.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        inputs = store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()
+        inputs = store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()
         intents = store._connection.execute("SELECT count(*) FROM publication_intents").fetchone()
         assert (inputs[0], intents[0]) == ((0, 0) if mutation == "stop_then_heartbeat" else (1, 1))
 
@@ -1415,13 +1424,20 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     comms.threads.register(
         Thread(
             "beta",
             frozenset({"team"}),
             str(tmp_path),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             model="openai-codex/gpt-6-sol",
         )
     )
@@ -1530,7 +1546,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
         return append(self, intent, registry_snapshot=registry_snapshot)
 
-    monkeypatch.setattr(Publisher, '_publish_keyed_response_unlocked', blocking_append)
+    monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
     try:
         result = await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1597,7 +1613,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         )
         assert (
             store._connection.execute(
-                "SELECT count(*) FROM native_runtime_inputs WHERE session_id IS NOT NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 1
         )
@@ -1721,7 +1737,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     assert comms.registry.require("beta").active_turn == original
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[0]
+            store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
             == 0
         )
         assert (
@@ -1760,7 +1776,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     assert len(rows) == 2 and rows[-1].notice
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         row = store._connection.execute(
-            "SELECT stage,session_id FROM native_runtime_inputs"
+            "SELECT stage,session_id FROM native_runtime_input"
         ).fetchone()
         assert tuple(row) == ("full", None)
         assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == "failed"
@@ -1771,7 +1787,7 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
     with MutationStore(str(path)) as store:
         assert (
             store._connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='native_runtime_inputs'"
+                "SELECT 1 FROM sqlite_master WHERE name='native_runtime_input'"
             ).fetchone()
             is None
         )
@@ -1781,26 +1797,6 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
         store._connection.execute("DROP TRIGGER native_runtime_input_delete_guard")
         with pytest.raises(PublicationActivationBlocked, match="drifted"):
             assert_native_runtime_schema(store._connection)
-
-
-def test_native_runtime_v2_is_not_implicitly_migrated(tmp_path: Path) -> None:
-    path = tmp_path / "old-runtime.sqlite3"
-    with MutationStore(str(path)) as store:
-        # The v2 metadata is enough to force an explicit, reviewed migration;
-        # never relabel historical native inputs with an inferred send epoch.
-        store._connection.execute(
-            "CREATE TABLE native_runtime_schema_meta (singleton INTEGER PRIMARY KEY,"
-            "version INTEGER NOT NULL,ddl_digest TEXT NOT NULL)"
-        )
-        store._connection.execute(
-            "INSERT INTO native_runtime_schema_meta VALUES (1,2,?)", ("0" * 64,)
-        )
-        with pytest.raises(PublicationActivationBlocked, match="version differs"):
-            install_native_runtime_schema(store)
-        version = store._connection.execute(
-            "SELECT version FROM native_runtime_schema_meta"
-        ).fetchone()[0]
-        assert version == 2
 
 
 async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch) -> None:
@@ -1818,8 +1814,10 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         for assignment in first_page:
             # Schema-legal terminal fixture only; no forged Pi context claim.
             store._connection.execute(
-                "UPDATE wake_claims SET disposition='ignored',triage_verdict='ignore',"
-                "revision=revision+1 WHERE claim_id=? AND disposition='triage_pending'",
+                (
+                    "UPDATE wake_claims SET lifecycle=json_object('kind','ignored'),revision=revi"
+                    "sion+1 WHERE assignment_id=? AND disposition='triage_pending'"
+                ),
                 (assignment.assignment_id,),
             )
         assert len(sealed_cohort_assignments(store, lookup, after_seq=first_page[-1].wire_seq)) == 1
@@ -1838,7 +1836,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors WHERE recipient_lookup=?",
+                "SELECT COUNT(*) FROM current_native_cursor WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
             == 0

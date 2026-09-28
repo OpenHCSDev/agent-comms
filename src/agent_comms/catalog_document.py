@@ -84,7 +84,6 @@ class CatalogDocument:
         return result
 
     def resolve(self, target: str) -> Channel:
-        target = BuiltinChannel.canonical(target)
         tag = target.removeprefix("#")
         view = self.saved_views.get(tag)
         members = (
@@ -98,9 +97,9 @@ class CatalogDocument:
         return preference.channel(target, members, view)
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
-        return frozenset(
-            name for kind in BuiltinChannel if kind.matches(tags) for name in kind.names
-        ) | frozenset(f"#{tag}" for tag in tags)
+        return frozenset(kind.value for kind in BuiltinChannel if kind.matches(tags)) | frozenset(
+            f"#{tag}" for tag in tags
+        )
 
     def history_targets(self, target: str) -> frozenset[str] | None:
         return self.resolve(target).history_targets

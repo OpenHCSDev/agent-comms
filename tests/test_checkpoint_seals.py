@@ -5,42 +5,10 @@ import json
 
 import pytest
 
-from agent_comms.checkpoint_seals import CheckpointSeal, FinalSeal, PendingSeal
+from agent_comms.checkpoint_seals import FinalSeal, PendingSeal
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.wire_log import WireLog
 from test_private_bus_checkpoint import _page, _root, stable_thread_lookup
-
-
-@pytest.mark.parametrize("mode", ["public", "private", "claims", "final", "pending"])
-def test_current_saved_protocol_roundtrips_without_migration(tmp_path, mode):
-    comms, root_id = _root(tmp_path)
-    raw = {"last_seq": 0}
-    if mode != "public":
-        raw.update(writer_protocol_version=1, wire_root_id=root_id)
-    if mode in ("claims", "final", "pending"):
-        raw["claim_envelopes_version"] = 1
-    if mode in ("final", "pending"):
-        witness = install_private_bus_checkpoint(comms.bus.log)
-        seal = (
-            FinalSeal.capture(witness, comms.root / "private_bus_checkpoint.sqlite3")
-            if mode == "final"
-            else PendingSeal.capture(
-                witness, witness, comms.root / "private_bus_checkpoint.sqlite3"
-            )
-        )
-        raw.update(checkpoint_version=1, checkpoint_seal=FieldCodec.encode(seal))
-        assert (
-            FieldCodec.encode(FieldCodec.decode(CheckpointSeal, raw["checkpoint_seal"]))
-            == raw["checkpoint_seal"]
-        )
-    # Decode actual bytes, without invoking a bus read on a deliberately changed protocol.
-    comms.bus.log.metadata_path.write_text(json.dumps(raw))
-    marker = comms.bus.log.read_metadata_unlocked()
-    assert FieldCodec.encode(marker) == raw
-    assert marker.private is (mode != "public")
-    assert marker.claims is (mode in ("claims", "final", "pending"))
 
 
 @pytest.mark.parametrize(
@@ -69,7 +37,6 @@ def test_current_saved_protocol_roundtrips_without_migration(tmp_path, mode):
 )
 def test_malformed_marker_denied_by_wire_and_registry_same_boundary(tmp_path, damage):
     comms, _ = _root(tmp_path)
-    install_private_bus_checkpoint(comms.bus.log)
     original = json.loads(comms.bus.log.metadata_path.read_text())
     raw = copy.deepcopy(original)
     seal = raw["checkpoint_seal"]
@@ -126,7 +93,6 @@ def test_malformed_marker_denied_by_wire_and_registry_same_boundary(tmp_path, da
 )
 def test_uncertain_seal_publication_recovers_exact_committed_suffix(tmp_path, monkeypatch, stage):
     comms, _ = _root(tmp_path)
-    install_private_bus_checkpoint(comms.bus.log)
     comms.messaging.send_initial_cohort("sender", "Alice", "original")
     real = WireLog.write_metadata_unlocked
     armed = True

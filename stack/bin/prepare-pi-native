@@ -57,21 +57,7 @@ python3 "$stack_root/patch-native-auto-compaction.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 python3 "$stack_root/patch-native-steering.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
-python3 "$stack_root/patch-native-input-recovery.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
-python3 "$stack_root/patch-native-proof-headroom.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent"
 manager=dist/core/session-manager.js
-python3 "$stack_root/patch-native-session-writer-prototype.py" --production \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-compaction-journal.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-writer-coverage.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-writer-failure-state.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
-python3 "$stack_root/patch-native-compaction-metadata.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 services=dist/core/agent-session-services.js
 python3 "$stack_root/patch-native-model-config.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
@@ -82,6 +68,14 @@ python3 "$stack_root/patch-native-compaction-readiness.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 python3 "$stack_root/patch-native-selected-compaction-summary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
+# One SessionManager storage owner; replace eager loaders and their consumers together.
+native_package="$stage/node_modules/@earendil-works/pi-coding-agent"
+patch --batch --fuzz=0 -p1 -d "$native_package" < "$stack_root/native-session-storage.patch"
+cp -- "$stack_root/native-session-entry-store.mjs" "$native_package/dist/core/session-entry-store.js"
+cp -- "$stack_root/native-session-entry-store.d.ts" "$native_package/dist/core/session-entry-store.d.ts"
+cp -- "$stack_root/native-session-context.mjs" "$native_package/dist/core/session-context.js"
+cp -- "$stack_root/native-compaction-source.mjs" "$native_package/dist/core/compaction/agent-comms-source.js"
+cp -- "$stack_root/native-compaction-source.d.ts" "$native_package/dist/core/compaction/agent-comms-source.d.ts"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
 python3 "$stack_root/prepare-native-import-boundary.py" \

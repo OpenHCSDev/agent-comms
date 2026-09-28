@@ -8,7 +8,8 @@ from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption, TextContentBlock, UserMessageChunk
 
 from agent_comms import backend
-from agent_comms.acp import CommsAgent, CommsClient
+from agent_comms.acp import CommsClient
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.config_options import ConfigOption
 from agent_comms.routing import MessageRoute
@@ -32,9 +33,9 @@ async def owner(tmp_path, monkeypatch):
 
     monkeypatch.setattr(backend, "discover_models", models)
     monkeypatch.setattr(backend, "discover_thinking_levels", levels)
-    agent = CommsAgent(
+    agent = canonical_agent(
         wire(tmp_path / "wire"),
-        agent_bin="/bin/echo",
+        agent_bin="pi",
         agent_args=["--model", "test/one"],
         auto_wake=False,
     )
@@ -46,7 +47,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
-    other = CommsClient(wire(tmp_path / "other"), agent_bin="/bin/echo")
+    other = CommsClient(wire(tmp_path / "other"), agent_bin="pi")
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
     await owner.initialize(1, {"_meta": {"agentComms": {"transcriptSnapshots": True}}})

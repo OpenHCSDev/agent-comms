@@ -8,6 +8,7 @@ import pytest
 
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import ThreadView
@@ -30,7 +31,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         "owner",
         frozenset({"team"}),
         str(tmp_path),
-        pid=os.getpid(),
+        process_identity=ProcessIdentity.capture(os.getpid()),
         title="Retained title",
         session_file="/retained/session.jsonl",
         created_at=12.5,
@@ -38,7 +39,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms.registry.register(thread, status)
     before = comms.registry.snapshot()
     raw = json.loads(comms.registry.store.path.read_text())
-    assert raw["threads"]["owner"]["status"] == status.declared_name
+    assert FieldCodec.decode(ThreadStatus, raw["statuses"]["owner"]) == status
     assert raw["threads"]["owner"]["created_at"] == 12.5
     reopened = Registration(comms.registry.store.path)
     assert reopened.snapshot() == before
@@ -55,7 +56,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()), status)
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), status)
     before = registry.snapshot()
     saved = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError, match="Stop a running thread"):
@@ -70,7 +71,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_reactivation_rotates_owner_and_admission_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()), status)
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), status)
     before = registry.snapshot()
     registry.heartbeat("owner")
     after = registry.snapshot()
@@ -101,7 +102,6 @@ def test_roster_and_controls_keep_archived_threads_dormant():
     assert not archived.allows_control("comms_start", owner_pid=123)
     assert not archived.allows_control("comms_stop", owner_pid=123)
     assert not archived.allows_control("comms_archive", owner_pid=123)
-    assert archived.allows_control("comms_delete", owner_pid=123)
     stopped = StoppedThreadStatus()
     assert stopped.in_view() and not stopped.in_view(show_stopped=False)
     assert stopped.allows_control("comms_start", owner_pid=123)

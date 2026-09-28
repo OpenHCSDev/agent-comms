@@ -6,7 +6,6 @@ import math
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
@@ -34,8 +33,15 @@ class RegistrationChange:
     def needs_maintenance_admission(self) -> bool:
         return self.thread.role.executable and (
             self.new_owner
-            or (self.previous is None and self.thread.pid > 0 and self.status.active)
-            or (self.previous is not None and self.previous.pid != self.thread.pid)
+            or (
+                self.previous is None
+                and self.thread.process_identity is not None
+                and self.status.active
+            )
+            or (
+                self.previous is not None
+                and self.previous.process_identity != self.thread.process_identity
+            )
             or (
                 self.previous_status is not None
                 and not self.previous_status.active
@@ -49,7 +55,7 @@ class RegistrationChange:
         return previous is not None and (
             self.new_owner
             or previous.created_at != thread.created_at
-            or previous.pid != thread.pid
+            or previous.process_identity != thread.process_identity
             or previous.session_file != thread.session_file
             or previous.worktree != thread.worktree
             or previous.role != thread.role
@@ -67,7 +73,6 @@ class RegistryDocument:
     aliases: dict[str, str] = field(default_factory=dict)
     owners: GenerationCounter = field(default_factory=GenerationCounter)
     admissions: GenerationCounter = field(default_factory=GenerationCounter)
-    generation_metadata_present: bool = False
 
     def copy(self) -> RegistryDocument:
         return replace(
@@ -93,89 +98,29 @@ class RegistryDocument:
         )
 
     @classmethod
-    def from_wire(cls, raw: dict, root: Path) -> RegistryDocument:
-        document = cls()
-        raw = dict(raw)
-        # These established disk names encode the single owner counter.
-        has_generations = "owner_epochs" in raw or "owner_epoch_counter" in raw
-        if has_generations:
-            try:
-                document.owners = FieldCodec.decode(
-                    GenerationCounter,
-                    {
-                        "counter": raw.get("owner_epoch_counter"),
-                        "generations": raw.get("owner_epochs"),
-                    },
-                )
-            except (ValueError, TypeError) as error:
-                raise RelationViolationError(
-                    "invalid private registry owner generations"
-                ) from error
-        else:
-            # Unmarked legacy stores remain readable but cannot authorize the
-            # coordinated CAS until an explicit owner registration migrates them.
-            legacy = raw.get("threads", {})
-            if type(legacy) is not dict or any(type(name) is not str for name in legacy):
-                raise RelationViolationError("invalid legacy registry owner declarations")
-            document.owners = GenerationCounter(
-                len(legacy), {name: index for index, name in enumerate(sorted(legacy), start=1)}
-            )
-        has_admissions = "admission_generations" in raw or "admission_generation_counter" in raw
-        if has_admissions:
-            try:
-                document.admissions = FieldCodec.decode(
-                    GenerationCounter,
-                    {
-                        "counter": raw.get("admission_generation_counter"),
-                        "generations": raw.get("admission_generations"),
-                    },
-                )
-            except (ValueError, TypeError) as error:
-                raise RelationViolationError("invalid owner admission generations") from error
-        else:
-            # Existing roots acquire a durable admission witness on their next
-            # registry write. Metadata revisions no longer rotate it.
-            document.admissions = GenerationCounter(
-                document.owners.counter, dict(document.owners.generations)
-            )
-        document.generation_metadata_present = has_generations
-        document.aliases.update(raw.get("aliases", {}))
-        for name, data in raw.get("threads", {}).items():
-            document.threads[name] = Thread.from_registry(name, data, root)
-            document.statuses[name] = ThreadStatus.decode(
-                data.get("status", RunningThreadStatus.declared_name)
-            )()
-            document.last_seen[name] = data.get("last_seen", 0.0)
-            if has_generations and name not in document.owners.generations:
-                raise RelationViolationError("missing private registry owner epoch")
-            if has_admissions and name not in document.admissions.generations:
-                raise RelationViolationError("missing private registry admission generation")
-        # Older stores retained aliases after deletion. Only a retained thread
-        # (including an archived one) can own a name reservation.
-        document.aliases = {
-            alias: target
-            for alias, target in document.aliases.items()
-            if target in document.threads
-        }
-        return document
-
-    def to_wire(self) -> dict:
-        return {
-            "threads": {
-                name: {
-                    **t.to_wire(),
-                    "status": self.statuses.get(name, RunningThreadStatus()).declared_name,
-                    "last_seen": self.last_seen.get(name, 0.0),
-                }
-                for name, t in self.threads.items()
-            },
-            "aliases": dict(sorted(self.aliases.items())),
-            # One saved-data encoding of the owner counter.
-            "owner_epoch_counter": self.owners.counter,
-            "owner_epochs": dict(sorted(self.owners.generations.items())),
-            "admission_generation_counter": self.admissions.counter,
-            "admission_generations": dict(sorted(self.admissions.generations.items())),
-        }
+    def from_wire(cls, raw: dict) -> RegistryDocument:
+        try:
+            document = FieldCodec.decode(cls, raw)
+            # Creation identity is supplied by storage, never synthesized from
+            # the clock or a session file during a read.
+            if any("created_at" not in record for record in raw["threads"].values()):
+                raise ValueError("missing stored creation identity")
+            names = set(document.threads)
+            if names != set(document.statuses) or names != set(document.last_seen):
+                raise ValueError("thread presence does not match declarations")
+            if not names <= document.owners.generations.keys():
+                raise ValueError("missing owner generation")
+            if not names <= document.admissions.generations.keys():
+                raise ValueError("missing admission generation")
+            if any(name != thread.name for name, thread in document.threads.items()):
+                raise ValueError("thread name differs from its declaration")
+            if any(
+                target not in names or alias in names for alias, target in document.aliases.items()
+            ):
+                raise ValueError("alias has no exclusive retained owner")
+            return document
+        except (ValueError, TypeError, KeyError) as error:
+            raise RelationViolationError(f"Invalid registry document: {error}") from error
 
     def prepare_registration(
         self, thread: Thread, status: ThreadStatus, *, new_owner: bool
@@ -236,7 +181,7 @@ class RegistryDocument:
         if (
             previous is None
             or new_owner
-            or previous.pid != thread.pid
+            or previous.process_identity != thread.process_identity
             or previous.role != thread.role
             or (previous_status is not None and previous_status.changes_owner(status))
         ):
@@ -272,7 +217,7 @@ class RegistryDocument:
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread, pid=0, active_turn=None))
+            additions.append(replace(thread, process_identity=None, active_turn=None))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
         aliases = {
@@ -473,6 +418,11 @@ class RegistrySnapshot:
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
+
+    def require_unambiguous_ownership(self) -> None:
+        """Archived identities remain readable; publication requires unique owners."""
+        if len({thread.created_at for thread in self.threads.values()}) != len(self.threads):
+            raise RelationViolationError("Registry creation identities collide.")
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)

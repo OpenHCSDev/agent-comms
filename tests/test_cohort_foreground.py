@@ -9,6 +9,8 @@ import os
 import select
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -18,6 +20,7 @@ from agent_comms import cohort_foreground as foreground
 from agent_comms import cohort_send
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -30,6 +33,8 @@ from agent_comms.coordination_store import (
 )
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
+from agent_comms.native_prompt_send import _enter_admission
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -62,7 +67,11 @@ def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
     return root, comms.messaging.initialize_private_initial_protocol(), comms
 
 
@@ -80,7 +89,11 @@ def _fake_pi(calls: list[str]):
             # The fake Pi must cross the same irreversible send-admission
             # boundary before claiming a native context. Do not synthesize a
             # receipt from a reservation that was never sent.
-            with _kwargs["prompt_send_boundary"](session_file):
+            with _enter_admission(
+                lambda: _kwargs["prompt_send_boundary"](session_file),
+                threading.Event(),
+                time.monotonic() + 5,
+            ):
                 calls.append(input_id)
 
         await asyncio.to_thread(admitted)
@@ -175,9 +188,9 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
-                    0
-                ]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 1
             )
 
@@ -191,7 +204,6 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         resource = base / "module.py"
         resource.write_bytes(b"before\n")
         root, root_id, comms = _wire(base)
-        comms.messaging.initialize_private_claim_protocol()
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
@@ -247,7 +259,6 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 selected_existing_file_write=plan,
             )
         assert "alpha" not in comms.registry and resource.read_bytes() == b"before\n"
-        comms.messaging.initialize_private_claim_protocol()
         external = tmp_path / "external.py"
         external.write_bytes(b"external\n")
         with pytest.raises(ValueError, match="inside the worktree"):
@@ -346,8 +357,14 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         resource = base / "module.py"
         resource.write_bytes(b"unchanged\n")
         root, root_id, comms = _wire(base)
-        comms.messaging.initialize_private_claim_protocol()
-        comms.threads.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "beta",
+                frozenset({"team"}),
+                str(base),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
@@ -449,7 +466,14 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
         base = Path(dirname)
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
-        comms.threads.register(Thread("beta", frozenset(), str(base), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "beta",
+                frozenset(),
+                str(base),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -498,9 +522,9 @@ except Exception as error:
         assert child.stdout.strip() == "StaleFence"
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
-                    0
-                ]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 0
             )
         assert comms.registry.status("beta") == RunningThreadStatus()
@@ -514,6 +538,8 @@ def test_actual_foreground_command_owns_its_recipient_process(tmp_path: Path) ->
         # Only the paid Pi edge is mocked IN THE CHILD. The CLI, registry,
         # bus, SQLite acceptance/claim and publication run in its actual PID.
         script = """import sys
+import threading
+import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
 from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
@@ -597,6 +623,8 @@ def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: 
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
         script = """import sys
+import threading
+import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
 from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
@@ -681,7 +709,7 @@ raise SystemExit(f.main(sys.argv[1:]))
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (
                     store._connection.execute(
-                        "SELECT count(*) FROM native_runtime_inputs"
+                        f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
                     ).fetchone()[0]
                     == 1
                 )
@@ -725,9 +753,9 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         assert len(calls) == 1
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute("SELECT count(*) FROM native_runtime_inputs").fetchone()[
-                    0
-                ]
+                store._connection.execute(
+                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+                ).fetchone()[0]
                 == 1
             )
         assert comms.registry.status("beta") == StoppedThreadStatus()
@@ -748,7 +776,11 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
 def test_sender_is_enabled_on_an_initialized_private_root() -> None:
     with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
         root, root_id, comms = _wire(Path(dirname))
-        comms.threads.register(Thread("beta", frozenset(), dirname, pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                "beta", frozenset(), dirname, process_identity=ProcessIdentity.capture(os.getpid())
+            )
+        )
         sequence, message_id = cohort_send.publish_one(
             root,
             wire_root_id=root_id,

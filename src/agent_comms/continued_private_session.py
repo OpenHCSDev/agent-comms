@@ -15,6 +15,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .backend import _session_revision
+from .native_runtime_input import NativeRuntimeInput
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDispositions
 from .native_entries import NativeEntry
@@ -114,22 +115,20 @@ def _recorded_private_contexts(
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("BEGIN")
         assert_native_runtime_schema(db)
-        rows = db.execute(
-            "SELECT input_id,session_id,session_file,session_entry_id,request_generation,"
-            "llm_context_digest,owner_thread FROM native_runtime_inputs WHERE owner_lookup=?",
-            (session.parent.name,),
-        ).fetchall()
-    if any(row["session_id"] is None for row in rows):
+        rows = NativeRuntimeInput.select(
+            db, where="owner_lookup=?", parameters=(session.parent.name,)
+        )
+    if any(row.session_id is None for row in rows):
         raise ValueError("Continued private owner has unresolved native input")
     return {
-        row["input_id"]: NativeContextProof(
-            row["input_id"],
-            row["session_id"],
-            row["session_entry_id"],
-            row["request_generation"],
-            row["llm_context_digest"],
+        row.input_id: NativeContextProof(
+            row.input_id,
+            row.session_id,
+            row.session_entry_id,
+            row.request_generation,
+            row.llm_context_digest,
             session,
         )
         for row in rows
-        if row["session_file"] == str(session) and row["owner_thread"] == owner
+        if row.session_file == str(session) and row.owner_thread == owner
     }

@@ -4,7 +4,7 @@ Start this process *before* publishing an initial cohort. It registers a fresh
 recipient under its own PID, prints a ready receipt, accepts at most one
 selected claim, then exits. The sender must separately initialize the private
 protocol and publish the cohort after readiness. No inbox ACK, daemon, retry,
-monitor, production cutover, or recovery decision is made here.
+monitor, production migration, or recovery decision is made here.
 
     python -m agent_comms.cohort_foreground --root /var/tmp/my-private-wire \\
         --wire-root-id ID --name recipient --worktree /path/to/project \\
@@ -26,7 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
-from .cohort_schema import install_private_cohort_schema
+from .child_process import ProcessIdentity
+from .cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from .comms import Comms
 from .coordinated_runtime import (
     CoordinatedTurn,
@@ -57,8 +58,8 @@ class NoWakeReceipt:
 def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool) -> None:
     # Do not create a root, registry, SQLite database, or provider opportunity
     # when the owner-only directory or reviewed copied Pi is absent.
-    if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
-        raise PublicationActivationBlocked("foreground cohort requires a private /var/tmp root")
+    if not opt_in:
+        raise PublicationActivationBlocked("foreground cohort requires explicit activation")
     _private_session_dir(root)
     _trusted_package(native_package)
     comms = Comms(root)
@@ -90,6 +91,7 @@ def _accept_visible_initials(
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != root_id:
             raise IdentityConflict("private initial wire root changed")
+        after_seq = max(after_seq, marker.admission_after_seq)
         initials = tuple(
             initial
             for _message, _receipt, initial in bus.log._verified_private_rows_unlocked(marker)
@@ -131,7 +133,7 @@ async def run_foreground_once(
 ) -> CoordinatedTurn | NoWakeReceipt | None:
     """Register THIS PID as a new recipient; wait boundedly for one claim.
 
-    A preexisting name is rejected, even if stopped: takeover/cutover needs a
+    A preexisting name is rejected, even if stopped: takeover/migration needs a
     separate verified all-old-writers-stop protocol. A failed or uncertain
     model attempt propagates immediately and is never invoked a second time.
     """
@@ -159,7 +161,9 @@ async def run_foreground_once(
         if not marker.claims:
             raise PublicationActivationBlocked("selected file write needs a private claim protocol")
         selected_existing_file_write.resource.normalized(worktree)
-    thread = Thread(name, tags, str(worktree), pid=os.getpid())
+    thread = Thread(
+        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+    )
     # The registry name reservation and registration must be ONE wire-locked
     # operation; `claim_thread` silently chooses a suffix on a collision.
     with _store_lock(comms._wire_lock_path):
@@ -200,16 +204,18 @@ async def run_foreground_once(
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     with store._read_transaction():
-                        observer = store._connection.execute(
-                            "SELECT d.wire_seq FROM cohort_delivery_receipts d "
-                            "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
-                            "AND r.wire_seq=d.wire_seq WHERE r.sealed=1 "
-                            "AND d.wire_root_id=? AND d.recipient_lookup=? "
-                            "AND d.kind='unmentioned_observer' AND d.wire_seq<=? "
-                            "ORDER BY d.wire_seq DESC LIMIT 1",
-                            (wire_root_id, lookup, cursor),
-                        ).fetchone()
-                    return NoWakeReceipt(observer[0]) if observer else None
+                        observers = CohortDeliveryReceipts.read(
+                            store._connection.execute(
+                                "SELECT d.* FROM cohort_delivery_receipts d "
+                                "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
+                                "AND r.wire_seq=d.wire_seq WHERE r.sealed=1 "
+                                "AND d.wire_root_id=? AND d.recipient_lookup=? "
+                                "AND d.kind='unmentioned_observer' AND d.wire_seq<=? "
+                                "ORDER BY d.wire_seq DESC LIMIT 1",
+                                (wire_root_id, lookup, cursor),
+                            )
+                        )
+                    return NoWakeReceipt(observers[0].wire_seq) if observers else None
                 await asyncio.sleep(min(0.1, remaining))
     finally:
         # Do not stop a replacement owner. A killed process may leave a stale

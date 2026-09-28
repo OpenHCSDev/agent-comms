@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms import private_sidecar as sidecar
 from agent_comms.coordination_store import IdentityConflict
-from agent_comms.native_prompt_binding import _DDL, _DDL_DIGEST
+from agent_comms.native_prompt_binding import PromptBinding
 
 
 @pytest.fixture
@@ -26,33 +26,29 @@ def path(tmp_path):
 
 
 def _create(path):
-    sidecar.create_sidecar_file(path, _DDL, _DDL_DIGEST)
+    sidecar.create_sidecar_file(path, PromptBinding)
 
 
 def _connection(path):
-    return sidecar.sidecar_connection(path, _DDL, _DDL_DIGEST)
+    return sidecar.sidecar_connection(path, PromptBinding)
 
 
 def _insert(db, key="1"):
-    return db.execute(
-        "INSERT INTO prompt_bindings VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (
-            key * 32,
-            1,
-            "triage",
-            "claim",
-            None,
-            None,
-            "2" * 32,
-            "owner",
-            1,
-            "3" * 32,
-            1,
-            "message",
-            "a" * 64,
-            1,
-        ),
-    )
+    return PromptBinding(
+        input_id=key * 32,
+        stage="triage",
+        assignment_id="claim",
+        execution_id=None,
+        attempt_ordinal=None,
+        owner_lookup="2" * 32,
+        owner_thread="owner",
+        owner_generation=1,
+        wire_root_id="3" * 32,
+        source_seq=1,
+        message_id="message",
+        expected_prompt_digest="a" * 64,
+        bound_at_ms=1,
+    ).insert(db)
 
 
 @pytest.mark.parametrize(
@@ -94,10 +90,10 @@ def test_symlink_ancestor_refused(path):
 @pytest.mark.parametrize(
     "sql",
     [
-        "CREATE TRIGGER unrelated_insert_suppressor BEFORE INSERT ON prompt_bindings "
+        "CREATE TRIGGER unrelated_insert_suppressor BEFORE INSERT ON prompt_binding "
         "BEGIN SELECT RAISE(IGNORE); END",
-        "CREATE INDEX unrelated_index ON prompt_bindings(claim_id)",
-        "CREATE VIEW unrelated_view AS SELECT * FROM prompt_bindings",
+        "CREATE INDEX unrelated_index ON prompt_binding(assignment_id)",
+        "CREATE VIEW unrelated_view AS SELECT * FROM prompt_binding",
         "CREATE TABLE unrelated_table (x)",
         "DROP TRIGGER prompt_binding_delete_guard",
     ],
@@ -107,8 +103,8 @@ def test_all_schema_objects_checked_independent_of_name(path, sql):
     with sqlite3.connect(path) as db:
         db.execute(sql)
     before = path.read_bytes()
-    with pytest.raises(IdentityConflict, match="schema objects"):
-        sidecar.verify_sidecar(path, _DDL, _DDL_DIGEST)
+    with pytest.raises(IdentityConflict, match="schema objects"), _connection(path):
+        pass
     with pytest.raises(IdentityConflict, match="schema objects"), _connection(path):
         pytest.fail("tampered schema reached caller")
     assert path.read_bytes() == before
@@ -132,7 +128,7 @@ def test_sqlite_only_opens_memory_and_exact_connection_is_verified(path, monkeyp
         assert _insert(db).rowcount == 1
     with _connection(path) as db:
         assert db is handles[-1]
-        assert db.execute("SELECT COUNT(*) FROM prompt_bindings").fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM prompt_binding").fetchone()[0] == 1
     assert names == [":memory:"] * 3
     with pytest.raises(sqlite3.ProgrammingError):
         db.execute("SELECT 1")
@@ -174,7 +170,7 @@ def test_mutation_of_loaded_inode_refuses_before_publish(path):
         with sqlite3.connect(path) as other:
             _insert(other, "4")
     with sqlite3.connect(path) as db:
-        rows = db.execute("SELECT input_id FROM prompt_bindings").fetchall()
+        rows = db.execute("SELECT input_id FROM prompt_binding").fetchall()
     assert rows == [("4" * 32,)]
 
 
@@ -183,7 +179,7 @@ def test_schema_drift_during_scope_cannot_publish(path):
     before = path.read_bytes()
     with pytest.raises(IdentityConflict, match="schema objects"), _connection(path) as db:
         db.execute(
-            "CREATE TRIGGER suppress BEFORE INSERT ON prompt_bindings "
+            "CREATE TRIGGER suppress BEFORE INSERT ON prompt_binding "
             "BEGIN SELECT RAISE(IGNORE); END"
         )
         assert _insert(db).rowcount == 0
@@ -216,7 +212,7 @@ def test_each_commit_fsync_fault_is_unknown_never_success(path, monkeypatch, pos
         # Only the intent-removal sync failed. Data+replacement were synced
         # first; this read is informational, never a permit to retry input.
         with _connection(path) as db:
-            assert db.execute("SELECT COUNT(*) FROM prompt_bindings").fetchone()[0] == 1
+            assert db.execute("SELECT COUNT(*) FROM prompt_binding").fetchone()[0] == 1
 
 
 def test_mode_drift_and_connection_attachment_are_not_admitted(path):
@@ -238,21 +234,21 @@ def test_owner_mismatch_refused(path, monkeypatch):
     _create(path)
     real_uid = os.geteuid()
     monkeypatch.setattr(sidecar.os, "geteuid", lambda: real_uid + 1)
-    with pytest.raises(IdentityConflict):
-        sidecar.verify_sidecar(path, _DDL, _DDL_DIGEST)
+    with pytest.raises(IdentityConflict), _connection(path):
+        pass
 
 
 def test_wal_and_bounded_snapshot_refused(path, monkeypatch):
     _create(path)
     with sqlite3.connect(path) as db:
         assert db.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
-    with pytest.raises(IdentityConflict, match="standalone rollback-mode"):
-        sidecar.verify_sidecar(path, _DDL, _DDL_DIGEST)
+    with pytest.raises(IdentityConflict, match="standalone rollback-mode"), _connection(path):
+        pass
     with sqlite3.connect(path) as db:
         assert db.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
     monkeypatch.setattr(sidecar, "_MAX_SIDECAR_BYTES", 100)
-    with pytest.raises(IdentityConflict, match="oversized"):
-        sidecar.verify_sidecar(path, _DDL, _DDL_DIGEST)
+    with pytest.raises(IdentityConflict, match="oversized"), _connection(path):
+        pass
 
 
 def test_install_sync_failure_leaves_explicit_unknown_not_repaired(path, monkeypatch):
@@ -274,11 +270,11 @@ _WORKER = r"""
 import os, signal, sys
 from pathlib import Path
 from agent_comms import private_sidecar as s
-from agent_comms.native_prompt_binding import _DDL, _DDL_DIGEST
+from agent_comms.native_prompt_binding import PromptBinding
 p = Path(sys.argv[1])
 print('READY', flush=True)
 assert sys.stdin.readline() == 'GO\n'
-s.create_sidecar_file(p, _DDL, _DDL_DIGEST)
+s.create_sidecar_file(p, PromptBinding)
 if len(sys.argv) > 2:
     sync = os.fsync
     count = 0
@@ -289,9 +285,12 @@ if len(sys.argv) > 2:
         if count == int(sys.argv[2]):
             os.kill(os.getpid(), signal.SIGKILL)
     s.os.fsync = crash
-    with s.sidecar_connection(p, _DDL, _DDL_DIGEST) as db:
-        db.execute('INSERT INTO prompt_bindings VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            ('1'*32,1,'triage','claim',None,None,'2'*32,'owner',1,'3'*32,1,'message','a'*64,1))
+    with s.sidecar_connection(p, PromptBinding) as db:
+        PromptBinding(input_id='1'*32,stage='triage',assignment_id='claim',
+            execution_id=None,attempt_ordinal=None,owner_lookup='2'*32,
+            owner_thread='owner',owner_generation=1,wire_root_id='3'*32,
+            source_seq=1,message_id='message',expected_prompt_digest='a'*64,
+            bound_at_ms=1).insert(db)
 print('OK', flush=True)
 """
 
@@ -318,7 +317,8 @@ def test_two_process_installers_serialize_one_exact_schema(path):
             stdout, stderr = child.communicate(timeout=10)
             assert child.returncode == 0, stderr
             assert stdout == "OK\n"
-        sidecar.verify_sidecar(path, _DDL, _DDL_DIGEST)
+        with _connection(path):
+            pass
     finally:
         for child in children:
             if child.poll() is None:

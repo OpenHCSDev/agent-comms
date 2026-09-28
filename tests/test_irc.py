@@ -17,7 +17,12 @@ def chat(wired):
     pr111 = comms.registry.require("PR111")
     fixer = comms.registry.require("fixer")
     comms.threads.register(
-        Thread(name="PR111", tags=frozenset({"ci"}), worktree=pr111.worktree, pid=pr111.pid)
+        Thread(
+            name="PR111",
+            tags=frozenset({"ci"}),
+            worktree=pr111.worktree,
+            process_identity=pr111.process_identity,
+        )
     )
     comms.threads.register(
         Thread(
@@ -26,10 +31,12 @@ def chat(wired):
             worktree=fixer.worktree,
             parent="PR111",
             task=fixer.task,
-            pid=fixer.pid,
+            process_identity=fixer.process_identity,
         )
     )
-    comms.threads.register(Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", pid=300))
+    comms.threads.register(
+        Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", process_identity=None)
+    )
     return comms
 
 
@@ -39,7 +46,9 @@ class TestChannelTargets:
         assert message.target == "#ci"
 
     def test_message_to_global_channel_is_valid(self):
-        message = Message(sender="a", target=BuiltinChannel.ALL.value, body="x", type=MessageType.INFO)
+        message = Message(
+            sender="a", target=BuiltinChannel.ALL.value, body="x", type=MessageType.INFO
+        )
         assert message.target == "#all"
 
     def test_rejects_bad_channel_characters(self):
@@ -71,13 +80,9 @@ class TestChannelDelivery:
         assert chat.bus.pending_count("PR111") == 0  # sender excluded
 
     def test_global_channel_reaches_everyone(self, chat):
-        chat.messaging.broadcast("PR111", "main is green")
+        chat.messaging.send("PR111", "#all", "main is green")
         assert chat.bus.pending_count("fixer") == 1
         assert chat.bus.pending_count("PR112") == 1
-
-    def test_broadcast_alias_equals_global(self, chat):
-        chat.messaging.send("PR111", "#all", "hello")
-        assert chat.bus.pending_count("fixer") == 1
 
     def test_dm_untagged_by_channels(self, chat):
         chat.messaging.send("PR111", "PR112", "dm")
@@ -113,10 +118,11 @@ class TestHistory:
         chat.messaging.send("PR111", "#all", "three")
         assert [m.body for m in chat.views.channel_history("#ci")] == ["one", "two"]
 
-    def test_channel_history_accepts_broadcast_alias(self, chat):
-        chat.messaging.broadcast("PR111", "hello")
-        assert [m.body for m in chat.views.channel_history("broadcast")] == ["hello"]
+    def test_global_channel_history(self, chat):
+        chat.messaging.send("PR111", "#all", "hello")
         assert [m.body for m in chat.views.channel_history("#all")] == ["hello"]
+        with pytest.raises(ValueError, match="not a channel"):
+            chat.views.channel_history("broadcast")
 
     def test_channel_history_rejects_dm_target(self, chat):
         with pytest.raises(ValueError, match="not a channel"):

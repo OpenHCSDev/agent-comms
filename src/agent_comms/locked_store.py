@@ -58,7 +58,7 @@ class LockedStore(ABC, Generic[T]):
         raise error
 
     def _decode(self, data: Any) -> T:
-        """Decode at the boundary; owners may normalize legacy document shapes."""
+        """Decode the current declaration at the storage boundary."""
         return FieldCodec.decode(self.record_type, data)
 
     def _encode(self, value: T) -> Any:

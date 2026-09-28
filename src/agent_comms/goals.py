@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 
-from .field_codec import FieldCodec, projected
-from .goal_states import ActiveGoal, GoalState, PausedGoal
+from .field_codec import FieldCodec
+from .goal_states import ActiveGoal, GoalState
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +68,7 @@ class GoalMentionSource:
 
 @dataclass(frozen=True)
 class Goal:
-    """A goal has one typed lifecycle; flat saved fields exist only at the wire boundary."""
+    """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
     text: str
     id: str
@@ -78,48 +76,10 @@ class Goal:
     revision: int = 0
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
-    state: GoalState = field(default_factory=ActiveGoal, metadata={"wire_exclude": True})
-
-    @projected(view="wire", name="status")
-    def wire_status(self) -> str:
-        return self.state.declared_name
-
-    @projected(view="wire", name="block_reason")
-    def wire_block_reason(self) -> str | None:
-        return self.state.reason
-
-    @projected(view="wire", name="pause_source")
-    def wire_pause_source(self) -> str | None:
-        source = self.state.pause_source
-        return source.declared_name if source is not None else None
+    state: GoalState = field(default_factory=ActiveGoal)
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.project(self, "wire")
-
-    @classmethod
-    def from_wire(cls, data: Mapping) -> Goal:
-        values = dict(data)
-        if "state" in values:
-            raise ValueError("Unexpected goal wire field: state")
-        values["state"] = GoalState.decode(
-            values.pop("status", ActiveGoal.declared_name)
-        ).wire_payload(values.pop("block_reason", None), values.pop("pause_source", None))
-        return FieldCodec.decode(cls, values)
-
-    @classmethod
-    def from_registry(cls, data: Mapping, root: Path) -> Goal:
-        from .goal_pauses import GoalPauseEvents
-
-        values = dict(data)
-        if (
-            "pause_source" not in values
-            and GoalState.decode(values.get("status", ActiveGoal.declared_name)) is PausedGoal
-        ):
-            events = GoalPauseEvents(root / GoalPauseEvents.filename).read()
-            event = events.get(f"{values['id']}:{values.get('revision', 0)}")
-            if event is not None:
-                values["pause_source"] = event.source.declared_name
-        return cls.from_wire(values)
+        return FieldCodec.encode(self)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

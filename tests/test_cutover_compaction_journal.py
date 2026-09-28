@@ -1,0 +1,148 @@
+"""Actual SQLite cutover preserves state-family barriers without sending/replaying."""
+
+import sqlite3
+from dataclasses import fields
+from pathlib import Path
+
+import pytest
+from tools.cutover.compaction_journal import stage
+
+from agent_comms.compaction_journal import (
+    CompactionJournal,
+    CompactionJournalError,
+    CompactionOperation,
+    EnrolledPrivateSession,
+    PrivateRawInput,
+    SelectedSummaryAttempt,
+)
+from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.compaction_states import OperationState, PublicationState, SummaryState
+from agent_comms.input_disposition import InputDocument
+
+
+def retired_database(tmp_path):
+    source = tmp_path / "retained.sqlite3"
+    db = sqlite3.connect(source)
+    db.executescript((Path(__file__).parent / "fixtures/cutover_compaction.sql").read_text())
+    return source, db
+
+
+def session(tmp_path, name):
+    path = tmp_path / f"{name}.jsonl"
+    path.write_text('{"type":"session","id":"retained"}\n')
+    return str(path)
+
+
+def test_all_retained_states_reopen_with_the_same_send_barriers(tmp_path):
+    source, old = retired_database(tmp_path)
+    operations = []
+    summaries = []
+    with old:
+        for number, state in enumerate(OperationState.members_with(OperationState)):
+            path = session(tmp_path, f"operation-{number}")
+            commit = f"{number + 1:032x}"
+            old.execute(
+                "INSERT INTO operations VALUES(?,?,?,?,?)",
+                (
+                    commit,
+                    path,
+                    '{"exactIntent": 1}',
+                    state.declared_name,
+                    '{"exactOutcome": 2}',
+                ),
+            )
+            operations.append((commit, path, state()))
+        for number, state in enumerate(PublicationState.members_with(PublicationState)):
+            commit, path, _ = operations[number]
+            old.execute(
+                "INSERT INTO publications VALUES(?,?,?,?)",
+                (
+                    commit,
+                    path,
+                    '{"retainedMetadata": 3}',
+                    state.declared_name,
+                ),
+            )
+        for number, state in enumerate(SummaryState.members_with(SummaryState)):
+            path = session(tmp_path, f"summary-{number}")
+            values = {"commit_id": operations[0][0], "decline_reason": "unsupported"}
+            payload = {item.name: values[item.name] for item in fields(state)}
+            old.execute(
+                "INSERT INTO selected_summary_attempts VALUES(?,?,?,?,?,?)",
+                (
+                    f"summary-{number}",
+                    path,
+                    '{"exactSource": 4}',
+                    state.declared_name,
+                    payload.get("commit_id"),
+                    payload.get("decline_reason"),
+                ),
+            )
+            summaries.append((f"summary-{number}", path, state(**payload)))
+        old.execute(
+            "INSERT INTO private_raw_inputs VALUES(?,?,?)",
+            (
+                "a" * 32,
+                operations[0][1],
+                "unknown",
+            ),
+        )
+        enrolled = session(tmp_path, "enrolled")
+        info = Path(enrolled).stat()
+        enrollment = EnrolledPrivateSession(
+            enrolled,
+            "retained",
+            info.st_dev,
+            info.st_ino,
+            "b" * 64,
+            "owner",
+            "1.25",
+            "c" * 32,
+            3,
+            5,
+            123,
+        )
+        old.execute(
+            "INSERT INTO enrolled_private_sessions VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (*[getattr(enrollment, item.name) for item in fields(enrollment)],),
+        )
+    old.close()
+    before = source.read_bytes()
+    result = stage(source, tmp_path / "converted")
+    assert source.read_bytes() == before
+    journal = CompactionJournal(Path(result.staged))
+    with journal._transaction() as db:
+        assert EnrolledPrivateSession.select(db) == [enrollment]
+        assert PrivateRawInput.select(db) == [PrivateRawInput("a" * 32, operations[0][1])]
+        for commit, _path, state in operations:
+            row = CompactionOperation.one(db, commit_id=commit)
+            assert row.state == state
+            assert row.intent_json == '{"exactIntent": 1}'
+            assert row.evidence_json == '{"exactOutcome": 2}'
+        for operation, _path, state in summaries:
+            row = SelectedSummaryAttempt.one(db, operation_id=operation)
+            assert row.state == state and row.source_json == '{"exactSource": 4}'
+    for _commit, path, state in operations:
+        assert bool(journal.unresolved(path)) == (not state.terminal)
+        assert native_input_admitted(Path(result.staged).parent, path) == state.terminal
+    for _operation, path, state in summaries:
+        assert (
+            native_input_admitted(Path(result.staged).parent, path)
+            == state.settled_without_original
+        )
+    # A repeated UNKNOWN is never silently re-created as a fresh attempt.
+    commit, path, _ = operations[0]
+    with pytest.raises(
+        CompactionJournalError, match="Unresolved session or reused commit ID; never replay"
+    ):
+        journal.begin(path, {}, inputs=InputDocument(), commit_id=commit)
+
+
+def test_refuses_unrecognised_retained_tables_instead_of_discarding_evidence(tmp_path):
+    source, db = retired_database(tmp_path)
+    with db:
+        db.execute("CREATE TABLE orphan_evidence (id TEXT)")
+        db.execute("INSERT INTO orphan_evidence VALUES('unknown')")
+    db.close()
+    with pytest.raises(ValueError, match="refusing to drop evidence"):
+        stage(source, tmp_path / "converted")

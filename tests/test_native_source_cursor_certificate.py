@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -20,8 +21,8 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
+from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
 
@@ -38,13 +39,26 @@ def _fresh(tmp_path: Path, count: int = 2):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="fake/fake"))
+        comms.threads.register(
+            Thread(
+                name,
+                frozenset({"team"}),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+                model="fake/fake",
+            )
+        )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
-    install_private_bus_checkpoint(comms.bus.log)  # Strictly fresh-root opt-in.
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -172,7 +186,7 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
         assert (
             store._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_source_cursors"
+                f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"
             ).fetchone()[0]
             == 1
         )

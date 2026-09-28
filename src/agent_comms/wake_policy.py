@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
+from .typed_table import sql_literal
 
 
 @dataclass(frozen=True)
@@ -27,17 +28,21 @@ class Engagement(DeclaredFamily, affix="Engagement"):
     @abstractmethod
     def verdict(self) -> str | None: ...
 
+    @classmethod
+    def verdict_expression(cls, expression: str) -> str:
+        cases = " ".join(
+            f"WHEN {sql_literal(member.declared_name)} THEN {sql_literal(member.verdict)}"
+            for member in cls.members_with(cls)
+        )
+        return f"CASE json_extract({expression}, '$.kind') {cases} END"
+
 
 class FullEngagement(Engagement):
-    @property
-    def verdict(self):
-        return None
+    verdict: ClassVar[str | None] = None
 
 
 class BoundedTriageEngagement(Engagement):
-    @property
-    def verdict(self):
-        return "engage"
+    verdict: ClassVar[str | None] = "engage"
 
 
 @dataclass(frozen=True)

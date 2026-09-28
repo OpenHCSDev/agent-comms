@@ -14,6 +14,7 @@ from .goal_pauses import GoalPauseEvent
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
+    BlockedState,
     CompletedGoal,
     GoalState,
     OwnerPause,
@@ -22,7 +23,6 @@ from .goal_states import (
 )
 from .goal_waits import GoalWait, GoalWaits
 from .goals import Goal
-from .owner_lifecycle import OwnerLifecycle
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -133,9 +133,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             ctx.goals.waits.clear(ctx.thread.goal.id)
         if goal is not None and goal.state.pause_source is not None:
             # Audit only; current pause authority is already durable in Goal.
-            ctx.goals.pauses.record(
-                GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source)
-            )
+            ctx.goals.pauses.record(GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source))
         return goal
 
     @abstractmethod
@@ -230,44 +228,28 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         report_turn = ctx.report_turn
         review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
         wait_targets = review.targets
-        from .input_disposition import AcpDeliveryCursors, InputDispositions
+        from .input_disposition import InputDispositions
 
         aliases = review.owners
-        cursor = (
-            AcpDeliveryCursors(ctx.goals.root / AcpDeliveryCursors.filename)
-            .read()
-            .boundary(aliases)
-            .cursor
-        )
         dispositions = InputDispositions(ctx.goals.root / InputDispositions.filename)
         unknown = {row.key: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
         if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):
             raise ValueError("Review only this recipient's exact unresolved bus input keys.")
-        reviewed_sequences = {unknown[key].sequence for key in reviewed_keys}
-        prior_reviews = {
-            row.sequence
-            for row in unknown.values()
-            if goal is not None and row.reviewed_for_goal(goal.id)
-        }
-        unresolved = {row.sequence for row in unknown.values() if row.sequence is not None}
-        senders = review.senders
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
-        pending = ctx.goals.bus._history_page(
-            lambda message: (
-                message.target in aliases
-                and message.sender in senders
-                and (message.seq > cursor or message.seq in unresolved)
-                and message.seq not in reviewed_sequences | prior_reviews
+        pending = next(
+            (
+                row
+                for row in review.unknown
+                if row.key in review.eligible_keys
+                and row.key not in reviewed_keys
+                and not row.reviewed_for_goal(goal.id)
             ),
-            before=None,
-            after=None,
-            limit=1,
-            max_bytes=256 * 1024,
+            None,
         )
-        if pending.messages:
-            sequence = pending.messages[0].seq
+        if pending is not None:
+            sequence = pending.sequence
             raise ValueError(
                 f"Dependency reply {sequence} is already pending or UNKNOWN. "
                 f"Call comms_inbox with goal_id={goal.id!r} and "
@@ -279,9 +261,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         snapshot = ctx.goals.registry.snapshot()
         if not any(
             GoalWaits.target_has_active_turn(target, snapshot)
-            and OwnerLifecycle._process_alive(
-                snapshot.threads[snapshot.aliases.get(target.name, target.name)].pid
-            )
+            and snapshot.threads[snapshot.aliases.get(target.name, target.name)].process_alive
             for target in wait_targets
         ):
             names = ", ".join(f"@{target.name}" for target in wait_targets)
@@ -296,7 +276,6 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             wait_targets,
             ctx.goals.waits.read(),
             snapshot,
-            OwnerLifecycle._process_alive,
         )
         if closed:
             names = ", ".join(f"@{name}" for name in closed)
@@ -307,6 +286,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             )
         dispositions.review_for_goal(
             reviewed_keys,
+            observed=tuple(unknown[key] for key in reviewed_keys),
             owners=aliases,
             goal_id=goal.id,
             goal_revision=goal.revision,
@@ -439,7 +419,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
 
 
 def required_block_reason(reason: str | None) -> str:
-    """Validate a new block's own reason; prior progress is never a fallback."""
+    """Validate the block's own reason, independently of prior progress."""
     if type(reason) is not str or not reason.strip():
         raise ValueError("Blocking a goal requires a nonempty reason for the needed input.")
     normalized = reason.strip()
@@ -458,15 +438,12 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
-        if not isinstance(goal.state, BlockedGoal):
+        if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.owner_store
         assert store is not None
         generation = store.snapshot(goal.id)
         if generation is None:
-            # Explicit owner decision can adopt a legacy registry-only goal.
-            store.create_goal(goal.id)
-            generation = store.snapshot(goal.id)
-            assert generation is not None
+            raise ValueError("Goal launch authority is missing; Retry cannot create a grant.")
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
         return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)

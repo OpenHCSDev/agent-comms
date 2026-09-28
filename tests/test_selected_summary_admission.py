@@ -1,6 +1,5 @@
 """Provider-free exact selected terminal ACK → one native input-ID bind."""
 
-
 import asyncio
 import hashlib
 import json
@@ -22,6 +21,7 @@ from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     CompactionJournalUnknownError,
+    SelectedSummaryAttempt,
     _ReturnedTerminalAck,
 )
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -79,8 +79,8 @@ def _source(identity):
             "originalSha256": identity.original_sha256,
             "reservedRevision": json.loads(json.dumps(identity.reserved_revision)),
         },
-        "selected": {"provider": "fake", "modelId": "fake"},
-        "settings": {"reserveTokens": 100},
+        "selected": {"provider": "fake", "modelId": "fake", "contextWindow": 1000},
+        "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
     }
 
 
@@ -369,9 +369,8 @@ def test_private_status_only_transaction_cannot_issue_admission_ack(case, termin
     # A well-formed terminal SQL row is still not a returned fsync capability.
     assert journal.selected_summary(operation_id).state.declared_name == "reserved"
     with journal._transaction() as db:
-        db.execute(
-            "UPDATE selected_summary_attempts SET status = ?, commit_id = ?, decline_reason = ? WHERE operation_id = ?",
-            (state.declared_name, state.commit_id, state.decline_reason, operation_id),
+        SelectedSummaryAttempt.update(
+            db, where="operation_id=?", parameters=(operation_id,), state=state
         )
     assert journal.selected_summary(operation_id).state.declared_name == terminal
     for forged in (scope, _ReturnedTerminalAck()):
@@ -434,7 +433,7 @@ source={'source':{'ownerName':identity.owner_name,'ownerPid':identity.owner_pid,
     'ingressKey':identity.ingress_key,'admissionGeneration':1,
     'correctionWitness':identity.correction_witness,'inputSha256':digest,
     'originalSha256':digest,'reservedRevision':json.loads(json.dumps(identity.reserved_revision))},
-    'selected':{'provider':'fake'},'settings':{'reserveTokens':100}}
+    'selected':{'provider':'fake','modelId':'fake','contextWindow':1000},'settings':{'reserveTokens':100,'keepRecentTokens':100}}
 j=CompactionJournal(root/'compaction-commits.sqlite3')
 d=InputDispositions(root / InputDispositions.filename)
 assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
@@ -477,7 +476,15 @@ os._exit(17)
 @pytest.mark.asyncio
 async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)

@@ -9,6 +9,8 @@ import pytest
 
 from agent_comms.native_startup import NativeStartupAdmission, NativeStartupPolicy
 
+pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
+
 
 def test_readiness_budget_is_size_aware_bounded_and_not_a_turn_deadline():
     policy = NativeStartupPolicy()

@@ -60,10 +60,10 @@ class TestToolCatalog:
             "comms_set_goal",
             "comms_stop",
             "comms_archive",
-            "comms_delete",
         } <= set(names)
         assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
 
+    @pytest.mark.refactor_guard
     def test_thread_context_actions_are_declared_in_display_order(self):
         actions = context_tool_catalog("thread")
         assert [action["name"] for action in actions] == [
@@ -71,7 +71,6 @@ class TestToolCatalog:
             "comms_stop",
             "comms_start",
             "comms_archive",
-            "comms_delete",
             "comms_ack",
         ]
         assert actions[0]["context_bindings"] == {"parent": "subject"}
@@ -86,17 +85,6 @@ class TestToolCatalog:
         assert result["messages"][0]["text"] == "hello"
         assert result["acknowledged"] == 1
         assert comms.bus.pending_count("b") == 0
-
-    def test_delete_tool_uses_shared_lifecycle_policy(self, comms):
-        comms.threads.register(Thread(name="running", tags=frozenset(), worktree="/wt"))
-        with pytest.raises(ValueError, match="Stop a running thread"):
-            invoke_tool(comms, "comms_delete", {"name": "running"})
-        comms.owners.stop("running")
-
-        result = invoke_tool(comms, "comms_delete", {"name": "running"})
-
-        assert result["deleted"] == "running"
-        assert "running" not in comms.registry
 
     def test_arguments_are_validated_before_dispatch(self, comms):
         with pytest.raises(ValueError, match="Missing required argument"):

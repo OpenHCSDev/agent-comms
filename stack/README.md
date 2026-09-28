@@ -67,17 +67,12 @@ required native user-start receipt. Existing Pi session directories and files
 must be private (0700 directory, 0600 file) before a tracked prompt; the native
 preflight refuses unsafe sessions rather than changing their permissions.
 
-The native proof journal's decoded-content startup limit is temporarily
-128 MiB (raised from 16 MiB after a long-lived owner exceeded that limit).
-`patch-native-proof-headroom.py` requires the exact prior pinned Pi source
-hash and verifies the exact resulting hash; the complete journal is still
-validated and never truncated or skipped. Pi currently reads the file before
-checking the limit, so this is emergency headroom, not a memory bound or
-compaction. ACP reports byte size as an advisory warning from 96 MiB; Pi's
-limit is decoded text length, not byte size. If Pi rejects a journal during
-preflight as oversized *or* incomplete, ACP gives a safe, specific rejection
-without claiming which cause occurred. An independently reviewed crash-atomic
-checkpoint/segment design is tracked in [issue #107](https://github.com/OpenHCSDev/agent-comms/issues/107); raising the total cap again is not the solution.
+Native proof recovery streams the retained journal through AgentSession. There
+is no lifetime file-size quota or startup copy of historical message bodies.
+SessionManager owns historical tracked-input lookup across all branches. Recovery
+validates every row and reserves generation high water; it never re-emits live
+acceptance proof. Malformed, truncated or concurrently changed evidence refuses
+startup without replaying uncertain inputs.
 
 All three packages are installed from immutable Git commits. Toad also pins
 agent-comms in its own manifest, so both agent-comms pins must agree. Update

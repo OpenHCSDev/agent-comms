@@ -11,17 +11,19 @@ from acp.agent.router import build_agent_router
 
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession, _session_revision
-from agent_comms.comms import wire
+from agent_comms.child_process import AttachedChild, ProcessIdentity
+from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.pi_commands import GetState
 from agent_comms.pi_events import Response
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.threads import Thread
-from test_manual_compaction import LoopbackProvider
+from compaction_loopback import LoopbackProvider
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("RETAINED_COMPACTION_SOURCE"), reason="Owned retained source opt-in"
@@ -101,9 +103,8 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "wire"))
     env = dict(os.environ, NODE_OPTIONS=f"--require={guard}", PI_OFFLINE="1")
-    stderr = (tmp_path / "native-stderr.log").open("wb")
-    proc = await asyncio.create_subprocess_exec(
-        "node",
+    proc = await AttachedChild.start(
+        ("node",
         "--max-old-space-size=1536",
         str(package / "dist/cli.js"),
         "--mode",
@@ -119,13 +120,11 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
         "--model",
         "fixture",
         "--session",
-        str(session),
+        str(session)),
         env=env,
         cwd=project,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=stderr,
     )
+    stderr_task = asyncio.create_task(proc.stderr.read())
     persistent = PersistentPiSession()
     persistent.proc = proc
     persistent.reader = PiRpcChannel(proc.stdout)
@@ -147,14 +146,17 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
         persistent.session_file = str(session)
         persistent.session_id = preparation.witness.session_id
         persistent.revision = _session_revision(str(session))
-        persistent.launch_key = (launcher,)
-        comms = wire(tmp_path / "wire")
+        persistent.launch_key = (
+            NativePiRpcLaunch(("node",), project, env, session.parent, session, package),
+            (0, 0),
+        )
+        comms = Comms(tmp_path / "wire")
         root_id = comms.messaging.initialize_private_initial_protocol()
         thread = Thread(
             "retained",
             frozenset(),
             str(project),
-            pid=os.getpid(),
+            process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             model=model,
         )
@@ -174,7 +176,7 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
 
         agent.on_connect(Client())
         await agent.sessions.bind_owned(
-            comms.registry.require("retained"), "retained", fresh=False, private=True
+            comms.registry.require("retained"), "retained"
         )
         comms.agents.set_agent_info(
             "retained", model=model, context_used=preparation.tokens_before, context_size=272000
@@ -195,7 +197,7 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
         assert persistent.proc is None and persistent.reopen_required == str(session)
         identity = await asyncio.to_thread(
             validate_native_reopen,
-            launcher,
+            package,
             str(session),
             expected_session_id=preparation.witness.session_id,
         )
@@ -237,6 +239,6 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
         if agent is not None:
             await agent.shutdown()
         await persistent.close_idle()
-        stderr.close()
+        (tmp_path / "native-stderr.log").write_bytes(await stderr_task)
         server.close()
         await server.wait_closed()

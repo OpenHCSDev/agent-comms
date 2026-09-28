@@ -16,20 +16,24 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
-from .cohort_schema import COHORT_SCHEMA_VERSION, assert_optional_awareness_schema
+from .cohort_schema import (
+    COHORT_SCHEMA_VERSION,
+    assert_cohort_schema,
+    assert_optional_awareness_schema,
+)
 from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
     CoordinationError,
     WakeAssignment,
 )
-from .coordination_cohort import _assert_schema, _receipt_matches
+from .coordination_cohort import _receipt_matches
 from .errors import RelationViolationError
 from .private_registry_guard import _require_no_private_owner_rename
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
-from .typed_table import TypedRow
+from .typed_table import SQLiteUserVersion, TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 
@@ -44,11 +48,6 @@ class _ParticipantOwner(TypedRow):
 class _CoordinatorVersions(TypedRow):
     schema_version: int
     snapshot_version: int
-
-
-@dataclass(frozen=True)
-class _UserVersion(TypedRow):
-    user_version: int
 
 
 @dataclass(frozen=True)
@@ -320,15 +319,15 @@ class OptionalAwarenessProjection:
         assignment: WakeAssignment,
         owner: Thread,
     ) -> None:
-        versions = _UserVersion.read(db.execute("PRAGMA user_version"))
+        versions = SQLiteUserVersion.read(db.execute("PRAGMA user_version"))
         meta = _CoordinatorVersions.read(
             db.execute("SELECT schema_version,snapshot_version FROM schema_meta WHERE singleton=1")
         )
-        if versions != [_UserVersion(COORDINATION_SCHEMA_VERSION)] or meta != [
+        if versions != [SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)] or meta != [
             _CoordinatorVersions(COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION)
         ]:
             raise ProjectionUnavailableError("coordinator schema changed")
-        _assert_schema(db)
+        assert_cohort_schema(db)
         assert_optional_awareness_schema(db)
         cohort_versions = _CohortVersion.read(
             db.execute("SELECT version FROM cohort_schema_meta WHERE singleton=1")
@@ -354,7 +353,7 @@ class OptionalAwarenessProjection:
     ) -> list[_SelectedDecision]:
         rows = _SelectedDecision.read(
             db.execute(
-                "SELECT c.claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
+                "SELECT c.assignment_id AS claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
                 "c.disposition,r.exact_target,r.sealed,r.message_id AS receipt_message_id,"
                 "m.claim_id AS member_claim,"
                 "d.claim_id AS delivery_claim,d.kind,d.canonical_thread,"
@@ -364,10 +363,10 @@ class OptionalAwarenessProjection:
                 "FROM wake_claims c "
                 "LEFT JOIN claim_batch_receipts r ON r.wire_root_id=? AND r.wire_seq=c.wire_seq "
                 "LEFT JOIN claim_batch_members m ON m.wire_root_id=r.wire_root_id "
-                "AND m.wire_seq=r.wire_seq AND m.claim_id=c.claim_id "
+                "AND m.wire_seq=r.wire_seq AND m.claim_id=c.assignment_id "
                 "LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
                 "AND d.wire_seq=r.wire_seq AND d.recipient_lookup=c.recipient_lookup "
-                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=c.claim_id "
+                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=c.assignment_id "
                 "AND ag.wire_root_id=r.wire_root_id AND ag.wire_seq=r.wire_seq "
                 "WHERE c.recipient_lookup=? AND c.wire_seq>? AND c.wire_seq<=? "
                 "ORDER BY c.wire_seq LIMIT ?",
@@ -401,11 +400,11 @@ class OptionalAwarenessProjection:
         rows = _OpenObligation.read(
             db.execute(
                 "SELECT o.execution_id,o.exact_target,o.state,e.owner_thread,e.origin,"
-                "ec.claim_id AS linked_claim,ag.owner_generation AS accepted_generation,"
+                "ec.assignment_id AS linked_claim,ag.owner_generation AS accepted_generation,"
                 "ag.canonical_thread AS generation_thread "
                 "FROM obligations o JOIN executions e ON e.execution_id=o.execution_id "
                 "LEFT JOIN execution_claims ec ON ec.execution_id=e.execution_id "
-                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=ec.claim_id "
+                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=ec.assignment_id "
                 "WHERE e.owner_lookup=? AND o.state IN ('pending','publishing','deferred') "
                 "ORDER BY o.created_at_ms,o.execution_id LIMIT ?",
                 (lookup, self.max_rows + 1),

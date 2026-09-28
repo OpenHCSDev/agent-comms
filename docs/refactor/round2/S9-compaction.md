@@ -3,6 +3,17 @@
 **Head audited:** `agent-comms` `main` at `a10655d`; re-verify at yours. **Rules:** [00-RULES.md](00-RULES.md). **Builds** [A14 `PiHelper`](02-SHARED-ABSTRACTIONS.md#a14-pihelper); **uses** A2, A12 (after S13), A13 (after S12).
 **Steps 2 and 3:** K1, K2, K5 and K6 start as soon as step 2 opens; K3 waits for A13, K4 for A12.
 
+## Current implementation — PR236
+
+K1–K6 source migration implemented in PR236 with shared A12/A13/S10 owners.
+Local authority transport/launcher/watchdog and startup keysets are deleted.
+All three S9 guards pass. Actual native authority36cases pass; two shared
+acceptance repairs remain: current ThreadManagement ProcessIdentity caller and
+S10 acceptance of external saved parent UUID IDs. Full receipt/deletion map:
+[evidence/s9/HANDOFF.md](../../../evidence/s9/HANDOFF.md).
+Parent owns quiet journal reset and actual activation; neither is claimed here.
+
+
 ---
 
 ## Already done; do not rebuild

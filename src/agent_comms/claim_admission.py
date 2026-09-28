@@ -14,8 +14,9 @@ from pathlib import Path
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .channel_targets import BuiltinChannel
+from .cohort_schema import assert_cohort_schema
 from .comms import Comms
-from .coordination_cohort import _assert_schema, _receipt_matches
+from .coordination_cohort import _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import (
     ClaimConflict,
@@ -44,7 +45,13 @@ def verify_selected_wake(
     with _store_lock(comms._wire_lock_path):
         _require_no_private_owner_rename(comms.root)
         try:
-            initial = comms.bus.log.read_initial_cohort(admission.wire_root_id, admission.source_seq)
+            with comms.bus.log.locked():
+                marker = comms.bus.log._private_marker_unlocked()
+                if admission.source_seq <= marker.admission_after_seq:
+                    raise IdentityConflict("Selected wake precedes the current admission floor")
+            initial = comms.bus.log.read_initial_cohort(
+                admission.wire_root_id, admission.source_seq
+            )
             owner, generation = comms.registry.live_owner_with_admission(owner_name)
         except (RelationViolationError, ValueError) as error:
             raise IdentityConflict("Wake bus or live owner authority changed") from error
@@ -70,7 +77,7 @@ def _verify_selected_wake_state(
     ):
         raise IdentityConflict("Wake source or owner turn does not match")
     with store._read_transaction():
-        _assert_schema(store._connection)
+        assert_cohort_schema(store._connection)
         receipt = _receipt_matches(store._connection, initial)
         if not any(
             assignment.assignment_id == admission.wake_assignment_id
@@ -143,6 +150,8 @@ def _selected_claim_boundary(
         metadata = bus.log._private_marker_unlocked()
         if metadata.root_id != admission.wire_root_id:
             raise IdentityConflict("Selected wake belongs to another wire root")
+        if admission.source_seq <= metadata.admission_after_seq:
+            raise IdentityConflict("Selected wake precedes the current admission floor")
         initial = next(
             (
                 row

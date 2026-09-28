@@ -21,20 +21,6 @@ _guard = threading.Lock()
 _pending: dict[Path, tuple[MessageBus, int]] = {}
 
 
-def schedule_private_candidate_after_commit(bus: MessageBus, committed_seq: int) -> None:
-    """Ignore legacy roots and never let optional maintenance fail a committed send."""
-    try:
-        marker = bus.log.path.parent / "bus_meta.json"
-        info = marker.stat()
-        if info.st_size > 4096 or not bus.log.read_metadata_unlocked().private:
-            return
-        schedule_candidate_catchup(bus, committed_seq)
-    except Exception as error:
-        _LOG.warning(
-            "Candidate notification omitted after committed send (%s)", type(error).__name__
-        )
-
-
 def schedule_candidate_catchup(bus: MessageBus, committed_seq: int) -> None:
     """A bounded memory-only signal; never wait for WAL or a wire lock here."""
     if type(bus) is not MessageBus or type(committed_seq) is not int or committed_seq <= 0:
@@ -65,9 +51,8 @@ def _drain_candidate(root: Path) -> None:
     try:
         with _guard:
             bus, _seq = _pending[root]
-        # This check is deliberately off the producer path. A private marker
-        # may not exist on a legacy send; never create one or activate private
-        # processing by merely scheduling derived maintenance.
+        # Recheck source ownership off the producer path. Derived maintenance
+        # cannot create the protocol marker or authorize delivery.
         with bus.log.locked():
             metadata = bus.log._private_marker_unlocked()
         root_id = metadata.root_id

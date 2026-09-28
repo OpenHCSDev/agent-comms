@@ -11,19 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
-
 import agent_comms.coordination_store as store_module
-from agent_comms.attempt_states import (
-    AbortingAttempt,
-    ModelRunningAttempt,
-    ModelStalledAttempt,
-    PromptAcceptedAttempt,
-    PromptStartingAttempt,
-    RetryingAttempt,
-    SettlingAttempt,
-    SucceededAttempt,
-)
 from agent_comms.assignment_states import (
     AssignmentState,
     CompletedAssignment,
@@ -35,12 +23,22 @@ from agent_comms.assignment_states import (
     PassiveAssignment,
     TriagePendingAssignment,
 )
+from agent_comms.attempt_states import (
+    AbortingAttempt,
+    ModelRunningAttempt,
+    ModelStalledAttempt,
+    PromptAcceptedAttempt,
+    PromptStartingAttempt,
+    RetryingAttempt,
+    SettlingAttempt,
+    SucceededAttempt,
+)
 from agent_comms.coordination import (
     ACPClientConnectivity,
     ExecutionOrigin,
     MessageAudience,
     OwnerConnectivity,
-    PublicationIntent,
+    PublicationIntents,
     ReplayFact,
     WakeAssignment,
     canonical_publication_key,
@@ -69,6 +67,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
@@ -720,9 +719,11 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
         before = db.snapshot("exec")
         prepared = prepare_fence_token()
         db._connection.execute(
-            "CREATE TEMP TRIGGER fail_retry_obligation BEFORE UPDATE OF state "
-            "ON main.obligations WHEN NEW.state='pending' BEGIN "
-            "SELECT RAISE(ABORT, 'injected retry failure'); END"
+            (
+                "CREATE TEMP TRIGGER fail_retry_obligation BEFORE UPDATE OF lifecycle ON main"
+                ".obligations WHEN NEW.state='pending' BEGIN SELECT RAISE(ABORT, 'injected re"
+                "try failure'); END"
+            )
         )
         with pytest.raises(sqlite3.IntegrityError, match="injected retry failure"):
             db.start_attempt(
@@ -1159,16 +1160,22 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
         # deliberately does not expose: ordinal 1 cannot start from DEFERRED.
         with db._transaction() as connection:
             connection.execute(
-                "UPDATE executions SET status='deferred',revision=revision+1 "
-                "WHERE execution_id='exec'"
+                (
+                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
+                    "sion=revision+1 WHERE execution_id='exec'"
+                )
             )
             connection.execute(
-                "UPDATE obligations SET state='deferred',revision=revision+1 "
-                "WHERE execution_id='exec'"
+                (
+                    "UPDATE obligations SET lifecycle=json_object('kind','deferred'),revision=rev"
+                    "ision+1 WHERE execution_id='exec'"
+                )
             )
             connection.execute(
-                "UPDATE wake_claims SET disposition='deferred',revision=revision+1 "
-                "WHERE claim_id='claim'"
+                (
+                    "UPDATE wake_claims SET lifecycle=json_set(lifecycle,'$.kind','deferred'),rev"
+                    "ision=revision+1 WHERE assignment_id='claim'"
+                )
             )
         before = db.snapshot("exec")
         assert type(before.execution.lifecycle) is DeferredExecution
@@ -1249,7 +1256,7 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
             timestamp=1.0,
             notice=False,
         )
-        intent = PublicationIntent(
+        intent = PublicationIntents(
             "exec",
             "thread",
             "owner",
@@ -1278,8 +1285,10 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
                 ),
             )
             connection.execute(
-                "UPDATE obligations SET state='publishing',revision=revision+1 "
-                "WHERE execution_id='exec'"
+                (
+                    "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=r"
+                    "evision+1 WHERE execution_id='exec'"
+                )
             )
         projected = db.snapshot("exec")
         assert projected.publication_intent == intent
@@ -1399,19 +1408,31 @@ def _read_while_other_store_commits(
     errors: list[BaseException] = []
 
     class PausedReader(MutationStore):
-        paused = False
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            paused = False
+            selected = False
 
-        def _row(self, table: str, column: str, key: object) -> sqlite3.Row | None:
-            result = super()._row(table, column, key)
-            if table == first_table and not self.paused:
-                self.paused = True
-                first_read.set()
-                assert commit_started.wait(timeout=5), "writer never reached COMMIT"
-                # Without one read transaction the writer commits before the
-                # remaining SELECTs, producing an impossible mixed aggregate.
-                # With rollback-journal read locking it waits until we return.
-                writer_done.wait(timeout=0.3)
-            return result
+            def trace(statement):
+                nonlocal selected
+                selected = f"FROM {first_table} " in statement or (
+                    f'FROM "{first_table}" ' in statement
+                )
+
+            def read_row(cursor, values):
+                nonlocal paused
+                result = sqlite3.Row(cursor, values)
+                if selected and not paused:
+                    paused = True
+                    first_read.set()
+                    assert commit_started.wait(timeout=5), "writer never reached COMMIT"
+                    # A real SQLite row was read under the aggregate snapshot.
+                    # The second connection must remain blocked until its reader exits.
+                    writer_done.wait(timeout=0.3)
+                return result
+
+            self._connection.set_trace_callback(trace)
+            self._connection.row_factory = read_row
 
     def writer() -> None:
         try:

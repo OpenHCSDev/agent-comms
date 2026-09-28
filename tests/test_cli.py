@@ -39,7 +39,7 @@ class TestCliSuccess:
     def test_tool_catalog_and_generic_invocation(self, cli, tmp_path):
         code, out = cli(tmp_path, "tools")
         assert code == 0
-        assert "comms_delete" in {tool["name"] for tool in out["tools"]}
+        assert "comms_archive" in {tool["name"] for tool in out["tools"]}
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         code, out = cli(
             tmp_path,
@@ -84,19 +84,11 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "heartbeat", "--name", "a")
         assert out == {"heartbeat": "a"}
 
-    def test_archive_and_delete_use_shared_lifecycle_operations(self, cli, tmp_path):
+    def test_archive_retains_thread_declaration(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "archived", "--worktree", "/wt")
         cli(tmp_path, "stop", "--name", "archived")
         code, out = cli(tmp_path, "archive", "--name", "archived")
         assert code == 0 and out == {"archived": "archived"}
-
-        cli(tmp_path, "register", "--name", "deleted", "--worktree", "/wt")
-        cli(tmp_path, "stop", "--name", "deleted")
-        code, out = cli(tmp_path, "delete", "--name", "deleted")
-        assert code == 0
-        assert out["deleted"] == "deleted"
-        code, out = cli(tmp_path, "thread", "--name", "deleted")
-        assert code == 1 and "not registered" in out["error"]
 
     def test_rename_self_uses_process_identity(self, cli, tmp_path, monkeypatch):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
@@ -143,10 +135,6 @@ class TestCliFailClosed:
         code, out = cli(tmp_path, "thread", "--name", "ghost")
         assert code == 1 and "not registered" in out["error"]
 
-    def test_delete_running_thread_is_rejected(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "running", "--worktree", "/wt")
-        code, out = cli(tmp_path, "delete", "--name", "running")
-        assert code == 1 and "Stop a running thread" in out["error"]
 
     def test_ledger_merge_requires_author(self, cli, tmp_path):
         merge_file = tmp_path / "merge.json"

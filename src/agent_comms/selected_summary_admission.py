@@ -15,91 +15,74 @@ import json
 import os
 import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
-from .compaction_journal import CompactionJournal, CompactionJournalError, _consume_selected_ack
+from .compaction_journal import (
+    CompactionJournal,
+    CompactionJournalError,
+    SelectedSummarySource,
+    _consume_selected_ack,
+)
 from .compaction_states import SummaryState
+from .field_codec import FieldCodec
 
 if TYPE_CHECKING:
     from .input_disposition import InputDispositions
 
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
-_SOURCE_FIELDS = {
-    "ownerName",
-    "ownerPid",
-    "ownerCreatedAt",
-    "turnId",
-    "ingressKey",
-    "admissionGeneration",
-    "correctionWitness",
-    "inputSha256",
-    "originalSha256",
-    "reservedRevision",
-}
 _MINT = object()
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedAdmissionIdentity:
-    owner_name: str
-    owner_pid: int
-    owner_created_at: str
-    turn_id: str
-    ingress_key: str
-    admission_generation: int
-    correction_witness: str
-    input_sha256: str
-    original_sha256: str
-    # The durable reservation witnesses the pre-result saved session bytes.
-    reserved_revision: tuple[tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None]
-    # This is the *post-result* native session revision, or the unchanged
-    # revision on a clean pre-start decline. Recheck it at final send.
-    session_revision: tuple[tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None]
+class SelectedAdmissionSource:
+    owner_name: str = field(metadata={"wire_name": "ownerName"})
+    owner_pid: int = field(metadata={"wire_name": "ownerPid"})
+    owner_created_at: str = field(metadata={"wire_name": "ownerCreatedAt"})
+    turn_id: str = field(metadata={"wire_name": "turnId"})
+    ingress_key: str = field(metadata={"wire_name": "ingressKey"})
+    admission_generation: int = field(metadata={"wire_name": "admissionGeneration"})
+    correction_witness: str = field(metadata={"wire_name": "correctionWitness"})
+    input_sha256: str = field(metadata={"wire_name": "inputSha256"})
+    original_sha256: str = field(metadata={"wire_name": "originalSha256"})
+    reserved_revision: tuple[
+        tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None
+    ] = field(metadata={"wire_name": "reservedRevision"})
 
-    def matches_source(self, source: dict) -> bool:
-        witness = source.get("source")
-        return (
-            type(witness) is dict
-            and set(witness) == _SOURCE_FIELDS
-            and witness == self.source_fields()
-            and type(self.owner_name) is str
-            and bool(self.owner_name)
-            and type(self.owner_pid) is int
-            and self.owner_pid > 0
-            and type(self.owner_created_at) is str
-            and bool(self.owner_created_at)
-            and type(self.turn_id) is str
-            and bool(self.turn_id)
-            and type(self.ingress_key) is str
-            and bool(self.ingress_key)
-            and type(self.admission_generation) is int
-            and self.admission_generation > 0
-            and type(self.correction_witness) is str
-            and bool(self.correction_witness)
-            and type(self.input_sha256) is str
-            and _HEX.fullmatch(self.input_sha256) is not None
-            and type(self.original_sha256) is str
-            and _HEX.fullmatch(self.original_sha256) is not None
-            and self.reserved_revision is not None
-        )
+    def __post_init__(self):
+        if (
+            not all(
+                (
+                    self.owner_name,
+                    self.owner_created_at,
+                    self.turn_id,
+                    self.ingress_key,
+                    self.correction_witness,
+                )
+            )
+            or self.owner_pid <= 0
+            or self.admission_generation <= 0
+            or _HEX.fullmatch(self.input_sha256) is None
+            or _HEX.fullmatch(self.original_sha256) is None
+        ):
+            raise ValueError("Exact selected admission identity required")
 
-    def source_fields(self) -> dict:
-        """The admission identity owns its existing persisted wire format."""
-        return {
-            "ownerName": self.owner_name,
-            "ownerPid": self.owner_pid,
-            "ownerCreatedAt": self.owner_created_at,
-            "turnId": self.turn_id,
-            "ingressKey": self.ingress_key,
-            "admissionGeneration": self.admission_generation,
-            "correctionWitness": self.correction_witness,
-            "inputSha256": self.input_sha256,
-            "originalSha256": self.original_sha256,
-            "reservedRevision": json.loads(json.dumps(self.reserved_revision)),
-        }
+
+@dataclass(frozen=True, slots=True)
+class SelectedAdmissionIdentity(SelectedAdmissionSource):
+    # Post-result revision; reserved_revision retains the pre-result witness.
+    session_revision: tuple[
+        tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None
+    ] = field(metadata={"source_exclude": True})
+
+    def matches_source(self, source: SelectedSummarySource) -> bool:
+        try:
+            witness = FieldCodec.decode(SelectedAdmissionSource, source.source)
+        except (TypeError, ValueError):
+            return False
+        return FieldCodec.encode(witness) == FieldCodec.project(self, "source")
 
 
 class SelectedSummaryAdmission:
@@ -158,10 +141,9 @@ class SelectedSummaryAdmission:
         if not _consume_selected_ack(receipt, scope):
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
-            source = json.loads(source_json)
+            source = FieldCodec.decode(SelectedSummarySource, json.loads(source_json))
             valid = (
-                type(source) is dict
-                and identity.matches_source(source)
+                identity.matches_source(source)
                 and identity.owner_pid == os.getpid()
                 and identity.session_revision is not None
                 and _session_revision(session) == identity.session_revision
@@ -199,7 +181,6 @@ class SelectedSummaryAdmission:
         try:
             if (
                 os.getpid() != self._process_pid
-                or type(identity) is not SelectedAdmissionIdentity
                 or identity != self._identity
                 or identity.owner_pid != os.getpid()
                 or Path(session_file).resolve(strict=True) != Path(self._session)

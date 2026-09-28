@@ -66,11 +66,11 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
 
 
 def stable_thread_lookup(created_at: float) -> str:
-    """Legacy-compatible immutable creation identity; duplicate timestamps fail at capture.
+    """Immutable creation identity; duplicate timestamps fail at capture.
 
     The registry preserves Thread.created_at across renames and restarts. Its
     canonical name, aliases, mutable tags, PID, and session attachment are NOT
-    lookup identities. A legacy unknown creation time (zero) cannot be trusted.
+    lookup identities. An unknown creation time (zero) cannot authorize delivery.
     """
     if isinstance(created_at, bool) or not isinstance(created_at, (float, int)):
         raise ValueError("Thread creation identity is invalid.")

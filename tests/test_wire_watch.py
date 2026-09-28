@@ -6,6 +6,7 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.threads import Thread
@@ -15,7 +16,14 @@ from agent_comms.wire_watch import open_wire_watcher
 @pytest.mark.asyncio
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     comms = Comms(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     root_id = comms.messaging.initialize_private_initial_protocol()
     guard = PrivateRegistryGuard(comms.registry.store.path, root_id)
     watcher = open_wire_watcher(tmp_path)
@@ -67,7 +75,11 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
         assert calls == 1
         with (tmp_path / "thread_read_markers.json").open("wb") as output:
             output.write(b"{}")
-        for name in ("coordination.sqlite3", ".registry.json.lock", "private_bus_checkpoint.sqlite3"):
+        for name in (
+            "coordination.sqlite3",
+            ".registry.json.lock",
+            "private_bus_checkpoint.sqlite3",
+        ):
             with (tmp_path / name).open("ab"):
                 pass
         await asyncio.sleep(0.1)

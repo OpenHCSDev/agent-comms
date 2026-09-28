@@ -18,6 +18,7 @@ from agent_comms import native_pi, native_prompt_send
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_store import MutationStore, StaleFence
+from agent_comms.child_process import AttachedChild
 from test_coordinated_runtime import _fake_model, _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -108,21 +109,21 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
     owner = people[2] if direct else people[1]
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
-    create = asyncio.create_subprocess_exec
+    create = AttachedChild.start
     children = []
     received = tmp_path / "received.json"
     session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
 
     async def launch(*args, **kwargs):
         child = await create(
-            sys.executable, "-c", _CHILD, str(session), str(received), "no", **kwargs
+            (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
         )
         children.append(child)
         if revoke:
             comms.registry.unregister(owner.name)
         return child
 
-    monkeypatch.setattr(native_pi.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     write = native_prompt_send._write_fenced
     observed = []
 
@@ -174,18 +175,13 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
 
         patch.setattr(runtime, "run_native_pi_turn", bounded_turn)
         loop = asyncio.get_running_loop()
-        create = asyncio.create_subprocess_exec
+        create = AttachedChild.start
         children = []
         session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
 
         async def launch(*args, **kwargs):
             child = await create(
-                sys.executable,
-                "-c",
-                _CHILD,
-                str(session),
-                str(directory / "unused"),
-                "yes",
+                (sys.executable, "-c", _CHILD, str(session), str(directory / "unused"), "yes"),
                 **kwargs,
             )
             fcntl.fcntl(child.stdin.get_extra_info("pipe").fileno(), fcntl.F_SETPIPE_SZ, 4096)
@@ -204,7 +200,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
                 child.stdin = SuspendedDrain()
             return child
 
-        patch.setattr(native_pi.asyncio, "create_subprocess_exec", launch)
+        patch.setattr(AttachedChild, "start", launch)
         write = os.write
         byte_counts = []
         lifecycle_done = []
@@ -336,16 +332,16 @@ async def test_short_admission_contention_sends_once_after_release(
     owner = people[2]
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
-    create = asyncio.create_subprocess_exec
+    create = AttachedChild.start
     received = tmp_path / "received.json"
     session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
 
     async def launch(*args, **kwargs):
         return await create(
-            sys.executable, "-c", _CHILD, str(session), str(received), "no", **kwargs
+            (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
         )
 
-    monkeypatch.setattr(native_pi.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     write = native_prompt_send._write_fenced
     admissions = []
 
@@ -516,19 +512,19 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     owner = people[2] if direct else people[1]
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
-    create = asyncio.create_subprocess_exec
+    create = AttachedChild.start
     received = tmp_path / "received.json"
     session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
     children = []
 
     async def launch(*_args, **kwargs):
         child = await create(
-            sys.executable, "-c", _CHILD, str(session), str(received), "no", **kwargs
+            (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
         )
         children.append(child)
         return child
 
-    monkeypatch.setattr(native_pi.asyncio, "create_subprocess_exec", launch)
+    monkeypatch.setattr(AttachedChild, "start", launch)
     write = native_prompt_send._write_fenced
     observations = []
 
@@ -536,7 +532,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
         path = root / "coordination.sqlite3"
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         reader.execute("BEGIN")
-        reader.execute("SELECT * FROM native_runtime_inputs").fetchall()
+        reader.execute("SELECT * FROM native_runtime_input").fetchall()
 
         @contextmanager
         def checked_admission():
@@ -547,7 +543,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
                     late = sqlite3.connect(path, isolation_level=None, timeout=0)
                     try:
                         with pytest.raises(sqlite3.OperationalError) as blocked:
-                            late.execute("SELECT * FROM native_runtime_inputs").fetchall()
+                            late.execute("SELECT * FROM native_runtime_input").fetchall()
                         assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
                     finally:
                         late.close()
@@ -581,6 +577,6 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     assert len(children) == 1 and children[0].returncode is not None
     with MutationStore(root / "coordination.sqlite3") as store:
         rows = store._connection.execute(
-            "SELECT sent_owner_admission_epoch FROM native_runtime_inputs"
+            "SELECT sent_owner_admission_generation FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and rows[0][0] is not None

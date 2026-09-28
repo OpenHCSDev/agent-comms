@@ -33,7 +33,7 @@ function acSelectedCompactionSettings(command, session, conflict) {
         selected: command.selected, contextTokens: command.contextTokens,
         decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
             keepRecentTokens: settings.keepRecentTokens,
-            trigger: shouldCompact(command.contextTokens, model.contextWindow, settings)}};
+            trigger: session.storedContext.requiresCompaction() || shouldCompact(command.contextTokens, model.contextWindow, settings)}};
 }
 function acValidSummaryRequest(value) {
     const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings"];
@@ -87,8 +87,8 @@ function acSummaryCurrent(session, request, binding) {
     try {
         const witness = session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId);
         if (Object.keys(request.witness).some(key => witness[key] !== request.witness[key])) return false;
-        const preparation = prepareCompaction(session.sessionManager.getBranch(), settings);
-        return preparation && !preparation.isSplitTurn && preparation.turnPrefixMessages.length === 0 &&
+        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, session.sessionManager.getLeafId());
+        return preparation && !preparation.isSplitTurn && preparation.turnPrefixMessages.isEmpty() &&
             preparation.firstKeptEntryId === request.witness.firstKeptEntryId;
     } catch { return false; }
 }
@@ -125,10 +125,10 @@ function acAdmitSummary(request, session, conflict, spent, host) {
     if (readiness.status !== "ready") return { denial: readiness.reason };
     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
     let preparation;
-    try { preparation = prepareCompaction(session.sessionManager.getBranch(),
-        session.settingsManager.getCompactionSettings()); }
+    try { preparation = prepareCompaction(session.sessionManager.entryStore,
+        session.settingsManager.getCompactionSettings(), session.sessionManager.getLeafId()); }
     catch { return { denial: "unsupported" }; }
-    if (!preparation || preparation.isSplitTurn || preparation.turnPrefixMessages.length ||
+    if (!preparation || preparation.isSplitTurn || !preparation.turnPrefixMessages.isEmpty() ||
         preparation.firstKeptEntryId !== request.witness.firstKeptEntryId) return { denial: "source_mismatch" };
     // Native compact() owns model-sized map/reduction requests. Total retained
     // history is not a request-size limit, and raw JSON includes metadata that

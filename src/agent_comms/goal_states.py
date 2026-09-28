@@ -157,10 +157,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
             raise ValueError(self.source.instruction())
 
 
-@dataclass(frozen=True)
-class BlockedGoal(GoalState, FromOpenGoal):
-    block_reason: str | None = None  # legacy rows can lack a reason
-
+class BlockedState(GoalState, FromOpenGoal):
     @property
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import RetryGoalAction
@@ -169,9 +166,25 @@ class BlockedGoal(GoalState, FromOpenGoal):
 
     toggle_label = "Retry"
 
+    @property
+    @abstractmethod
+    def reason(self) -> str | None: ...
+
+    @classmethod
+    def successors(cls) -> tuple[type[GoalState], ...]:
+        return (BlockedGoal,)
+
+    def transition_refusal(self) -> str:
+        return "Blocked goal requires an explicit retry through its owner."
+
+
+@dataclass(frozen=True)
+class BlockedGoal(BlockedState):
+    block_reason: str
+
     def __post_init__(self) -> None:
         reason = self.block_reason
-        if reason is not None and (
+        if (
             type(reason) is not str
             or not reason.strip()
             or reason != reason.strip()
@@ -183,21 +196,26 @@ class BlockedGoal(GoalState, FromOpenGoal):
     def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
         return {"kind": cls.declared_name, "block_reason": reason}
 
-    @classmethod
-    def successors(cls) -> tuple[type[GoalState], ...]:
-        return (BlockedGoal,)
-
-    def transition_refusal(self) -> str:
-        return "Blocked goal requires an explicit retry through its owner."
-
     @property
-    def reason(self) -> str | None:
+    def reason(self) -> str:
         return self.block_reason
 
     def presentation(self) -> tuple[str, str]:
-        reason = " ".join(self.block_reason.split()) if self.block_reason else "reason unavailable"
+        reason = " ".join(self.block_reason.split())
         summary = reason[:157] + "…" if len(reason) > 160 else reason
         return "!", f"Blocked · {summary}"
+
+
+@dataclass(frozen=True)
+class UnrecordedBlockGoal(BlockedState):
+    """A recorded blocked status whose reason was not recorded."""
+
+    @property
+    def reason(self) -> None:
+        return None
+
+    def presentation(self) -> tuple[str, str]:
+        return "!", "Blocked · reason unavailable"
 
 
 @dataclass(frozen=True)

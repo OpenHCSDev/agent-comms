@@ -8,58 +8,18 @@ capture its canonical source BEFORE summary generation and recheck on commit.
 
 from __future__ import annotations
 
-import json
+import asyncio
 import os
 import re
-import shutil
 import stat
-import subprocess
+from abc import abstractmethod
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from .field_codec import FieldCodec
+from .declared_family import DeclaredFamily
 from .native_package import verify_native_package
-
-_PREPARE = r"""
-import {realpathSync, lstatSync} from 'node:fs';
-import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
-const [root, file, recent] = process.argv.slice(1);
-const {loadEntriesFromFile, SessionManager} = await import(
-  pathToFileURL(join(root, 'dist/core/session-manager.js')));
-const {prepareCompaction, DEFAULT_COMPACTION_SETTINGS} = await import(
-  pathToFileURL(join(root, 'dist/core/compaction/compaction.js')));
-const rows = loadEntriesFromFile(file);
-if (!rows.length || rows[0].type !== 'session' || rows[0].version !== 3 ||
-    typeof rows[0].id !== 'string' || !rows[0].id)
-  throw new Error('Native session is not strict v3');
-// In-memory loader is intentional: SessionManager.open() has an empty-file
-// initialization writer if the path races. Preparation must NEVER own a writer.
-const manager = SessionManager.inMemory(process.cwd(), undefined, rows);
-if (manager.getSessionId() !== rows[0].id || !manager.getLeafId())
-  throw new Error('Native session identity changed');
-const stat = lstatSync(file, {bigint:true});
-if (!stat.isFile() || stat.nlink !== 1n || stat.size > 256n*1024n*1024n)
-  throw new Error('Native session revision unavailable');
-// Mirrors the exact pinned pr48DiskRevision tuple. Writer CAS independently
-// recomputes it under the session lock; this is evidence, never authority.
-const revision = [stat.dev,stat.ino,stat.size,stat.mtimeNs,stat.ctimeNs]
-  .map(String).join(':');
-const settings = recent === 'default' ? DEFAULT_COMPACTION_SETTINGS :
-  {...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: Number(recent)};
-const preparation = prepareCompaction(manager.getBranch(), settings);
-if (!preparation) {
-  console.log(JSON.stringify({status:'skip', sessionId:rows[0].id}));
-} else {
-  if (!manager.getBranch().some(entry => entry.id === preparation.firstKeptEntryId))
-    throw new Error('Native kept entry changed');
-  const witness = {sessionId:manager.getSessionId(),sessionFile:realpathSync(file),
-    leafId:manager.getLeafId(),firstKeptEntryId:preparation.firstKeptEntryId,revision};
-  console.log(JSON.stringify({status:'ready', sessionId:rows[0].id,
-    witness, tokensBefore:preparation.tokensBefore,
-    isSplitTurn:preparation.isSplitTurn}));
-}
-"""
+from .owner_compaction_settings import PiCompactionSettings
+from .pi_helper import PiHelper, SessionHelperRequest
 
 
 class NativePreparationError(ValueError):
@@ -77,9 +37,7 @@ class NativeWitness:
     revision: str
 
     def __post_init__(self):
-        if any(
-            type(value := getattr(self, item.name)) is not str or not value for item in fields(self)
-        ):
+        if any(not getattr(self, item.name) for item in fields(self)):
             raise NativePreparationError("Exact native witness required")
         if (
             not self.session_file.startswith("/")
@@ -88,11 +46,49 @@ class NativeWitness:
             raise NativePreparationError("Canonical native path and revision required")
 
 
+class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
+    family_discriminator = "status"
+
+    @abstractmethod
+    def checked(self, file: Path, revision: str) -> NativePreparation | None:
+        """Bind an observed cutpoint to the already captured native revision."""
+
+
 @dataclass(frozen=True)
-class NativePreparation:
+class SkipPreparationResult(NativePreparationResult):
+    session_id: str = field(metadata={"wire_name": "sessionId"})
+
+    def checked(self, file: Path, revision: str) -> None:
+        if not self.session_id:
+            raise NativePreparationError("Native session identity missing")
+        return None
+
+
+@dataclass(frozen=True)
+class NativePreparation(NativePreparationResult, declared_name="ready"):
     witness: NativeWitness
-    tokens_before: int
-    is_split_turn: bool
+    tokens_before: int = field(metadata={"wire_name": "tokensBefore"})
+    is_split_turn: bool = field(metadata={"wire_name": "isSplitTurn"})
+
+    def __post_init__(self):
+        if not 0 <= self.tokens_before <= 2**53 - 1:
+            raise NativePreparationError("Invalid native preparation token count")
+
+    def checked(self, file: Path, revision: str) -> NativePreparation:
+        if self.witness.session_file != str(file) or self.witness.revision != revision:
+            raise NativePreparationError("Invalid native witness")
+        return self
+
+
+@dataclass(frozen=True)
+class PreparationRequest(SessionHelperRequest):
+    settings: PiCompactionSettings | None
+
+
+class PrepareCompactionHelper(PiHelper):
+    script = Path(__file__).with_name("_pi_helpers") / "prepare_compaction.mjs"
+    request = PreparationRequest
+    result = NativePreparationResult
 
 
 def prepare_native_source(
@@ -104,10 +100,6 @@ def prepare_native_source(
     Pi's declared DEFAULT_COMPACTION_SETTINGS. The returned witness is not
     authority: the owner captures source and the writer later CASes on disk.
     """
-    if keep_recent_tokens is not None and (
-        type(keep_recent_tokens) is not int or not 0 < keep_recent_tokens <= 10_000_000
-    ):
-        raise NativePreparationError("Invalid bounded recent context window")
     try:
         package = package.resolve(strict=True)
         verify_native_package(package)
@@ -119,62 +111,30 @@ def prepare_native_source(
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
             or before.st_uid not in (0, os.getuid())
-            or not 0 < before.st_size <= 256 * 1024 * 1024
+            or before.st_size <= 0
         ):
-            raise NativePreparationError("Native session is not bounded regular storage")
-        node = shutil.which("node")
-        if node is None:
-            raise NativePreparationError("Native preparer unavailable")
-        environment = dict(os.environ)
-        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            environment.pop(key, None)
-        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        environment["PI_OFFLINE"] = "1"
-        result = subprocess.run(
-            [
-                node,
-                "--no-global-search-paths",
-                "--import",
-                str(package / "dist/agent-comms-import-fence.mjs"),
-                "--input-type=module",
-                "--eval",
-                _PREPARE,
-                str(package),
-                str(file),
-                "default" if keep_recent_tokens is None else str(keep_recent_tokens),
-            ],
-            cwd=file.parent,
-            env=environment,
-            capture_output=True,
-            timeout=10,
+            raise NativePreparationError("Native session is not regular storage")
+        result = asyncio.run(
+            PrepareCompactionHelper.run(
+                PreparationRequest(
+                    str(package),
+                    str(file),
+                    PiCompactionSettings(0, keep_recent_tokens)
+                    if keep_recent_tokens is not None
+                    else None,
+                ),
+                cwd=file.parent,
+            )
         )
         after = file.stat()
 
         def revision(info: os.stat_result) -> tuple[int, ...]:
             return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
-        if result.returncode or revision(before) != revision(after) or len(result.stdout) > 4096:
+        if revision(before) != revision(after):
             raise NativePreparationError("Native preparation failed or changed")
-        data = json.loads(result.stdout)
-        if not isinstance(data, dict) or type(data.get("sessionId")) is not str:
-            raise NativePreparationError("Invalid native preparation")
-        if data.get("status") == "skip" and set(data) == {"status", "sessionId"}:
-            return None
-        if set(data) != {"status", "sessionId", "witness", "tokensBefore", "isSplitTurn"}:
-            raise NativePreparationError("Invalid native preparation")
-        witness = FieldCodec.decode(NativeWitness, data["witness"])
-        if (
-            data["status"] != "ready"
-            or type(data["tokensBefore"]) is not int
-            or not 0 <= data["tokensBefore"] <= 2**53 - 1
-            or type(data["isSplitTurn"]) is not bool
-            or witness.session_id != data["sessionId"]
-            or witness.session_file != str(file)
-            or witness.revision != ":".join(map(str, revision(before)))
-        ):
-            raise NativePreparationError("Invalid native witness")
-        return NativePreparation(witness, data["tokensBefore"], data["isSplitTurn"])
-    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError) as error:
+        return result.checked(file, ":".join(map(str, revision(before))))
+    except (OSError, ValueError, TypeError) as error:
         if isinstance(error, NativePreparationError):
             raise
         raise NativePreparationError("Native source cannot be prepared") from error

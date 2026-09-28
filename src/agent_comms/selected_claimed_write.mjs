@@ -31,7 +31,7 @@ export default function registerSelectedClaimedWrite(pi) {
       const path = process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
       const token = process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
       if (!path || !/^[0-9a-f]{64}$/.test(token ?? "")) throw new Error("Selected tool owner bridge unavailable");
-      const request = Buffer.from(JSON.stringify({ token, call_id: callId, ...params }) + "\n", "utf8");
+      const request = Buffer.from(JSON.stringify({ token, request: { call_id: callId, arguments: params } }) + "\n", "utf8");
       if (request.byteLength > MAX_CONTENT + 8192) throw new Error("Selected tool request exceeds bound");
       const response = await new Promise((resolve, reject) => {
         const socket = createConnection(path);

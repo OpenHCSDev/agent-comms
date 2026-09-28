@@ -1,46 +1,61 @@
-"""Real owner with a message queued behind its existing turn lock."""
+"""Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
 
-import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
-from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
+from test_coordinated_runtime import _fake_model, _root
+
+
+def native_model(*, decision="FULL", fail_on=None):
+    """Give each fresh simulated session its own durable evidence file."""
+    model, calls = _fake_model(decision=decision, fail_on=fail_on)
+
+    async def run(*args, session_file=None, **kwargs):
+        if session_file is None:
+            input_id = kwargs["input_id"]
+            session_file = kwargs["session_dir"] / f"{input_id}.jsonl"
+            with session_file.open("x") as stream:
+                stream.write(json.dumps({"type": "session", "id": input_id}) + "\n")
+            session_file.chmod(0o600)
+        return await model(*args, session_file=session_file, **kwargs)
+
+    return run, calls
 
 
 @asynccontextmanager
-async def queued_delivery_owner(root):
-    """A real incoming message waits behind the existing turn lock; no provider starts."""
-    project = root / "project"
-    project.mkdir(parents=True)
-    comms = wire(root / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
-    session = (await owner.new_session(str(project))).session_id
-    comms.threads.register(Thread("peer", frozenset(), str(project)))
-    ledger = owner.inputs.dispositions
-    admission = comms.registry.snapshot().admission_generations[session]
-    for key in ("acp:earlier-unbound", "acp:earlier-bound"):
-        ledger.record(key, seq=None, owner=session, admission=admission, target=session, text=key)
-    ledger.bind(
-        "acp:earlier-bound",
-        admission=admission,
-        turn_id="old-turn",
-        native_id="a" * 32,
-        text="old bound input",
+async def canonical_delivery_owner(root, *, direct=False):
+    """Only model execution is supplied by tests; routing and persistence are real."""
+    _path, root_id, comms, initial, people = _root(root, direct=direct)
+    owner = CommsAgent(
+        comms,
+        runtime_enabled=True,
+        private_nk_native_package=root,
+        private_nk_wire_root_id=root_id,
     )
-    lock = owner.turns.turn_locks.setdefault(session, asyncio.Lock())
-    await lock.acquire()
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    for person in people[1:]:
+        owner.sessions.bindings[person.name] = person.name
+        owner.sessions.titles[person.name] = person.name
+        owner.sessions.worktrees[person.name] = person.worktree
+    await owner._runtime.start()
     try:
-        incoming = comms.messaging.send_message("peer", session, "New input must remain awaiting")
-        await owner.inputs.drain_inbox(session)
-        assert owner.inputs.pending_turns[session][0].origin == incoming
-        assert owner.inputs.wake_tasks[session] and not owner.inputs.wake_tasks[session].done()
-        assert not owner.inputs.backend_inboxes
-        yield owner, proxy, session, incoming
+        yield comms, owner, initial.message, root_id
     finally:
-        await proxy.close()
         await owner.shutdown()
-        lock.release()
+
+
+def canonical_agent(comms, **options):
+    """Configure the existing owner against its real canonical root marker."""
+    with comms.bus.log.locked():
+        metadata = comms.bus.log.read_metadata_unlocked()
+    root_id = (
+        metadata.root_id if metadata.private
+        else comms.messaging.initialize_private_initial_protocol()
+    )
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    return CommsAgent(
+        comms, private_nk_native_package=package,
+        private_nk_wire_root_id=root_id, **options,
+    )

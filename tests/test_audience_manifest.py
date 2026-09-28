@@ -96,13 +96,12 @@ def test_reusing_frozen_value_after_rename_retag_stop_does_not_resolve_members_a
     assert freeze(members=[FrozenRecipient("id-alpha", "renamed")]).digest != original.digest
 
 
-def test_exact_stored_all_target_and_no_wildcard_or_alias_inference():
+def test_exact_stored_all_target_and_no_wildcard_inference():
     all_members = freeze(message(target="#all"))
     assert all_members.exact_target == "#all"
     assert len(all_members.recipients) == 2
-    for invalid in ("#any", "broadcast"):
-        with pytest.raises(ValueError, match="exact stored|aggregate views"):
-            freeze(message(target=invalid))
+    with pytest.raises(ValueError, match="exact stored|aggregate views"):
+        freeze(message(target="#any"))
     # The pure value cannot classify a saved view. Stage3 must attest routability.
     assert freeze(message(target="#saved-view")).exact_target == "#saved-view"
 

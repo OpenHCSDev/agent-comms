@@ -6,6 +6,8 @@ The runner's separate fake-provider tests establish no-retry and session safety.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from acp import RequestError
 from acp.agent.router import build_agent_router
@@ -154,5 +156,45 @@ async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(t
         with pytest.raises(RequestError) as oversized:
             await agent.prompt(session, [block("/compact " + "x" * 2001)])
         assert oversized.value.data == {"reason": "Compaction instructions are too long."}
+    finally:
+        await agent.shutdown()
+
+
+async def test_current_root_compact_refuses_unjournaled_writer_for_every_launch_form(
+    tmp_path, monkeypatch
+):
+    """Actual ACP request uses root authority, never executable-name inference."""
+    comms = wire(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    package = tmp_path / "native-package"
+    agent = CommsAgent(
+        comms,
+        auto_wake=False,
+        private_nk_native_package=package,
+        private_nk_wire_root_id=root_id,
+    )
+    session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
+    saved = tmp_path / "native.jsonl"
+    saved.write_text('{"type":"session","version":3,"id":"preserved"}\n')
+    comms.threads.attach_session(session, str(saved), pid=os.getpid())
+    before = saved.read_bytes()
+    alias = tmp_path / "renamed-native"
+    alias.symlink_to(package / "dist/cli.js")
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Canonical ACP request reached an unjournaled writer")
+
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", forbidden)
+    try:
+        for command in ("pi", str(package / "dist/cli.js"), str(alias)):
+            agent.turns.agent_bin = command
+            with pytest.raises(RequestError, match="requires the current selected native session"):
+                await build_agent_router(agent)(
+                    "session/prompt",
+                    {"sessionId": session, "prompt": [{"type": "text", "text": "/compact"}]},
+                    False,
+                )
+            assert saved.read_bytes() == before
+            assert comms.registry.require(session).active_turn is None
     finally:
         await agent.shutdown()

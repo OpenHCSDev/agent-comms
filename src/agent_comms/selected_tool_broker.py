@@ -18,18 +18,21 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_store import MutationStore
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
+from .field_codec import FieldCodec
+from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
+from .pi_rpc import unique_fields
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
@@ -37,7 +40,7 @@ _MAX_REQUEST = _MAX_CONTENT + 8192
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
-_TOOL_SOURCE_SHA = "722dcd9f79359528c9183f52fb9c04a93fed852e590981534f79a5a99c593896"
+_TOOL_SOURCE_SHA = "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1a845"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,10 +91,37 @@ class SelectedToolMode(NativeToolMode):
         return SelectedToolSocket(directory, token, self.action)
 
 
+@dataclass(frozen=True)
+class SelectedWriteArguments:
+    """Model-supplied text and relative resource, validated once at ingress."""
+
+    resource: str
+    contents: str
+    claim: ExistingFileClaim = field(init=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not self.resource or len(self.resource.encode("utf-8")) > 4096:
+            raise SelectedToolDenied("Selected tool resource is not bounded")
+        path = Path(self.resource)
+        if (
+            not path.parts
+            or path.is_absolute()
+            or ".." in path.parts
+            or self.resource.startswith(("@", "./"))
+        ):
+            raise SelectedToolDenied("Selected tool resource must be relative without aliases")
+        object.__setattr__(self, "claim", ExistingFileClaim(path))
+        if len(self.contents.encode("utf-8", errors="strict")) > _MAX_CONTENT:
+            raise SelectedToolDenied("Selected tool contents exceed 128 KiB")
+
+
 @dataclass
 class SelectedToolRequest(NativeToolCall):
-    resource: str
-    contents: bytes
+    arguments: SelectedWriteArguments
+
+    def __post_init__(self) -> None:
+        if not _CALL_ID.fullmatch(self.call_id):
+            raise SelectedToolDenied("Selected tool call identity is invalid")
 
     @property
     def name(self) -> str:
@@ -105,66 +135,16 @@ class SelectedToolRequest(NativeToolCall):
     def admission_failed(self) -> None:
         raise SelectedToolDenied("Native Pi selected tool admission failed; outcome UNKNOWN")
 
-    @classmethod
-    def argument_names(cls) -> frozenset[str]:
-        lifecycle_fields = {field.name for field in fields(NativeToolCall)}
-        return frozenset(
-            field.name for field in fields(cls) if field.init and field.name not in lifecycle_fields
-        )
 
-    @classmethod
-    def from_wire(cls, raw: bytes, token: str) -> SelectedToolRequest:
-        """Strict bounded wire syntax; token authenticates transport, not admission."""
-        if type(raw) is not bytes or len(raw) > _MAX_REQUEST or not raw.endswith(b"\n"):
-            raise SelectedToolDenied("Selected tool request is incomplete or oversized")
+@dataclass(frozen=True)
+class SelectedToolEnvelope:
+    token: str
+    request: SelectedToolRequest
 
-        def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-            result: dict[str, Any] = {}
-            for key, value in pairs:
-                if key in result:
-                    raise SelectedToolDenied("Ambiguous selected tool request")
-                result[key] = value
-            return result
-
-        try:
-            value = json.loads(raw[:-1].decode("utf-8", errors="strict"), object_pairs_hook=unique)
-        except (UnicodeError, ValueError) as error:
-            raise SelectedToolDenied("Invalid selected tool request") from error
-        if type(value) is not dict or set(value) != {"token", "call_id"} | cls.argument_names():
-            raise SelectedToolDenied("Selected tool fields are not exact")
-        if value["token"] != token:
+    def authenticate(self, expected_token: str) -> SelectedToolRequest:
+        if self.token != expected_token:
             raise SelectedToolDenied("Selected tool transport is not authenticated")
-        return cls.from_arguments(
-            value["call_id"], {name: value[name] for name in cls.argument_names()}
-        )
-
-    @classmethod
-    def from_arguments(cls, call_id: object, arguments: object) -> SelectedToolRequest:
-        if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
-            raise SelectedToolDenied("Selected tool call identity is invalid")
-        if type(arguments) is not dict or set(arguments) != cls.argument_names():
-            raise SelectedToolDenied("Selected tool arguments are not exact")
-        resource, contents = arguments["resource"], arguments["contents"]
-        if type(resource) is not str or not resource or len(resource.encode("utf-8")) > 4096:
-            raise SelectedToolDenied("Selected tool resource is not bounded")
-        path = Path(resource)
-        if (
-            not path.parts
-            or path.is_absolute()
-            or ".." in path.parts
-            or resource.startswith("@")
-            or resource.startswith("./")
-        ):
-            raise SelectedToolDenied("Selected tool resource must be relative without aliases")
-        if type(contents) is not str:
-            raise SelectedToolDenied("Selected tool contents must be UTF-8 text")
-        try:
-            payload = contents.encode("utf-8", errors="strict")
-        except UnicodeError as error:
-            raise SelectedToolDenied("Selected tool contents are not UTF-8") from error
-        if len(payload) > _MAX_CONTENT:
-            raise SelectedToolDenied("Selected tool contents exceed 128 KiB")
-        return cls(call_id, resource, payload)
+        return self.request
 
 
 def selected_extension(package: Path) -> Path:
@@ -293,20 +273,18 @@ def verify_sent_full_input(
     """Only the exact FULL input admitted by the owner may call native tools."""
     with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._read_transaction():
         assert_native_runtime_schema(scoped._connection)
-        row = scoped._connection.execute(
-            "SELECT * FROM native_runtime_inputs WHERE input_id=?", (input_id,)
-        ).fetchone()
+        row = NativeRuntimeInput.one(scoped._connection, input_id=input_id)
         if row is None or (
-            row["stage"],
-            row["claim_id"],
-            row["execution_id"],
-            row["attempt_ordinal"],
-            row["owner_lookup"],
-            row["owner_thread"],
-            row["owner_generation"],
-            row["sent_owner_admission_epoch"],
-            row["session_id"],
-            row["verdict"],
+            row.stage,
+            row.assignment_id,
+            row.execution_id,
+            row.attempt_ordinal,
+            row.owner_lookup,
+            row.owner_thread,
+            row.owner_generation,
+            row.sent_owner_admission_generation,
+            row.session_id,
+            row.verdict,
         ) != (
             "full",
             admission.wake_assignment_id,
@@ -353,9 +331,11 @@ def perform_selected_write(
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.
     claimed = publish_selected_resource_claim(
-        comms, store, admission, owner_name, ExistingFileClaim(Path(request.resource))
+        comms, store, admission, owner_name, request.arguments.claim
     )
-    write_selected_claimed_file(comms, store, admission, owner_name, claimed, request.contents)
+    write_selected_claimed_file(
+        comms, store, admission, owner_name, claimed, request.arguments.contents.encode("utf-8")
+    )
     record_selected_terminal(session_dir, input_id, request.call_id)
 
 
@@ -525,10 +505,24 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
     def decode_call(self, call_id: object, name: object, arguments: object) -> SelectedToolRequest:
         if name != "selected_claimed_write":
             raise SelectedToolDenied("Native Pi returned an unapproved selected call")
-        return SelectedToolRequest.from_arguments(call_id, arguments)
+        try:
+            return FieldCodec.decode(
+                SelectedToolRequest, {"call_id": call_id, "arguments": arguments}
+            )
+        except (TypeError, ValueError) as error:
+            raise SelectedToolDenied("Invalid selected tool call") from error
 
     def decode_request(self, raw: bytes) -> SelectedToolRequest:
-        return SelectedToolRequest.from_wire(raw, self.token)
+        if len(raw) > self.max_request or not raw.endswith(b"\n"):
+            raise SelectedToolDenied("Selected tool request is incomplete or oversized")
+        try:
+            envelope = FieldCodec.decode(
+                SelectedToolEnvelope,
+                json.loads(raw.decode("utf-8"), object_pairs_hook=unique_fields),
+            )
+        except (TypeError, ValueError) as error:
+            raise SelectedToolDenied("Invalid selected tool request") from error
+        return envelope.authenticate(self.token)
 
     def admit(self, call: SelectedToolRequest) -> None:
         self.action(call)

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from .child_process import ProcessIdentity
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
@@ -24,12 +25,12 @@ from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .message_bus import MessageBus
+from .native_transcript import NativeTranscript
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .threads import Thread, current_thread
-from .native_transcript import NativeTranscript
 
 _LOG = logging.getLogger(__name__)
 
@@ -62,15 +63,6 @@ class ForkSpec:
             raise ValueError("Fork task cannot be empty.")
 
 
-@dataclass(frozen=True, slots=True)
-class DeleteThreadResult:
-    name: str
-    messages_removed: int
-    markers_removed: int
-    activity_events_removed: int
-    runtime_removed: bool
-    ledger_references_removed: int
-    detached_children: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,13 +136,14 @@ class ThreadManagement:
             self.channels._require_available_new_tags(thread.tags)
             session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if os.name == "posix":
-                # Do not follow a redirected legacy directory when repairing it.
+                # Session output must remain in an owner-controlled directory.
                 info = session_path.parent.lstat()
-                if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
+                if (
+                    not stat.S_ISDIR(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) != 0o700
+                ):
                     raise ValueError("Imported session directory is not owner-controlled.")
-                # Native Pi requires a private session directory before it will
-                # attest input IDs. Also repair directories made by older imports.
-                session_path.parent.chmod(0o700)
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry.register(thread, StoppedThreadStatus())
@@ -213,13 +206,13 @@ class ThreadManagement:
             canonical = self.registry.canonical_name(thread.name)
             existing = self.registry.all_threads().get(canonical)
             if existing is not None and existing.executing:
-                if thread.pid not in {0, existing.pid}:
+                if thread.process_identity not in {None, existing.process_identity}:
                     raise RelationViolationError(
                         "Cannot replace an executor during its active turn."
                     )
                 thread = replace(
                     thread,
-                    pid=existing.pid,
+                    process_identity=existing.process_identity,
                     active_turn=existing.active_turn,
                     turn_generation=existing.turn_generation,
                     last_finished_turn_id=existing.last_finished_turn_id,
@@ -281,16 +274,14 @@ class ThreadManagement:
             new_owner = (
                 existing is not None
                 and not existing.executing
-                and existing.pid > 0
-                and thread.pid > 0
+                and existing.process_identity is not None
+                and thread.process_identity is not None
                 and thread.created_at != existing.created_at
             )
             self.registry.register(thread, new_owner=new_owner)
 
             with self.channels.catalog.editing() as document:
                 document.remember_tags(thread.tags, thread.created_at)
-            if existing is not None and existing.tags != thread.tags:
-                self.channels._rebase_passive_channel_scope(thread.name)
 
     def claim_thread(
         self,
@@ -315,7 +306,7 @@ class ThreadManagement:
                 name=name,
                 tags=tags,
                 worktree=worktree,
-                pid=pid,
+                process_identity=ProcessIdentity.capture(pid) if pid > 0 else None,
                 model=model,
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
@@ -378,7 +369,7 @@ class ThreadManagement:
         """Rename a locally managed running thread after proving process ownership."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            if owner_pid <= 0 or thread.pid != owner_pid:
+            if owner_pid <= 0 or thread.process_identity != ProcessIdentity.capture(owner_pid):
                 raise RelationViolationError(
                     f"Process {owner_pid} does not own thread {thread.name!r}."
                 )
@@ -411,7 +402,7 @@ class ThreadManagement:
         before = self.registry.require(name)
         private_meta = self.root / "bus_meta.json"
         if private_meta.is_symlink():
-            raise RelationViolationError("Private/legacy bus metadata cannot be a symlink.")
+            raise RelationViolationError("Bus metadata cannot be a symlink.")
         private = False
         if private_meta.exists():
             with self.bus.log.locked():
@@ -506,7 +497,6 @@ class ThreadManagement:
             )
         if previous == current:
             return RenameThreadResult(previous, current, False)
-        self.bus.rename_thread(previous, current)
         self.agents.activity.rename_thread(previous, current)
         self.agents.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
@@ -553,7 +543,7 @@ class ThreadManagement:
             self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
-    def resolve_thread_model(self, name: str, fallback: str | None = None) -> str | None:
+    def resolve_thread_model(self, name: str, default: str | None = None) -> str | None:
         """Prefer a saved selection, then the resumed session's last model."""
         thread = self.registry.require(name)
         if thread.model is not None:
@@ -561,7 +551,7 @@ class ThreadManagement:
         if thread.session_file and (model := _session_model(Path(thread.session_file))):
             return "/".join(model)
         info = self.agents.agent_info_of(thread.name)
-        return (info.model if info else None) or fallback
+        return (info.model if info else None) or default
 
     def attach_session(self, name: str, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""
@@ -569,7 +559,13 @@ class ThreadManagement:
             current = self.registry.require(name)
             attached = replace(
                 current,
-                pid=current.pid if pid is None else pid,
+                process_identity=(
+                    current.process_identity
+                    if pid is None
+                    else ProcessIdentity.capture(pid)
+                    if pid > 0
+                    else None
+                ),
                 session_file=str(Path(session_file).expanduser().resolve()),
             )
             self.registry.register(attached)
@@ -584,31 +580,6 @@ class ThreadManagement:
             self.registry.archive(canonical)
             self.agents.runtime_info.remove(canonical)
 
-    def delete(self, name: str) -> DeleteThreadResult:
-        """Remove a stopped thread and its owned state, preserving its children."""
-        with _store_lock(self._wire_lock_path):
-            canonical = self.registry.require(name).name
-            if not self.registry.status(canonical).stopped:
-                raise RelationViolationError("Stop a running thread before deleting it.")
-            self.bus.log.assert_legacy_rewrite_allowed()
-            self.registry.begin_delete(canonical)
-            messages_removed, markers_removed = self.bus.remove_thread(canonical)
-            activity_removed = self.agents.activity.remove_thread(canonical)
-            runtime_removed = self.agents.runtime_info.read().get(canonical) is not None
-            self.agents.runtime_info.remove(canonical)
-            ledger_removed = self.ledger.remove_thread(canonical)
-            with self.channels.catalog.editing() as document:
-                document.remove_thread(canonical)
-            detached_children = self.registry.remove(canonical)
-            return DeleteThreadResult(
-                name=canonical,
-                messages_removed=messages_removed,
-                markers_removed=markers_removed,
-                activity_events_removed=activity_removed,
-                runtime_removed=runtime_removed,
-                ledger_references_removed=ledger_removed,
-                detached_children=detached_children,
-            )
 
     def fork(self, spec: ForkSpec, pi_bin: str | None = None) -> Thread:
         """Fork with the current owner's backend executable unless overridden."""
@@ -639,7 +610,7 @@ class ThreadManagement:
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
-            pid=0,
+            process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,
         )
