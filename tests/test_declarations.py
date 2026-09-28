@@ -369,10 +369,13 @@ class TestThreadRegistry:
         else:
             assert registry.finish_claimed_turn("a", "claimed")
         registry.register(claimed)
-        assert registry.require("a") == claimed
+        assert registry.require("a").active_turn.owner_generation is None
         with pytest.raises(RelationViolationError, match="unavailable"):
             registry.live_owner_with_epoch("a")
-        assert registry.snapshot().owner_epochs["a"] > claimed_epoch
+        if revocation == "stop":
+            assert registry.snapshot().owner_generations["a"] > claimed_epoch
+        else:
+            assert registry.snapshot().owner_generations["a"] == claimed_epoch
         assert "turn_epochs" not in claimed.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
@@ -392,7 +395,7 @@ class TestThreadRegistry:
         comms.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
-        for field in ("owner_epochs", "owner_epoch_counter", "turn_epochs"):
+        for field in ("owner_generations", "owner_generation_counter"):
             data.pop(field)
         registry_path.write_text(json.dumps(data))
         comms.begin_turn("a", "migrated-turn")
@@ -419,7 +422,7 @@ class TestThreadRegistry:
         comms.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
-        for field in ("owner_epochs", "owner_epoch_counter", "turn_epochs"):
+        for field in ("owner_generations", "owner_generation_counter"):
             data.pop(field)
         registry_path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="guard does not match"):
@@ -580,8 +583,8 @@ class TestThreadRegistry:
         else:
             path = root / "registry.json"
             data = json.loads(path.read_text())
-            data.pop("owner_epochs")
-            data.pop("owner_epoch_counter")
+            data.pop("owner_generations")
+            data.pop("owner_generation_counter")
             path.write_text(json.dumps(data))  # simulated old writer ignores marker
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             cold.require("a")
@@ -608,17 +611,17 @@ class TestThreadRegistry:
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         owner, epoch = registry.live_owner_with_epoch("a")
         data = json.loads(path.read_text())
-        data.pop("owner_epochs")
-        data.pop("owner_epoch_counter")
+        data.pop("owner_generations")
+        data.pop("owner_generation_counter")
         path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="stopped or changed"):
             registry.claim_live_turn(owner, "claimed", expected_epoch=epoch)
         with pytest.raises(RelationViolationError, match="unavailable"):
             registry.live_owner_with_epoch("a")
-        data["owner_epochs"] = {"a": True}
-        data["owner_epoch_counter"] = epoch
+        data["owner_generations"] = {"a": True}
+        data["owner_generation_counter"] = epoch
         path.write_text(json.dumps(data))
-        with pytest.raises(RelationViolationError, match="invalid private registry owner epochs"):
+        with pytest.raises(RelationViolationError, match="invalid private registry owner generations"):
             registry.live_owner_with_epoch("a")
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):

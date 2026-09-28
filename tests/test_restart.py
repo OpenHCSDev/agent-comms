@@ -126,10 +126,10 @@ def test_direct_claim_racing_final_preflight_is_not_erased_or_signaled(tmp_path,
     expected = (original.pid, original.created_at, snapshot.admission_generations["one"])
     real_fence = comms.registry.fence_idle_owner
 
-    def racing_fence(thread, *, expected_epoch):
+    def racing_fence(thread, *, expected_admission_generation):
         current = comms.registry.require("one")
         comms.registry.register(replace(current, active_turn=ActiveTurn("raced", current.pid)))
-        return real_fence(thread, expected_epoch=expected_epoch)
+        return real_fence(thread, expected_admission_generation=expected_admission_generation)
 
     monkeypatch.setattr(comms.registry, "fence_idle_owner", racing_fence)
     with pytest.raises(RelationViolationError, match="Idle owner changed before restart fence"):
@@ -142,7 +142,7 @@ def test_explicit_start_cannot_reopen_stopped_live_restart_fence(tmp_path, monke
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     original = comms.registry.require("one")
     snapshot = comms.registry.snapshot()
-    comms.registry.fence_idle_owner(original, expected_epoch=snapshot.admission_generations["one"])
+    comms.registry.fence_idle_owner(original, expected_admission_generation=snapshot.admission_generations["one"])
     with pytest.raises(RelationViolationError, match="Cannot reactivate a stopped incarnation"):
         comms.start("one")
     assert comms.registry.status("one") is ThreadStatus.STOPPED
@@ -154,11 +154,11 @@ def test_start_racing_fence_after_proof_cannot_reopen_admission(tmp_path, monkey
     comms, stopped = setup_owners(tmp_path, monkeypatch)
     original = comms.registry.require("one")
     snapshot = comms.registry.snapshot()
-    expected_epoch = snapshot.admission_generations["one"]
+    expected_admission_generation = snapshot.admission_generations["one"]
 
     def proof_and_fence(thread, wait=True):
         if wait:
-            comms.registry.fence_idle_owner(original, expected_epoch=expected_epoch)
+            comms.registry.fence_idle_owner(original, expected_admission_generation=expected_admission_generation)
         return True
 
     monkeypatch.setattr(comms, "_is_local_participant", proof_and_fence)

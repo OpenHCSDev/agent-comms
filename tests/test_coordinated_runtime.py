@@ -1575,7 +1575,10 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         assert saved.active_turn is not None
         comms.registry.unregister("beta")
         comms.registry.register(saved)
-        assert comms.registry.require("beta") == saved
+        restored = comms.registry.require("beta")
+        assert restored == replace(
+            saved, active_turn=replace(saved.active_turn, owner_generation=None)
+        )
         assert comms.registry.status("beta").active
 
     if boundary == "before_run":

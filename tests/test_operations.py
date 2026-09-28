@@ -259,7 +259,10 @@ class TestThreadOps:
         wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_epochs["reserved"]
         read_fd, write_fd = os.pipe()
-        os.write(write_fd, _owner_launch_proof("reserved", 987654, before))
+        os.write(
+            write_fd,
+            _owner_launch_proof(wired.registry.snapshot().owner_identity("reserved"), 987654),
+        )
         os.close(write_fd)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         attached = wired.acquire_thread("reserved", owner_pid=987654)
@@ -276,9 +279,12 @@ class TestThreadOps:
         wired.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_epochs["reserved"]
         read_fd, write_fd = os.pipe()
-        os.write(write_fd, _owner_launch_proof("reserved", 987654, before))
+        os.write(
+            write_fd,
+            _owner_launch_proof(wired.registry.snapshot().owner_identity("reserved"), 987654),
+        )
         os.close(write_fd)
-        wired.registry.register(wired.registry.require("reserved"))
+        wired.registry.register(wired.registry.require("reserved"), new_owner=True)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         with pytest.raises(RelationViolationError, match="reservation no longer matches"):
             wired.acquire_thread("reserved", owner_pid=987654)
@@ -290,7 +296,7 @@ class TestThreadOps:
         wired.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
         epoch = wired.registry.snapshot().owner_epochs[name]
         read_fd, write_fd = os.pipe()
-        proof = _owner_launch_proof(name, 987654, epoch)
+        proof = _owner_launch_proof(wired.registry.snapshot().owner_identity(name), 987654)
         assert len(proof) == 32
         os.write(write_fd, proof)
         os.close(write_fd)
@@ -317,7 +323,9 @@ class TestThreadOps:
                 )
             epoch = wired.registry.snapshot().owner_epochs[name]
             assert owned.pid == 987654
-            assert os.read(inherited[0], 33) == _owner_launch_proof(name, 987654, epoch)
+            assert os.read(inherited[0], 33) == _owner_launch_proof(
+                wired.registry.snapshot().owner_identity(name), 987654
+            )
         finally:
             for fd in inherited:
                 os.close(fd)
