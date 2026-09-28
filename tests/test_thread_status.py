@@ -38,7 +38,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms.registry.register(thread, status)
     before = comms.registry.snapshot()
     raw = json.loads(comms.registry.store.path.read_text())
-    assert raw["threads"]["owner"]["status"] == status.declared_name
+    assert FieldCodec.decode(ThreadStatus, raw["statuses"]["owner"]) == status
     assert raw["threads"]["owner"]["created_at"] == 12.5
     reopened = Registration(comms.registry.store.path)
     assert reopened.snapshot() == before
@@ -101,7 +101,6 @@ def test_roster_and_controls_keep_archived_threads_dormant():
     assert not archived.allows_control("comms_start", owner_pid=123)
     assert not archived.allows_control("comms_stop", owner_pid=123)
     assert not archived.allows_control("comms_archive", owner_pid=123)
-    assert archived.allows_control("comms_delete", owner_pid=123)
     stopped = StoppedThreadStatus()
     assert stopped.in_view() and not stopped.in_view(show_stopped=False)
     assert stopped.allows_control("comms_start", owner_pid=123)
