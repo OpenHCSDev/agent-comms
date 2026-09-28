@@ -135,6 +135,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     assert command.to_rpc() == record
 
 
+@pytest.mark.usefixtures("native_rpc_fixture")
 async def test_invalid_queued_command_reports_failure_and_reaps_child(tmp_path):
     child = tmp_path / "pi-stub"
     child.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(60)\n")

@@ -2,14 +2,14 @@ import asyncio
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from agent_comms.acp import CommsAgent
+from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 
 
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/base")
-    agent = CommsAgent(wire(tmp_path), agent_bin="pi", agent_args=["--model", "test/base"])
-    await agent.new_session("/tmp/project")
+    agent = canonical_agent(wire(tmp_path), agent_bin="pi", agent_args=["--model", "test/base"])
+    await agent.new_session(str(tmp_path / "project"))
     return agent
 
 
@@ -38,7 +38,7 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
     monkeypatch.setattr(backend, "stream_agent_events", events)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
     try:
-        await active.wait()
+        await asyncio.wait_for(active.wait(), 3)
         await agent.prompt(
             "project",
             [{"type": "text", "text": "later"}],
@@ -84,7 +84,7 @@ async def test_cancellation_restores_unprocessed_user_queue(tmp_path, monkeypatc
     monkeypatch.setattr(backend, "stream_agent_events", events)
     turn = asyncio.create_task(agent.prompt("project", [{"type": "text", "text": "original"}]))
     try:
-        await active.wait()
+        await asyncio.wait_for(active.wait(), 3)
         await agent.prompt(
             "project",
             [{"type": "text", "text": "keep this queued text"}],
