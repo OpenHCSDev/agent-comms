@@ -56,3 +56,12 @@ Restart idle owners using the normal guarded API and test fresh installed
 channel coding in an owned worktree. Production still uses runtime-history
 with the prior native package; none of this coding change is live yet.
 PR95 repeated real compaction and queued input acceptance remains separate.
+
+## Integration complete
+
+Merged main ee774f1 (S2 PR143 plus history PR144). The single native event-loop
+conflict now dispatches S2 nominal ToolExecutionStart/End/AgentSettled values
+into the shared tool policy. 144 focused merged tests passed,6 optional skips.
+Core wheel installed in runtime-coding-20260927 with current history Toad79.
+Parent next activates the paired native package and performs fresh installed
+owner delivery/tool checks. No CI gate.
