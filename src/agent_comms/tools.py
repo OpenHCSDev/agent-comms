@@ -143,10 +143,6 @@ def _bounded_inbox_response(
     ack: bool,
 ) -> JsonObject:
     """Project a saved inbox snapshot without changing any delivery or goal authority."""
-    messages, unresolved = (response["messages"], response["unresolved_inputs"])
-    review = response.get("standby_review")
-    assert isinstance(messages, list) and isinstance(unresolved, list)
-    assert review is None or isinstance(review, dict)
     bounded: JsonObject = {
         "messages": [],
         "acknowledged": 0,

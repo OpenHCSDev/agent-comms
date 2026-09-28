@@ -143,8 +143,12 @@ class FieldCodec:
         required = []
         hints = cls._types(target)
         for declared, key in cls._fields(target):
-            schema = cls.value_schema(hints[declared.name])
+            annotation = hints[declared.name]
             metadata = declared.metadata
+            if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
+                members = tuple(item for item in get_args(annotation) if item is not type(None))
+                annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
+            schema = cls.value_schema(annotation)
             if "description" in metadata:
                 schema["description"] = metadata["description"]
             if "wire_choices" in metadata:
@@ -166,7 +170,7 @@ class FieldCodec:
         """Derive external scalar/array choices from the same decode declarations."""
         origin, args = get_origin(annotation), get_args(annotation)
         if origin in (Union, types.UnionType):
-            members = [item for item in args if item is not type(None)]
+            members = list(args)
             if len(members) == 1:
                 return cls.value_schema(members[0])
             return {"anyOf": [cls.value_schema(item) for item in members]}
@@ -179,7 +183,13 @@ class FieldCodec:
         if isinstance(annotation, type) and issubclass(annotation, Enum):
             values = [item.value for item in annotation]
             return {**cls.value_schema(type(values[0])), "enum": values}
-        primitive = {str: "string", bool: "boolean", int: "integer", float: "number"}
+        primitive = {
+            str: "string",
+            bool: "boolean",
+            int: "integer",
+            float: "number",
+            type(None): "null",
+        }
         if annotation in primitive:
             return {"type": primitive[annotation]}
         if isinstance(annotation, type) and is_dataclass(annotation):

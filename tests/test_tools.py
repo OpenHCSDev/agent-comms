@@ -129,7 +129,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
             messages = comms.bus.inbox(self.viewer, self.target)
             return {
                 "count": len(messages),
-                "bodies": [row.text for row in messages] if self.include_body else [],
+                "bodies": [row.body for row in messages] if self.include_body else [],
             }
 
     for name in ("a", "b"):
