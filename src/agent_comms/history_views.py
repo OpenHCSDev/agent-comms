@@ -821,8 +821,7 @@ class HistoryViews:
         self, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
     ) -> tuple[ThreadView, ...]:
         runtime = self.agents.runtime_info.read()
-        active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
-        activities = self.agents.activity.all_current(active=active)
+        activities = self.agents.all_activity(snapshot=snapshot)
         waits = GoalWaits(self.root / GoalWaits.filename).read()
         return tuple(
             ThreadView(
@@ -1041,7 +1040,7 @@ class HistoryViews:
             for name, thread in snapshot.threads.items()
             if not active_only or snapshot.statuses[name].active
         }
-        activities = self.agents.activity.all_current()
+        activities = self.agents.all_activity(snapshot=snapshot)
         pending = self.bus.pending_counts_all(tuple(threads))
         waits = GoalWaits(self.root / GoalWaits.filename).read()
         return [

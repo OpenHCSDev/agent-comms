@@ -173,6 +173,8 @@ class ThreadView:
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
+        if self.status.active and self.activity.diagnostic is not None:
+            return self.activity.presentation(self.thread.title or self.thread.name)
         if self.status.active and self.thread.executing and not self.activity.state.busy:
             return ActivityState.WORKING.presentation(
                 self.thread.title or self.thread.name, "In a turn"
