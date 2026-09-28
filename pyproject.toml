@@ -80,6 +80,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-n auto --maxprocesses=8 --dist=worksteal --cov=agent_comms --cov-report=term-missing --cov-fail-under=85"
 asyncio_mode = "auto"
+markers = ["refactor_guard: permanent architecture guards selected by the required debt check"]
 
 [tool.black]
 line-length = 100
