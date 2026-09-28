@@ -1,6 +1,6 @@
 # Current functional acceptance — 2026-09-28
 
-Installed source: core195 runtime/collaboration document ownership (retains R2 catalog192, R4 goal190, restart188 and bus/compaction186), paired Toad95; Textual remains4fa6a9c. Runtime is runtime-r5-documents-20260928. Current normal activation, installed activity/sorting and saved-document comparison: evidence/r5-integration/HANDOFF.md. Earlier R2 history/catalog and R4 goal acceptance remain retained. Original refactor plan is not complete.
+Installed source: core196 known Pi payload ownership, paired Toad96; retains R2/R4/R5 and original bus/compaction activation. Runtime is runtime-r1-pi-payloads-20260928. Current receipt: evidence/r1-integration/HANDOFF.md. Fresh installed real-provider queue/compaction, mounted original history111choices, tool diffs and transcript process races passed. Normal two-owner restart and production source59/reply60 read/bash passed; checkpoint60, roster103. Original refactor plan remains incomplete: Darwin R3, Pascal R6, R7 queued. Earlier table receipts below retain their original scope and are supplemented by this current acceptance.
 
 ## Six functional requirements
 
@@ -17,10 +17,10 @@ Installed source: core195 runtime/collaboration document ownership (retains R2 c
 
 The activation attempt signaled both idle owners, then restart_owners rejected a graceful release as a changed owner. Both old processes later were authoritatively absent and STOPPED, with no active turn. Starting exactly those identities recovered both; fresh57→58 proves actual subsequent use. The failed activation and recovery receipts are retained. Core188 accepts only the exact voluntary-release receipt, still proves OS exit/ownership and rejects a replaced incarnation/epoch before signals; its normal two-owner restart is now verified live. No timeout alone permits restart or replay.
 
-The original plan remains broader than completed C0/bus/D1–D4: dispatch/FINAL-ORIGINAL-PLAN-AUDIT.md records Pi payload/document-store/goal-attempt/transcript/coordinated-turn/internal vocabulary work. R4 is merged/live with installed Toad goal routes verified. Pascal implements R1 Pi payload closure; R2 and R5 are also merged/live; Darwin implements R3 input/delivery documents. This is assigned refactor work, not evidence of functional default-off behavior.
+The original plan remains broader than completed C0/bus/D1–D4: dispatch/FINAL-ORIGINAL-PLAN-AUDIT.md records Pi payload/document-store/goal-attempt/transcript/coordinated-turn/internal vocabulary work. R4 is merged/live with installed Toad goal routes verified. R1/R2/R4/R5 are merged/live; Pascal proceeds with R6 saved transcripts and Darwin implements R3 input/delivery documents. This is assigned refactor work, not evidence of functional default-off behavior.
 
 The original proposal explicitly lists owner decision supersession, arbitrary DM obligations and task→commit heads as future. Those are not claimed shipped by the six-requirement acceptance. Native proof-journal limit issue107 remains issue-only. No current150-owner provider/UI p99 is claimed.
 
-## Verification in this audit
+## Verification in the earlier baseline audit
 
 Read original PR17/94 bodies and the current ordinary delivery/proposal contracts; inspected previous actual receipts and current code. Ran only a read-only installed observation: checkpoint seal, process participation, launch paths and selected configuration. Verified current Toad/Textual fork heads match the pinned pair. No new provider turn, broad suite, live mutation, or old input replay for this audit.

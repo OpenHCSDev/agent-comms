@@ -68,7 +68,13 @@ async def queue(agent, text="future", delivery="queue"):
     public = response.field_meta["agentComms"]["inputDisposition"]
     assert public["status"] == "accepted_not_started"
     key = "acp:" + public["inputId"]
-    assert InputDispositions(agent._comms.root).get(key)["native_id"] is None
+    assert (
+        InputDispositions(agent._comms.root / InputDispositions.filename)
+        .read()
+        .rows.get(key)
+        .native_id
+        is None
+    )
     return key
 
 
@@ -94,7 +100,7 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
         text="foreign input",
     )
     assert capture(owner) == source
-    assert agent.inputs.dispositions.get(key)["status"] == "unknown"
+    assert agent.inputs.dispositions.read().rows.get(key).declared_name == "unknown"
     assert not any(
         name in vars(agent) for name in ("_queued_inputs", "_dispositions", "_drain_tasks")
     )
@@ -129,13 +135,16 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
     elif change == "lost_owner":
         bridge.future_queue = CommsAgent(agent._comms).inputs
     elif change in {"changed_queue", "deleted_queue"}:
-        with _store_lock(agent.inputs.dispositions.path):
-            rows = agent.inputs.dispositions._read()
+
+        def mutate(document):
+            rows = dict(document.rows)
             if change == "changed_queue":
-                rows[key]["source_text"] = "changed"
+                rows[key] = replace(rows[key], source_text="changed")
             else:
                 del rows[key]
-            agent.inputs.dispositions._write(rows)
+            return replace(document, rows=rows)
+
+        agent.inputs.dispositions.update(mutate)
     elif change == "bound_queue":
         agent.inputs.dispositions.bind(
             key,
@@ -155,7 +164,7 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
         )
     with pytest.raises(RelationViolationError):
         capture(owner)
-    assert agent.inputs.dispositions.status("acp:original") == "unknown"
+    assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "unknown"
     assert (
         CompactionJournal(agent._comms.root / "compaction-commits.sqlite3").unresolved(
             str(current.session_file)
@@ -170,10 +179,15 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
     await queue(agent)
     comms = agent._comms
     if change == "original":
-        with _store_lock(agent.inputs.dispositions.path):
-            rows = agent.inputs.dispositions._read()
-            rows["acp:original"]["source_text"] = "corrected"
-            agent.inputs.dispositions._write(rows)
+        agent.inputs.dispositions.update(
+            lambda document: replace(
+                document,
+                rows={
+                    **document.rows,
+                    "acp:original": replace(document.rows["acp:original"], source_text="corrected"),
+                },
+            )
+        )
         assert capture(owner) != source
     elif change == "bus":
         comms.threads.register(Thread("peer", frozenset(), str(comms.root)))

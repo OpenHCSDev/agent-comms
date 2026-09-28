@@ -405,9 +405,9 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             worker.join(timeout=2)
         kinds = [type(event) for event in events]
         if case == "acp_success":
-            rows = InputDispositions(comms.root)._read()
+            rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
             assert len(rows) == 1
-            assert next(iter(rows.values()))["status"] == "started"
+            assert not next(iter(rows.values())).unresolved
             assert len(calls) > 1
             assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
             assert reasoning_efforts[-1] == "high"

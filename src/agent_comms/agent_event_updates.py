@@ -261,9 +261,8 @@ class AcpEventConsumer(MroDispatch):
         self.agent.turns.emitted_errors[session_id] = text
         failed_input = None
         input_text = self.agent.inputs.turn_input_text.get(session_id)
-        if input_text and any(
-            self.agent.inputs.dispositions.status(key) != "started"
-            for key in self.agent.inputs.turn_original_input_keys.get(session_id, ())
+        if input_text and not self.agent.inputs.dispositions.read().all_started(
+            self.agent.inputs.turn_original_input_keys.get(session_id, ())
         ):
             failed_input = {"text": input_text, "reason": text}
         await client.session_update(

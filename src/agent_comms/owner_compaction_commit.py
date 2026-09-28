@@ -84,7 +84,7 @@ class OwnerCompactionCommit:
         require_deadline_support()
         self.root = registry_path.parent.resolve(strict=True)
         self.registry = Registration(registry_path)
-        self.inputs = InputDispositions(self.root)
+        self.inputs = InputDispositions(self.root / InputDispositions.filename)
         self.future_queue = future_queue
         self.package_dir = package_dir.resolve(strict=True)
         self.helper = self.package_dir / "dist/agent-comms-compaction-commit-child.mjs"
@@ -148,10 +148,12 @@ class OwnerCompactionCommit:
             _store_lock(self.root / "wire") as wire_fd,
             _store_lock(self.root / "bus.jsonl") as bus_fd,
             self.registry.guard_owner_compaction(owner, epoch, **arguments) as (receipt, fd),
-            _store_lock(self.inputs.path) as input_fd,
+            self.inputs.locked() as input_fd,
         ):
             if settled:
-                self.inputs._compaction_rows_unlocked(owner, pending_input_key, self.future_queue)
+                self.inputs._read_unlocked().compaction_rows(
+                    owner, pending_input_key, self.future_queue
+                )
             yield receipt, fd, (executor_fd, wire_fd, bus_fd, input_fd)
 
     @staticmethod
@@ -226,7 +228,9 @@ class OwnerCompactionCommit:
             snapshot.aliases,
             ChannelCatalog(self.root / ChannelCatalog.filename).read().targets_for(owner.tags),
         )
-        rows = self.inputs._compaction_rows_unlocked(owner, pending_input_key, self.future_queue)
+        rows = self.inputs._read_unlocked().compaction_rows(
+            owner, pending_input_key, self.future_queue
+        )
         return CompactionSource(
             witness,
             f"{self.root}:{root.st_dev}:{root.st_ino}",
@@ -236,7 +240,9 @@ class OwnerCompactionCommit:
             receipt.goal_id,
             receipt.goal_revision,
             self._ingress_revision(self.root / "bus.jsonl", bus=True, delivery=delivery),
-            hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
+            hashlib.sha256(
+                json.dumps(FieldCodec.encode(rows), sort_keys=True).encode()
+            ).hexdigest(),
             pending_input_key,
             settings_paths,
             self._settings_source(settings_paths),
@@ -476,7 +482,9 @@ class OwnerCompactionCommit:
                         selected_attempt.source_json.encode()
                     ).hexdigest(),
                 )
-            commit_id = self.journal.begin(witness.session_file, intent)
+            commit_id = self.journal.begin(
+                witness.session_file, intent, inputs=self.inputs._read_unlocked()
+            )
             request = dict(
                 action="commit",
                 witness=FieldCodec.encode(witness),

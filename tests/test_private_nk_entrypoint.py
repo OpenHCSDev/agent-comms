@@ -247,9 +247,13 @@ def test_rotate_stopped_private_route_without_replaying_old_inputs(
     )
     old_id = old.messaging.initialize_private_initial_protocol()
     old.messaging.send_user_message("owner", "pending old message", worktree=str(tmp_path))
-    InputDispositions(old_root).record(
-        "old:unknown", seq=None, owner="owner", admission=1,
-        target="owner", text="uncertain old input",
+    InputDispositions(old_root / InputDispositions.filename).record(
+        "old:unknown",
+        seq=None,
+        owner="owner",
+        admission=1,
+        target="owner",
+        text="uncertain old input",
     )
     new = Comms(new_root)
     new_id = new.messaging.initialize_private_initial_protocol()
@@ -392,9 +396,13 @@ def test_withdraw_route_archives_stopped_private_root(tmp_path, monkeypatch):
         comms.threads.register(Thread("alpha", frozenset({"team"}), str(tmp_path), pid=process.pid))
         root_id = comms.messaging.initialize_private_initial_protocol()
         comms.messaging.send_initial_cohort("sender", "#team", "pending private message")
-        InputDispositions(root).record(
-            "rollback:unknown", seq=None, owner="alpha", admission=1,
-            target="alpha", text="uncertain private input",
+        InputDispositions(root / InputDispositions.filename).record(
+            "rollback:unknown",
+            seq=None,
+            owner="alpha",
+            admission=1,
+            target="alpha",
+            text="uncertain private input",
         )
         route_file = tmp_path / "route-state" / "active-route.json"
         route = active_route.ActiveRoute(root, root_id, tmp_path)
@@ -458,9 +466,13 @@ def test_activate_archive_stage_and_route_as_one_default_lock(tmp_path, monkeypa
         legacy.threads.register(Thread("receiver", frozenset(), str(tmp_path), pid=0))
         legacy.threads.register(Thread("observer", frozenset(), str(tmp_path), pid=0))
         legacy.messaging.send("sender", "receiver", "old pending")
-        InputDispositions(legacy.root).record(
-            "cutover:unknown", seq=None, owner="sender", admission=1,
-            target="sender", text="uncertain old input",
+        InputDispositions(legacy.root / InputDispositions.filename).record(
+            "cutover:unknown",
+            seq=None,
+            owner="sender",
+            admission=1,
+            target="sender",
+            text="uncertain old input",
         )
         snapshot = legacy.registry.snapshot()
         sender = snapshot.threads["sender"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import asyncio
 import os
 
@@ -26,7 +27,11 @@ def test_saved_session_barrier_does_not_create_or_repair_journal(tmp_path):
     assert native_input_admitted(root, str(session))
     assert not (root / "compaction-commits.sqlite3").exists()
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    first = journal.begin(str(session), {"source": "pre-summary"})
+    first = journal.begin(
+        str(session),
+        {"source": "pre-summary"},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     assert not native_input_admitted(root, str(session))
     journal.resolve(first, UnknownOperation(), {"status": "unknown", "reason": "lost reply"})
     assert not native_input_admitted(root, str(session))
@@ -53,7 +58,11 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     session.write_text("{}\n")
     comms.threads.attach_session("project", str(session), pid=os.getpid())
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-    commit_id = journal.begin(str(session), {"source": "pre-summary"})
+    commit_id = journal.begin(
+        str(session),
+        {"source": "pre-summary"},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
     observed = []
 
     async def events(*args, **kwargs):
@@ -65,8 +74,12 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     try:
         await agent.inputs.run_owned_input("project", "project", "new correction")
         assert observed == [False]
-        rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
-        assert len(rows) == 1 and rows[0]["native_id"] is None
+        rows = (
+            InputDispositions(comms.root / InputDispositions.filename)
+            .read()
+            .unknown(frozenset({"project"}))
+        )
+        assert len(rows) == 1 and rows[0].native_id is None
         assert journal.get(commit_id).state.declared_name == "intent"
         journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "uncertain"})
         await agent.inputs.run_owned_input("project", "project", "distinct later input")

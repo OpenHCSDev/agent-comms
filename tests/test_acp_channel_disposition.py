@@ -29,12 +29,20 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
 
     def durable_before_cursor(aliases, through):
         if through >= message.seq:
-            rows = InputDispositions(comms.root).unknown(frozenset({"worker"}))
-            assert [row["sequence"] for row in rows] == [message.seq]
+            rows = (
+                InputDispositions(comms.root / InputDispositions.filename)
+                .read()
+                .unknown(frozenset({"worker"}))
+            )
+            assert [row.sequence for row in rows] == [message.seq]
             observed.append(through)
         advance(aliases, through)
 
-    monkeypatch.setattr(agent.inputs.delivery_cursors, "advance", durable_before_cursor)
+    monkeypatch.setattr(
+        type(agent.inputs.delivery_cursors),
+        "advance",
+        lambda self, aliases, through: durable_before_cursor(aliases, through),
+    )
 
     async def unexpected_backend(*args, **kwargs):
         raise AssertionError("Revoked UNKNOWN input must not launch a backend")
@@ -65,8 +73,8 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
             async def session_update(self, **kwargs):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
-        ledger = InputDispositions(comms.root)
-        before = ledger._read()
+        ledger = InputDispositions(comms.root / InputDispositions.filename)
+        before = ledger.read().rows
         cursor_before = agent.inputs.delivery_cursors.path.read_bytes()
         await agent.inputs.replay_unknown_inputs("worker", Client())
         unknown = [row["_meta"]["agentComms"]["inputDisposition"] for row in updates]
@@ -91,12 +99,14 @@ async def test_channel_queued_before_revocation_remains_visible_unknown(
         assert [(row["sequence"], row["target"], row["status"]) for row in visible] == [
             (message.seq, "#team", "unknown")
         ]
-        assert [row["sequence"] for row in ledger.unknown(frozenset({"worker"}))] == [message.seq]
-        assert ledger._read() == before
+        assert [row.sequence for row in ledger.read().unknown(frozenset({"worker"}))] == [
+            message.seq
+        ]
+        assert ledger.read().rows == before
         assert agent.inputs.delivery_cursors.path.read_bytes() == cursor_before
         assert await agent.inputs.drain_inbox("worker") == 0
         assert not agent.inputs.pending_turns.get("worker")
-        assert ledger._read() == before
+        assert ledger.read().rows == before
     finally:
         await agent.shutdown()
 
@@ -130,12 +140,12 @@ async def test_channel_native_receipts_are_per_recipient_and_per_sequence(tmp_pa
         for name in ("alpha", "beta"):
             await agent.inputs.drain_inbox(name)
         await asyncio.gather(*(agent.inputs.wake_tasks[name] for name in ("alpha", "beta")))
-        rows = list(InputDispositions(comms.root)._read().values())
+        rows = list(InputDispositions(comms.root / InputDispositions.filename).read().rows.values())
         assert len(rows) == 4
-        assert {(row["owner"], row["sequence"], row["status"]) for row in rows} == {
+        assert {(row.owner, row.sequence, row.declared_name) for row in rows} == {
             (name, message.seq, "started") for name in ("alpha", "beta") for message in messages
         }
-        assert len({row["native_id"] for row in rows}) == len(calls) == 2
+        assert len({row.native_id for row in rows}) == len(calls) == 2
         assert all("Request one" in text and "Request two" in text for _, text in calls)
     finally:
         await agent.shutdown()
@@ -149,7 +159,7 @@ async def test_channel_hard_exit_never_replays_unknown(crash_at, monkeypatch):
     from pathlib import Path
     from tempfile import TemporaryDirectory
 
-    code = "\nimport asyncio, os, sys\nfrom pathlib import Path\nfrom agent_comms.comms import wire\nfrom agent_comms.input_drain import InputDrain\nfrom agent_comms.acp import CommsAgent\n\nasync def run():\n    comms = wire(Path(sys.argv[1]))\n    agent = CommsAgent(comms, agent_bin='pi', runtime_enabled=True)\n    agent.inputs.ensure_live_drain = lambda session: None\n    agent.inputs.schedule_wake = lambda session: None\n    await agent.new_session(sys.argv[2])\n    comms.channels.channels.update_tags('worker', add=frozenset({'team'}))\n    message = comms.messaging.send_user_message('#team', 'CRASH_REQUEST', worktree=sys.argv[2])\n    advance = agent.inputs.delivery_cursors.advance\n\n    def before_cursor(aliases, through):\n        if through == message.seq and sys.argv[3] == 'before_cursor':\n            pending = agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]\n            assert pending['sequence'] == message.seq\n            os._exit(0)\n        advance(aliases, through)\n    agent.inputs.delivery_cursors.advance = before_cursor\n    await agent.inputs.drain_inbox('worker')\n    assert agent.inputs.pending_turns['worker']\n    assert agent.inputs.dispositions.unknown(frozenset({'worker'}))[0]['sequence'] == message.seq\n    os._exit(0)\nasyncio.run(run())\n"
+    code = "\nimport asyncio, os, sys\nfrom pathlib import Path\nfrom agent_comms.comms import wire\nfrom agent_comms.input_drain import InputDrain\nfrom agent_comms.acp import CommsAgent\n\nasync def run():\n    comms = wire(Path(sys.argv[1]))\n    agent = CommsAgent(comms, agent_bin='pi', runtime_enabled=True)\n    agent.inputs.ensure_live_drain = lambda session: None\n    agent.inputs.schedule_wake = lambda session: None\n    await agent.new_session(sys.argv[2])\n    comms.channels.update_tags('worker', add=frozenset({'team'}))\n    message = comms.messaging.send_user_message('#team', 'CRASH_REQUEST', worktree=sys.argv[2])\n    advance = agent.inputs.delivery_cursors.advance\n\n    def before_cursor(aliases, through):\n        if through == message.seq and sys.argv[3] == 'before_cursor':\n            pending = agent.inputs.dispositions.read().unknown(frozenset({'worker'}))[0]\n            assert pending.sequence == message.seq\n            os._exit(0)\n        advance(aliases, through)\n    type(agent.inputs.delivery_cursors).advance = lambda self, aliases, through: before_cursor(aliases, through)\n    await agent.inputs.drain_inbox('worker')\n    assert agent.inputs.pending_turns['worker']\n    assert agent.inputs.dispositions.read().unknown(frozenset({'worker'}))[0].sequence == message.seq\n    os._exit(0)\nasyncio.run(run())\n"
     with TemporaryDirectory(prefix="ac-channel-crash-", dir="/var/tmp") as raw:
         root = Path(raw)
         environment = os.environ.copy()
@@ -180,9 +190,9 @@ async def test_channel_hard_exit_never_replays_unknown(crash_at, monkeypatch):
             await agent.inputs.drain_inbox("worker")
             assert not agent.inputs.pending_turns.get("worker")
             assert not agent.inputs.wake_tasks.get("worker")
-            rows = agent.inputs.dispositions.unknown(frozenset({"worker"}))
-            assert len(rows) == 1 and rows[0]["native_id"] is None
-            assert rows[0]["source_text"].endswith("CRASH_REQUEST")
+            rows = agent.inputs.dispositions.read().unknown(frozenset({"worker"}))
+            assert len(rows) == 1 and rows[0].native_id is None
+            assert rows[0].source_text.endswith("CRASH_REQUEST")
         finally:
             await agent.shutdown()
 
@@ -219,8 +229,8 @@ async def test_channel_batch_never_credits_omitted_or_duplicate_sequences(
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("worker", "worker", prompt, origins=origins)
-        rows = agent.inputs.dispositions.unknown(frozenset({"worker"}))
-        assert {row["sequence"] for row in rows} == {message.seq for message in messages}
-        assert all(row["native_id"] is None for row in rows)
+        rows = agent.inputs.dispositions.read().unknown(frozenset({"worker"}))
+        assert {row.sequence for row in rows} == {message.seq for message in messages}
+        assert all(row.native_id is None for row in rows)
     finally:
         await agent.shutdown()

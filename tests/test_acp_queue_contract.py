@@ -95,7 +95,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     exact = inbox.get_nowait()["_input_id"]
     assert response.field_meta["agentComms"]["inputDisposition"]["inputId"] == exact
     assert exact in agent.inputs.queued_inputs["beta"]
-    assert agent.inputs.dispositions.get("acp:" + exact)["status"] == "unknown"
+    assert agent.inputs.dispositions.read().rows.get("acp:" + exact).declared_name == "unknown"
     meta = agent.sessions.metadata("beta", session_id="beta")["agentComms"]
     assert meta["queueBinding"]["ownerThread"] == "beta"
     assert meta["queueState"] is None
