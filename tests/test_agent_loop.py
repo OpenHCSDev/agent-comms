@@ -1,10 +1,12 @@
 """Participant agent loop: a thread that answers its own inbox."""
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
+from agent_comms.activity import Activity
 from agent_comms.agent_loop import Participant
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
@@ -153,7 +155,11 @@ class TestParticipantActivity:
         comms.messaging.send("human", "bot", "fix the flake")
         await participant._tick("bot")
 
-        states = [e.state.value for e in comms.agents.activity._load() if e.thread == "bot"]
+        events = (
+            Activity.from_wire(json.loads(line))
+            for line in (root / "activity.jsonl").read_text().splitlines()
+        )
+        states = [e.state.value for e in events if e.thread == "bot"]
         assert states == ["thinking", "idle"]
         assert comms.agents.activity_of("bot").state is ActivityState.IDLE
 
@@ -198,7 +204,11 @@ class TestParticipantActivity:
         comms.messaging.send("human", "bot", "check cwd")
         await participant._tick("bot")
 
-        states = [(e.state.value, e.detail) for e in comms.agents.activity._load() if e.thread == "bot"]
+        events = (
+            Activity.from_wire(json.loads(line))
+            for line in (root / "activity.jsonl").read_text().splitlines()
+        )
+        states = [(e.state.value, e.detail) for e in events if e.thread == "bot"]
         assert ("working", "bash: ") in [(s, d) for s, d in states] or any(
             s == "working" for s, d in states
         )

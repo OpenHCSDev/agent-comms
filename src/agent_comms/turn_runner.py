@@ -20,6 +20,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .goal_actions import (
     EditGoalAction,
@@ -55,7 +56,6 @@ from .transcript_updates import StartedTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
 
-GLOBAL_TARGET = "#all"
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
 GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
@@ -753,4 +753,4 @@ def parse_target(text: str) -> tuple[str, str]:
         channel = parts[0].rstrip("@#")
         if channel and len(parts) == 2 and parts[1].strip():
             return f"#{channel}", parts[1].strip()
-    return GLOBAL_TARGET, stripped
+    return BuiltinChannel.ALL.value, stripped
