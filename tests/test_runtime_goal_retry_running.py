@@ -9,6 +9,13 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import (
+    BlockedGoalAction,
+    CompletedGoalAction,
+    GoalPrecondition,
+    ModelInvocable,
+    SetGoalAction,
+)
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.runtime import RuntimeProxy, socket_path
 
@@ -37,12 +44,17 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     owner.on_connect(Client())
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner.turns.open_goal_store()
-    goal = comms.update_goal(session, "set", text="Finish the blocked objective", owner_store=store)
+    goal = comms.update_goal(
+        session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
+    )
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
     store.record_failed(reservation, "Previous goal attempt failed")
     blocked = comms.update_goal(
-        session, "blocked", goal_id=goal.id, block_reason="Previous goal attempt failed"
+        session,
+        BlockedGoalAction(
+            expect=GoalPrecondition(goal_id=goal.id), block_reason="Previous goal attempt failed"
+        ),
     )
     owner.inputs.dispositions.record(
         "acp:old-unknown",
@@ -79,9 +91,13 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
                     yield ae.Done(ok=outcome == "success", text="Current turn ended")
             else:
                 current = comms.registry.require(session).goal
-                assert current.active and current.id == goal.id
+                assert current.state.active and current.id == goal.id
                 assert store.snapshot(goal.id).number == 2
-                comms.update_goal(session, "completed", goal_id=goal.id, model_report=True)
+                comms.update_goal(
+                    session,
+                    CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=ModelInvocable,
+                )
                 yield ae.ToolEnd(id="report", name="alternate_goal_report", ok=True)
                 yield ae.StreamSettled()
                 yield ae.Done(ok=True, text="Goal completed")
@@ -127,7 +143,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         if outcome == "cancel":
             await proxy.request("cancel")
             assert (await turn)["stopReason"] == "cancelled"
-            assert comms.registry.require(session).goal.status == "paused"
+            assert comms.registry.require(session).goal.state.declared_name == "paused"
             owner.turns.schedule_goal(session)
             assert not owner.inputs.pending_turns.get(session) and len(calls) == 1
             assert store.snapshot(goal.id) == generation
@@ -149,7 +165,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             await asyncio.wait_for(continued.wait(), 5)
             await owner.inputs.wake_tasks[session]
             assert len(calls) == 2
-            assert comms.registry.require(session).goal.status == "completed"
+            assert comms.registry.require(session).goal.state.declared_name == "completed"
             assert store.snapshot(goal.id).state == "completed"
         assert max_active_backends == 1
         assert owner.inputs.dispositions.get("acp:old-unknown") == old_unknown
@@ -170,14 +186,20 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner.turns.open_goal_store()
-    goal = comms.update_goal(session, "set", text="Keep attempt authority", owner_store=store)
+    goal = comms.update_goal(
+        session, SetGoalAction(text="Keep attempt authority"), owner_store=store
+    )
     reservation = store.reserve(goal.id, 1)
     if fence != "reserved":
         store.claim_launch(reservation)
     if fence in {"owner", "origin"}:
         store.record_failed(reservation, "Known failed attempt")
     blocked = comms.update_goal(
-        session, "blocked", goal_id=goal.id, block_reason="Owner input required before retry"
+        session,
+        BlockedGoalAction(
+            expect=GoalPrecondition(goal_id=goal.id),
+            block_reason="Owner input required before retry",
+        ),
     )
     generation = store.snapshot(goal.id)
     owner.turns.active_turns[session] = "unrelated-turn"

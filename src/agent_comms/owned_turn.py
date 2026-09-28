@@ -121,7 +121,7 @@ class OwnedTurn:
                 or self.original_owner_input
                 or self.dependency_wait_id is not None
                 or self.goal is None
-                or not self.goal.active
+                or not self.goal.state.active
                 or self.goal.id != self.direct_interrupt_goal_id
                 or self.goal.revision != self.direct_interrupt_goal_revision
                 or (self.wait.wait_id if self.wait else None) != self.direct_interrupt_wait_id
@@ -154,13 +154,13 @@ class OwnedTurn:
         ):
             return
         if self.original_owner_input and self.original_goal_id != (
-            self.goal.id if self.goal is not None and self.goal.active else None
+            self.goal.id if self.goal is not None and self.goal.state.active else None
         ):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: LaunchPermit | None = None
-        if self.autonomous_goal and (self.goal is None or not self.goal.active):
+        if self.autonomous_goal and (self.goal is None or not self.goal.state.active):
             return
-        if self.goal is not None and self.goal.active and not self.direct_interrupt:
+        if self.goal is not None and self.goal.state.active and not self.direct_interrupt:
             if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is None:
                 if self.autonomous_goal:
                     return
@@ -285,20 +285,20 @@ class OwnedTurn:
             current = snapshot.threads.get(canonical)
             current_goal = current.goal if current is not None else None
             current_wait = self.runner.comms.goal_wait(canonical) if current is not None else None
-            if self.goal is not None and self.goal.active:
+            if self.goal is not None and self.goal.state.active:
                 goal_ok = (
                     current_goal is not None
                     and current_goal.id == self.goal.id
-                    and current_goal.active
+                    and current_goal.state.active
                 )
             else:
-                goal_ok = current_goal is None or not current_goal.active
+                goal_ok = current_goal is None or not current_goal.state.active
             # A parked-goal DM owns no goal attempt. A fresh owner input
             # may join that SAME interruption, not borrow or retry the goal.
             interrupt_scope_current = (
                 self.direct_interrupt
                 and current_goal is not None
-                and current_goal.active
+                and current_goal.state.active
                 and current_goal.id == self.direct_interrupt_goal_id
                 and current_goal.revision == self.direct_interrupt_goal_revision
                 and (current_wait.wait_id if current_wait else None)
@@ -312,7 +312,9 @@ class OwnedTurn:
                 assert public_id is not None
                 admitted_goal_id = admitted_goals[public_id]
                 current_goal_id = (
-                    current_goal.id if current_goal is not None and current_goal.active else None
+                    current_goal.id
+                    if current_goal is not None and current_goal.state.active
+                    else None
                 )
                 goal_ok = admitted_goal_id == current_goal_id
                 input_permit = (
@@ -379,9 +381,9 @@ class OwnedTurn:
             defer_for_goal = (
                 public_id is not None
                 and owner_ok
-                and (self.goal is None or not self.goal.active)
+                and (self.goal is None or not self.goal.state.active)
                 and current_goal is not None
-                and current_goal.active
+                and current_goal.state.active
             )
             allowed = (
                 owner_ok
@@ -407,7 +409,7 @@ class OwnedTurn:
                 and not (
                     keys
                     and current_goal is not None
-                    and current_goal.active
+                    and current_goal.state.active
                     and not owner_followup
                     and not (
                         public_id is None
@@ -602,7 +604,7 @@ class OwnedTurn:
             "comms_set_goal(text) so this same thread continues it autonomously. "
             f"Peer state: {json.dumps(self.peers)}\n\n{self.task}"
         )
-        if self.goal is not None and self.goal.active:
+        if self.goal is not None and self.goal.state.active:
             if self.direct_interrupt:
                 self.task = (
                     f"Persistent goal {self.goal.id} is parked for this ordinary direct-message "
@@ -612,7 +614,7 @@ class OwnedTurn:
                     "input. The goal remains separately scheduled. Current goal state for "
                     "answering questions about it only (verify live project state before "
                     "reporting current PR status):\n"
-                    f"Goal status: {self.goal.status}; revision: {self.goal.revision}\n"
+                    f"Goal status: {self.goal.state.declared_name}; revision: {self.goal.revision}\n"
                     f"Objective: {self.goal.text}\nProgress: {self.goal.progress}\n\n" + self.task
                 )
             else:
@@ -736,7 +738,7 @@ class OwnedTurn:
             except Exception:
                 # A selected adaptive operation may already have paid or
                 # written. Do not turn a fault into ordinary input fallback.
-                if self.goal is not None and self.goal.active:
+                if self.goal is not None and self.goal.state.active:
                     self.runner.comms.block_goal_after_failed_turn(
                         self.thread_name,
                         started_goal=self.goal,

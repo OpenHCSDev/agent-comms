@@ -10,6 +10,15 @@ from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ScheduledTurn
+from agent_comms.goal_actions import (
+    ActiveGoalAction,
+    ClearGoalAction,
+    GoalPrecondition,
+    OwnerInvocable,
+    PausedGoalAction,
+    SetGoalAction,
+    StandbyGoalAction,
+)
 
 
 async def _owner(tmp_path, monkeypatch, *, standby=False):
@@ -20,11 +29,14 @@ async def _owner(tmp_path, monkeypatch, *, standby=False):
     session = (await agent.new_session(str(tmp_path / "owner"))).session_id
     for name in ("outsider", "dependency"):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
-    goal = comms.update_goal(session, "set", text="Wait for the dependency")
+    goal = comms.update_goal(session, SetGoalAction(text="Wait for the dependency"))
     assert goal is not None
     if standby:
         comms.begin_turn("dependency", "dependency-turn")
-        comms.update_goal(session, "standby", goal_id=goal.id, wait_for=["dependency"])
+        comms.update_goal(
+            session,
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)),
+        )
     return comms, agent, session, goal
 
 
@@ -43,7 +55,10 @@ async def test_new_nondependency_direct_dm_interrupts_active_goal_without_attemp
         seen.append(task)
         assert "ordinary direct-message interruption" in task
         assert f"Persistent goal {goal.id} is parked" in task
-        assert f"Goal status: {original_goal.status}; revision: {original_goal.revision}" in task
+        assert (
+            f"Goal status: {original_goal.state.declared_name}; revision: {original_goal.revision}"
+            in task
+        )
         assert f"Objective: {original_goal.text}" in task
         assert f"Progress: {original_goal.progress}" in task
         assert "verify live project state before reporting current PR status" in task
@@ -140,7 +155,10 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
     try:
         await agent.inputs.drain_owned_inbox(session)
         assert agent.inputs.pending_turns[session][0].direct_interrupt_wait_id == old_wait.wait_id
-        comms.update_goal(session, "standby", goal_id=goal.id, wait_for=["dependency"])
+        comms.update_goal(
+            session,
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)),
+        )
         new_wait = comms.goal_wait(session)
         assert new_wait.wait_id != old_wait.wait_id
         outcome = []
@@ -182,7 +200,7 @@ async def test_benign_wait_replacement_does_not_strand_queued_interrupt(tmp_path
         assert agent.inputs.dispositions.status(f"bus:{message.seq}") == "started"
         assert comms.goal_wait(session) == new_wait
         assert comms.registry.require(session).goal.id == goal.id
-        assert comms.registry.require(session).goal.active
+        assert comms.registry.require(session).goal.state.active
     finally:
         await agent.shutdown()
 
@@ -328,7 +346,10 @@ async def test_queue_survives_progress_bump_and_rebinds_at_dispatch(tmp_path, mo
         queued = agent.inputs.pending_turns[session][0]
         assert queued.direct_interrupt_goal_revision == original_goal.revision
         # Benign same-goal progress bump before dispatch must NOT strand it.
-        comms.update_goal(session, "active", goal_id=goal.id, progress="normal progress")
+        comms.update_goal(
+            session,
+            ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="normal progress"),
+        )
         bumped = comms.registry.require(session).goal
         assert bumped.id == goal.id and bumped.revision == original_goal.revision + 1
 
@@ -375,9 +396,19 @@ async def test_change_after_dispatch_denies_without_retry(tmp_path, monkeypatch,
             task = args[2]
             # The change happens after dispatch, immediately before the send.
             if mutate == "revision":
-                comms.update_goal(session, "active", goal_id=goal.id, progress="post-dispatch bump")
+                comms.update_goal(
+                    session,
+                    ActiveGoalAction(
+                        expect=GoalPrecondition(goal_id=goal.id), progress="post-dispatch bump"
+                    ),
+                )
             else:
-                comms.update_goal(session, "standby", goal_id=goal.id, wait_for=["dependency"])
+                comms.update_goal(
+                    session,
+                    StandbyGoalAction(
+                        expect=GoalPrecondition(goal_id=goal.id), wait_for=("dependency",)
+                    ),
+                )
             with kwargs["send_boundary"](None, "e" * 32, task) as allowed:
                 seen.append(allowed)
             yield ae.StreamSettled()
@@ -416,9 +447,17 @@ async def test_goal_cleared_or_paused_drops_queued_interrupt_without_crash(
         await agent.inputs.drain_owned_inbox(session)
         assert agent.inputs.pending_turns[session][0].direct_interrupt_goal_id == goal.id
         if terminal == "clear":
-            comms.update_goal(session, "clear", goal_id=goal.id, owner_action=True)
+            comms.update_goal(
+                session,
+                ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            )
         else:
-            comms.update_goal(session, "paused", goal_id=goal.id, owner_action=True)
+            comms.update_goal(
+                session,
+                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            )
         called = []
 
         async def forbidden_events(*args, **kwargs):

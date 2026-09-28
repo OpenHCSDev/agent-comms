@@ -9,8 +9,14 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.declarations import Goal, GoalPauseSource, Thread, ThreadStatus, TurnLeaseFence
+from agent_comms.declarations import Goal, Thread, ThreadStatus, TurnLeaseFence
 from agent_comms.diagnostics import FailureReason
+from agent_comms.goal_actions import (
+    GoalPrecondition,
+    OwnerInvocable,
+    PausedGoalAction,
+    SetGoalAction,
+)
 from agent_comms.goal_attempts import (
     GoalAttemptStore,
     StaleAttempt,
@@ -19,6 +25,7 @@ from agent_comms.goal_attempts import (
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
 from agent_comms.goal_pauses import GoalPauseEvent
+from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
 
 
@@ -62,7 +69,7 @@ def rows(store, table):
 
 
 def blocked(owner):
-    return replace(owner, goal=replace(owner.goal, status="blocked", revision=3))
+    return replace(owner, goal=replace(owner.goal, state=BlockedGoal(), revision=3))
 
 
 def read(store, owner, **kwargs):
@@ -189,7 +196,7 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
     )
 
 
-@pytest.mark.parametrize("source", [None, "stale", GoalPauseSource.OWNER, GoalPauseSource.MODEL])
+@pytest.mark.parametrize("source", [None, "stale", OwnerPause(), ModelPause()])
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
     store.record_failed(observation.reservation, "failed", observation=observation)
@@ -197,11 +204,8 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         owner,
         goal=replace(
             owner.goal,
-            status="paused",
+            state=PausedGoal(ModelPause() if isinstance(source, ModelPause) else OwnerPause()),
             revision=3,
-            pause_source=(
-                str(source) if source in (GoalPauseSource.OWNER, GoalPauseSource.MODEL) else None
-            ),
         ),
     )
     pause = (
@@ -210,7 +214,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         else GoalPauseEvent(
             "goal",
             2 if source == "stale" else 3,
-            GoalPauseSource.OWNER if source == "stale" else source,
+            OwnerPause() if source == "stale" else source,
         )
     )
     before = store.path.read_bytes()
@@ -218,7 +222,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         store.path, owner=owner, owner_status=ThreadStatus.IDLE, admission=3, pause=pause
     )
     assert projection.state == (
-        "paused_uncertain" if source is GoalPauseSource.MODEL else "owner_paused"
+        "paused_uncertain" if isinstance(source, ModelPause) else "owner_paused"
     )
     assert "canRetry" not in projection.to_primitive()
     assert store.path.read_bytes() == before
@@ -231,7 +235,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"created_at": 11.0},
         {"worktree": "/changed"},
         {"pid": 0},
-        {"goal": Goal("replacement", "replacement", status="blocked")},
+        {"goal": Goal("replacement", "replacement", state=BlockedGoal())},
         {"goal": Goal("active", "goal")},
         {"turn_generation": 8},
         {"last_finished_turn_id": "b" * 32},
@@ -297,7 +301,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     agent = CommsAgent(wired, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
-    goal = wired.update_goal("project", "set", text="private goal")
+    goal = wired.update_goal("project", SetGoalAction(text="private goal"))
     GoalFixture()._authorize_test_goal(agent, wired, goal)
     store = agent.turns.goal_store
     admission = wired.registry.snapshot().admission_generations["project"]
@@ -330,7 +334,11 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     async def failed_events(*args, **kwargs):
         nonlocal pause_bytes
         if owner_pauses:
-            wired.update_goal("project", "paused", goal_id=goal.id, owner_action=True)
+            wired.update_goal(
+                "project",
+                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            )
             pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
         yield ae.StreamSettled()
         if outcome != "eof":
@@ -370,10 +378,10 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         assert agent.inputs.dispositions.path.read_bytes() == ledger_before
         assert (cursors.read_bytes() if cursors.exists() else None) == cursor_before
         if owner_pauses:
-            assert owner.goal.status == "paused"
+            assert owner.goal.state.declared_name == "paused"
             assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
         else:
-            assert owner.goal.status == "blocked"
+            assert owner.goal.state.declared_name == "blocked"
         agent.turns.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
         observations = rows(store, "failed_turn_observations")

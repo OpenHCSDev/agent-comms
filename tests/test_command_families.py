@@ -104,8 +104,8 @@ def test_runtime_wire_format_round_trip(parameters):
     assert {key: encoded[key] for key in payload} == payload
     assert "kind" not in encoded
     assert RuntimeRequest.from_wire(encoded) == request
-    # Compatibility: unknown extension fields never reach operation bodies.
-    assert RuntimeRequest.from_wire({**payload, "futureExtension": {"yes": True}}) == request
+    with pytest.raises(ValueError, match="Unknown fields.*futureExtension"):
+        RuntimeRequest.from_wire({**payload, "futureExtension": {"yes": True}})
 
 
 @pytest.mark.parametrize(
@@ -113,25 +113,24 @@ def test_runtime_wire_format_round_trip(parameters):
     [
         (
             {"action": "input_dispositions", "include_history": "yes"},
-            "include_history must be a boolean.",
+            "Expected.*bool",
         ),
-        ({"action": "goal_history", "goal_id": 2}, "Goal identity must be a string."),
+        ({"action": "goal_history", "goal_id": 2}, "Value does not match str"),
         (
             {"action": "edit_goal", "goal_id": "g", "expected_revision": True, "text": "x"},
-            "A goal identity and revision are required for updating.",
+            "Expected.*int",
         ),
-        ({"action": "retry_goal"}, "A goal identity and revision are required for retry."),
+        ({"action": "retry_goal"}, "missing.*goal_id.*expected_revision"),
         ({"action": "set_goal", "text": "  "}, "A goal requires text."),
         (
             {"action": "edit_goal", "goal_id": "g", "expected_revision": 1, "text": False},
-            "A goal requires text.",
+            "Expected.*str",
         ),
     ],
 )
-def test_invalid_runtime_parameters_keep_domain_errors(parameters, message):
-    with pytest.raises(ValueError) as caught:
+def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(parameters, message):
+    with pytest.raises((ValueError, TypeError), match=message):
         RuntimeRequest.from_wire({"thread": "owner", **parameters})
-    assert str(caught.value) == message
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
@@ -159,6 +158,10 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
         }
         with pytest.raises(RuntimeError, match="Expected.*int"):
             await proxy.request("contract_probe", amount=True)
+        with pytest.raises(RuntimeError, match="Unknown fields.*futureExtension"):
+            await proxy.request("contract_probe", amount=40, futureExtension=True)
+        with pytest.raises(RuntimeError, match="Unknown runtime request field: kind"):
+            await proxy.request("contract_probe", amount=40, kind="cancel")
         reader, writer = await asyncio.open_unix_connection(server.path)
         try:
             writer.write(b'{"action":"not-a-request","thread":"owner"}\n')

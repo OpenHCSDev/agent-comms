@@ -5,6 +5,7 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
@@ -54,10 +55,13 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
 async def test_explicit_retry_recovers_registry_goal_missing_ledger(tmp_path, monkeypatch):
     comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
     try:
-        legacy = comms.update_goal(session, "set", text="older UI goal")
+        legacy = comms.update_goal(session, SetGoalAction(text="older UI goal"))
         assert legacy is not None
         blocked = comms.update_goal(
-            session, "blocked", goal_id=legacy.id, progress="Goal attempt unresolved"
+            session,
+            BlockedGoalAction(
+                expect=GoalPrecondition(goal_id=legacy.id), progress="Goal attempt unresolved"
+            ),
         )
         assert blocked is not None
         assert GoalAttemptStore(comms.root / "goal-private").snapshot(legacy.id) is None

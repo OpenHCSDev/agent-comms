@@ -430,7 +430,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
                 await turn
             assert dispatched == []
             assert InputDispositions(root).status("acp:original") == "unknown"
-            assert comms.registry.require("proj").goal.status == "blocked"
+            assert comms.registry.require("proj").goal.state.declared_name == "blocked"
         else:
             await turn
             assert dispatched == ["a" * 32]
