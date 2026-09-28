@@ -1,0 +1,2 @@
+{"messages_sent": 0, "project": "/home/ts/.agent-comms", "views": [{"target": "#comms", "history_entries": 8}, {"target": "agent-comms-ux", "history_entries": 2}, {"target": "pr95-selected-pi-summary-owner", "history_entries": 0}], "watch_child": 699952, "watcher_and_child_joined": true}
+PASS: interpreter shutdown completed
