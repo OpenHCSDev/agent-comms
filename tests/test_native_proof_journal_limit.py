@@ -14,6 +14,8 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.diagnostics import FailureReason, record_terminal_failure
 
+pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
+
 
 @contextmanager
 def refuse_native_send(*_args):

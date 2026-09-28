@@ -184,3 +184,21 @@ retaining explicit activation/private directory/package/root identity checks.
 Coordinated runtime module62pass25.48s (same run initially exposed test socket
 path length; final real maintenance fixture uses short owned session directory).
 No publisher/checkpoint/current-source changes. Full suite still not complete.
+
+## Parent251 integration and actual raw-send closure
+
+Merged58bfad3 into248 asd66588e; parent bootstrap/cursor deletion retained. Parent
+continues to own cutover tools. Remainder-five164pass/9failed/3skip before deliberate
+interrupt150.25s after the first repeated90s raw-send timeout. Current native
+binding tests pass after parent251 retired the obsolete cursor/alias expectation.
+
+Raw-send fixtures intercepted asyncio.create_subprocess_exec and bypassed the
+current POSIX exec gate, leaving its inherited startup error pipe open. Fixtures
+now call real AttachedChild.start with their local protocol executable, preserving
+identity/gate/cleanup and actual raw fd writes. No fence or proof assertions removed.
+Includes bounded partial-write/cancel/repeated-cancel/lifecycle and contention
+subprocess cases. Added explicit executable trust to proof-journal tests; no native
+size-limit behavior changed. Mentions derives reply destination from existing origin.
+
+Focused combined result65pass/1skip24.46s: mentions, current native binding,
+proof journal and all23 real native send admission cases. Full suite remains pending.
