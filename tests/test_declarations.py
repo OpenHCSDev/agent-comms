@@ -360,23 +360,23 @@ class TestRegistration:
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         owner, admission_generation = registry.live_owner_with_generation("a")
-        claimed, claimed_generation = registry.lease_live_turn_with_generation(
+        leased, owner_generation = registry.lease_live_turn_with_generation(
             owner, "claimed", expected_owner_generation=admission_generation
         )
-        assert registry.live_owner_with_generation("a") == (claimed, claimed_generation)
+        assert registry.live_owner_with_generation("a") == (leased, owner_generation)
         if revocation == "stop":
             registry.unregister("a")
         else:
             assert registry.release_turn(registry.require("a").turn_lease)[0]
-        registry.register(claimed)
+        registry.register(leased)
         assert registry.require("a").active_turn.admission_generation is None
         with pytest.raises(RelationViolationError, match="unavailable"):
             registry.live_owner_with_generation("a")
         if revocation == "stop":
-            assert registry.snapshot().owner_generations["a"] > claimed_generation
+            assert registry.snapshot().owner_generations["a"] > owner_generation
         else:
-            assert registry.snapshot().owner_generations["a"] == claimed_generation
-        assert "turn_epochs" not in claimed.to_wire()
+            assert registry.snapshot().owner_generations["a"] == owner_generation
+        assert "turn_epochs" not in leased.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
         comms = Comms(tmp_path / "wire")
@@ -600,13 +600,13 @@ class TestRegistration:
         registry.rename("a", "b")
         owner, admission_generation = registry.live_owner_with_generation("a")
         assert owner.name == "b"
-        claimed, _ = registry.lease_live_turn_with_generation(
+        leased, _ = registry.lease_live_turn_with_generation(
             owner, "claimed", expected_owner_generation=admission_generation
         )
         registry.rename("b", "c")
-        assert not registry.release_turn(replace(claimed.turn_lease, turn_id="other"))[0]
+        assert not registry.release_turn(replace(leased.turn_lease, turn_id="other"))[0]
         assert registry.require("c").active_turn is not None
-        assert registry.release_turn(claimed.turn_lease)[0]
+        assert registry.release_turn(leased.turn_lease)[0]
         assert registry.require("c").active_turn is None
 
     def test_missing_or_malformed_private_generation_metadata_refuses_turn(self, tmp_path: Path):

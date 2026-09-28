@@ -39,13 +39,13 @@ def make_registry(tmp_path) -> tuple[Registration, Thread, int]:
     return registry, live, owner_generation
 
 
-def claim(
+def lease(
     registry: Registration, owner: Thread, owner_generation: int, turn: str
 ) -> tuple[Thread, int]:
-    claimed, claimed_generation = registry.lease_live_turn_with_generation(
+    leased, leased_generation = registry.lease_live_turn_with_generation(
         owner, turn, expected_owner_generation=owner_generation
     )
-    return claimed, claimed_generation
+    return leased, leased_generation
 
 
 def attest(
@@ -70,10 +70,10 @@ def attest(
 
 def test_positive_attestation_echoes_owner_and_fence(tmp_path) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
-    receipt = attest(registry, claimed, claimed_generation)
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
+    receipt = attest(registry, leased, leased_generation)
     assert receipt.thread == "owner"
-    assert receipt.owner_generation == claimed_generation
+    assert receipt.owner_generation == leased_generation
     assert receipt.turn_id == "turn-1"
     assert receipt.goal_id == "goal-1"
     assert receipt.goal_revision == 4
@@ -86,9 +86,9 @@ def test_positive_attestation_echoes_owner_and_fence(tmp_path) -> None:
 
 def test_recheck_binds_same_store_revision(tmp_path) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
-    first = attest(registry, claimed, claimed_generation)
-    second = attest(registry, claimed, claimed_generation)
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
+    first = attest(registry, leased, leased_generation)
+    second = attest(registry, leased, leased_generation)
     assert first.registry_revision == second.registry_revision
 
 
@@ -111,24 +111,24 @@ def test_recheck_binds_same_store_revision(tmp_path) -> None:
 )
 def test_attestation_fails_closed_after_owner_or_goal_change(tmp_path, mutate) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
-    mutate(registry, claimed)
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
+    mutate(registry, leased)
     with pytest.raises((RelationViolationError, ValueError)):
-        attest(registry, claimed, claimed_generation)
+        attest(registry, leased, leased_generation)
 
 
-def test_stale_generation_after_second_turn_claim_fails(tmp_path) -> None:
+def test_stale_generation_after_second_turn_lease_fails(tmp_path) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
     registry.unregister("owner")
-    revived = replace(claimed, active_turn=None)
+    revived = replace(leased, active_turn=None)
     registry.register(revived)
-    _, second_generation = claim(
+    _, second_generation = lease(
         registry, revived, registry.snapshot().owner_generations["owner"], "turn-2"
     )
-    assert second_generation != claimed_generation
+    assert second_generation != leased_generation
     with pytest.raises(RelationViolationError):
-        attest(registry, claimed, claimed_generation)  # pre-restart epoch is stale
+        attest(registry, leased, leased_generation)  # pre-restart epoch is stale
     # Even the current epoch fails: the turn id no longer matches the claim.
     with pytest.raises(RelationViolationError):
         attest(registry, revived, second_generation, turn="turn-1")
@@ -142,19 +142,19 @@ def test_unclaimed_turn_cannot_attest(tmp_path) -> None:
 
 def test_stale_goal_expectation_fails(tmp_path) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
-    stale_goal = claimed.goal
-    registry.register(replace(claimed, goal=replace(claimed.goal, revision=99)))
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
+    stale_goal = leased.goal
+    registry.register(replace(leased, goal=replace(leased.goal, revision=99)))
     with pytest.raises(RelationViolationError):
-        attest(registry, claimed, claimed_generation, goal=stale_goal)
+        attest(registry, leased, leased_generation, goal=stale_goal)
 
 
 def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
     monkeypatch.setattr("agent_comms.store_files.os.getpid", lambda: owner.pid + 1)
     with pytest.raises(RelationViolationError):
-        attest(registry, claimed, claimed_generation)
+        attest(registry, leased, leased_generation)
 
 
 @pytest.mark.parametrize(
@@ -173,9 +173,9 @@ def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
 )
 def test_malformed_expectations_rejected(tmp_path, kwargs) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
-    claimed, claimed_generation = claim(registry, owner, owner_generation, "turn-1")
+    leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
     request = {
-        "expected_owner_generation": claimed_generation,
+        "expected_owner_generation": leased_generation,
         "turn_id": "turn-1",
         "expected_goal_id": "goal-1",
         "expected_goal_revision": 4,
@@ -184,4 +184,4 @@ def test_malformed_expectations_rejected(tmp_path, kwargs) -> None:
     }
     request.update(kwargs)
     with pytest.raises(ValueError):
-        registry.attest_owner_compaction(claimed, **request)
+        registry.attest_owner_compaction(leased, **request)

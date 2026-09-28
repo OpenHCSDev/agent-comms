@@ -152,8 +152,10 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     result = accept_initial_cohort(reopened.bus, root_id, message.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count) == (2, 2)
-    assert {claim.recipient for claim in result.value.assignments} == {"Alice", "Bob"}
-    assert {claim.audience for claim in result.value.assignments} == {MessageAudience.COLLECTIVE}
+    assert {assignment.recipient for assignment in result.value.assignments} == {"Alice", "Bob"}
+    assert {assignment.audience for assignment in result.value.assignments} == {
+        MessageAudience.COLLECTIVE
+    }
     store.transition_preengagement(
         result.value.assignments[0].assignment_id, DeferredAssignment, expected_revision=1
     )
@@ -164,11 +166,13 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     again = accept_initial_cohort(reopened.bus, root_id, message.seq, recovered)
     assert isinstance(again, AlreadyApplied)
     assert again.value.accepted_at_ms == 4788
-    assert any(type(claim.lifecycle) is DeferredAssignment for claim in again.value.assignments)
-    assert [claim.recipient_lookup for claim in again.value.assignments] == [
-        claim.recipient_lookup for claim in result.value.assignments
+    assert any(
+        type(assignment.lifecycle) is DeferredAssignment for assignment in again.value.assignments
+    )
+    assert [assignment.recipient_lookup for assignment in again.value.assignments] == [
+        assignment.recipient_lookup for assignment in result.value.assignments
     ]
-    assert {claim.recipient_lookup for claim in again.value.assignments} == {
+    assert {assignment.recipient_lookup for assignment in again.value.assignments} == {
         lookups["Alice"],
         lookups["Bob"],
     }
@@ -271,9 +275,9 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
     response = response_bus.publisher.publish_keyed_response(intent)
     assert response_bus.publisher.publish_keyed_response(intent) == response
     assert [message.seq for message in response_bus.log.full_history()] == [sent.seq, response.seq]
-    assert [claim.wire_seq for claim in sealed_cohort_assignments(store, lookups["Alice"])] == [
-        sent.seq
-    ]
+    assert [
+        assignment.wire_seq for assignment in sealed_cohort_assignments(store, lookups["Alice"])
+    ] == [sent.seq]
     with pytest.raises(RelationViolationError, match="No committed initial"):
         response_bus.log.read_initial_cohort(root_id, response.seq)
 
@@ -301,12 +305,14 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
     result = accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count) == (3, 3)
-    assert {claim.recipient_lookup for claim in result.value.assignments} == {
+    assert {assignment.recipient_lookup for assignment in result.value.assignments} == {
         lookups["Alice"],
         lookups["Bob"],
         lookups["Charlie"],
     }
-    assert {claim.lifecycle.mode for claim in result.value.assignments} == {BoundedTriageWake()}
+    assert {assignment.lifecycle.mode for assignment in result.value.assignments} == {
+        BoundedTriageWake()
+    }
 
 
 def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path) -> None:
