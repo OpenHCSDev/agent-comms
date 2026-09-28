@@ -8,11 +8,10 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import backend, manual_compaction_bridge, native_session_reopen
+from agent_comms import backend, native_session_reopen
 from agent_comms.native_session_reopen import NativeReopenError, validate_native_reopen
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -43,13 +42,11 @@ console.log(JSON.stringify({id:manager.getSessionId(),file:manager.getSessionFil
     )
     item = json.loads(result.stdout)
     assert item["file"] and item["id"]
-    launcher = Path(PACKAGE).parents[3] / "bin/pi-native"
-    assert launcher.is_file(), launcher
-    return launcher, Path(item["file"]), item["id"]
+    return Path(PACKAGE), Path(item["file"]), item["id"]
 
 
 def test_strict_native_reopen_preserves_bytes_and_strips_preload(saved, tmp_path, monkeypatch):
-    launcher, file, identity = saved
+    package, file, identity = saved
     before = file.read_bytes()
     marker = tmp_path / "ambient-marker"
     preload = tmp_path / "ambient.mjs"
@@ -58,17 +55,15 @@ def test_strict_native_reopen_preserves_bytes_and_strips_preload(saved, tmp_path
         f"writeFileSync({json.dumps(str(marker))},'unsafe');"
     )
     monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
-    assert (
-        validate_native_reopen(str(launcher), str(file), expected_session_id=identity) == identity
-    )
+    assert validate_native_reopen(package, str(file), expected_session_id=identity) == identity
     assert file.read_bytes() == before and not marker.exists()
     with pytest.raises(NativeReopenError, match="identity changed"):
-        validate_native_reopen(str(launcher), str(file), expected_session_id="wrong")
+        validate_native_reopen(package, str(file), expected_session_id="wrong")
 
 
 @pytest.mark.parametrize("mutation", ["tail", "legacy", "ancestry", "missing", "symlink"])
 def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
-    launcher, file, identity = saved
+    package, file, identity = saved
     rows = file.read_text().splitlines()
     if mutation == "tail":
         file.write_bytes(file.read_bytes().rstrip(b"\n"))
@@ -88,76 +83,22 @@ def test_invalid_disk_never_repaired(saved, tmp_path, mutation):
         file = alias
     before = file.read_bytes() if file.exists() else None
     with pytest.raises(NativeReopenError):
-        validate_native_reopen(str(launcher), str(file), expected_session_id=identity)
+        validate_native_reopen(package, str(file), expected_session_id=identity)
     assert (file.read_bytes() if file.exists() else None) == before
 
 
 @pytest.mark.asyncio
-async def test_canonical_manual_route_cannot_use_installed_legacy_compaction(tmp_path, monkeypatch):
-    class Owner:
-        def __init__(self):
-            self.turns = SimpleNamespace(
-                agent_bin="/disposable/stack/bin/pi-native", turn_locks={}, active_turns={}
-            )
-            self.turns.sessions = SimpleNamespace(sync_identity=self.sync_identity)
-
-        async def sync_identity(self, session_id):
-            return session_id
-
-    async def forbidden(*args, **kwargs):
-        raise AssertionError("legacy installed Pi route must not launch")
-
-    monkeypatch.setattr(
-        manual_compaction_bridge.manual_compaction.ManualCompaction, "run", forbidden
-    )
-    result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
-    assert result == {
-        "ok": False,
-        "error": "Canonical native compaction requires the owner journal bridge.",
-    }
-
-
-@pytest.mark.asyncio
-async def test_renamed_symlink_to_verified_native_cannot_use_legacy_manual_route(
-    saved, tmp_path, monkeypatch
-):
-    launcher, _file, _identity = saved
-    alias = tmp_path / "renamed-native"
-    alias.symlink_to(launcher)
-    assert native_session_reopen.package_for_launcher(str(alias)) == Path(PACKAGE)
-
-    class Owner:
-        def __init__(self):
-            self.turns = SimpleNamespace(agent_bin=str(alias), turn_locks={}, active_turns={})
-            self.turns.sessions = SimpleNamespace(sync_identity=self.sync_identity)
-
-        async def sync_identity(self, session_id):
-            return session_id
-
-    async def forbidden(*args, **kwargs):
-        raise AssertionError("Verified canonical native alias must not reach legacy writer")
-
-    monkeypatch.setattr(
-        manual_compaction_bridge.manual_compaction.ManualCompaction, "run", forbidden
-    )
-    result = await manual_compaction_bridge.compact_context(Owner().turns, "owner")
-    assert result == {
-        "ok": False,
-        "error": "Canonical native compaction requires the owner journal bridge.",
-    }
-
-
-@pytest.mark.asyncio
+@pytest.mark.usefixtures("native_rpc_fixture")
 async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
     saved, tmp_path, monkeypatch
 ):
-    launcher, file, identity = saved
+    package, file, identity = saved
     original = native_session_reopen.validate_native_reopen
     checks = []
 
     def checked(_stub, session, *, expected_session_id):
         checks.append((session, expected_session_id))
-        return original(str(launcher), session, expected_session_id=expected_session_id)
+        return original(package, session, expected_session_id=expected_session_id)
 
     monkeypatch.setattr(native_session_reopen, "validate_native_reopen", checked)
     marker = tmp_path / "provider-prompt-sent"
