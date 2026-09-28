@@ -18,15 +18,17 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_store import MutationStore
 from .envelope_claim_transitions import WakeAdmission
+from .native_tool_call import NativeToolCall, SelectedToolDenied
+from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
@@ -86,59 +88,83 @@ class SelectedToolMode(NativeToolMode):
         return SelectedToolSocket(directory, token, self.action)
 
 
-class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
-    """A rejected request (including duplicate or uncertain prior consumption)."""
-
-
-@dataclass(frozen=True, slots=True)
-class SelectedToolRequest:
-    call_id: str
+@dataclass
+class SelectedToolRequest(NativeToolCall):
     resource: str
     contents: bytes
 
+    @property
+    def name(self) -> str:
+        return "selected_claimed_write"
 
-def parse_selected_request(raw: bytes, token: str) -> SelectedToolRequest:
-    """Strict bounded wire syntax; token authenticates transport, not admission."""
-    if type(raw) is not bytes or len(raw) > _MAX_REQUEST or not raw.endswith(b"\n"):
-        raise SelectedToolDenied("Selected tool request is incomplete or oversized")
+    def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None:
+        if is_error:
+            raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
+        verify_selected_terminal(directory, input_id, self.call_id)
 
-    def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise SelectedToolDenied("Ambiguous selected tool request")
-            result[key] = value
-        return result
+    def admission_failed(self) -> None:
+        raise SelectedToolDenied("Native Pi selected tool admission failed; outcome UNKNOWN")
 
-    try:
-        value = json.loads(raw[:-1].decode("utf-8", errors="strict"), object_pairs_hook=unique)
-    except (UnicodeError, ValueError) as error:
-        raise SelectedToolDenied("Invalid selected tool request") from error
-    if type(value) is not dict or set(value) != {"token", "call_id", "resource", "contents"}:
-        raise SelectedToolDenied("Selected tool fields are not exact")
-    resource, contents, call_id = value["resource"], value["contents"], value["call_id"]
-    if value["token"] != token or type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
-        raise SelectedToolDenied("Selected tool transport is not authenticated")
-    if type(resource) is not str or not resource or len(resource.encode("utf-8")) > 4096:
-        raise SelectedToolDenied("Selected tool resource is not bounded")
-    path = Path(resource)
-    if (
-        not path.parts
-        or path.is_absolute()
-        or ".." in path.parts
-        or resource.startswith("@")
-        or resource.startswith("./")
-    ):
-        raise SelectedToolDenied("Selected tool resource must be relative without aliases")
-    if type(contents) is not str:
-        raise SelectedToolDenied("Selected tool contents must be UTF-8 text")
-    try:
-        payload = contents.encode("utf-8", errors="strict")
-    except UnicodeError as error:
-        raise SelectedToolDenied("Selected tool contents are not UTF-8") from error
-    if len(payload) > _MAX_CONTENT:
-        raise SelectedToolDenied("Selected tool contents exceed 128 KiB")
-    return SelectedToolRequest(call_id, resource, payload)
+    @classmethod
+    def argument_names(cls) -> frozenset[str]:
+        lifecycle_fields = {field.name for field in fields(NativeToolCall)}
+        return frozenset(
+            field.name for field in fields(cls) if field.init and field.name not in lifecycle_fields
+        )
+
+    @classmethod
+    def from_wire(cls, raw: bytes, token: str) -> SelectedToolRequest:
+        """Strict bounded wire syntax; token authenticates transport, not admission."""
+        if type(raw) is not bytes or len(raw) > _MAX_REQUEST or not raw.endswith(b"\n"):
+            raise SelectedToolDenied("Selected tool request is incomplete or oversized")
+
+        def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise SelectedToolDenied("Ambiguous selected tool request")
+                result[key] = value
+            return result
+
+        try:
+            value = json.loads(raw[:-1].decode("utf-8", errors="strict"), object_pairs_hook=unique)
+        except (UnicodeError, ValueError) as error:
+            raise SelectedToolDenied("Invalid selected tool request") from error
+        if type(value) is not dict or set(value) != {"token", "call_id"} | cls.argument_names():
+            raise SelectedToolDenied("Selected tool fields are not exact")
+        if value["token"] != token:
+            raise SelectedToolDenied("Selected tool transport is not authenticated")
+        return cls.from_arguments(
+            value["call_id"], {name: value[name] for name in cls.argument_names()}
+        )
+
+    @classmethod
+    def from_arguments(cls, call_id: object, arguments: object) -> SelectedToolRequest:
+        if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
+            raise SelectedToolDenied("Selected tool call identity is invalid")
+        if type(arguments) is not dict or set(arguments) != cls.argument_names():
+            raise SelectedToolDenied("Selected tool arguments are not exact")
+        resource, contents = arguments["resource"], arguments["contents"]
+        if type(resource) is not str or not resource or len(resource.encode("utf-8")) > 4096:
+            raise SelectedToolDenied("Selected tool resource is not bounded")
+        path = Path(resource)
+        if (
+            not path.parts
+            or path.is_absolute()
+            or ".." in path.parts
+            or resource.startswith("@")
+            or resource.startswith("./")
+        ):
+            raise SelectedToolDenied("Selected tool resource must be relative without aliases")
+        if type(contents) is not str:
+            raise SelectedToolDenied("Selected tool contents must be UTF-8 text")
+        try:
+            payload = contents.encode("utf-8", errors="strict")
+        except UnicodeError as error:
+            raise SelectedToolDenied("Selected tool contents are not UTF-8") from error
+        if len(payload) > _MAX_CONTENT:
+            raise SelectedToolDenied("Selected tool contents exceed 128 KiB")
+        return cls(call_id, resource, payload)
 
 
 def selected_extension(package: Path) -> Path:
@@ -331,7 +357,10 @@ def perform_selected_write(
     record_selected_terminal(session_dir, input_id, request.call_id)
 
 
-class OwnerToolSocket(ABC):
+Call = TypeVar("Call", bound=NativeToolCall)
+
+
+class OwnerToolSocket(ABC, Generic[Call]):
     """Authenticated native child transport; the policy owns request admission."""
 
     max_request = _MAX_REQUEST
@@ -348,26 +377,61 @@ class OwnerToolSocket(ABC):
         # fsync is not a durable receipt and must never be promoted by itself.
         self._server: asyncio.AbstractServer | None = None
         self._created = False
+        self.calls: dict[str, Call] = {}
+        self._handlers: set[asyncio.Task] = set()
 
     @abstractmethod
-    def announce(self, content: tuple[PiContent, ...]) -> None: ...
+    def decode_call(self, call_id: object, name: object, arguments: object) -> Call: ...
 
     @abstractmethod
-    def tool_started(self, event) -> None: ...
+    def decode_request(self, raw: bytes) -> Call: ...
 
     @abstractmethod
-    def tool_finished(self, event, input_id: str) -> None: ...
+    def admit(self, call: Call) -> None: ...
 
-    @abstractmethod
-    def assert_complete(self) -> None: ...
+    def call_for(self, candidate: Call) -> Call:
+        existing = self.calls.get(candidate.call_id)
+        if existing is not None:
+            existing.correlate(candidate)
+            return existing
+        self.calls[candidate.call_id] = candidate
+        return candidate
+
+    def announce(self, content: tuple[PiContent, ...]) -> None:
+        if not any(isinstance(item, ToolCallContent) for item in content):
+            raise SelectedToolDenied("Native tool round has no declared call")
+        for item in content:
+            if isinstance(item, ToolCallContent):
+                self.call_for(self.decode_call(item.id, item.name, item.arguments)).announce()
+            elif not item.tool_round_allowed:
+                raise SelectedToolDenied("Invalid native tool content")
+
+    def tool_started(self, event: ToolExecutionStart) -> None:
+        candidate = self.decode_call(event.tool_call_id, event.tool_name, event.args)
+        call = self.calls.get(candidate.call_id)
+        if call is None:
+            raise SelectedToolDenied("Native tool start has no declared call")
+        call.correlate(candidate)
+        call.start()
+
+    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
+        call = self.calls.get(event.tool_call_id)
+        if call is None:
+            raise SelectedToolDenied("Native tool terminal has no declared call")
+        call.finish(event.tool_name, event.is_error, self.path.parent, input_id)
+
+    def assert_complete(self) -> None:
+        for call in self.calls.values():
+            call.assert_complete()
 
     @property
     def selected_call_id(self) -> str | None:
         return None
 
-    @abstractmethod
     async def handle_request(self, raw: bytes) -> dict[str, object]:
-        """Decode and admit the policy's request before replying to Pi."""
+        call = self.call_for(self.decode_request(raw))
+        await call.authorize(lambda: self.admit(call))
+        return {"ok": True}
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": "Selected tool denied or outcome UNKNOWN; no retry"}
@@ -396,37 +460,53 @@ class OwnerToolSocket(ABC):
             raise
 
     async def close(self) -> None:
-        if self._server is not None:
-            self._server.close()
-            await self._server.wait_closed()
-            self._server = None
+        server, self._server = self._server, None
+        if server is not None:
+            server.close()
+        # Python's server wait_closed can wait for existing client transports.
+        # Cancel/drain those handlers before awaiting listener completion.
+        handlers = tuple(self._handlers)
+        for task in handlers:
+            task.cancel()
+        if handlers:
+            await asyncio.gather(*handlers, return_exceptions=True)
+        if server is not None:
+            await server.wait_closed()
         if self._created:
             self.path.unlink(missing_ok=True)
             self._created = False
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        self._handlers.add(task)
         try:
-            sock = writer.get_extra_info("socket")
-            if sock is None or self.expected_pid is None:
-                raise SelectedToolDenied("Selected tool child is not bound")
-            pid, uid, _gid = struct.unpack(
-                "3i", sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-            )
-            if pid != self.expected_pid or uid != os.geteuid():
-                raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
-            raw = await asyncio.wait_for(reader.readline(), timeout=10)
-            response = await self.handle_request(raw)
-        except Exception as error:
-            response = self.failure_response(error)
-        try:
+            try:
+                if self._server is None:
+                    raise SelectedToolDenied("Owner tool socket is closed")
+                sock = writer.get_extra_info("socket")
+                if sock is None or self.expected_pid is None:
+                    raise SelectedToolDenied("Selected tool child is not bound")
+                pid, uid, _gid = struct.unpack(
+                    "3i", sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+                )
+                if pid != self.expected_pid or uid != os.geteuid():
+                    raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
+                raw = await asyncio.wait_for(reader.readline(), timeout=10)
+                response = await self.handle_request(raw)
+            except Exception as error:
+                response = self.failure_response(error)
             writer.write((json.dumps(response) + "\n").encode("ascii"))
             await writer.drain()
         finally:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            finally:
+                self._handlers.discard(task)
 
 
-class SelectedToolSocket(OwnerToolSocket):
+class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
     """One selected replacement, preserving the existing one-slot authority."""
 
     def __init__(
@@ -434,87 +514,23 @@ class SelectedToolSocket(OwnerToolSocket):
     ) -> None:
         super().__init__(directory, token)
         self.action = action
-        self.completed_call_id: str | None = None
-        self._approved: dict[str, tuple[str, bytes]] = {}
-        self._approval_changed = asyncio.Event()
-        self._announced_id: str | None = None
-        self._announced_args: object = None
-        self._started = self._finished = False
 
-    def approve_tool_start(self, call_id: str, arguments: object) -> None:
-        """Owner supplies a Pi-emitted tool_execution_start, never model text."""
-        if (
-            type(call_id) is not str
-            or not _CALL_ID.fullmatch(call_id)
-            or type(arguments) is not dict
-            or set(arguments) != {"resource", "contents"}
-        ):
-            return
-        if type(arguments["resource"]) is not str or type(arguments["contents"]) is not str:
-            return
-        try:
-            contents = arguments["contents"].encode("utf-8", errors="strict")
-        except UnicodeError:
-            return
-        if len(contents) > _MAX_CONTENT:
-            return
-        self._approved[call_id] = (arguments["resource"], contents)
-        self._approval_changed.set()
+    def call_for(self, candidate: SelectedToolRequest) -> SelectedToolRequest:
+        if self.calls and candidate.call_id not in self.calls:
+            raise SelectedToolDenied("Native Pi returned more than one selected call")
+        return super().call_for(candidate)
 
-    async def handle_request(self, raw: bytes) -> dict[str, object]:
-        request = parse_selected_request(raw, self.token)
-        if request.call_id not in self._approved:
-            await asyncio.wait_for(self._approval_changed.wait(), timeout=10)
-        if self._approved.get(request.call_id) != (request.resource, request.contents):
-            raise SelectedToolDenied("Selected tool call differs from owner's Pi event")
-        self.action(request)
-        self.completed_call_id = request.call_id
-        return {"ok": True}
+    def decode_call(self, call_id: object, name: object, arguments: object) -> SelectedToolRequest:
+        if name != "selected_claimed_write":
+            raise SelectedToolDenied("Native Pi returned an unapproved selected call")
+        return SelectedToolRequest.from_arguments(call_id, arguments)
 
-    def announce(self, content: tuple[PiContent, ...]) -> None:
-        calls = [item for item in content if isinstance(item, ToolCallContent)]
-        if (
-            self._announced_id is not None
-            or len(calls) != 1
-            or calls[0].name != "selected_claimed_write"
-        ):
-            raise SelectedToolDenied("Native Pi returned an unapproved tool call")
-        if any(not item.tool_round_allowed for item in content):
-            raise SelectedToolDenied("Native Pi returned invalid tool content")
-        self._announced_id = calls[0].id
-        self._announced_args = calls[0].arguments
+    def decode_request(self, raw: bytes) -> SelectedToolRequest:
+        return SelectedToolRequest.from_wire(raw, self.token)
 
-    def tool_started(self, event) -> None:
-        if (
-            self._started
-            or self._announced_id is None
-            or event.tool_name != "selected_claimed_write"
-            or event.tool_call_id != self._announced_id
-            or event.args != self._announced_args
-        ):
-            raise SelectedToolDenied("Native Pi began an unapproved tool execution")
-        self.approve_tool_start(self._announced_id, event.args)
-        if self._announced_id not in self._approved:
-            raise SelectedToolDenied("Native Pi tool arguments are invalid")
-        self._started = True
-
-    def tool_finished(self, event, input_id: str) -> None:
-        if (
-            not self._started
-            or self._finished
-            or event.tool_name != "selected_claimed_write"
-            or event.tool_call_id != self._announced_id
-            or event.is_error is not False
-            or self.completed_call_id != self._announced_id
-        ):
-            raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
-        verify_selected_terminal(self.path.parent, input_id, self._announced_id)
-        self._finished = True
-
-    def assert_complete(self) -> None:
-        if self._announced_id is not None and not self._finished:
-            raise SelectedToolDenied("Native Pi selected tool has no terminal result")
+    def admit(self, call: SelectedToolRequest) -> None:
+        self.action(call)
 
     @property
     def selected_call_id(self) -> str | None:
-        return self._announced_id
+        return next(iter(self.calls), None)

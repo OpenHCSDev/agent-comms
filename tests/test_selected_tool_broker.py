@@ -17,6 +17,9 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_store import MutationStore
 from agent_comms.envelope_claim_transitions import WakeAdmission
+from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.pi_events import ToolExecutionStart
+from agent_comms.pi_payloads import ToolCallContent
 
 
 def _wire(token: str, **changes: object) -> bytes:
@@ -36,7 +39,7 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 
 def test_strict_bounded_request_and_no_model_admission() -> None:
     token = secrets.token_hex(32)
-    assert broker.parse_selected_request(_wire(token), token) == broker.SelectedToolRequest(
+    assert broker.SelectedToolRequest.from_wire(_wire(token), token) == broker.SelectedToolRequest(
         "call_1", "notes.txt", "é".encode()
     )
     bad = (
@@ -51,8 +54,8 @@ def test_strict_bounded_request_and_no_model_admission() -> None:
         b'{"token":"' + token.encode() + b'","token":"' + token.encode() + b'"}\n',
     )
     for raw in bad:
-        with pytest.raises(broker.SelectedToolDenied):
-            broker.parse_selected_request(raw, token)
+        with pytest.raises(SelectedToolDenied):
+            broker.SelectedToolRequest.from_wire(raw, token)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
@@ -81,7 +84,7 @@ def test_default_off_and_packaged_extension_selection(
     assert extension == packaged
     assert not (sessions / "selected-claim-extension.mjs").exists()
     extension.write_text("evil changed extension", encoding="utf-8")
-    with pytest.raises(broker.SelectedToolDenied, match="reviewed"):
+    with pytest.raises(SelectedToolDenied, match="reviewed"):
         native_pi.prepare_native_pi_rpc_launch(
             tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
         )
@@ -102,10 +105,10 @@ def test_consumption_is_once_only_and_terminal_is_separate(tmp_path: Path) -> No
     ledger = tmp_path / "selected-tool-ledger"
     assert (ledger / input_id).read_text() == "call_1\n"
     assert not (ledger / (input_id + ".done")).exists()
-    with pytest.raises(broker.SelectedToolDenied, match="already consumed"):
+    with pytest.raises(SelectedToolDenied, match="already consumed"):
         broker.consume_selected_slot(tmp_path, input_id, "call_2")
     broker.record_selected_terminal(tmp_path, input_id, "call_1")
-    with pytest.raises(broker.SelectedToolDenied, match="UNKNOWN"):
+    with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
         broker.record_selected_terminal(tmp_path, input_id, "call_1")
 
 
@@ -121,10 +124,10 @@ def test_unknown_reservation_never_retries(tmp_path: Path, monkeypatch: pytest.M
         real_sync(path)
 
     monkeypatch.setattr(broker, "_sync_dir", fail_ledger_only)
-    with pytest.raises(broker.SelectedToolDenied, match="UNKNOWN"):
+    with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
         broker.consume_selected_slot(tmp_path, input_id, "call_1")
     assert (tmp_path / "selected-tool-ledger" / input_id).exists()
-    with pytest.raises(broker.SelectedToolDenied, match="already consumed"):
+    with pytest.raises(SelectedToolDenied, match="already consumed"):
         broker.consume_selected_slot(tmp_path, input_id, "call_1")
 
 
@@ -156,7 +159,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         mode = broker.selected_tool_mode_for_owner(
             comms, store, admission, "owner", session_dir, input_id
         )
-        with pytest.raises(broker.SelectedToolDenied, match="exact sent FULL input"):
+        with pytest.raises(SelectedToolDenied, match="exact sent FULL input"):
             mode.action(broker.SelectedToolRequest("call_1", "notes.txt", b"write"))
         assert not (session_dir / "selected-tool-ledger").exists()
 
@@ -200,7 +203,7 @@ def test_writer_order_and_unknown_after_writer(
     )
     broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert trace == ["claim", "write", "terminal"]
-    with pytest.raises(broker.SelectedToolDenied, match="already consumed"):
+    with pytest.raises(SelectedToolDenied, match="already consumed"):
         broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert trace == ["claim", "write", "terminal"]
 
@@ -247,7 +250,7 @@ def test_post_reservation_effect_unknown_is_never_retried(
     ledger = tmp_path / "selected-tool-ledger"
     assert (ledger / input_id).exists()
     assert not (ledger / (input_id + ".done")).exists()
-    with pytest.raises(broker.SelectedToolDenied, match="already consumed"):
+    with pytest.raises(SelectedToolDenied, match="already consumed"):
         broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert observed == (["claim"] if failed_stage == "claim_append_unknown" else ["claim", "write"])
 
@@ -265,12 +268,29 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(tmp_path: Path) ->
             server.expected_pid = os.getpid() + 100000
             assert not await query(server.path, _wire(token))
             server.expected_pid = os.getpid()
-            assert not await query(server.path, _wire(token))  # no Pi start event
-            server.approve_tool_start("call_1", {"resource": "notes.txt", "contents": "different"})
-            assert not await query(server.path, _wire(token))  # forged arguments
-            server.approve_tool_start("call_1", {"resource": "notes.txt", "contents": "é"})
+            arguments = {"resource": "notes.txt", "contents": "é"}
+            pending = asyncio.create_task(query(server.path, _wire(token)))
+            await asyncio.sleep(0)
+            assert not pending.done()  # Socket arrival is not a native start.
+            server.announce(
+                [ToolCallContent(id="call_1", name="selected_claimed_write", arguments=arguments)]
+            )
+            with pytest.raises(SelectedToolDenied):
+                server.tool_started(
+                    ToolExecutionStart(
+                        tool_call_id="call_1",
+                        tool_name="selected_claimed_write",
+                        args={**arguments, "contents": "different"},
+                    )
+                )
+            server.tool_started(
+                ToolExecutionStart(
+                    tool_call_id="call_1", tool_name="selected_claimed_write", args=arguments
+                )
+            )
+            assert await pending
             assert not await query(server.path, _wire("0" * 64))
-            assert await query(server.path, _wire(token))
+            assert not await query(server.path, _wire(token))  # Consumed exactly once.
             assert observed == [broker.SelectedToolRequest("call_1", "notes.txt", "é".encode())]
         finally:
             await server.close()

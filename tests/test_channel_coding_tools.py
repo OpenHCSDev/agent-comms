@@ -107,7 +107,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
         # Terminal ledger needs the consumed slot an actual owner writes.
         from agent_comms.selected_tool_broker import consume_selected_slot
 
-        call = socket.announced[id]
+        call = socket.calls[id]
         consume_selected_slot(tmp_path, call.slot(owner.input_id), call.slot(owner.input_id))
         socket.tool_finished(
             ToolExecutionEnd(tool_call_id=id, tool_name=name, is_error=False), owner.input_id

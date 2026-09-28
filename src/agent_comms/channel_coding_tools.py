@@ -7,7 +7,6 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 from abc import abstractmethod
@@ -31,11 +30,10 @@ from .envelope_claim_transitions import (
     WritableFileClaim,
 )
 from .field_codec import FieldCodec
-from .pi_payloads import PiContent, ToolCallContent
+from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,
-    SelectedToolDenied,
     consume_selected_slot,
     record_selected_terminal,
     verify_sent_full_input,
@@ -83,10 +81,21 @@ class WriteTool(CodingTool):
         return WritableFileClaim(self.arguments["path"])
 
 
-@dataclass(frozen=True)
-class CodingCall:
-    call_id: str
+@dataclass
+class CodingCall(NativeToolCall):
     tool: CodingTool
+
+    @property
+    def name(self) -> str:
+        return self.tool.declared_name
+
+    def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None:
+        record_selected_terminal(directory, self.slot(input_id), self.slot(input_id))
+
+    def admission_failed(self) -> None:
+        # A denied ordinary tool may report an error and let Pi explain it. The
+        # consumed call cannot be retried; this grants no mutation authority.
+        pass
 
     @classmethod
     def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
@@ -161,7 +170,7 @@ class CodingToolMode(NativeToolMode):
         self.owner.finish()
 
 
-class CodingToolSocket(OwnerToolSocket):
+class CodingToolSocket(OwnerToolSocket[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
 
     max_request = 1024 * 1024
@@ -169,31 +178,11 @@ class CodingToolSocket(OwnerToolSocket):
     def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
         super().__init__(directory, token)
         self.owner = owner
-        self.announced: dict[str, CodingCall] = {}
-        self.started: set[str] = set()
-        self.finished: set[str] = set()
-        self.admitted: set[str] = set()
-        self.denied: set[str] = set()
-        self.changed = asyncio.Event()
 
-    def announce(self, content: tuple[PiContent, ...]) -> None:
-        for item in content:
-            if isinstance(item, ToolCallContent):
-                call = CodingCall.decode(item.id, item.name, item.arguments)
-                if call.call_id in self.announced:
-                    raise SelectedToolDenied("Native coding call ID was repeated")
-                self.announced[call.call_id] = call
-            elif not item.tool_round_allowed:
-                raise SelectedToolDenied("Invalid native coding content")
+    def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
+        return CodingCall.decode(call_id, name, arguments)
 
-    def tool_started(self, event) -> None:
-        call = CodingCall.decode(event.tool_call_id, event.tool_name, event.args)
-        if self.announced.get(call.call_id) != call or call.call_id in self.started:
-            raise SelectedToolDenied("Coding start differs from the native declaration")
-        self.started.add(call.call_id)
-        self.changed.set()
-
-    async def handle_request(self, raw: bytes) -> dict[str, object]:
+    def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
         from .native_pi import _unique
@@ -205,41 +194,10 @@ class CodingToolSocket(OwnerToolSocket):
             or value["token"] != self.token
         ):
             raise SelectedToolDenied("Coding request is not authenticated")
-        call = CodingCall.decode(value["call_id"], value["name"], value["arguments"])
-        async with asyncio.timeout(10):
-            while call.call_id not in self.started:
-                self.changed.clear()
-                await self.changed.wait()
-        if (
-            self.announced.get(call.call_id) != call
-            or call.call_id in self.admitted
-            or call.call_id in self.denied
-        ):
-            raise SelectedToolDenied("Coding request differs or was already consumed")
-        try:
-            self.owner.admit(call)
-        except Exception:
-            self.denied.add(call.call_id)
-            raise
-        self.admitted.add(call.call_id)
-        return {"ok": True}
+        return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
-    def tool_finished(self, event, input_id: str) -> None:
-        call_id = event.tool_call_id
-        if call_id not in self.started or call_id in self.finished or event.is_error is None:
-            raise SelectedToolDenied("Coding tool terminal is missing or repeated")
-        call = self.announced[call_id]
-        if event.tool_name != call.tool.declared_name:
-            raise SelectedToolDenied("Coding tool terminal identity changed")
-        if call_id not in self.admitted and (call_id not in self.denied or not event.is_error):
-            raise SelectedToolDenied("Coding tool ran without owner admission")
-        if call_id in self.admitted:
-            record_selected_terminal(self.path.parent, call.slot(input_id), call.slot(input_id))
-        self.finished.add(call_id)
-
-    def assert_complete(self) -> None:
-        if self.announced.keys() != self.finished:
-            raise SelectedToolDenied("Native coding tool outcome remains UNKNOWN")
+    def admit(self, call: CodingCall) -> None:
+        self.owner.admit(call)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

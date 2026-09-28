@@ -26,9 +26,10 @@ from . import pi_events as pi
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
-from .selected_tool_broker import NativeToolMode, OwnerToolSocket, SelectedToolDenied
+from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
