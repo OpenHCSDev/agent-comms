@@ -434,47 +434,38 @@ class RegistryDocument:
         owner_generation = self.owners.generations[current.name]
         return claimed, owner_generation
 
-    def finish_claimed_turn_with_fence(
-        self, name: str, turn_id: str, *, expected: TurnLeaseFence | None = None
-    ) -> tuple[bool, FinishedTurnFence | None]:
-        """Release only the claimed turn; legacy ID-only release cannot attest a fence."""
-        name = self.aliases.get(name, name)
+    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
+        """Release only this exact lease; a revoked admission cannot attest completion."""
+        name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
         current = self.threads.get(name)
-        if current is None or current.active_turn is None or current.active_turn.id != turn_id:
-            return False, None
-        admission = current.active_turn.admission_generation
-        if expected is not None and (
-            type(expected) is not TurnLeaseFence
-            or self.aliases.get(
-                expected.identity.incarnation.name, expected.identity.incarnation.name
-            )
-            != name
-            or expected.identity.incarnation.created_at != current.created_at
-            or expected.turn_id != turn_id
-            or expected.identity.generation != current.turn_generation
-            or expected.admission_generation != admission
-            or current.active_turn.turn_generation != expected.identity.generation
+        if (
+            current is None
+            or current.active_turn is None
+            or current.active_turn.id != lease.turn_id
+            or current.created_at != lease.identity.incarnation.created_at
+            or current.turn_generation != lease.identity.generation
+            or current.active_turn.turn_generation != lease.identity.generation
+            or current.active_turn.admission_generation != lease.admission_generation
         ):
             return False, None
+        admission = lease.admission_generation
         attested = (
-            expected is not None
-            and current.turn_generation > 0
-            and type(admission) is int
+            current.turn_generation > 0
             and admission > 0
             and self.admissions.generations.get(name) == admission
-            and current.active_turn.turn_generation == current.turn_generation
             and self.statuses[name].active
         )
         self.threads[name] = replace(
             current,
             active_turn=None,
-            last_finished_turn_id=(current.active_turn.id if current.turn_generation else None),
+            last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
         )
         self.last_seen[name] = time.time()
         if not attested:
             return True, None
-        assert type(admission) is int
         assert current.turn_identity is not None
         return True, FinishedTurnFence(
-            identity=current.turn_identity, turn_id=turn_id, admission_generation=admission
+            identity=current.turn_identity,
+            turn_id=lease.turn_id,
+            admission_generation=admission,
         )

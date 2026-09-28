@@ -309,8 +309,8 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
             owner_created_at=owner.created_at,
         )
     )
-    comms.finish_turn("alice", "alice-turn")
-    comms.finish_turn("bob", "bob-turn")
+    comms.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.finish_turn(comms.registry.require("bob").turn_lease)
 
     if pending_reply:
         comms.send_message("bob", "alice", "The work is finished")
@@ -351,15 +351,15 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
             report_turn_generation=owner.turn_generation if bound_old_turn else None,
         )
     )
-    comms.finish_turn("alice", "alice-first")
-    comms.finish_turn("bob", "bob-first")
+    comms.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.finish_turn(comms.registry.require("bob").turn_lease)
     comms.begin_turn("bob", "bob-independent-new")
     wait = comms.goal_wait("alice")
     assert wait is not None
     assert comms.recover_closed_goal_wait("alice") == ()
     assert comms.goal_wait("alice") == wait
     assert comms.goal_execution("alice").state is GoalExecutionState.STANDBY
-    comms.finish_turn("bob", "bob-independent-new")
+    comms.finish_turn(comms.registry.require("bob").turn_lease)
     assert comms.recover_closed_goal_wait("alice") == ("alice", "bob")
 
 
@@ -384,8 +384,8 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
             owner_created_at=comms.registry.require("bob").created_at,
         )
     )
-    comms.finish_turn("alice", "alice-turn")
-    comms.finish_turn("bob", "bob-turn")
+    comms.finish_turn(comms.registry.require("alice").turn_lease)
+    comms.finish_turn(comms.registry.require("bob").turn_lease)
     original_clear = GoalWaits.clear
 
     def unavailable(*_args, **_kwargs):

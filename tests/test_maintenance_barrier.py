@@ -74,7 +74,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     assert gate.read() is None
     comms.register(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()))
     assert comms.begin_turn("owner", "before")
-    comms.finish_turn("owner", "before")
+    comms.finish_turn(comms.registry.require("owner").turn_lease)
     control = FixtureMaintenanceControl(gate)
     first = control.begin("operator-one")
     assert first.phase == "draining" and first.generation == 1

@@ -124,11 +124,9 @@ class Registration:
             edit.commit()
             return result
 
-    def finish_claimed_turn_with_fence(
-        self, name: str, turn_id: str, *, expected: TurnLeaseFence | None = None
-    ) -> tuple[bool, FinishedTurnFence | None]:
+    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
         with self.store.editing() as edit:
-            result = edit.document.finish_claimed_turn_with_fence(name, turn_id, expected=expected)
+            result = edit.document.release_turn(lease)
             edit.commit()
             return result
 
@@ -433,11 +431,6 @@ class Registration:
             result = document.claim_turn(current, turn_id, routing)
             edit.commit()
             return result
-
-    def finish_claimed_turn(self, name: str, turn_id: str) -> bool:
-        """Release only the exact owned turn, resolving retained aliases under lock."""
-        released, _ = self.finish_claimed_turn_with_fence(name, turn_id)
-        return released
 
     def canonical_name(self, name: str) -> str:
         with self.store.reading() as document:

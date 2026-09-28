@@ -338,7 +338,7 @@ class TestRegistration:
         assert reopened.require("agent-comms-ux").active_turn.id == "goal-turn"
         assert reopened.require("child").parent == "agent-comms-ux"
         assert snapshot.admission_generations["agent-comms-ux"] == admission
-        assert reopened.finish_claimed_turn("pr17", "goal-turn")
+        assert reopened.release_turn(reopened.require("pr17").turn_lease)[0]
 
     def test_other_owner_writes_do_not_invalidate_private_epoch(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
@@ -355,8 +355,8 @@ class TestRegistration:
             owner, "mine", expected_owner_generation=epoch
         )
         assert turn.active_turn is not None and turn.active_turn.id == "mine"
-        assert registry.finish_claimed_turn("a", "mine")
-        assert not registry.finish_claimed_turn("a", "mine")
+        assert registry.release_turn(turn.turn_lease)[0]
+        assert not registry.release_turn(turn.turn_lease)[0]
         assert "owner_epoch" not in owner.to_wire()
 
     @pytest.mark.parametrize("revocation", ["stop", "finish"])
@@ -373,7 +373,7 @@ class TestRegistration:
         if revocation == "stop":
             registry.unregister("a")
         else:
-            assert registry.finish_claimed_turn("a", "claimed")
+            assert registry.release_turn(registry.require("a").turn_lease)[0]
         registry.register(claimed)
         assert registry.require("a").active_turn.admission_generation is None
         with pytest.raises(RelationViolationError, match="unavailable"):
@@ -407,7 +407,7 @@ class TestRegistration:
         comms.begin_turn("a", "migrated-turn")
         assert comms.registry.require("a").active_turn is not None
         assert comms.registry.live_owner_with_generation("a")[1] > 0
-        comms.finish_turn("a", "migrated-turn")
+        comms.finish_turn(comms.registry.require("a").turn_lease)
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     def test_private_marker_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
@@ -598,17 +598,19 @@ class TestRegistration:
             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
         assert "registry_guard" not in comms.registry.store.cache.document.threads["a"].to_wire()
 
-    def test_finish_claimed_turn_resolves_retained_alias_only_for_exact_turn(self, tmp_path: Path):
+    def test_release_turn_resolves_retained_alias_only_for_exact_lease(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", pid=os.getpid()))
         registry.rename("a", "b")
         owner, epoch = registry.live_owner_with_generation("a")
         assert owner.name == "b"
-        registry.claim_live_turn_with_generation(owner, "claimed", expected_owner_generation=epoch)
+        claimed, _ = registry.claim_live_turn_with_generation(
+            owner, "claimed", expected_owner_generation=epoch
+        )
         registry.rename("b", "c")
-        assert not registry.finish_claimed_turn("a", "other")
+        assert not registry.release_turn(replace(claimed.turn_lease, turn_id="other"))[0]
         assert registry.require("c").active_turn is not None
-        assert registry.finish_claimed_turn("a", "claimed")
+        assert registry.release_turn(claimed.turn_lease)[0]
         assert registry.require("c").active_turn is None
 
     def test_missing_or_malformed_private_epoch_metadata_refuses_turn(self, tmp_path: Path):

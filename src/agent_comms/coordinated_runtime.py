@@ -50,6 +50,7 @@ from .declarations import (
     MessageType,
     RelationViolationError,
     Thread,
+    TurnLeaseFence,
     _require_no_private_owner_rename,
     _store_lock,
 )
@@ -1029,7 +1030,7 @@ async def run_one_sealed_claim(
     if marker["wire_root_id"] != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
     store = MutationStore(str(root / "coordination.sqlite3"))
-    owned_turn_id: str | None = None
+    owned_turn_lease: TurnLeaseFence | None = None
     fence: OwnerFence | None = None
     input_id: str | None = None
     try:
@@ -1102,8 +1103,9 @@ async def run_one_sealed_claim(
                 expected_generation=owner_admission_generation,
             )
         except RelationViolationError as error:
-            owned_turn_id = None
             raise StaleFence("selected owner stopped or busy before native turn") from error
+        owned_turn_lease = owner.turn_lease
+        assert owned_turn_lease is not None
         _require_registry_owner(comms, owner, owner_admission_generation)
         if owner.active_turn is None or owner.active_turn.owner_pid != owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
@@ -1585,8 +1587,8 @@ async def run_one_sealed_claim(
         raise
     finally:
         try:
-            if owned_turn_id is not None:
-                comms.registry.finish_claimed_turn(owner_name, owned_turn_id)
+            if owned_turn_lease is not None:
+                comms.registry.release_turn(owned_turn_lease)
         finally:
             store.close()
 

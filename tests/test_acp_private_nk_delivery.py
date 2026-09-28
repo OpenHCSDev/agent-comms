@@ -935,7 +935,7 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
             == 0
         )
     assert calls == []
-    comms.finish_turn("beta", "human-live-turn")
+    comms.finish_turn(comms.registry.require("beta").turn_lease)
     assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
 
