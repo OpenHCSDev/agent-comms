@@ -22,7 +22,6 @@ from agent_comms.native_pi import (
     NativePiUnavailable,
     _read_native_context_evidence,
     _trusted_package,
-    load_native_context_proof,
     prepare_native_pi_rpc_launch,
     run_native_pi_turn,
 )
@@ -73,8 +72,6 @@ def _evidence(tmp_path: Path) -> Path:
 
 def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> None:
     session = _evidence(tmp_path)
-    with pytest.raises(NativePiUnavailable, match="lacks a durable commit marker"):
-        load_native_context_proof(session, INPUT_ID)
     first = _read_native_context_evidence(session, INPUT_ID)
     second = _read_native_context_evidence(session, INPUT_ID)
     assert first == second

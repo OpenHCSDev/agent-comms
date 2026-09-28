@@ -1,0 +1,46 @@
+SIM102 Use a single `if` statement instead of nested `if` statements
+  --> src/agent_comms/native_entries.py:54:13
+   |
+52 |               if message.get("inputId") is not None and not entry.message.user:
+53 |                   raise ValueError("Tracked native input must belong to a user")
+54 | /             if entry.message.user and "content" in message:
+55 | |                 if message["content"] != entry.message.to_wire().get("content"):
+   | |________________________________________________________________________________^
+56 |                       raise ValueError("Native user content contains unrepresented evidence fields")
+57 |           return entry
+   |
+help: Combine `if` statements using `and`
+
+E501 Line too long (102 > 100)
+  --> src/agent_comms/native_entries.py:89:101
+   |
+87 |                 tracked[user.input_id] = user
+88 |         except (ValueError, TypeError) as error:
+89 |             raise NativePiUnavailable("Native Pi session has ambiguous tracked user input") from error
+   |                                                                                                     ^^
+90 |         return tracked
+   |
+
+E501 Line too long (106 > 100)
+   --> src/agent_comms/native_pi.py:121:101
+    |
+119 |         hints = FieldCodec._types(cls)
+120 |         proof = cls(**{
+121 |             item.name: FieldCodec.decode(hints[item.name], row[item.metadata.get("wire_name", item.name)])
+    |                                                                                                     ^^^^^^
+122 |             for item in fields(cls) if item.name != "session_file"
+123 |         }, session_file=session_file)
+    |
+
+E501 Line too long (103 > 100)
+   --> src/agent_comms/native_pi.py:152:101
+    |
+150 |                     raise ValueError("Native Pi proof journal contains an invalid row")
+151 |             except (ValueError, TypeError, KeyError) as error:
+152 |                 raise NativePiUnavailable("Native Pi proof journal contains an invalid row") from error
+    |                                                                                                     ^^^
+153 |             previous_generation = proof.request_generation
+154 |             generation_digest = proof.llm_context_digest
+    |
+
+Found 8 errors (4 fixed, 4 remaining).

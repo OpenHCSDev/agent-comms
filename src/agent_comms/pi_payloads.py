@@ -118,6 +118,10 @@ class PiUsage(PiPayload):
 
 @dataclass(frozen=True)
 class PiContent(PiPayload, DeclaredFamily, affix="Content"):
+    def preserve_evidence(self, raw: dict) -> PiContent:
+        """Keep unrepresented native fields opaque, never equivalent to plain text."""
+        return self if self.to_wire() == raw else UnknownContent(raw)
+
     def user_transcript(self):
         return []
 
@@ -198,6 +202,9 @@ class UnknownContent(PiContent):
     payload: dict[str, Any]
     opaque = True
 
+    def to_wire(self):
+        return self.payload
+
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
@@ -219,6 +226,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
+    input_digest: str | None = wire_field("inputDigest")
     stop_reason: str | None = wire_field("stopReason")
     error_message: str | None = wire_field("errorMessage")
 
