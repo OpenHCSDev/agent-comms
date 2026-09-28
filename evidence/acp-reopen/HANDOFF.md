@@ -1,3 +1,11 @@
+# Integrated candidate acceptance — ready for activation
+
+Complete native extension fix30571e7 is integrated with parent startup feedback. Candidate runtime `runtime-acp-extensions-20260928` and native deployment `/var/tmp/agent-comms-pi-native-extensions-20260928/node_modules/@earendil-works/pi-coding-agent` are built.38 installed combined Python cases pass. `installed-startup.json` proves the normal installed wrapper opens the actual copied143MB saved session with automatic global discovery, configured gpt-6-sol and native capability,714 messages, kernel network denial and zero prompts. No --no-extensions bypass. Original session/journal untouched.
+
+First candidate package location under ~/.local/share was refused by the existing lexical deployment guard; moved the owned package to its required private /var/tmp layout and the same wrapper passed. This was a staging-path error, not evidence that the original native guard was changed or bypassed. Candidate uses the same Python3.14.2 and dependency versions as current runtime. Live activation remains parent-owned below.
+
+---
+
 # Toad ACP startup regression — 2026-09-28
 
 Owner's ordinary Toad prompt to agent-comms-ux failed at native startup.

@@ -1,0 +1,5 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928
+Resolved 1 package in 1ms
+Prepared 1 package in 7ms
+Installed 1 package in 6ms
+ + agent-comms==0.1.0 (from file:///home/ts/.local/state/agent-comms/acp-extension-wheels/core/agent_comms-0.1.0-py3-none-any.whl)
