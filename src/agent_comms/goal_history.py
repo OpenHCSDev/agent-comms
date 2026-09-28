@@ -36,7 +36,7 @@ class GoalHistoryEntry:
     after: Goal | None
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.project(self, "wire")
+        return FieldCodec.encode(self)
 
 
 class GoalHistoryStore:

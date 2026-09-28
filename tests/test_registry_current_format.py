@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_states import GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
@@ -21,6 +22,7 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
         goal = Goal("Keep the objective", name, state=GoalState.decode(name)())
         owner = Thread(name, frozenset(), str(tmp_path), goal=goal)
         registry.register(owner)
+        assert FieldCodec.decode(Goal, goal.to_wire()) == goal
         reopened = Registration(registry.store.path)
         assert reopened.require(name).goal == goal
         assert reopened.require(name).incarnation == owner.incarnation

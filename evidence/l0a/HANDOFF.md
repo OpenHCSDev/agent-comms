@@ -4,7 +4,7 @@ Owner branch `refactor/round2-l0a-loaders`; worktree `~/wt/comms-refactor2-l0a-2
 
 ## Implemented
 
-- `goals.py`: remove flat-record loader and pause-event recovery loader. Display projections remain read-only views for current UI consumers; storage uses `FieldCodec.encode/decode(Goal)` with typed state.
+- `goals.py`: remove flat-record loader and pause-event recovery loader. Remove the flat display projection too: storage and agent-comms payloads both use `FieldCodec.encode/decode(Goal)` with typed state.
 - `registry_document.py`: remove owner-epoch and missing-counter migration, stale-alias recovery, manual disk encoding, and generation-presence flag. Decode the current document once and enforce creation identity, owner/admission, presence and alias invariants.
 - `registry_store.py`: persist the existing typed document via `FieldCodec`; missing files yield an empty document, existing invalid documents fail. Private durability guard still verifies before cache access.
 - `registration.py`: remove all branches that admitted unmarked documents or upgraded them on first turn.
@@ -27,7 +27,7 @@ Read-only inventory at implementation start: live root 104 threads, all have cre
 
 - **Parent L0B #229** owns bus/ReadLedger integration and durable one-shot cutover, stopped-owner activation, installed behavior, and deletion of used cutover tools. Our ThreadManagement no longer calls bus.rename_thread/remove_thread or the public purge guard.
 - **Darwin #231** owns `tools.py`: delete `_delete` and the `comms_delete` declaration; update tool catalog/context tests and `tests/test_channels.py`'s retired purge setup. Core CLI removal is here. No edits made to Darwin's files.
-- **Parent Toad** owns `src/toad/app.py`: remove `comms_delete` progress/dispatch logic and the direct `comms.threads.delete` call. No Toad tree edited here.
+- **Parent Toad** owns `src/toad/app.py`: remove `comms_delete` progress/dispatch logic and the direct `comms.threads.delete` call. Also migrate five `Goal.from_wire` calls in `toad/acp/agent.py` and `screens/goal_details.py` to `FieldCodec.decode(Goal, payload)`, since core now emits typed Goal records. No Toad tree edited here.
 - **Lovelace #232** owns `threads.py`: RegistryDocument no longer calls Thread.from_registry. Delete the now-unused Thread.from_registry, registry_created_at and session_created_at methods with their old date recovery. Current decoding is FieldCodec on Thread; its ProcessIdentity changes will participate automatically. No threads.py edits here.
 
 This branch is not independently installable before stored data cutover and these caller removals. Full L0A completion remains open until the coordinated changes and installed acceptance land.

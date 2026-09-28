@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
 
 
@@ -68,7 +68,7 @@ class GoalMentionSource:
 
 @dataclass(frozen=True)
 class Goal:
-    """A goal owns its typed lifecycle; display projections never serve as stored records."""
+    """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
     text: str
     id: str
@@ -76,23 +76,10 @@ class Goal:
     revision: int = 0
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
-    state: GoalState = field(default_factory=ActiveGoal, metadata={"wire_exclude": True})
-
-    @projected(view="wire", name="status")
-    def wire_status(self) -> str:
-        return self.state.declared_name
-
-    @projected(view="wire", name="block_reason")
-    def wire_block_reason(self) -> str | None:
-        return self.state.reason
-
-    @projected(view="wire", name="pause_source")
-    def wire_pause_source(self) -> str | None:
-        source = self.state.pause_source
-        return source.declared_name if source is not None else None
+    state: GoalState = field(default_factory=ActiveGoal)
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.project(self, "wire")
+        return FieldCodec.encode(self)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

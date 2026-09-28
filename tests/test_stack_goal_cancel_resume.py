@@ -12,8 +12,10 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
+from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -195,7 +197,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             retried = await proxy.request(
                 "retry_goal", goal_id=goal_id, expected_revision=blocked.revision
             )
-            assert retried["goal"]["status"] == "active"
+            assert FieldCodec.decode(Goal, retried["goal"]).state.declared_name == "active"
             ready = store.snapshot(goal_id)
             assert ready.number == failed.number + 1 and ready.lifecycle == ReadyGeneration()
             assert ready.attempt_id is None
