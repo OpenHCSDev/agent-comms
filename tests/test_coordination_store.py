@@ -40,7 +40,6 @@ from agent_comms.coordination import (
     OwnerConnectivity,
     PublicationIntent,
     ReplayFact,
-    TriageVerdict,
     WakeClaim,
     canonical_publication_key,
 )
@@ -299,7 +298,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             index: int,
             mode: WakePolicy,
             disposition: ClaimState,
-            verdict: TriageVerdict | None = None,
+            verdict: str | None = None,
         ) -> WakeClaim:
             return WakeClaim(
                 claim_id=f"claim-{index}",
@@ -314,7 +313,7 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             )
 
         for index, mode, disposition, verdict in (
-            (1, BoundedTriageWake(), IgnoredClaim, TriageVerdict.IGNORE),
+            (1, BoundedTriageWake(), IgnoredClaim, "ignore"),
             (2, BoundedTriageWake(), DeferredClaim, None),
             (3, BoundedTriageWake(), FailedClaim, None),
             (4, FullWake(), DeferredClaim, None),
@@ -336,7 +335,6 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
             "claim-7",
             IgnoredClaim,
             expected_revision=1,
-            verdict=TriageVerdict.IGNORE,
         )
         deferred = db.transition_preengagement("claim-8", DeferredClaim, expected_revision=1)
         failed = db.transition_preengagement("claim-9", FailedClaim, expected_revision=1)
@@ -499,7 +497,7 @@ def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
         assert settled.value.attempt is not None
         assert type(settled.value.attempt.lifecycle) is SucceededAttempt
         assert settled.value.obligation is not None
-        assert settled.value.obligation.state.value == "silent"
+        assert settled.value.obligation.lifecycle.declared_name == "silent"
         assert type(settled.value.claims[0].lifecycle) is CompletedClaim
         assert not settled.value.is_current
         assert settled.value.pointer_revision == 2
@@ -1148,7 +1146,7 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
             )
         )
         deferred = db.transition_preengagement("claim", DeferredClaim, expected_revision=1)
-        assert deferred.value.execution_id is None
+        assert deferred.value.lifecycle.execution_id is None
         requeued = db.transition_preengagement("claim", FullPendingClaim, expected_revision=2)
         assert type(requeued.value.lifecycle) is FullPendingClaim
 

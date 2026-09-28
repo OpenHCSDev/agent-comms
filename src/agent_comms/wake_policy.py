@@ -58,10 +58,6 @@ class WakePolicy(DeclaredFamily, affix="Wake"):
     def full_expectation(self):
         return "this is yours; answer the original committed message"
 
-    @property
-    def engagement_verdict(self) -> str | None:
-        return None
-
 
 class PassiveWake(WakePolicy):
     active = False
@@ -87,10 +83,6 @@ class BoundedTriageWake(WakePolicy):
         from .claim_states import TriagePendingClaim
 
         return TriagePendingClaim
-
-    @property
-    def engagement_verdict(self):
-        return "engage"
 
 
 class FullWake(WakePolicy):

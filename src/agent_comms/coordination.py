@@ -49,11 +49,6 @@ class MessageAudience(StrEnum):
     COLLECTIVE = "collective"
 
 
-class TriageVerdict(StrEnum):
-    IGNORE = "ignore"
-    ENGAGE = "engage"
-
-
 class ExecutionOrigin(StrEnum):
     WIRE = "wire"
     ACP = "acp"
@@ -820,8 +815,8 @@ class RecoverySnapshot:
             claim.recipient_lookup != execution.owner_lookup for claim in self.claims
         ):
             raise IntegrityViolationError("snapshot claims have duplicate IDs or wrong owner")
-        claim_kind = execution.lifecycle.claim_disposition
-        if any(claim.lifecycle.declared_name != claim_kind for claim in self.claims):
+        claim_kind = execution.lifecycle.claim_state()
+        if any(type(claim.lifecycle) is not claim_kind for claim in self.claims):
             raise IntegrityViolationError("snapshot claims disagree with execution disposition")
 
     def validate_attempt_identity(self) -> None:
@@ -1730,7 +1725,7 @@ def _schema():
         obligation_edges=_sql_edges(ResponseState, "state"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
         engaged_execution_names=_sql_members(
-            ExecutionState, lambda member: member.unstarted or member.active
+            ExecutionState, lambda member: member.claim_state().engaged
         ),
         unstarted_execution_names=_sql_members(ExecutionState, lambda member: member.unstarted),
         required_attempt_execution_names=_sql_members(

@@ -104,3 +104,23 @@ def test_defaults_nested_optional_and_nonfinite_decode():
     )
     with pytest.raises(ValueError):
         FieldCodec.decode(float, float("nan"))
+
+
+@dataclass(frozen=True)
+class ChoiceReference:
+    choice: type[Choice]
+
+
+def test_nominal_class_reference_retains_owner_without_inventing_state_payload():
+    record = ChoiceReference(CountChoice)
+    assert FieldCodec.encode(record) == {"choice": "count"}
+    assert FieldCodec.decode(ChoiceReference, {"choice": "count"}) == record
+    # References do not fabricate CountChoice.value; instances still require it.
+    with pytest.raises(TypeError):
+        FieldCodec.decode(Choice, {"kind": "count"})
+
+
+@pytest.mark.parametrize("value", ["unknown", 1, True, None, {}, {"kind": "count"}])
+def test_nominal_class_reference_rejects_unknown_names_and_wrong_shapes(value):
+    with pytest.raises(ValueError):
+        FieldCodec.decode(ChoiceReference, {"choice": value})

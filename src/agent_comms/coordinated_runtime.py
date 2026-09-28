@@ -98,7 +98,7 @@ _LOG = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn:
     claim_id: str
-    disposition: ClaimState
+    disposition: type[ClaimState]
     input_id: str
     response_message_id: str | None
     exact_target: str | None

@@ -1849,7 +1849,7 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
     assert comms.registry.require("beta").active_turn is None
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         pending = sealed_cohort_claims(store, stable_thread_lookup(owner.created_at))
-        assert pending[0].disposition is TriagePendingClaim
+        assert type(pending[0].lifecycle) is TriagePendingClaim
 
 
 @pytest.mark.parametrize("direct", [True, False])

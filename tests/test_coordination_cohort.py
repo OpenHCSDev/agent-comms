@@ -111,7 +111,7 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert isinstance(first, Applied)
     assert (first.value.member_count, first.value.claim_count) == (2, 1)
     assert first.value.claims[0].recipient_lookup == lookups["Alice"]
-    assert first.value.claims[0].wake_mode == FullWake()
+    assert first.value.claims[0].lifecycle.mode == FullWake()
     assert first.value.accepted_at_ms == 4723
     assert len(sealed_cohort_claims(coordinator, lookups["Alice"])) == 1
     assert sealed_cohort_claims(coordinator, lookups["Bob"]) == ()

@@ -204,8 +204,8 @@ def test_recovery_refuses_live_native_session_process(released_failure):
 
 @pytest.mark.asyncio
 async def test_unresolved_execution_does_not_engage_a_new_source(
-    tmp_path,
-    monkeypatch,  # noqa: F811
+    tmp_path,  # noqa: F811
+    monkeypatch,
 ):
     from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims

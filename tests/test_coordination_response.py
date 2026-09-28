@@ -154,7 +154,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         )
         published = publish_fenced_response(case.store, case.bus, case.fence).value
         assert type(published.execution.lifecycle) is CompletedExecution
-        assert published.obligation.state is PublishedResponse
+        assert type(published.obligation.lifecycle) is PublishedResponse
         assert published.publication_receipt is not None
         assert type(published.claims[0].lifecycle) is CompletedClaim
         assert published.publication_receipt.seq == case.origin_seq + 1
@@ -250,7 +250,7 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         case.store.close()
         with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
             result = resolve_existing_response(reopened, case.bus, case.fence)
-            assert result.value.obligation.state is PublishedResponse
+            assert type(result.value.obligation.lifecycle) is PublishedResponse
             assert result.value.publication_receipt.seq == case.origin_seq + 1
             assert isinstance(
                 publish_fenced_response(reopened, case.bus, case.fence), AlreadyApplied
@@ -384,7 +384,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
         assert child.returncode == 0, (output, errors)
         assert not case.comms.registry.status("owner").active
         assert type(result.value.execution.lifecycle) is CompletedExecution
-        assert result.value.obligation.state is PublishedResponse
+        assert type(result.value.obligation.lifecycle) is PublishedResponse
         assert case.comms.bus.latest_sequence() == case.origin_seq + 1
     finally:
         if child is not None and child.poll() is None:

@@ -155,7 +155,8 @@ def snapshot(
                             claim().lifecycle.exact_target,
                         ),
                     )
-                    if type(record.lifecycle) in {DeferredExecution, CompletedExecution, FailedExecution}
+                    if type(record.lifecycle)
+                    in {DeferredExecution, CompletedExecution, FailedExecution}
                     else claim()
                 ),
             )

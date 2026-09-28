@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from .attempt_states import AttemptState
-from .claim_states import ClaimState
+from .claim_states import ClaimState, EngagedClaim
 from .coordination import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -46,7 +46,6 @@ from .coordination import (
     ReplayAssessment,
     ReplayFact,
     ResponseObligation,
-    TriageVerdict,
     WakeClaim,
     retry_disposition_authorized,
 )
@@ -301,7 +300,7 @@ def _claim(row: sqlite3.Row) -> WakeClaim:
         policy_version=row["policy_version"],
         lifecycle=ClaimState.decode(row["disposition"]).load(
             WakePolicy.decode(row["wake_mode"])(),
-            TriageVerdict(row["triage_verdict"]) if row["triage_verdict"] else None,
+            row["triage_verdict"],
             row["execution_id"],
             row["exact_target"],
         ),
@@ -611,7 +610,6 @@ class MutationStore(CoordinationStore):
         disposition: type[ClaimState],
         *,
         expected_revision: int,
-        verdict: TriageVerdict | None = None,
     ) -> Applied[WakeClaim]:
         with self._transaction() as db:
             current = self.claim(claim_id)
@@ -627,19 +625,20 @@ class MutationStore(CoordinationStore):
                 current,
                 updated_at_ms=self._now(current.updated_at_ms),
                 revision=current.revision + 1,
-                lifecycle=disposition.load(
+                lifecycle=disposition.build(
                     current.lifecycle.mode,
-                    verdict,
                     current.lifecycle.execution_id,
                     current.lifecycle.exact_target,
                 ),
             )
+            if after.lifecycle.mode != current.lifecycle.mode:
+                raise IdentityConflict("preengagement cannot change frozen wake policy")
             db.execute(
                 "UPDATE wake_claims SET disposition=?,triage_verdict=?,updated_at_ms=?,"
                 "revision=? WHERE claim_id=? AND revision=?",
                 (
                     disposition.declared_name,
-                    verdict.value if verdict else None,
+                    after.lifecycle.verdict,
                     after.updated_at_ms,
                     after.revision,
                     claim_id,
@@ -846,14 +845,15 @@ class MutationStore(CoordinationStore):
                     or not claim.lifecycle.engageable
                 ):
                     raise IdentityConflict("claim cannot engage this execution")
-                verdict = claim.lifecycle.mode.engagement_verdict
+                decision = EngagedClaim.build(claim.lifecycle.mode, execution_id, exact_target)
                 db.execute(
-                    "UPDATE wake_claims SET disposition='engaged',triage_verdict=?,exact_target=?,"
+                    "UPDATE wake_claims SET disposition=?,triage_verdict=?,exact_target=?,"
                     "execution_id=?,revision=revision+1,updated_at_ms=? WHERE claim_id=?",
                     (
-                        verdict,
-                        exact_target,
-                        execution_id,
+                        decision.declared_name,
+                        decision.verdict,
+                        decision.exact_target,
+                        decision.execution_id,
                         self._now(claim.updated_at_ms),
                         claim_id,
                     ),
@@ -1161,7 +1161,7 @@ class MutationStore(CoordinationStore):
                 new_final_fact = (backend_done and not attempt.lifecycle.backend_done) or (
                     process_dead and not attempt.lifecycle.process_dead
                 )
-                if phase != type(attempt.lifecycle) or progress or not new_final_fact:
+                if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
                     raise RecoveryBlocked(
                         "final backend evidence forbids further phase or progress"
                     )
