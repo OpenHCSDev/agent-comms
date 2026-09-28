@@ -8,7 +8,6 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
 
 from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
