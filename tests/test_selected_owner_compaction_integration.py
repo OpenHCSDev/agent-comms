@@ -754,10 +754,12 @@ async def test_disconnected_selected_summary_stays_unknown_without_original_repl
 
 
 @pytest.mark.parametrize(
-    "compact_after_reset", [False, True], ids=["attach-input", "attach-compact-input"]
+    "compact_after_reset,damage",
+    [(False, None), (True, None), (True, "missing-proof"), (True, "unsettled-input")],
+    ids=["attach-input", "attach-compact-input", "missing-proof", "unsettled-input"],
 )
 async def test_private_retained_session_accepts_after_runtime_journal_reset(
-    tmp_path, monkeypatch, compact_after_reset
+    tmp_path, monkeypatch, compact_after_reset, damage
 ):
     from dataclasses import replace
 
@@ -865,6 +867,40 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
                 json.dumps({"attached": True, "session": file})
             )
             assert not agent.turns.persistent_backends
+            if damage is not None:
+                from acp import RequestError
+
+                if damage == "missing-proof":
+                    Path(file + ".input-proof").unlink()
+                else:
+                    dispositions = agent.inputs.dispositions
+                    admission = comms.registry.snapshot().admission_generations["proj"]
+                    dispositions.record(
+                        "acp:uncertain",
+                        seq=None,
+                        owner="proj",
+                        admission=admission,
+                        target="proj",
+                        text="Unresolved current input",
+                    )
+                    dispositions.bind(
+                        "acp:uncertain",
+                        admission=admission,
+                        turn_id="uncertain",
+                        native_id="e" * 32,
+                        text="Unresolved current input",
+                    )
+                requests_before = json.loads((tmp_path / "provider-requests.json").read_text())
+                with pytest.raises(RequestError):
+                    await agent.prompt("proj", [{"type": "text", "text": "/compact"}])
+                assert Path(file).read_bytes() == before
+                assert (
+                    json.loads((tmp_path / "provider-requests.json").read_text()) == requests_before
+                )
+                if damage == "unsettled-input":
+                    row = agent.inputs.dispositions.read().lookup("acp:uncertain")
+                    assert row.unresolved and row.has_native_binding and not row.has_started
+                return
             if compact_after_reset:
                 await agent.prompt("proj", [{"type": "text", "text": "/compact"}])
             await agent.prompt("proj", [{"type": "text", "text": "After quiet cutover"}])
