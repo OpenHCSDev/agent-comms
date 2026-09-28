@@ -1,6 +1,6 @@
 # Current functional acceptance — 2026-09-28
 
-Installed source: core188 restart correction (includes complete bus184 and compaction185 via186), pairedToad92; Textual main remains4fa6a9c. Runtime is runtime-owner-restart-20260928. This receipt updates the historical functional-audit snapshot; it does not claim the remaining nominal refactor plan is complete.
+Installed source: core190 goal-attempt ownership (retains restart188, bus184 and compaction185 via186), pairedToad93; Textual main remains4fa6a9c. Runtime is runtime-r4-goal-attempts-20260928. Installed goal-set/pause/edit routes and successful normal activation are recorded in evidence/r4-live/HANDOFF.md. This receipt updates the historical functional-audit snapshot; it does not claim the remaining nominal refactor plan is complete.
 
 ## Six functional requirements
 
@@ -17,7 +17,7 @@ Installed source: core188 restart correction (includes complete bus184 and compa
 
 The activation attempt signaled both idle owners, then restart_owners rejected a graceful release as a changed owner. Both old processes later were authoritatively absent and STOPPED, with no active turn. Starting exactly those identities recovered both; fresh57→58 proves actual subsequent use. The failed activation and recovery receipts are retained. Core188 accepts only the exact voluntary-release receipt, still proves OS exit/ownership and rejects a replaced incarnation/epoch before signals; its normal two-owner restart is now verified live. No timeout alone permits restart or replay.
 
-The original plan remains broader than completed C0/bus/D1–D4: dispatch/FINAL-ORIGINAL-PLAN-AUDIT.md records Pi payload/document-store/goal-attempt/transcript/coordinated-turn/internal vocabulary work. Pascal implements complete R4 goal-attempt closure; Darwin investigates complete R2 catalog document ownership. This is assigned refactor work, not evidence of functional default-off behavior.
+The original plan remains broader than completed C0/bus/D1–D4: dispatch/FINAL-ORIGINAL-PLAN-AUDIT.md records Pi payload/document-store/goal-attempt/transcript/coordinated-turn/internal vocabulary work. R4 is merged/live with installed Toad goal routes verified. Pascal implements R1 Pi payload closure; Darwin implements R2 catalog document ownership. This is assigned refactor work, not evidence of functional default-off behavior.
 
 The original proposal explicitly lists owner decision supersession, arbitrary DM obligations and task→commit heads as future. Those are not claimed shipped by the six-requirement acceptance. Native proof-journal limit issue107 remains issue-only. No current150-owner provider/UI p99 is claimed.
 
