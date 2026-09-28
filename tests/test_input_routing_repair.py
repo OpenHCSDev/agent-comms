@@ -69,7 +69,7 @@ def test_preview_is_read_only_and_apply_is_idempotent_without_ack(tmp_path):
 
 def test_old_display_schema_survives_and_dry_run_does_not_upgrade_it(tmp_path):
     comms, message, _, source, _ = fixture(tmp_path)
-    comms.transcripts.record_input_display("a" * 32, source)
+    comms.transcripts.routes.record_input_display("a" * 32, source)
     with sqlite3.connect(comms.transcripts.routes.database_path) as connection:
         connection.execute("DROP TABLE input_routing")
     comms = wire(comms.root)
@@ -109,7 +109,7 @@ def test_ambiguous_native_id_or_mismatched_receipt_is_not_repaired(tmp_path):
 
 def test_existing_different_binding_is_not_overwritten(tmp_path):
     comms, _, _, _, sent = fixture(tmp_path)
-    comms.transcripts.record_input_display("a" * 32, "Explicit human input", sent_text=sent)
+    comms.transcripts.routes.record_input_display("a" * 32, "Explicit human input", sent_text=sent)
     before = comms.transcripts.routes.input_bindings()
     assert comms.transcripts.repair_input_routing()["conflicts"] == 1
     assert comms.transcripts.repair_input_routing(dry_run=False)["conflicts"] == 1
@@ -153,7 +153,9 @@ def test_channel_batch_recovers_one_binding_for_all_admitted_sequences(tmp_path)
     owner = Thread("worker", frozenset({"team"}), str(tmp_path))
     comms.threads.register(owner)
     comms.threads.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
-    messages = tuple(comms.messaging.send_message("peer", "#team", body) for body in ("First", "Second"))
+    messages = tuple(
+        comms.messaging.send_message("peer", "#team", body) for body in ("First", "Second")
+    )
     sources = [ScheduledTurn.incoming(message).prompt for message in messages]
     sent = "Coordination context: owner instructions\n\n" + "\n\n".join(sources)
     dispositions = InputDispositions(comms.root)

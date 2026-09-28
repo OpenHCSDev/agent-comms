@@ -136,7 +136,7 @@ class TestThreadOps:
 
         events = wired.transcripts.thread_transcript("transcript-thread")
 
-        assert [event.kind for event in events] == [
+        assert [event.declared_name for event in events] == [
             "user",
             "thinking",
             "tool_start",
@@ -172,7 +172,7 @@ class TestThreadOps:
         events = wired.transcripts.thread_transcript_page("compacted-thread").events
 
         assert len(events) == 1
-        assert events[0].kind == "notice"
+        assert events[0].declared_name == "notice"
         assert "Important decisions" in events[0].text
 
     def test_claim_thread_can_baseline_inbox_atomically(self, wired):
@@ -1394,7 +1394,7 @@ class TestLedgerOps:
             Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
         )
         events = wired.transcripts.thread_transcript("large")
-        assert events[0].kind == "notice"
+        assert events[0].declared_name == "notice"
         assert [event.text for event in events[1:]] == [str(index) for index in range(80, 100)]
         assert _session_model(path) == ("test", "one")
 

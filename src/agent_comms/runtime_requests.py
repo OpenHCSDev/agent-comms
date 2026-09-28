@@ -86,7 +86,6 @@ class ResultRuntimeRequest(RuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class SubscribeRuntimeRequest(RuntimeRequest):
     transcript_snapshots: bool = field(default=False, metadata={"wire_name": "transcriptSnapshots"})
-    transcript_diffs: bool = field(default=False, metadata={"wire_name": "transcriptDiffs"})
 
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
@@ -97,7 +96,6 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             ctx.name,
             client=ctx.client,
             snapshots=self.transcript_snapshots,
-            diffs=self.transcript_diffs,
         )
         await agent.turns.replay_turn_state(ctx.session_id, client=ctx.client)
         await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)

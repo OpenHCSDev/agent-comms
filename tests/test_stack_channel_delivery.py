@@ -123,7 +123,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
                 )
             else:
-                message = comms.messaging.send_message("peer", "#team", "@worker STEER_CHANNEL_REQUEST")
+                message = comms.messaging.send_message(
+                    "peer", "#team", "@worker STEER_CHANNEL_REQUEST"
+                )
             messages = [message]
             if case in {"batch", "batch_rename"}:
                 messages.append(
@@ -192,7 +194,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 incoming = [
                     event
                     for event in replayed
-                    if event.kind == "user" and event.routing and event.routing.requests
+                    if event.declared_name == "user" and event.routing and event.routing.requests
                 ]
                 assert [event.routing.requests[0].message_id for event in incoming] == [
                     origin.message_id for origin in messages

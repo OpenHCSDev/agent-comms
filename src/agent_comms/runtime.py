@@ -359,7 +359,6 @@ class RuntimeProxy:
                         SubscribeRuntimeRequest(
                             thread=self.session_id,
                             transcript_snapshots=self.agent.sessions.transcript.snapshots,
-                            transcript_diffs=self.agent.sessions.transcript.diffs,
                         ).to_wire()
                     )
                     + "\n"

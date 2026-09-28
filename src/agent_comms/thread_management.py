@@ -29,7 +29,7 @@ from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_pr
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .threads import Thread, current_thread
-from .transcripts import _reverse_lines
+from .native_transcript import NativeTranscript
 
 _LOG = logging.getLogger(__name__)
 
@@ -41,22 +41,9 @@ def _session_model(session_file: Path) -> tuple[str, str] | None:
     parent's final ``model_change`` entry. Returns ``(provider, model_id)`` or
     ``None`` when the session carries no model record.
     """
-    try:
-        lines = _reverse_lines(session_file)
-    except OSError:
-        return None
-    for line in lines:
-        if b'"model_change"' not in line:
-            continue
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        if entry.get("type") == "model_change":
-            provider = entry.get("provider")
-            model_id = entry.get("modelId")
-            if provider and model_id:
-                return str(provider), str(model_id)
+    for entry in NativeTranscript(session_file).tail():
+        if entry.model_choice is not None:
+            return entry.model_choice
     return None
 
 

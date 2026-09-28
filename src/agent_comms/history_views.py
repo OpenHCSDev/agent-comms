@@ -801,23 +801,11 @@ class HistoryViews:
                 self.transcript_reads.counts(
                     captured_viewer,
                     {view.thread.name: view.thread.session_file or "" for view in threads},
-                    self._is_unread_reply,
                 ),
                 show_stopped=show_stopped,
                 show_archived=show_archived,
                 read_marker_notice=notice,
             )
-
-    def _is_unread_reply(self, record: Mapping) -> bool:
-        message = record.get("message")
-        return (
-            isinstance(message, Mapping)
-            and message.get("role") == "assistant"
-            and any(
-                event.kind in {"assistant", "notice"} and event.text.strip()
-                for event in self.transcripts._transcript_record_events(record)
-            )
-        )
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""

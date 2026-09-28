@@ -6,11 +6,11 @@ import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from .errors import RelationViolationError
 from .routing import TurnRouting
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
+from .transcript_events import TranscriptCodec
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,19 +40,21 @@ class _SessionRoutes:
         self._cache: dict[str, TurnRouting | None] = {}
         self._input_cache: dict[str, InputDisplay | None] = {}
 
-    def get(self, entry_id: Any, default: None = None) -> TurnRouting | None:
-        if not isinstance(entry_id, str) or self._connection is None:
-            return default
+    def get(self, entry_id: str | None) -> TurnRouting | None:
+        if entry_id is None or self._connection is None:
+            return None
         if entry_id not in self._cache:
             row = self._connection.execute(
                 "SELECT route FROM routes WHERE session_file = ? AND entry_id = ?",
                 (self._session_file, entry_id),
             ).fetchone()
-            self._cache[entry_id] = TurnRouting.from_wire(json.loads(row[0])) if row else None
+            self._cache[entry_id] = (
+                TranscriptCodec.decode(TurnRouting, json.loads(row[0])) if row else None
+            )
         return self._cache[entry_id]
 
-    def input_display(self, native_id: Any) -> InputDisplay | None:
-        if not isinstance(native_id, str) or self._connection is None:
+    def input_display(self, native_id: str | None) -> InputDisplay | None:
+        if native_id is None or self._connection is None:
             return None
         if native_id not in self._input_cache:
             row = self._connection.execute(
@@ -62,7 +64,9 @@ class _SessionRoutes:
             ).fetchone()
             self._input_cache[native_id] = (
                 InputDisplay(
-                    row[0], TurnRouting.from_wire(json.loads(row[1])) if row[1] else None, row[2]
+                    row[0],
+                    TranscriptCodec.decode(TurnRouting, json.loads(row[1])) if row[1] else None,
+                    row[2],
                 )
                 if row
                 else None
@@ -82,75 +86,73 @@ class _SessionRoutes:
 
 
 class TranscriptRoutes:
-    def __init__(self, path: Path):
-        self.path = path  # Legacy JSON source, imported when its revision changes.
-        self.database_path = path.with_suffix(".sqlite3")
+    filename = "transcript_routes.sqlite3"
+
+    def __init__(self, root: Path):
+        self.database_path = root / self.filename
+        self.migration_source = root / "transcript_routes.json"
         self._initialized = False
-        self._legacy_revision: tuple[int, int, int, int] | None = None
 
     def _ensure_database(self, *, create: bool = False) -> bool:
-        revision = file_revision(self.path)
-        if self._initialized and self.database_path.is_file() and revision == self._legacy_revision:
+        if self._initialized and self.database_path.is_file():
             return True
-        if not create and not self.database_path.exists() and revision is None:
+        if not create and not self.database_path.exists() and not self.migration_source.exists():
             return False
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with (
-            _store_lock(self.path),
+            _store_lock(self.database_path),
             closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS routes ("
-                "session_file TEXT NOT NULL, entry_id TEXT NOT NULL, route TEXT NOT NULL, "
-                "source TEXT NOT NULL, "
-                "PRIMARY KEY (session_file, entry_id)) WITHOUT ROWID"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS metadata " "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS input_display "
-                "(native_id TEXT PRIMARY KEY, display_text TEXT) WITHOUT ROWID"
-            )
-            # Keep the two-column display table compatible with running older
-            # writers that use INSERT ... VALUES without a column list.
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS input_routing "
-                "(native_id TEXT PRIMARY KEY, sent_text_digest TEXT NOT NULL, routing TEXT) "
-                "WITHOUT ROWID"
-            )
-            # An older process can keep writing the JSON map during a rolling
-            # upgrade. Import only when its authoritative file revision moves.
-            revision = file_revision(self.path)
-            recorded = connection.execute(
-                "SELECT value FROM metadata WHERE key = 'legacy_revision'"
-            ).fetchone()
-            if recorded is None or recorded[0] != json.dumps(revision):
-                raw = json.loads(self.path.read_text()) if self.path.exists() else {}
-                if not isinstance(raw, dict):
-                    raise ValueError("Legacy transcript routes are not an object.")
-                with connection:
-                    for session_file, entries in raw.items():
-                        if not isinstance(session_file, str) or not isinstance(entries, dict):
-                            raise ValueError("Legacy transcript route session is malformed.")
-                        for entry_id, route in entries.items():
-                            if not isinstance(entry_id, str):
-                                raise ValueError("Legacy transcript route entry is malformed.")
-                            canonical = TurnRouting.from_wire(route).to_wire()
-                            connection.execute(
-                                "INSERT INTO routes VALUES (?, ?, ?, 'legacy') "
-                                "ON CONFLICT(session_file, entry_id) DO UPDATE "
-                                "SET route = excluded.route WHERE routes.source = 'legacy'",
-                                (session_file, entry_id, json.dumps(canonical)),
-                            )
-                    connection.execute(
-                        "INSERT OR REPLACE INTO metadata VALUES ('legacy_revision', ?)",
-                        (json.dumps(revision),),
-                    )
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS routes (session_file TEXT NOT NULL, entry_id TEXT NOT NULL, route TEXT NOT NULL, PRIMARY KEY (session_file, entry_id)) WITHOUT ROWID"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS input_display (native_id TEXT PRIMARY KEY, display_text TEXT) WITHOUT ROWID"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS input_routing (native_id TEXT PRIMARY KEY, sent_text_digest TEXT NOT NULL, routing TEXT) WITHOUT ROWID"
+                )
+                migrated = connection.execute(
+                    "SELECT value FROM metadata WHERE key='routes_imported'"
+                ).fetchone()
+                if migrated is None:
+                    self._import_saved_routes(connection)
         self._initialized = True
-        self._legacy_revision = revision
         return True
+
+    def _import_saved_routes(self, connection: sqlite3.Connection) -> None:
+        """One-way import of actual saved annotations, then retire writer coexistence."""
+        prior_source = any(
+            row[1] == "source" for row in connection.execute("PRAGMA table_info(routes)")
+        )
+        raw = (
+            json.loads(self.migration_source.read_text()) if self.migration_source.exists() else {}
+        )
+        routes = TranscriptCodec.decode(dict[str, dict[str, TurnRouting]], raw)
+        for session_file, entries in routes.items():
+            for entry_id, route in entries.items():
+                encoded = json.dumps(TranscriptCodec.encode(route))
+                if prior_source:
+                    # Existing indexed rows win over the last original JSON snapshot.
+                    connection.execute(
+                        "INSERT INTO routes VALUES (?, ?, ?, 'legacy') ON CONFLICT(session_file,entry_id) DO UPDATE SET route=excluded.route WHERE routes.source='legacy'",
+                        (session_file, entry_id, encoded),
+                    )
+                else:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO routes VALUES (?, ?, ?)",
+                        (session_file, entry_id, encoded),
+                    )
+        if prior_source:
+            connection.execute("ALTER TABLE routes DROP COLUMN source")
+        connection.execute("DELETE FROM metadata WHERE key='legacy_revision'")
+        connection.execute("INSERT INTO metadata VALUES ('routes_imported', '1')")
 
     def for_session(self, session_file: str) -> _SessionRoutes:
         path = self.database_path if self._ensure_database() else None
@@ -181,15 +183,15 @@ class TranscriptRoutes:
         if not entry_ids:
             return
         self._ensure_database(create=True)
-        encoded = json.dumps(routing.to_wire())
+        encoded = json.dumps(TranscriptCodec.encode(routing))
         with (
-            _store_lock(self.path),
+            _store_lock(self.database_path),
             closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
                 connection.executemany(
-                    "INSERT OR REPLACE INTO routes VALUES (?, ?, ?, 'indexed')",
+                    "INSERT OR REPLACE INTO routes VALUES (?, ?, ?)",
                     ((session_file, entry_id, encoded) for entry_id in entry_ids),
                 )
 
@@ -207,10 +209,14 @@ class TranscriptRoutes:
         digest = (
             hashlib.sha256(sent_text.encode("utf-8")).hexdigest() if sent_text is not None else None
         )
-        encoded = json.dumps(routing.to_wire(), sort_keys=True) if routing is not None else None
+        encoded = (
+            json.dumps(TranscriptCodec.encode(routing), sort_keys=True)
+            if routing is not None
+            else None
+        )
         self._ensure_database(create=True)
         with (
-            _store_lock(self.path),
+            _store_lock(self.database_path),
             closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from weakref import WeakValueDictionary
 
 from .read_ledger import ReadLedger
+from .native_entries import NativeEntry
 from .store_files import file_revision
 
 _INDEX_VERSION = 1
@@ -96,7 +96,7 @@ class TranscriptReadState:
         for suffix in ("", "-journal", "-wal", "-shm"):
             self._index_path.with_name(self._index_path.name + suffix).unlink(missing_ok=True)
 
-    def _index(self, source: str, is_reply: Callable[[Mapping], bool]) -> ReplyIndex:
+    def _index(self, source: str) -> ReplyIndex:
         path = Path(source)
         revision = file_revision(path) if source else None
         if revision is None:
@@ -128,10 +128,10 @@ class TranscriptReadState:
                         break  # A writer's incomplete trailing record is not a reply.
                     through = stream.tell()
                     try:
-                        record = json.loads(raw)
-                    except (ValueError, UnicodeDecodeError):
+                        record = NativeEntry.read(raw)
+                    except (ValueError, TypeError, UnicodeDecodeError):
                         continue
-                    if isinstance(record, dict) and is_reply(record):
+                    if record.unread_reply:
                         total += 1
                         database.execute(
                             "INSERT INTO replies(source, end, ordinal) VALUES (?, ?, ?)",
@@ -145,25 +145,21 @@ class TranscriptReadState:
             )
         return ReplyIndex(revision, through, total)
 
-    def counts(
-        self, viewer: str, sources: Mapping[str, str], is_reply: Callable[[Mapping], bool]
-    ) -> dict[str, int]:
+    def counts(self, viewer: str, sources: Mapping[str, str]) -> dict[str, int]:
         with self._lock:
             try:
-                return self._counts_locked(viewer, sources, is_reply)
+                return self._counts_locked(viewer, sources)
             except sqlite3.DatabaseError:
                 # The index is disposable. A damaged cache cannot make unread
                 # state unavailable; rebuild from the authoritative transcript.
                 self._discard_database()
-                return self._counts_locked(viewer, sources, is_reply)
+                return self._counts_locked(viewer, sources)
 
-    def _counts_locked(
-        self, viewer: str, sources: Mapping[str, str], is_reply: Callable[[Mapping], bool]
-    ) -> dict[str, int]:
+    def _counts_locked(self, viewer: str, sources: Mapping[str, str]) -> dict[str, int]:
         result = {}
         for name, source in sources.items():
             try:
-                index = self._index(source, is_reply)
+                index = self._index(source)
             except FileNotFoundError:
                 result[name] = 0
                 continue
