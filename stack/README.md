@@ -18,6 +18,26 @@ stack/bin/prepare-pi-native
 thread. Link that script into your `PATH` if you want the short command name.
 It attaches to the current owner and does not send a prompt.
 
+The managed launcher follows the installed console entry points and active-route
+record. On that active N/K bus, ordinary channel posts notify eligible running
+subscribers: bounded triage can ignore a post without a full turn, or engage a
+normal coding turn. FULL turns provide native read, bash, edit and write with
+cooperative resource claims; these claims are not an OS filesystem sandbox.
+Saved stopped owners remain stopped until explicitly started, and uncertain old
+inputs are never replayed to prove installation.
+
+Current installed acceptance is recorded in
+[`presence-integration/HANDOFF.md`](../evidence/presence-integration/HANDOFF.md) and the preceding
+[`relationship-integration/HANDOFF.md`](../evidence/relationship-integration/HANDOFF.md).
+That checkpoint includes the lossless saved-relationship migration, real channel
+coding, installed sidebar and saved-history checks. Repeated compaction and
+queued-input acceptance are recorded in
+[`s7-integration`](../evidence/s7-integration/) and
+[`input-drain`](../evidence/input-drain/). These are specific measured paths, not
+a claim that every historical issue or performance limit is resolved. The current
+active bus still needs existing-root migration to PR94's scalable private
+checkpoint; the fresh-root installer cannot activate it on saved traffic.
+
 `prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
 local copy with native input IDs, bounded compaction and writer-fenced session
 storage. Preparation and launch verify a complete-package content commitment,
@@ -30,9 +50,12 @@ Pi or make a provider call. Set `PI_STOCK_DIR` if Pi is installed elsewhere.
 Ambient `NODE_OPTIONS`/`NODE_PATH` are removed; the managed-project bootstrap is
 copied into and loaded from the verified package. Native v3 files with complete,
 valid ancestry are required; legacy or damaged files are refused without repair.
-This prepares code, **not adaptive activation**: old workers must be retired and
-the remaining runtime/publication/recovery gates reviewed first. Operator
-failure handling and exact-ID no-replay rules are documented in
+Adaptive compaction is enabled by default in the prepared native package.
+Preparing a package does not replace processes already using an older copy;
+update the managed route and restart idle owners to load that package. The
+current managed installation has completed this activation, including repeated
+compaction retention and queued-input acceptance. Operator failure handling and
+exact-ID no-replay rules are documented in
 [`compaction-operator-recovery.md`](compaction-operator-recovery.md); that
 runbook is not an activation procedure.
 The `toad-comms` launcher uses this copy so a direct prompt can produce the
@@ -50,7 +73,7 @@ compaction. ACP reports byte size as an advisory warning from 96 MiB; Pi's
 limit is decoded text length, not byte size. If Pi rejects a journal during
 preflight as oversized *or* incomplete, ACP gives a safe, specific rejection
 without claiming which cause occurred. An independently reviewed crash-atomic
-checkpoint/segment design is needed before further growth.
+checkpoint/segment design is tracked in [issue #107](https://github.com/OpenHCSDev/agent-comms/issues/107); raising the total cap again is not the solution.
 
 All three packages are installed from immutable Git commits. Toad also pins
 agent-comms in its own manifest, so both agent-comms pins must agree. Update

@@ -1,0 +1,18 @@
+{
+  "runtime": "runtime-presence-20260928",
+  "source_seq": 51,
+  "reply_seq": 52,
+  "reply": "PRESENCE_OK",
+  "elapsed": 18.81253933906555,
+  "native_tools": [
+    {
+      "name": "read",
+      "error": false
+    },
+    {
+      "name": "bash",
+      "error": false
+    }
+  ],
+  "verified_success": true
+}
