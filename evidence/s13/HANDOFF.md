@@ -97,3 +97,34 @@ quiet install/relaunch and installed Toad/ACP acceptance. No live roots changed.
 Local behavior evidence does not claim quiet installed acceptance or full
 cross-platform app success. Old per-module mock supervisor tests were deleted;
 shared OS behavior tests replace the old mechanisms, not their mocks.
+
+
+## Latest caller/test closure
+
+GoalWaits no longer takes a PID liveness callback: the snapshot's Thread owns
+that decision. Goal action/recovery callers use it directly. No old probe alias
+remains. Shared supervisor mock tests were deleted from test_operations,
+test_start, test_restart and test_owner_release_restart. The real release tests
+now exercise actual TERM, a deliberately surviving released owner, forced
+retirement before replacement, voluntary exit during grace, and refusal to
+escalate when birth/admission/release receipt changes after TERM.
+
+`owner-acceptance-tests.log`: **14 passed** (includes four real owner-process
+cases; do not add the four in owner-process-tests.log again). `all-guards.log`:
+**11 passed**, 3037 deselected, using the exact local R0 marked-guard command.
+First guard collection found an import of deleted reservation proof in obsolete
+tests; those tests/import were removed. Owner fixture API mistakes were fixed
+and their receipt preserved; two leftover owned fixture replacements were
+identified by their test-root saved identities and retired before rerunning.
+
+`reattach-first-failure.log` is an actual new-session path failure at
+ThreadManagement.claim_thread's obsolete pid= constructor. This is the explicit
+#235 adoption dependency, not a passing ACP claim. Copernicus has the exact
+constructor/replacement/full-identity scope. Parent's tests/test_private_nk_entrypoint
+still mocks the removed owner-local subprocess/reservation API; its runtime
+launch-pin acceptance must move to the shared child owner/real path alongside
+parent cutover. S10 pi_events and S12 NativeOwnerLoss remain owned dependencies.
+
+The Windows CPython/Wine test download, isolated package, and Wine prefix
+(421 MB) were removed after recording results. The probe script is retained as
+windows_process_probe.py. No live owners or installation were changed.

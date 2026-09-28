@@ -57,7 +57,13 @@ def test_s13_callers_cannot_reintroduce_local_supervision() -> None:
         tree = ast.parse((package / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                assert node.name not in {"_terminate_process", "_close_child_stdin"}
+                assert node.name not in {
+                    "_terminate_process",
+                    "_close_child_stdin",
+                    "_process_alive",
+                    "_signal_local_owner",
+                    "_read_owner_release_receipts",
+                }
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 assert node.func.attr not in {"create_subprocess_exec", "Popen", "killpg", "kill"}
                 if isinstance(node.func.value, ast.Name):

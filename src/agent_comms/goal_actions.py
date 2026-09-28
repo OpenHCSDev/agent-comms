@@ -22,7 +22,6 @@ from .goal_states import (
 )
 from .goal_waits import GoalWait, GoalWaits
 from .goals import Goal
-from .owner_lifecycle import OwnerLifecycle
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -292,7 +291,6 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             wait_targets,
             ctx.goals.waits.read(),
             snapshot,
-            OwnerLifecycle._process_alive,
         )
         if closed:
             names = ", ".join(f"@{name}" for name in closed)
