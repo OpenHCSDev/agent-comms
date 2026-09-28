@@ -72,7 +72,16 @@ def _bounded_coverage_pages(
     can make us skip an initial. ``through_seq`` is used only when verifying
     an existing persisted cursor: even its alleged prefix is rescanned.
     """
-    covered = 0
+    with bus.log.locked(blocking=False):
+        marker = bus.log._private_marker_unlocked()
+        if marker.root_id != root_id:
+            raise IdentityConflict("current source admission root changed")
+        admission_after_seq = marker.admission_after_seq
+    if through_seq is not None and 0 < through_seq <= admission_after_seq:
+        raise IdentityConflict("current source proof precedes this activation")
+    # The floor excludes historical inputs from this activation. It is never
+    # native proof: an empty post-cutover scan still returns covered_seq=0.
+    covered = admission_after_seq
     injected: list[int] = []
     no_wake: list[int] = []
     source_witness: PrefixWitness | None = None
@@ -100,7 +109,7 @@ def _bounded_coverage_pages(
             return ProvenSourceCoverage(
                 root_id,
                 lookup,
-                covered,
+                covered if covered > admission_after_seq else 0,
                 tuple(injected),
                 tuple(no_wake),
                 page.blocked_seq,
@@ -111,7 +120,7 @@ def _bounded_coverage_pages(
             return ProvenSourceCoverage(
                 root_id,
                 lookup,
-                covered,
+                covered if covered > admission_after_seq else 0,
                 tuple(injected),
                 tuple(no_wake),
                 page.blocked_seq,

@@ -269,6 +269,12 @@ def accept_initial_cohort(
     """
     if type(bus) is not MessageBus or type(store) is not MutationStore:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
+    with bus.log.locked():
+        marker = bus.log._private_marker_unlocked()
+        if marker.root_id != wire_root_id:
+            raise IdentityConflict("cohort admission wire root changed")
+        if wire_seq <= marker.admission_after_seq:
+            raise IdentityConflict("historical source precedes the current admission floor")
     initial = bus.log.read_initial_cohort(wire_root_id, wire_seq)
     with store._transaction() as db:
         _assert_schema(db)

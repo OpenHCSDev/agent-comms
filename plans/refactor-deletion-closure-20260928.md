@@ -108,3 +108,19 @@ public-tail and missing-marker repair assertions. No live installation yet.
 D22 history rewrite, old reader removal, admission floor across runtime reset,
 and remaining current callers still belong to229/235. Round-two detailed
 assignments are in docs/refactor/round2/04-DISPATCH.md.
+
+## Admission authority and actual native path
+
+The current marker now requires admission_after_seq, separate from native proof.
+Cohort acceptance, foreground selection, ACP scheduling, resource claims and
+optional awareness honor it. Current source proof starts empty after the floor;
+rebuilding an index cannot invent a native receipt. 46 focused checks passed,
+including real SQLite reset/reopen and certified/plain source. Three additional
+checks passed using prepared real Pi, loopback provider and actual read/edit/
+write/bash tools, with a retained old pending source excluded and only fresh
+input executed. No live owners were changed. UNKNOWN-specific cutover and full
+D22 durable rewrite remain open, along with full installed acceptance.
+
+Final claim-admission guard and actual native rerun: 4 passed in3.70s. The
+intermediate rerun failed before launch because Ruff removed an imported pytest
+fixture; explicit fixture binding fixed it. Both receipts retained.
