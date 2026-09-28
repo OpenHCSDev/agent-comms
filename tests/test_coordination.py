@@ -10,8 +10,12 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
-
+from agent_comms.assignment_states import (
+    AssignmentState,
+    CompletedAssignment,
+    DeferredAssignment,
+    EngagedAssignment,
+)
 from agent_comms.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
@@ -19,12 +23,6 @@ from agent_comms.attempt_states import (
     PromptStartingAttempt,
     RetryingAttempt,
     SucceededAttempt,
-)
-from agent_comms.assignment_states import (
-    AssignmentState,
-    CompletedAssignment,
-    DeferredAssignment,
-    EngagedAssignment,
 )
 from agent_comms.coordination import (
     COORDINATION_SCHEMA_VERSION,
@@ -46,10 +44,10 @@ from agent_comms.coordination import (
     ResponseObligation,
     SchemaVersionError,
     WakeAssignment,
+    assignment_transition_allowed,
     attempt_phase_transition_allowed,
     attempt_retry_identity_allowed,
     canonical_publication_key,
-    assignment_transition_allowed,
     execution_status_transition_allowed,
     obligation_transition_allowed,
     replay_transition_allowed,
@@ -62,6 +60,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
 from agent_comms.obligation_states import (
     DeferredResponse,
@@ -591,10 +590,10 @@ def test_database_version_privacy_and_reopen(db):
 
 def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):
     script = """import sys
-from agent_comms.coordination import CoordinationStore
+from agent_comms.coordination import CoordinationStore, COORDINATION_SCHEMA_VERSION
 sys.stdin.buffer.read(1)
 with CoordinationStore(sys.argv[1]) as store:
-    assert store.schema_version == 2
+    assert store.schema_version == COORDINATION_SCHEMA_VERSION
     assert store._connection.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
 print("ready")
 """
@@ -1890,7 +1889,7 @@ def test_publication_sql_validator_two_stores_raw_connection_and_process(db):
         )
     # A fresh process must install the function before a direct SQL write.
     script = """import sqlite3, sys
-from agent_comms.coordination import CoordinationStore
+from agent_comms.coordination import CoordinationStore, COORDINATION_SCHEMA_VERSION
 with CoordinationStore(sys.argv[1]) as store:
     db = store._connection
     assert db.execute("SELECT coordination_validate_publication_intent("

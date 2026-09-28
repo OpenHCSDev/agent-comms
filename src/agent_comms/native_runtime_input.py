@@ -6,14 +6,14 @@ store at a quiet cutover; admission remains fenced by the root authority.
 
 from __future__ import annotations
 
-from abc import ABC
 from dataclasses import dataclass, field
 from typing import Literal
 
+from .coordination import Executions, Participants, WakeClaims
 from .typed_table import Column, TypedTable
 
 
-class NativeRuntimeTable(ABC):
+class NativeRuntimeTable:
     """Capability identifying the native-runtime schema's declared tables."""
 
 
@@ -26,7 +26,8 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable):
     @classmethod
     def triggers(cls) -> dict[str, str]:
         return {
-            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_{operation.lower()}_guard "
+            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
+            f"{operation.lower()}_guard "
             f"BEFORE {operation} ON {cls.declared_name} "
             "BEGIN SELECT RAISE(ABORT,'native runtime schema is frozen'); END"
             for operation in ("UPDATE", "DELETE")
@@ -43,13 +44,13 @@ class NativeRuntimeInput(NativeRuntimeTable, TypedTable):
         }
     )
     stage: Literal["triage", "full"]
-    assignment_id: str = field(metadata={"sql": Column(references=("wake_claims", "claim_id"))})
+    assignment_id: str = field(metadata={"sql": Column(references=(WakeClaims, "claim_id"))})
     execution_id: str | None = field(
-        metadata={"sql": Column(references=("executions", "execution_id"))}
+        metadata={"sql": Column(references=(Executions, "execution_id"))}
     )
     attempt_ordinal: int | None
     owner_lookup: str = field(
-        metadata={"sql": Column(references=("participants", "participant_lookup"))}
+        metadata={"sql": Column(references=(Participants, "participant_lookup"))}
     )
     owner_thread: str
     owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
@@ -72,7 +73,8 @@ class NativeRuntimeInput(NativeRuntimeTable, TypedTable):
         "(session_id IS NULL AND session_file IS NULL AND session_entry_id IS NULL "
         "AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
-        "AND length(session_file)>0 AND session_entry_id IS NOT NULL AND length(session_entry_id)>0 "
+        "AND length(session_file)>0 AND session_entry_id IS NOT NULL AND "
+        "length(session_entry_id)>0 "
         "AND request_generation>0 AND length(llm_context_digest)=64)",
         "stage='triage' OR verdict IS NULL",
     )
@@ -91,8 +93,10 @@ class NativeRuntimeInput(NativeRuntimeTable, TypedTable):
                 OR NEW.owner_thread IS NOT OLD.owner_thread
                 OR NEW.owner_generation IS NOT OLD.owner_generation
                 OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
-                OR (OLD.sent_owner_admission_generation IS NOT NULL
-                    AND NEW.sent_owner_admission_generation IS NOT OLD.sent_owner_admission_generation)
+                OR (OLD.sent_owner_admission_generation
+                    IS NOT NULL
+                    AND NEW.sent_owner_admission_generation
+                        IS NOT OLD.sent_owner_admission_generation)
                 OR (NEW.sent_owner_admission_generation IS NULL AND NEW.session_id IS NOT NULL)
                 OR OLD.session_id IS NOT NULL
                 OR (NEW.session_id IS NULL AND NEW.sent_owner_admission_generation IS NULL)
@@ -113,9 +117,7 @@ class CurrentNativeCursor(NativeRuntimeTable, TypedTable):
         }
     )
     recipient_lookup: str = field(
-        metadata={
-            "sql": Column(primary_key=True, references=("participants", "participant_lookup"))
-        }
+        metadata={"sql": Column(primary_key=True, references=(Participants, "participant_lookup"))}
     )
     owner_thread: str = field(metadata={"sql": Column(check="owner_thread<>''")})
     owner_generation: int = field(
@@ -140,7 +142,8 @@ class CurrentNativeCursor(NativeRuntimeTable, TypedTable):
     checks = (
         "(injected_seq=0 AND input_id IS NULL AND assignment_id IS NULL AND stage IS NULL "
         "AND session_id IS NULL AND request_generation IS NULL) OR "
-        "(injected_seq>0 AND input_id IS NOT NULL AND assignment_id IS NOT NULL AND stage IS NOT NULL "
+        "(injected_seq>0 AND input_id IS NOT NULL AND assignment_id IS NOT NULL "
+        "AND stage IS NOT NULL "
         "AND session_id IS NOT NULL AND request_generation>0)",
     )
 

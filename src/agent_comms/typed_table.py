@@ -48,8 +48,13 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         if get_origin(declared) is not Literal:
             return ()
         choices = ", ".join(
-            "'" + value.replace("'", "''") + "'" if isinstance(value, str)
-            else str(int(value)) if isinstance(value, bool) else str(value)
+            (
+                "'" + value.replace("'", "''") + "'"
+                if isinstance(value, str)
+                else str(int(value))
+                if isinstance(value, bool)
+                else str(value)
+            )
             for value in get_args(declared)
         )
         return (f"{_identifier(column)} IN ({choices})",)
@@ -121,6 +126,27 @@ class BooleanStorage(SqlStorage):
         return bool(value)
 
 
+class FamilyClassStorage(SqlStorage):
+    """Names in SQLite decode to the existing declared family exactly once."""
+
+    sql_type = "TEXT"
+
+    @classmethod
+    def accepts(cls, annotation: object) -> bool:
+        args = get_args(annotation)
+        return get_origin(annotation) is type and bool(args) and issubclass(args[0], DeclaredFamily)
+
+
+class ExactStorage(SqlStorage):
+    """SQLite ANY retains the input storage class without affinity coercion."""
+
+    sql_type = "ANY"
+
+    @classmethod
+    def accepts(cls, annotation: object) -> bool:
+        return False  # Explicit field capability, never an inferred representation.
+
+
 class JsonStorage(SqlStorage):
     sql_type = "TEXT"
 
@@ -151,10 +177,13 @@ class Column:
     """Constraints on a field; its name and type remain on the dataclass field."""
 
     primary_key: bool = False
+    auto_increment: bool = False
     unique: bool = False
     references: tuple[type[TypedTable], str] | None = None
     check: str | None = None
     index: bool = False
+    generated: str | None = None
+    storage: type[SqlStorage] | None = None
 
 
 @dataclass(frozen=True)
@@ -172,6 +201,7 @@ class ForeignKey:
     target: type[TypedTable]
     target_columns: tuple[str, ...]
     deferred: bool = False
+    on_delete: str | None = None
 
     def sql(self, owner: type[TypedTable]) -> str:
         if len(self.columns) != len(self.target_columns):
@@ -180,6 +210,7 @@ class ForeignKey:
             f"FOREIGN KEY ({owner._column_list(self.columns)}) "
             f"REFERENCES {_identifier(self.target.declared_name)} "
             f"({self.target._column_list(self.target_columns)})"
+            + (f" ON DELETE {self.on_delete}" if self.on_delete else "")
             + (" DEFERRABLE INITIALLY DEFERRED" if self.deferred else "")
         )
 
@@ -187,6 +218,7 @@ class ForeignKey:
 @dataclass(frozen=True)
 class _Field:
     name: str
+    init: bool
     annotation: object
     nullable: bool
     storage: type[SqlStorage]
@@ -215,13 +247,13 @@ class TypedRow:
         return tuple(
             _Field(
                 item.name,
+                item.init,
                 hints[item.name],
                 _base_type(hints[item.name])[1],
-                SqlStorage.for_type(hints[item.name]),
+                item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
                 item.metadata.get("sql", Column()),
             )
             for item in fields(cls)
-            if item.init
         )
 
     @classmethod
@@ -237,10 +269,15 @@ class TypedRow:
         if len(set(names)) != len(names) or set(names) != set(cls.columns()):
             raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
         positions = {name: index for index, name in enumerate(names)}
-        return [
-            cls(**{item.name: item.decode(row[positions[item.name]]) for item in cls._fields()})
-            for row in cursor
-        ]
+        result = []
+        for row in cursor:
+            values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
+            instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
+            for item in cls._fields():
+                if not item.init:
+                    object.__setattr__(instance, item.name, values[item.name])
+            result.append(instance)
+        return result
 
 
 class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
@@ -272,9 +309,16 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
     def schema_objects(cls) -> dict[str, str]:
         definitions = []
         keys = tuple(item.name for item in cls._fields() if item.column.primary_key)
+        auto_keys = tuple(item.name for item in cls._fields() if item.column.auto_increment)
+        if auto_keys and (auto_keys != keys or len(keys) != 1 or cls.without_rowid):
+            raise TypeError("AUTOINCREMENT requires one rowid primary key")
         for item in cls._fields():
             column = item.column
             sql = f"{_identifier(item.name)} {item.storage.sql_type}"
+            if column.auto_increment:
+                sql += " PRIMARY KEY AUTOINCREMENT"
+            if column.generated is not None:
+                sql += f" GENERATED ALWAYS AS ({column.generated}) STORED"
             if not item.nullable or column.primary_key:
                 sql += " NOT NULL"
             if column.unique:
@@ -288,7 +332,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
             if column.check:
                 sql += f" CHECK ({column.check})"
             definitions.append(sql)
-        if keys:
+        if keys and not auto_keys:
             definitions.append(f"PRIMARY KEY ({cls._column_list(keys)})")
         elif cls.without_rowid:
             raise TypeError("WITHOUT ROWID requires a declared primary key")
@@ -358,11 +402,12 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
         return next(iter(rows), None)
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+        writable = tuple(item for item in self._fields() if item.column.generated is None)
         return db.execute(
             f"INSERT INTO {_identifier(self.declared_name)} "
-            f"({self._column_list(self.columns())}) "
-            f"VALUES ({', '.join('?' for _ in self._fields())})",
-            tuple(item.encode(getattr(self, item.name)) for item in self._fields()),
+            f"({self._column_list(tuple(item.name for item in writable))}) "
+            f"VALUES ({', '.join('?' for _ in writable)})",
+            tuple(item.encode(getattr(self, item.name)) for item in writable),
         )
 
     @classmethod
@@ -376,6 +421,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
     ) -> sqlite3.Cursor:
         cls._column_list(tuple(changes))
         selected = tuple(item for item in cls._fields() if item.name in changes)
+        if any(item.column.generated is not None for item in selected):
+            raise ValueError("Generated columns cannot be updated")
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "
             + ", ".join(f"{_identifier(item.name)}=?" for item in selected)

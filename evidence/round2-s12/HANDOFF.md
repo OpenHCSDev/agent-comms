@@ -1,3 +1,57 @@
+# S12 continuation — active, not merge-ready closure
+
+Foundation #230 merged at reviewed cca3b282. Current branch:
+`refactor/round2-s12-caller-closure`.
+
+## Stable NativeRuntimeInput API for Pascal
+
+```python
+from agent_comms.native_runtime_input import NativeRuntimeInput
+reserved = NativeRuntimeInput.one(db, input_id=input_id)
+# reserved is NativeRuntimeInput or None
+# reserved.assignment_id
+# reserved.sent_owner_admission_generation
+```
+
+All other native input fields retain typed current meaning. The derived physical
+table is `native_runtime_input`; schema version 4. Current cursor table is
+`current_native_cursor`, fields owner_admission_generation and assignment_id.
+`history_views.py` (parent) must use native_runtime_input and n.assignment_id.
+`selected_tool_broker.py` (Pascal S10) must use the API above. No aliases provided.
+
+## Current local evidence
+
+197 behavior/family/fast-guard checks passed, one skipped. Receipt
+closure-prepublish.log. Tests exercise real SQLite and filesystem/process boundaries;
+native Pi replies are synthetic here. No provider/installed activation claim.
+The first run found one test hardcoding prior schema_version=2; the concurrency
+behavior now compares the owner constant. Six fast marked guards passed locally
+(closure-guards-initial.log). Full caller closure is still in progress.
+
+## Runtime cutover exact scope
+
+- `coordination.sqlite3`: schema_meta, participants, participant_aliases,
+  owner_generations, executions, attempts, current_executions, wake_claims,
+  execution_claims, replay_assessments, obligations, publication_intents,
+  publication_receipts, connectivity, recovery_audit; native_runtime_schema_meta,
+  native_runtime_input, current_native_cursor. Reset the runtime file under the
+  parent's quiet lock after durable admission_after_seq is established.
+- `native_prompt_bindings.sqlite3`: snapshot_meta, prompt_binding. Parent owns
+  reset of the private snapshot and pending intent protocol, preserving UNKNOWN
+  as history; this code never repairs/replays uncertain prompts.
+- Durable todos/history are not reset by this work. Further tables will be
+  classified as their callers migrate.
+
+Parent #229/6fd9857 owns floor/D22. Preserve required admission_after_seq;
+acceptance/selection strictly >H, empty native proof 0. Canonical plain history
+<=H is legal history, never a new wake. No invented old recipients or parallel
+migration store. Installed UNKNOWN reset and durable rewrite proof remain parent
+work. This branch performs no live writes/restarts/resets/installation.
+
+---
+
+## Prior foundation receipts
+
 # S12 A13 foundation (surface still open)
 
 No production table or stored data is changed by this foundation. It provides

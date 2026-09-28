@@ -26,9 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .typed_table import Column, TypedRow, TypedTable
-
 from .coordination_store import IdentityConflict
+from .typed_table import Column, TypedRow, TypedTable
 
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
@@ -194,7 +193,8 @@ class SnapshotMeta(TypedTable):
     @classmethod
     def triggers(cls) -> dict[str, str]:
         return {
-            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_{operation.lower()}_guard "
+            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
+            f"{operation.lower()}_guard "
             f"BEFORE {operation} ON {cls.declared_name} "
             "BEGIN SELECT RAISE(ABORT,'snapshot schema is immutable'); END"
             for operation in ("UPDATE", "DELETE")

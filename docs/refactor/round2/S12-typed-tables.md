@@ -76,31 +76,44 @@ A13 is merged; every table in S12's scope has a row type, derived DDL and typed 
 
 ## Current implementation ownership
 
-S12 owns branch `refactor/round2-s12-typed-tables`, worktree
-`~/wt/comms-refactor2-s12-20260928`. Draft #230 supplies A13
-in `typed_table.py`; the whole surface remains open. A13 is a new shared
-foundation, so this first commit adds source; deletion follows table adoption.
+Foundation [#230](https://github.com/OpenHCSDev/agent-comms/pull/230) merged
+at reviewed `cca3b282`. Full S12 is **in progress**, owned by
+`refactor/round2-s12-caller-closure` in `~/wt/comms-refactor2-s12-20260928`.
+The caller-closure draft follows #230; it must finish all remaining stores,
+callers and deletion guards before S12 is complete.
 
-- **A13 API:** frozen dataclass subclasses of `TypedTable` own table names derived
-  by `DeclaredFamily`; `Column` field metadata and `Index` class metadata derive
-  DDL, constraints and indexes. `create`, `select`, `insert`, `update` use that
-  declaration; `TypedRow.read(cursor)` handles typed query projections.
-- **Store classification:** A13 owns no file, transaction, connection or durable
-  state. Its tests create disposable SQLite databases under this worktree.
-  No reset or durable cutover is needed to install the foundation alone.
-- **Dependencies:** Pascal #226 owns native proof, response authority and claim
-  caller changes; #226 merged and this branch rebased onto it. S9 owns
-  compaction; S10 owns tool broker adoption; L0 owns its file migrations. These
-  consumers adopt this API after the foundation merges.
-- **Remaining S12:** declare `NativeRuntimeInput`; migrate all unowned tables,
-  joins, reads, inserts, updates and callers; delete old DDL and mapper tests;
-  enforce guards with zero exceptions in every migrated file. Runtime tables
-  reset in the parent's quiet activation; durable histories remain unchanged
-  absent an explicit one-shot cutover. Parent owns that operation.
-- **Acceptance:** local real SQLite tests cover strict boundary decoding,
-  persistence after reopen, transactions, references, constraints and new row
-  declarations. Production path acceptance must be performed after actual
-  consumer migrations; foundation tests do not establish full S12 readiness.
+- **A13 API:** frozen dataclass subclasses of `TypedTable` own table names,
+  columns, strict reads/writes, constraints, references, indexes and triggers.
+  `TypedRow.read(cursor)` decodes query projections. `one(db, **keys)` returns
+  one declared row or None. Generated fields cannot be written.
+- **Implemented continuation:** native input/cursor declarations and readers,
+  prompt binding declarations, private sidecar metadata, and 15 coordinator
+  table declarations replace their handwritten DDL. Coordinator mutation
+  callers and rich lifecycle row consolidation remain in progress.
+- **S10 dependency API:** `NativeRuntimeInput.one(db, input_id=...)`; attributes
+  include `assignment_id`, `sent_owner_admission_generation`, execution/owner
+  identity, stage and native proof fields. Physical table `native_runtime_input`.
+  Pascal owns selected_tool_broker.py adoption. Parent owns history_views.py.
+- **S9 dependency:** compaction owners adopt A13 after #230. No changes to
+  their files without handoff.
+- **Runtime reset files:** `coordination.sqlite3` (whole coordinator runtime,
+  including 15 core tables, native_runtime_schema_meta, native_runtime_input,
+  current_native_cursor); `native_prompt_bindings.sqlite3` (snapshot_meta and
+  prompt_binding, including its pending intent/lock protocol). Parent must
+  quiesce owners before resetting any of these; no reset was performed here.
+- **Durable stores:** todos and other durable stores remain unconverted in
+  this draft. Their data must be carried across once; never reset as runtime.
+- **Floor and D22:** parent #229 owns the required durable
+  WireMetadata.admission_after_seq. Preserve parent 6fd9857 on integration.
+  Selection and acceptance require seq > H. Current native proof stays 0
+  until actual post-floor coverage. Plain retained Message rows <= H are
+  history only; no invented old recipients or native proof.
+- **Local acceptance:** real SQLite coordinator/sidecar/binding behavior checks
+  include persistence, concurrent initialization, fsync failure and subprocess
+  crash negatives. Native binding tests use synthetic Pi results; they do not
+  establish installed provider acceptance. Parent owns real UNKNOWN/reset,
+  D22 history and fresh-message activation proof. S12 stays open until those
+  pass and every assigned caller/deletion guard closes.
 
 ### Reader closure in #230
 
@@ -114,8 +127,10 @@ scope automatically. Local family/guard/awareness checks: 25 passed.
 ### Reset admission requirement
 
 Parent owns D22 and quiet activation. Runtime reset must preserve operation
-semantics: capture pre-cutover highwater H, then seed the existing checkpoint /
-candidate / admission owners so native wake eligibility is strictly after H.
-UNKNOWN remains history, never a fresh attempt. No parallel migration store or
-old-schema reader may implement this. Until that real-path proof and the full
-table/caller migrations pass, S12 is open.
+semantics: capture pre-cutover highwater H in required durable
+WireMetadata.admission_after_seq, then accept/select only seq > H. The existing
+checkpoint is index progress, not a native proof cursor. UNKNOWN remains history,
+never a fresh attempt; genuine native coverage begins at 0. No parallel migration
+store or old-schema reader may implement this. Parent's current #229 also permits
+canonical plain history only <= H. The full table/caller migration and installed
+UNKNOWN/reset proof remain open.
