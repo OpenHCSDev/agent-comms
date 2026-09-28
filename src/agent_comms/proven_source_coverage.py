@@ -167,13 +167,13 @@ def read_proven_source_coverage(
             continue
         if type(decision) is not WakeDecision:
             raise IdentityConflict("unsupported frozen wake decision")
-        claims = [
-            claim
-            for claim in receipt.claims
-            if claim.recipient_lookup == recipient_lookup
-            and claim.recipient == recipient.canonical_thread
+        assignments = [
+            assignment
+            for assignment in receipt.assignments
+            if assignment.recipient_lookup == recipient_lookup
+            and assignment.recipient == recipient.canonical_thread
         ]
-        if len(claims) != 1 or claims[0].lifecycle.mode != decision.wake_mode:
+        if len(assignments) != 1 or assignments[0].lifecycle.mode != decision.wake_mode:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
         if not decision.wake_mode.active:
             blocked = seq  # PASSIVE has no native injection semantics.
@@ -206,7 +206,7 @@ def read_proven_source_coverage(
                     or stages["triage"].triage_result not in {"ignore", "full"}
                 )
             )
-            or any(proof.claim_id != claims[0].claim_id for proof in evidence)
+            or any(proof.assignment_id != assignments[0].assignment_id for proof in evidence)
         ):
             blocked = seq
             break

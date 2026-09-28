@@ -17,7 +17,7 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
+from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import MutationStore
 from agent_comms.threads import Thread
 
@@ -57,9 +57,9 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
             message = comms.messaging.send_initial_cohort("sender", "#team", "Please investigate @Alice")
             receipt = accept_initial_cohort(comms.bus, root_id, message.seq, coordinator).value
             assert receipt.member_count == 2
-            assert receipt.claim_count == 1
-            assert sealed_cohort_claims(coordinator, stable_thread_lookup(people["Alice"]))
-            assert sealed_cohort_claims(coordinator, stable_thread_lookup(people["Bob"])) == ()
+            assert receipt.assignment_count == 1
+            assert sealed_cohort_assignments(coordinator, stable_thread_lookup(people["Alice"]))
+            assert sealed_cohort_assignments(coordinator, stable_thread_lookup(people["Bob"])) == ()
 
             # Existing explicit resource claims are valid independent operations.
             # They neither consult nor reference the sealed N/K receipt. A

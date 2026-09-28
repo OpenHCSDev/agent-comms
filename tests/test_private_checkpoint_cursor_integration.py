@@ -76,9 +76,9 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    first_turn = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    first_turn = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number:04}-" + "x" * 8700)
@@ -100,9 +100,9 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
         assert comms.bus.log.path.read_bytes() == before
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
-    second_turn = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    second_turn = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
@@ -121,9 +121,9 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     bad, bad_calls = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(runtime, "run_native_pi_turn", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await runtime.run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        )
+        await runtime.SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
     assert len(bad_calls) == 1  # failed input is UNKNOWN; never retry it
     for number in range(101):
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
@@ -132,9 +132,9 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
         accept_initial_cohort(comms.bus, root_id, later.seq, store)
     good, good_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", good)
-    result = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    result = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert result is not None and result.cursor_status == "blocked_gap" and len(good_calls) == 1
     with MutationStore(str(root / "coordination.sqlite3")) as reopened:
         assert (
@@ -154,9 +154,9 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
-    turn = await runtime.run_one_sealed_claim(
-        root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-    )
+    turn = await runtime.SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    ).run()
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     original = checkpoint.append_private_bus_checkpoint_unlocked
 

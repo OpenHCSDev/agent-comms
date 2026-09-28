@@ -272,7 +272,7 @@ class TestThreadOps:
         assert wired.registry.snapshot().owner_generations["reserved"] > before
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
-    def test_reserved_worker_rejects_stale_launch_epoch(self, wired, monkeypatch):
+    def test_reserved_worker_rejects_stale_launch_generation(self, wired, monkeypatch):
         wired.threads.register(Thread(name="reserved", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_generations["reserved"]
         read_fd, write_fd = os.pipe()
@@ -291,7 +291,7 @@ class TestThreadOps:
     def test_long_valid_name_reservation_is_not_truncated(self, wired, monkeypatch):
         name = "n" * 257  # The old plaintext proof exceeded the 256-byte child read.
         wired.threads.register(Thread(name=name, tags=frozenset(), worktree="/tmp", pid=987654))
-        epoch = wired.registry.snapshot().owner_generations[name]
+        admission_generation = wired.registry.snapshot().owner_generations[name]
         read_fd, write_fd = os.pipe()
         proof = _owner_launch_proof(wired.registry.snapshot().owner_identity(name), 987654)
         assert len(proof) == 32
@@ -299,7 +299,7 @@ class TestThreadOps:
         os.close(write_fd)
         monkeypatch.setenv("AGENT_COMMS_RESERVATION_FD", str(read_fd))
         assert wired.owners.acquire_thread(name, owner_pid=987654).pid == 987654
-        assert wired.registry.snapshot().owner_generations[name] == epoch
+        assert wired.registry.snapshot().owner_generations[name] == admission_generation
 
     @pytest.mark.skipif(os.name != "posix", reason="inherited POSIX startup pipe")
     def test_name_exceeding_pipe_capacity_has_fixed_size_launch_proof(self, wired, monkeypatch):
@@ -471,18 +471,20 @@ class TestThreadOps:
         assert wired.registry.status("starting").stopped
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
-    def test_stop_rejects_same_pid_new_epoch_before_signal(self, wired, monkeypatch):
+    def test_stop_rejects_same_pid_new_generation_before_signal(self, wired, monkeypatch):
         wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().admission_generations["starting"]
         signals = []
 
-        def epoch_changed(self, thread, *, wait=True):
+        def generation_changed(self, thread, *, wait=True):
             if wait:
                 self.registry.register(thread, new_owner=True)  # Same PID, new process.
             return True
 
         monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", epoch_changed)
+        monkeypatch.setattr(
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", generation_changed
+        )
         monkeypatch.setattr(
             "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),
@@ -553,7 +555,9 @@ class TestThreadOps:
         assert wired.registry.status("owner").declared_name == "stopped"
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
-    def test_stop_accepts_attested_release_after_unrelated_epoch_change(self, wired, monkeypatch):
+    def test_stop_accepts_attested_release_after_unrelated_generation_change(
+        self, wired, monkeypatch
+    ):
         wired.threads.register(Thread(name="owner", tags=frozenset(), worktree="/tmp", pid=987654))
         monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
         monkeypatch.setattr(
@@ -630,17 +634,19 @@ class TestThreadOps:
         assert wired.registry.status("starting").active
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner socket proof")
-    def test_start_rejects_same_pid_new_epoch(self, wired, monkeypatch):
+    def test_start_rejects_same_pid_new_generation(self, wired, monkeypatch):
         wired.threads.register(Thread(name="starting", tags=frozenset(), worktree="/tmp", pid=987654))
         before = wired.registry.snapshot().owner_generations["starting"]
 
-        def epoch_changed(self, thread, *, wait=True):
+        def generation_changed(self, thread, *, wait=True):
             if wait:
                 self.registry.register(thread, new_owner=True)  # Same PID, later owner incarnation.
             return True
 
         monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", epoch_changed)
+        monkeypatch.setattr(
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", generation_changed
+        )
         with pytest.raises(RelationViolationError, match="epoch changed"):
             wired.owners.start("starting")
         assert wired.registry.snapshot().owner_generations["starting"] > before
@@ -697,19 +703,23 @@ class TestThreadOps:
         assert wired.registry.require("restart-b").pid == 987655
 
     @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner signaling")
-    def test_restart_rejects_same_pid_new_epoch_without_partial_signal(self, wired, monkeypatch):
+    def test_restart_rejects_same_pid_new_generation_without_partial_signal(
+        self, wired, monkeypatch
+    ):
         wired.threads.register(Thread(name="restart-a", tags=frozenset(), worktree="/tmp", pid=987654))
         wired.threads.register(Thread(name="restart-b", tags=frozenset(), worktree="/tmp", pid=987655))
         before = wired.registry.snapshot().admission_generations["restart-a"]
         signals = []
 
-        def epoch_changed(self, thread, *, wait=True):
+        def generation_changed(self, thread, *, wait=True):
             if wait and thread.name == "restart-a":
                 self.registry.register(thread, new_owner=True)
             return True
 
         monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._process_alive", lambda *args: True)
-        monkeypatch.setattr("agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", epoch_changed)
+        monkeypatch.setattr(
+            "agent_comms.owner_lifecycle.OwnerLifecycle._is_local_participant", generation_changed
+        )
         monkeypatch.setattr(
             "agent_comms.owner_lifecycle.OwnerLifecycle._signal_local_owner",
             staticmethod(lambda pid, sig: signals.append((pid, sig))),

@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .bus_publication import CommittedInitial
 from .cohort_schema import (
@@ -24,9 +24,15 @@ from .coordination import (
     RESOLVER_VERSION,
     IntegrityViolationError,
     SchemaVersionError,
-    WakeClaim,
+    WakeAssignment,
 )
-from .coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore, _claim
+from .coordination_store import (
+    AlreadyApplied,
+    Applied,
+    IdentityConflict,
+    MutationStore,
+    _assignment,
+)
 from .message_bus import MessageBus
 from .wake import NoWakeDecision, WakeDecision
 
@@ -39,12 +45,12 @@ class AcceptedCohort:
     wire_seq: int
     message_id: str
     member_count: int
-    claim_count: int
+    assignment_count: int = field(metadata={"wire_name": "claim_count"})
     accepted_at_ms: int
-    claims: tuple[WakeClaim, ...]
+    assignments: tuple[WakeAssignment, ...] = field(metadata={"wire_name": "claims"})
 
 
-def _claim_id(root: str, seq: int, lookup: str) -> str:
+def _assignment_id(root: str, seq: int, lookup: str) -> str:
     identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
     return "cohort-v1:" + hashlib.sha256(identity).hexdigest()
 
@@ -69,8 +75,10 @@ def _assert_schema(db: sqlite3.Connection) -> None:
         raise SchemaVersionError("private cohort schema is missing or drifted")
 
 
-def _expected_claims(initial: CommittedInitial, accepted_at_ms: int) -> tuple[WakeClaim, ...]:
-    result: list[WakeClaim] = []
+def _expected_assignments(
+    initial: CommittedInitial, accepted_at_ms: int
+) -> tuple[WakeAssignment, ...]:
+    result: list[WakeAssignment] = []
     for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True):
         if recipient.recipient_lookup != decision.recipient:
             raise IntegrityViolationError("bus decision does not match frozen N")
@@ -79,8 +87,10 @@ def _expected_claims(initial: CommittedInitial, accepted_at_ms: int) -> tuple[Wa
         if type(decision) is not WakeDecision:
             raise IntegrityViolationError("bus decision has an unsupported kind")
         result.append(
-            WakeClaim(
-                claim_id=_claim_id(initial.wire_root_id, initial.message.seq, decision.recipient),
+            WakeAssignment(
+                assignment_id=_assignment_id(
+                    initial.wire_root_id, initial.message.seq, decision.recipient
+                ),
                 recipient=recipient.canonical_thread,
                 recipient_lookup=decision.recipient,
                 wire_seq=initial.message.seq,
@@ -97,11 +107,11 @@ def _expected_claims(initial: CommittedInitial, accepted_at_ms: int) -> tuple[Wa
     return tuple(result)
 
 
-def _immutable_claim_matches(current: WakeClaim, expected: WakeClaim) -> bool:
+def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignment) -> bool:
     return current.lifecycle.mode == expected.lifecycle.mode and all(
         getattr(current, field) == getattr(expected, field)
         for field in (
-            "claim_id",
+            "assignment_id",
             "recipient",
             "recipient_lookup",
             "wire_seq",
@@ -140,7 +150,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
         )
     ):
         raise IdentityConflict("sealed cohort receipt conflicts with committed bus")
-    expected = _expected_claims(initial, row["accepted_at_ms"])
+    expected = _expected_assignments(initial, row["accepted_at_ms"])
     members = tuple(
         db.execute(
             "SELECT ordinal,claim_id,recipient_lookup FROM claim_batch_members "
@@ -149,7 +159,8 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
         )
     )
     if tuple(tuple(member) for member in members) != tuple(
-        (ordinal, claim.claim_id, claim.recipient_lookup) for ordinal, claim in enumerate(expected)
+        (ordinal, assignment.assignment_id, assignment.recipient_lookup)
+        for ordinal, assignment in enumerate(expected)
     ):
         raise IdentityConflict("sealed K claim members conflict with committed bus")
     deliveries = tuple(
@@ -159,7 +170,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
             (initial.wire_root_id, message.seq),
         )
     )
-    selected = {claim.recipient_lookup: claim.claim_id for claim in expected}
+    selected = {assignment.recipient_lookup: assignment.assignment_id for assignment in expected}
     if tuple(tuple(delivery) for delivery in deliveries) != tuple(
         (
             ordinal,
@@ -171,15 +182,15 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
         for ordinal, recipient in enumerate(audience.recipients)
     ):
         raise IdentityConflict("sealed N delivery receipts conflict with committed bus")
-    current: list[WakeClaim] = []
+    current: list[WakeAssignment] = []
     for accepted in expected:
         db_row = db.execute(
-            "SELECT * FROM wake_claims WHERE claim_id=?", (accepted.claim_id,)
+            "SELECT * FROM wake_claims WHERE claim_id=?", (accepted.assignment_id,)
         ).fetchone()
         if db_row is None:
             raise IdentityConflict("sealed cohort claim is missing")
-        actual = _claim(db_row)
-        if not _immutable_claim_matches(actual, accepted):
+        actual = _assignment(db_row)
+        if not _immutable_assignment_matches(actual, accepted):
             raise IdentityConflict("sealed cohort claim immutable facts conflict")
         current.append(actual)
     # A singleton claim for an explicitly no-wake observer cannot be accepted
@@ -206,7 +217,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> Accep
 
 def _record_optional_owner_generations(
     db: sqlite3.Connection,
-    claims: tuple[WakeClaim, ...],
+    assignments: tuple[WakeAssignment, ...],
     wire_root_id: str,
     wire_seq: int,
 ) -> None:
@@ -219,21 +230,21 @@ def _record_optional_owner_generations(
     db.execute("SAVEPOINT optional_awareness_claims")
     try:
         assert_optional_awareness_schema(db)
-        for claim in claims:
+        for assignment in assignments:
             current = db.execute(
                 "SELECT owner_thread,generation FROM owner_generations WHERE owner_lookup=?",
-                (claim.recipient_lookup,),
+                (assignment.recipient_lookup,),
             ).fetchone()
-            if current is None or current["owner_thread"] != claim.recipient:
+            if current is None or current["owner_thread"] != assignment.recipient:
                 raise IdentityConflict("optional claim generation has no current canonical owner")
             db.execute(
                 "INSERT INTO awareness_claim_generations VALUES(?,?,?,?,?,?)",
                 (
-                    claim.claim_id,
+                    assignment.assignment_id,
                     wire_root_id,
                     wire_seq,
-                    claim.recipient_lookup,
-                    claim.recipient,
+                    assignment.recipient_lookup,
+                    assignment.recipient,
                     current["generation"],
                 ),
             )
@@ -285,7 +296,7 @@ def accept_initial_cohort(
             ):
                 raise IdentityConflict("frozen recipient has no durable participant identity")
         accepted_at = store._now()
-        expected = _expected_claims(initial, accepted_at)
+        expected = _expected_assignments(initial, accepted_at)
         db.execute(
             "INSERT INTO claim_batch_receipts (wire_root_id,wire_seq,message_id,exact_target,"
             "envelope_digest,audience_digest,decisions_digest,member_count,claim_count,"
@@ -307,39 +318,47 @@ def accept_initial_cohort(
                 accepted_at,
             ),
         )
-        for claim in expected:
+        for assignment in expected:
             db.execute(
                 "INSERT INTO wake_claims(claim_id,recipient,recipient_lookup,wire_seq,"
                 "message_id,exact_target,audience,wake_mode,triage_verdict,disposition,"
                 "resolver_version,policy_version,accepted_at_ms,updated_at_ms,"
                 "revision,execution_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    claim.claim_id,
-                    claim.recipient,
-                    claim.recipient_lookup,
-                    claim.wire_seq,
-                    claim.message_id,
+                    assignment.assignment_id,
+                    assignment.recipient,
+                    assignment.recipient_lookup,
+                    assignment.wire_seq,
+                    assignment.message_id,
                     None,
-                    claim.audience.value,
-                    claim.lifecycle.mode.declared_name,
+                    assignment.audience.value,
+                    assignment.lifecycle.mode.declared_name,
                     None,
-                    claim.lifecycle.declared_name,
-                    claim.resolver_version,
-                    claim.policy_version,
-                    claim.accepted_at_ms,
-                    claim.updated_at_ms,
+                    assignment.lifecycle.declared_name,
+                    assignment.resolver_version,
+                    assignment.policy_version,
+                    assignment.accepted_at_ms,
+                    assignment.updated_at_ms,
                     1,
                     None,
                 ),
             )
-        for ordinal, claim in enumerate(expected):
+        for ordinal, assignment in enumerate(expected):
             db.execute(
                 "INSERT INTO claim_batch_members VALUES (?,?,?,?,?)",
-                (wire_root_id, wire_seq, ordinal, claim.claim_id, claim.recipient_lookup),
+                (
+                    wire_root_id,
+                    wire_seq,
+                    ordinal,
+                    assignment.assignment_id,
+                    assignment.recipient_lookup,
+                ),
             )
-        selected = {claim.recipient_lookup: claim.claim_id for claim in expected}
+        selected = {
+            assignment.recipient_lookup: assignment.assignment_id for assignment in expected
+        }
         for ordinal, recipient in enumerate(initial.audience.recipients):
-            claim_id = selected.get(recipient.recipient_lookup)
+            assignment_id = selected.get(recipient.recipient_lookup)
             db.execute(
                 "INSERT INTO cohort_delivery_receipts VALUES (?,?,?,?,?,?,?)",
                 (
@@ -348,8 +367,8 @@ def accept_initial_cohort(
                     ordinal,
                     recipient.recipient_lookup,
                     recipient.canonical_thread,
-                    "selected" if claim_id is not None else "unmentioned_observer",
-                    claim_id,
+                    "selected" if assignment_id is not None else "unmentioned_observer",
+                    assignment_id,
                 ),
             )
         _record_optional_owner_generations(db, expected, wire_root_id, wire_seq)
@@ -360,9 +379,9 @@ def accept_initial_cohort(
         return Applied(_receipt_matches(db, initial))
 
 
-def sealed_cohort_claims(
+def sealed_cohort_assignments(
     store: MutationStore, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100
-) -> tuple[WakeClaim, ...]:
+) -> tuple[WakeAssignment, ...]:
     """Bounded receipt-backed projection. Never pages legacy singleton claims."""
     if (
         type(after_seq) is not int
@@ -375,7 +394,7 @@ def sealed_cohort_claims(
         db = store._connection
         _assert_schema(db)
         return tuple(
-            _claim(row)
+            _assignment(row)
             for row in db.execute(
                 "SELECT c.* FROM wake_claims c "
                 "JOIN claim_batch_members m ON m.claim_id=c.claim_id "

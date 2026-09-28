@@ -283,7 +283,7 @@ def verify_sent_full_input(
             row["verdict"],
         ) != (
             "full",
-            admission.wake_claim_id,
+            admission.wake_assignment_id,
             admission.execution_id,
             admission.attempt_ordinal,
             admission.recipient_lookup,

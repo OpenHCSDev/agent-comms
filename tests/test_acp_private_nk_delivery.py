@@ -471,7 +471,7 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
     assert comms.registry.require("beta").name == "beta"
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         person = store.participant(lookup)
-    assert person.owner_thread == "beta" and person.generation == 3
+    assert person.owner_thread == "beta" and person.participant_generation == 3
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send_message("sender", "beta", "not published after uncertain rename")

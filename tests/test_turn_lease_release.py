@@ -19,7 +19,7 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
     def fail_after_replacement(_activity):
         original = comms.registry.require("owner")
         assert comms.registry.release_turn(original.turn_lease)[0]
-        successor, _ = comms.registry.claim_local_turn("owner", "same-id")
+        successor, _ = comms.registry.lease_local_turn("owner", "same-id")
         replacement.append(successor.turn_lease)
         raise OSError("activity publication failed")
 

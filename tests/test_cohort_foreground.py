@@ -217,7 +217,10 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         assert result is not None and result.response_message_id
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
         claimed = Comms(root).bus.log.claim_projection()[str(resource)]
-        assert claimed.admission is not None and claimed.admission.wake_claim_id == result.claim_id
+        assert (
+            claimed.admission is not None
+            and claimed.admission.wake_assignment_id == result.assignment_id
+        )
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
 
 
@@ -474,8 +477,8 @@ from pathlib import Path
 from agent_comms import coordinated_runtime as r
 r._trusted_package = lambda _: None
 try:
-    asyncio.run(r.run_one_sealed_claim(Path(sys.argv[1]), wire_root_id=sys.argv[2],
-        owner_name="beta", native_package=Path(sys.argv[1]), opt_in=True))
+    asyncio.run(r.SelectedExecution(root=Path(sys.argv[1]), wire_root_id=sys.argv[2],
+        owner_name="beta", native_package=Path(sys.argv[1]), opt_in=True).run())
 except Exception as error:
     print(type(error).__name__)
 """

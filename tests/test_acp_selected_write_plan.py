@@ -21,7 +21,7 @@ from agent_comms.cohort_foreground import _accept_visible_initials
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import sealed_cohort_claims
+from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.message_bus import MessageBus
@@ -369,7 +369,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             assert owner.owner == "beta" and owner.admission is not None
             with MutationStore(str(root / "coordination.sqlite3")) as store:
                 assert (
-                    store.claim(owner.admission.wake_claim_id).lifecycle.declared_name
+                    store.assignment(owner.admission.wake_assignment_id).lifecycle.declared_name
                     == "completed"
                 )
                 assert (
@@ -378,7 +378,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                     ).fetchone()[0]
                     == 1
                 )
-                assert sealed_cohort_claims(store, stable_thread_lookup(61002.0)) == ()
+                assert sealed_cohort_assignments(store, stable_thread_lookup(61002.0)) == ()
         finally:
             if attached is not None:
                 await attached.shutdown()

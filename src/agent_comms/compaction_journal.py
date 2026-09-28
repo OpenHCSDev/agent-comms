@@ -375,7 +375,7 @@ class CompactionJournal:
         owner_created_at: str,
         owner_lookup: str,
         owner_generation: int,
-        admission_epoch: int,
+        admission_generation: int,
     ) -> None:
         """Persist exact O_EXCL new-session coverage under the caller's owner locks.
 
@@ -401,8 +401,8 @@ class CompactionJournal:
             or not owner_created_at
             or type(owner_generation) is not int
             or owner_generation <= 0
-            or type(admission_epoch) is not int
-            or admission_epoch <= 0
+            or type(admission_generation) is not int
+            or admission_generation <= 0
         ):
             raise CompactionJournalError("Fresh-session owner or private location differs")
         try:
@@ -436,7 +436,7 @@ class CompactionJournal:
                         owner_created_at,
                         owner_lookup,
                         owner_generation,
-                        admission_epoch,
+                        admission_generation,
                         fresh.creator_pid,
                     ),
                 )
@@ -452,7 +452,7 @@ class CompactionJournal:
             owner_created_at,
             owner_lookup,
             owner_generation,
-            admission_epoch,
+            admission_generation,
             fresh.creator_pid,
         )
 
@@ -463,7 +463,7 @@ class CompactionJournal:
         *,
         operation_id: str | None = None,
         fresh_session: FreshPrivateSession | None = None,
-        admission_epoch: int | None = None,
+        admission_generation: int | None = None,
     ) -> str:
         """Durably reserve BEFORE any selected Pi RPC send or auth side effect.
 
@@ -497,7 +497,7 @@ class CompactionJournal:
                 )
             fresh_session.verify_saved_identity()
             if fresh_session.path != Path(canonical) or (
-                admission_epoch is not None and type(admission_epoch) is not int
+                admission_generation is not None and type(admission_generation) is not int
             ):
                 raise CompactionJournalError("Fresh private selected identity changed")
         if (
@@ -561,7 +561,9 @@ class CompactionJournal:
                         or witness.get("ownerCreatedAt") != coverage[5]
                         or Path(canonical).parent.name != coverage[6]
                         or witness.get("ownerPid") != coverage[9]
-                        or (admission_epoch is not None and admission_epoch != coverage[8])
+                        or (
+                            admission_generation is not None and admission_generation != coverage[8]
+                        )
                     ):
                         raise CompactionJournalError("Fresh private owner coverage differs")
                     fresh_session.verify_saved_identity()

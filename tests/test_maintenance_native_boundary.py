@@ -13,8 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_store import MutationStore
 from agent_comms.errors import RelationViolationError
 from maintenance_control_fixture import FixtureMaintenanceControl
-from test_coordinated_runtime import _root
-
+from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 @pytest.mark.asyncio
 async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path) -> None:
@@ -37,7 +36,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path)
         def __init__(self, response: bytes = b""):
             self.response = response
 
-        async def readline(self) -> bytes:
+        async def readuntil(self, separator: bytes) -> bytes:
             response, self.response = self.response, b""
             if response:
                 # The real coordinator's registry turn claim and get_state
@@ -71,6 +70,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path)
         }
 
         class Process:
+            pid = 999999999  # Never signaled: this stream fixture is already exited.
             stdin = Stdin()
             stdout = Reader((json.dumps(reply) + "\n").encode())
             stderr = Reader()
@@ -103,9 +103,9 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path)
         patch.object(native_pi, "send_fenced_prompt", fake_raw_send),
         pytest.raises(RelationViolationError, match="Maintenance"),
     ):
-        await runtime.run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        )
+        await runtime.SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(pause_receipts) == 1 and pause_receipts[0].phase == "paused"
     assert [item["type"] for item in writes] == ["get_state"]
     with MutationStore(str(root / "coordination.sqlite3")) as store:

@@ -71,15 +71,15 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         goal=Goal("task", "goal"),
     )
     registry.register(owner)
-    owner, epoch = registry.live_owner_with_generation("owner")
-    owner, epoch = registry.claim_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=epoch
+    owner, owner_generation = registry.live_owner_with_generation("owner")
+    owner, owner_generation = registry.lease_live_turn_with_generation(
+        owner, "turn", expected_owner_generation=owner_generation
     )
     bridge = OwnerCompactionCommit(tmp_path / "registry.json", Path(PACKAGE))
     # Capture once BEFORE each test's summary/invalidations, never at commit.
-    source = bridge.capture_source(owner, epoch, witness)
+    source = bridge.capture_source(owner, owner_generation, witness)
     bridge.commit = partial(bridge.commit, source=source)
-    return bridge, owner, epoch, witness
+    return bridge, owner, owner_generation, witness
 
 
 def entries(witness):
@@ -104,8 +104,8 @@ def test_compaction_child_refuses_external_helper_before_execution(native, tmp_p
 
 
 def test_native_file_operations_survive_journaled_commit(native):
-    bridge, owner, epoch, witness = native
-    source = bridge.capture_source(owner, epoch, witness)
+    bridge, owner, owner_generation, witness = native
+    source = bridge.capture_source(owner, owner_generation, witness)
     usage = {
         "input": 12,
         "output": 9,
@@ -117,7 +117,7 @@ def test_native_file_operations_survive_journaled_commit(native):
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
-        epoch,
+        owner_generation,
         witness,
         "Synthetic summary with file evidence",
         42,
@@ -160,12 +160,12 @@ console.log(JSON.stringify(prepared && computeFileLists(prepared.fileOps)));
 
 
 def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
-    bridge, owner, epoch, witness = native
-    source = bridge.capture_source(owner, epoch, witness)
+    bridge, owner, owner_generation, witness = native
+    source = bridge.capture_source(owner, owner_generation, witness)
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
-        epoch,
+        owner_generation,
         witness,
         "summary",
         42,
@@ -198,8 +198,8 @@ def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
 
 @pytest.mark.parametrize("alter", ["details", "usage"])
 def test_native_metadata_digest_refuses_changed_transport_before_write(native, alter):
-    bridge, owner, epoch, witness = native
-    source = bridge.capture_source(owner, epoch, witness)
+    bridge, owner, owner_generation, witness = native
+    source = bridge.capture_source(owner, owner_generation, witness)
     original = bridge._call
     before = Path(witness.session_file).read_bytes()
     usage = {
@@ -224,7 +224,7 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
-        epoch,
+        owner_generation,
         witness,
         "summary",
         42,
@@ -236,14 +236,14 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
     assert Path(witness.session_file).read_bytes() == before
     bridge._call = original
     assert (
-        bridge.reconcile(owner, epoch, operation.commit_id).state.declared_name
+        bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
         == "aborted-no-write"
     )
 
 
 def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
-    bridge, owner, epoch, witness = native
-    source = bridge.capture_source(owner, epoch, witness)
+    bridge, owner, owner_generation, witness = native
+    source = bridge.capture_source(owner, owner_generation, witness)
     original = bridge._call
 
     def changed_transport(fd, request, timeout, retained_fds=()):
@@ -260,7 +260,7 @@ def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
-        epoch,
+        owner_generation,
         witness,
         "summary",
         42,
@@ -271,13 +271,16 @@ def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
     assert entries(witness)[-1]["details"]["readFiles"] == ["src/other.py"]
     assert bridge.journal.pending_publications(witness.session_file) == ()
     bridge._call = original
-    assert bridge.reconcile(owner, epoch, operation.commit_id).state.declared_name == "unknown"
+    assert (
+        bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
+        == "unknown"
+    )
 
 
 @pytest.mark.parametrize("alter", ["details", "marker", "usage"])
 def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter):
-    bridge, owner, epoch, witness = native
-    source = bridge.capture_source(owner, epoch, witness)
+    bridge, owner, owner_generation, witness = native
+    source = bridge.capture_source(owner, owner_generation, witness)
     original = bridge._call
 
     def lost_result(fd, request, timeout, retained_fds=()):
@@ -289,7 +292,7 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
-        epoch,
+        owner_generation,
         witness,
         "summary",
         42,
@@ -320,11 +323,14 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
     Path(witness.session_file).write_text(
         "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
     )
-    assert bridge.reconcile(owner, epoch, operation.commit_id).state.declared_name == "unknown"
+    assert (
+        bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
+        == "unknown"
+    )
 
 
 def test_compaction_child_cannot_inherit_node_preload(native, tmp_path, monkeypatch):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     marker = tmp_path / "untrusted-preload-executed"
     preload = tmp_path / "untrusted-loader.mjs"
     preload.write_text(
@@ -332,51 +338,53 @@ def test_compaction_child_cannot_inherit_node_preload(native, tmp_path, monkeypa
         f"writeFileSync({json.dumps(str(marker))}, 'executed');process.exit(29);"
     )
     monkeypatch.setenv("NODE_OPTIONS", f"--import={preload.as_uri()}")
-    operation = bridge.commit(owner, epoch, witness, "isolated native mutation", 42)
+    operation = bridge.commit(owner, owner_generation, witness, "isolated native mutation", 42)
     assert operation.state.declared_name == "committed"
     assert not marker.exists()
 
 
 async def test_active_backend_executor_refuses_before_intent_or_dispatch(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     before = Path(witness.session_file).read_bytes()
     async with session_writer_fence(witness.session_file):
         with pytest.raises(SessionWriterBusyError, match="not dispatched"):
-            bridge.commit(owner, epoch, witness, "summary", 42)
+            bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert bridge.journal.unresolved(witness.session_file) == ()
     assert Path(witness.session_file).read_bytes() == before
 
 
 def test_json_source_is_not_accepted_as_owner_capture(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     with pytest.raises(ValueError, match="Owner-captured"):
-        OwnerCompactionCommit.commit(bridge, owner, epoch, witness, "summary", 42, source={})
+        OwnerCompactionCommit.commit(
+            bridge, owner, owner_generation, witness, "summary", 42, source={}
+        )
     assert bridge.journal.unresolved(witness.session_file) == ()
 
 
 def test_malformed_bus_refuses_source_capture_without_repair(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     bus = bridge.root / "bus.jsonl"
     bus.write_bytes(b'{"incomplete":')
     with pytest.raises(RelationViolationError, match="Invalid compaction ingress"):
-        bridge.capture_source(owner, epoch, witness)
+        bridge.capture_source(owner, owner_generation, witness)
     assert bus.read_bytes() == b'{"incomplete":'
     assert bridge.journal.unresolved(witness.session_file) == ()
 
 
 def test_new_correction_send_invalidates_pre_summary_source(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     comms = Comms(bridge.root)
     comms.threads.register(Thread("peer", frozenset(), str(bridge.root)))
     comms.messaging.send("peer", "owner", "Correction: retain the newer requirement")
     with pytest.raises(RelationViolationError, match="source changed"):
-        bridge.commit(owner, epoch, witness, "stale summary", 42)
+        bridge.commit(owner, owner_generation, witness, "stale summary", 42)
     assert bridge.journal.unresolved(witness.session_file) == ()
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     inputs = InputDispositions(bridge.root / InputDispositions.filename)
     inputs.record(
         "acp:queued",
@@ -387,16 +395,16 @@ def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown
         text="queued correction",
     )
     with pytest.raises(RelationViolationError, match="Unsettled"):
-        bridge.capture_source(owner, epoch, witness)
+        bridge.capture_source(owner, owner_generation, witness)
     with pytest.raises(RelationViolationError, match="Unsettled"):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert inputs.read().rows["acp:queued"].declared_name == "unknown"
     assert bridge.journal.unresolved(witness.session_file) == ()
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_only_exact_unattempted_original_input_can_cross_source_and_commit(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     inputs = InputDispositions(bridge.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     assert admission is not None
@@ -409,11 +417,13 @@ def test_only_exact_unattempted_original_input_can_cross_source_and_commit(nativ
         text="next input, not yet dispatched",
     )
     with pytest.raises(RelationViolationError, match="Unsettled"):
-        bridge.capture_source(owner, epoch, witness)
-    source = bridge.capture_source(owner, epoch, witness, pending_input_key="acp:original")
+        bridge.capture_source(owner, owner_generation, witness)
+    source = bridge.capture_source(
+        owner, owner_generation, witness, pending_input_key="acp:original"
+    )
     assert source.pending_input_key == "acp:original"
     result = OwnerCompactionCommit.commit(
-        bridge, owner, epoch, witness, "summary", 42, source=source
+        bridge, owner, owner_generation, witness, "summary", 42, source=source
     )
     assert result.state.declared_name == "committed"
     assert inputs.read().rows["acp:original"].declared_name == "unknown"
@@ -421,7 +431,7 @@ def test_only_exact_unattempted_original_input_can_cross_source_and_commit(nativ
 
 
 def test_original_input_exception_refuses_other_unknown_or_bound_original(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     inputs = InputDispositions(bridge.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     assert admission is not None
@@ -433,7 +443,9 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
         target=owner.name,
         text="original",
     )
-    source = bridge.capture_source(owner, epoch, witness, pending_input_key="acp:original")
+    source = bridge.capture_source(
+        owner, owner_generation, witness, pending_input_key="acp:original"
+    )
     inputs.record(
         "acp:correction",
         seq=None,
@@ -444,7 +456,7 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
     )
     with pytest.raises(RelationViolationError, match="Unsettled"):
         OwnerCompactionCommit.commit(
-            bridge, owner, epoch, witness, "stale summary", 42, source=source
+            bridge, owner, owner_generation, witness, "stale summary", 42, source=source
         )
     assert bridge.journal.unresolved(witness.session_file) == ()
     assert inputs.bind(
@@ -455,12 +467,12 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
         text="original",
     )
     with pytest.raises(RelationViolationError, match="already attempted"):
-        bridge.capture_source(owner, epoch, witness, pending_input_key="acp:original")
+        bridge.capture_source(owner, owner_generation, witness, pending_input_key="acp:original")
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_bus_unknown_cannot_borrow_direct_original_exception(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     assert owner.active_turn is not None
     InputDispositions(bridge.root / InputDispositions.filename).record(
         "bus:1",
@@ -471,12 +483,12 @@ def test_bus_unknown_cannot_borrow_direct_original_exception(native):
         text="single bus original",
     )
     with pytest.raises(RelationViolationError, match="already attempted"):
-        bridge.capture_source(owner, epoch, witness, pending_input_key="bus:1")
+        bridge.capture_source(owner, owner_generation, witness, pending_input_key="bus:1")
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_changed_started_input_still_invalidates_pre_summary_source(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     inputs = InputDispositions(bridge.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     inputs.record(
@@ -498,13 +510,13 @@ def test_changed_started_input_still_invalidates_pre_summary_source(native):
         "acp:new", turn_id=owner.active_turn.id, native_id="a" * 32, text="correction"
     )
     with pytest.raises(RelationViolationError, match="source changed"):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert bridge.journal.unresolved(witness.session_file) == ()
 
 
 def test_positive_owner_validated_native_commit(native):
-    bridge, owner, epoch, witness = native
-    operation = bridge.commit(owner, epoch, witness, "retained summary", 42)
+    bridge, owner, owner_generation, witness = native
+    operation = bridge.commit(owner, owner_generation, witness, "retained summary", 42)
     assert operation.state.declared_name == "committed", operation
     entry = entries(witness)[-1]
     assert entry["type"] == "compaction"
@@ -519,7 +531,7 @@ def test_positive_owner_validated_native_commit(native):
 
 @pytest.mark.parametrize("mutation", ["stop", "heartbeat", "goal", "bus", "input", "send"])
 def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, mutation):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     call = bridge._call
     children = []
     script = """
@@ -583,7 +595,7 @@ print('changed', flush=True)
 
     monkeypatch.setattr(bridge, "_call", with_competitor)
     try:
-        operation = bridge.commit(owner, epoch, witness, "summary", 42)
+        operation = bridge.commit(owner, owner_generation, witness, "summary", 42)
         assert operation.state.declared_name == "committed"
         output, error = children[0].communicate(timeout=5)
         assert children[0].returncode == 0, error
@@ -601,7 +613,7 @@ print('changed', flush=True)
 
 
 def test_lost_native_result_never_replays_and_reconciles_exact_id(native, monkeypatch):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     call = bridge._call
 
     def lose_result(*args):
@@ -610,13 +622,13 @@ def test_lost_native_result_never_replays_and_reconciles_exact_id(native, monkey
         raise CompactionTransportUnknownError("lost result")
 
     monkeypatch.setattr(bridge, "_call", lose_result)
-    operation = bridge.commit(owner, epoch, witness, "retained summary", 42)
+    operation = bridge.commit(owner, owner_generation, witness, "retained summary", 42)
     assert operation.state.declared_name == "unknown"
     before = Path(witness.session_file).read_bytes()
     with pytest.raises(CompactionJournalError, match="never replay"):
-        bridge.commit(owner, epoch, witness, "retained summary", 42)
+        bridge.commit(owner, owner_generation, witness, "retained summary", 42)
     monkeypatch.setattr(bridge, "_call", call)
-    resolved = bridge.reconcile(owner, epoch, operation.commit_id)
+    resolved = bridge.reconcile(owner, owner_generation, operation.commit_id)
     assert resolved.state.declared_name == "committed"
     assert Path(witness.session_file).read_bytes() == before
     assert len([entry for entry in entries(witness) if entry["type"] == "compaction"]) == 1
@@ -626,7 +638,7 @@ def test_lost_native_result_never_replays_and_reconciles_exact_id(native, monkey
 
 
 def test_postcommit_directory_fsync_fault_is_unknown_and_never_dispatches(native, monkeypatch):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     fsync = os.fsync
     called = []
     monkeypatch.setattr(bridge, "_call", lambda *args: called.append(args))
@@ -636,7 +648,7 @@ def test_postcommit_directory_fsync_fault_is_unknown_and_never_dispatches(native
 
     monkeypatch.setattr(os, "fsync", denied)
     with pytest.raises(CompactionJournalUnknownError, match="durability UNKNOWN"):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert called == []
     assert entries(witness)[-1]["type"] == "message"
     monkeypatch.setattr(os, "fsync", fsync)
@@ -645,7 +657,7 @@ def test_postcommit_directory_fsync_fault_is_unknown_and_never_dispatches(native
 
 
 def test_outcome_persistence_failure_keeps_intent_and_requires_reconciliation(native, monkeypatch):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     resolve = bridge.journal.resolve
 
     def fail_outcome(*args, **kwargs):
@@ -653,28 +665,31 @@ def test_outcome_persistence_failure_keeps_intent_and_requires_reconciliation(na
 
     monkeypatch.setattr(bridge.journal, "resolve", fail_outcome)
     with pytest.raises(OSError, match="outcome fsync"):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     pending = bridge.journal.unresolved(witness.session_file)
     assert len(pending) == 1 and pending[0].state.declared_name == "intent"
     with pytest.raises(CompactionJournalError, match="never replay"):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     monkeypatch.setattr(bridge.journal, "resolve", resolve)
-    assert bridge.reconcile(owner, epoch, pending[0].commit_id).state.declared_name == "committed"
+    assert (
+        bridge.reconcile(owner, owner_generation, pending[0].commit_id).state.declared_name
+        == "committed"
+    )
 
 
 def test_missing_write_reconciles_absence_only_at_unchanged_revision(native, monkeypatch):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     call = bridge._call
 
     def never_started(*args):
         raise CompactionTransportUnknownError("transport unavailable")
 
     monkeypatch.setattr(bridge, "_call", never_started)
-    operation = bridge.commit(owner, epoch, witness, "summary", 42)
+    operation = bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert operation.state.declared_name == "unknown"
     monkeypatch.setattr(bridge, "_call", call)
     assert (
-        bridge.reconcile(owner, epoch, operation.commit_id).state.declared_name
+        bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
         == "aborted-no-write"
     )
     with pytest.raises(CompactionJournalError):
@@ -689,24 +704,24 @@ def test_missing_write_reconciles_absence_only_at_unchanged_revision(native, mon
 
 
 def test_stopped_owner_refused_before_journal_or_native_mutation(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     before = Path(witness.session_file).read_bytes()
     bridge.registry.unregister(owner.name)
     with pytest.raises(RelationViolationError):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert Path(witness.session_file).read_bytes() == before
 
 
 def test_changed_goal_refused_before_native_mutation(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     bridge.registry.register(replace(owner, goal=Goal("replacement", "new-goal")))
     with pytest.raises(RelationViolationError):
-        bridge.commit(owner, epoch, witness, "summary", 42)
+        bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_forged_receipt_without_inherited_fd_never_writes(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     before = Path(witness.session_file).read_bytes()
     result = subprocess.run(
         ["node", str(bridge.helper), str(bridge.package_dir), "-1"],
@@ -722,22 +737,25 @@ def test_forged_receipt_without_inherited_fd_never_writes(native):
 
 
 def test_native_stale_lock_requires_explicit_reconciliation(native):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     lock = Path(witness.session_file + ".pr48-writer.lock")
     lock.write_text("fixture dead holder\n")
-    operation = bridge.commit(owner, epoch, witness, "summary", 42)
+    operation = bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert operation.state.declared_name == "unknown"
-    assert bridge.reconcile(owner, epoch, operation.commit_id).state.declared_name == "unknown"
+    assert (
+        bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
+        == "unknown"
+    )
     lock.unlink()  # Explicit fixture operator decision; never automatic recovery.
     assert bridge.journal.get(operation.commit_id).state.declared_name == "unknown"
     assert (
-        bridge.reconcile(owner, epoch, operation.commit_id).state.declared_name
+        bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
         == "aborted-no-write"
     )
 
 
 def test_owner_sigkill_after_native_write_before_journal_result(native, tmp_path):
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     script = """
 import json,os,signal,sys
 from pathlib import Path
@@ -748,7 +766,7 @@ owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
 bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
-owner,epoch = bridge.registry.claim_live_turn_with_generation(
+owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash-turn',expected_owner_generation=epoch)
 call = bridge._call
 def lose_result(*args):
@@ -791,13 +809,13 @@ bridge.commit(owner,epoch,witness,'crash summary',42,source=source)
         # the stopped owner's request and no reuse of its epoch or receipt.
         bridge.registry.unregister("owner")
         bridge.registry.register(replace(owner, active_turn=None))
-        recovered, epoch = bridge.registry.live_owner_with_generation("owner")
-        recovered, epoch = bridge.registry.claim_live_turn_with_generation(
+        recovered, owner_generation = bridge.registry.live_owner_with_generation("owner")
+        recovered, owner_generation = bridge.registry.lease_live_turn_with_generation(
             recovered,
             "recovery-turn",
-            expected_owner_generation=epoch,
+            expected_owner_generation=owner_generation,
         )
-        result = bridge.reconcile(recovered, epoch, pending[0].commit_id)
+        result = bridge.reconcile(recovered, owner_generation, pending[0].commit_id)
         assert result.state.declared_name == "committed"
         assert Path(witness.session_file).read_bytes() == before
         assert bridge.journal.unresolved(witness.session_file) == ()
@@ -820,7 +838,7 @@ def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
     parsing, before CAS. Parent dies with stdin sent and no result read; native
     continues only when the test releases it, still owning registry authority.
     """
-    bridge, owner, epoch, witness = native
+    bridge, owner, owner_generation, witness = native
     ready, gate, written = [tmp_path / name for name in ("ready.fifo", "go.fifo", "written.fifo")]
     for path in (ready, gate, written):
         os.mkfifo(path)
@@ -866,7 +884,7 @@ owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
 bridge.registry.register(replace(owner,pid=os.getpid(),active_turn=None))
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
-owner,epoch = bridge.registry.claim_live_turn_with_generation(
+owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash',expected_owner_generation=epoch)
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_compaction_prepare import NativeWitness
@@ -970,13 +988,13 @@ print('stopped-after-native',flush=True)
             assert Path(witness.session_file).read_bytes() == before
         assert bridge.journal.get(pending[0].commit_id).state.declared_name == "intent"
         bridge.registry.register(replace(owner, active_turn=None))
-        recovered, epoch = bridge.registry.live_owner_with_generation("owner")
-        recovered, epoch = bridge.registry.claim_live_turn_with_generation(
+        recovered, owner_generation = bridge.registry.live_owner_with_generation("owner")
+        recovered, owner_generation = bridge.registry.lease_live_turn_with_generation(
             recovered,
             "recovery",
-            expected_owner_generation=epoch,
+            expected_owner_generation=owner_generation,
         )
-        result = bridge.reconcile(recovered, epoch, pending[0].commit_id)
+        result = bridge.reconcile(recovered, owner_generation, pending[0].commit_id)
         assert result.state.declared_name == ("committed" if release_native else "aborted-no-write")
         if release_native:
             assert json.loads(result.evidence_json)["entryId"] == entry_id

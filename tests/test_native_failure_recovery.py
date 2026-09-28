@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.claim_states import FullPendingClaim
+from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.coordination import ReplayFact
 from agent_comms.coordination_store import (
     MutationStore,
@@ -57,9 +57,9 @@ def failed_owner(directory, output, exit_allowed):
     runtime.run_native_pi_turn = old_failure
     try:
         asyncio.run(
-            runtime.run_one_sealed_claim(
-                root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
-            )
+            runtime.SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+            ).run()
         )
     except NativePiUnavailable:
         pass
@@ -208,7 +208,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     monkeypatch,
 ):
     from agent_comms.bus_publication import stable_thread_lookup
-    from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
+    from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
     from agent_comms.coordination_store import StaleFence
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
@@ -216,20 +216,20 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     fake, calls = _fake_model(fail_on=1)
     monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
     with pytest.raises(NativePiUnavailable):
-        await runtime.run_one_sealed_claim(
-            root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
-        )
+        await runtime.SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+        ).run()
     source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
         with pytest.raises(StaleFence, match="unresolved execution"):
-            await runtime.run_one_sealed_claim(
-                root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
-            )
-        claims = sealed_cohort_claims(store, lookup, after_seq=source.seq - 1)
+            await runtime.SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+            ).run()
+        claims = sealed_cohort_assignments(store, lookup, after_seq=source.seq - 1)
         assert len(claims) == 1
-        assert type(claims[0].lifecycle) is FullPendingClaim
+        assert type(claims[0].lifecycle) is FullPendingAssignment
         assert len(calls) == 1
         assert store._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
 

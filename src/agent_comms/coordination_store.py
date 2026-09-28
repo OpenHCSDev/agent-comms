@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from .attempt_states import AttemptState
-from .claim_states import ClaimState, EngagedClaim
+from .assignment_states import AssignmentState, EngagedAssignment
 from .coordination import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
@@ -32,7 +32,7 @@ from .coordination import (
     CoordinationError,
     CoordinationStore,
     CurrentExecutionPointer,
-    ExecutionClaimLink,
+    ExecutionAssignmentLink,
     ExecutionOrigin,
     ExecutionRecord,
     IntegrityViolationError,
@@ -46,7 +46,7 @@ from .coordination import (
     ReplayAssessment,
     ReplayFact,
     ResponseObligation,
-    WakeClaim,
+    WakeAssignment,
     retry_disposition_authorized,
 )
 from .coordination_errors import IdentityConflict
@@ -106,12 +106,8 @@ class ParticipantSnapshot:
     committed: bool
     aliases: tuple[str, ...]
     owner_thread: str
-    generation: int
+    participant_generation: int = field(metadata={"wire_name": "generation"})
     pointer: CurrentExecutionPointer
-
-    @property
-    def participant_generation(self) -> int:
-        return self.generation
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,7 +170,7 @@ class VerifiedOwnerLoss:
                 attempt.owner_generation,
             ):
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
-            epoch = source["sent_owner_admission_epoch"]
+            admission_generation = source["sent_owner_admission_epoch"]
             release = comms.owners._read_owner_release_receipts().get(attempt.owner_thread)
             current = registry.threads.get(attempt.owner_thread)
             if release is None or current is None:
@@ -186,8 +182,8 @@ class VerifiedOwnerLoss:
                     type(pid) is int
                     and pid > 0
                     and type(before) is int
-                    and type(epoch) is int
-                    and before >= epoch
+                    and type(admission_generation) is int
+                    and before >= admission_generation
                     and type(after) is int
                     and after > before
                     and released["name"] == attempt.owner_thread
@@ -285,9 +281,9 @@ def _bounded_reason(reason: str | None) -> None:
         raise ValueError("reason code is invalid")
 
 
-def _claim(row: sqlite3.Row) -> WakeClaim:
-    return WakeClaim(
-        claim_id=row["claim_id"],
+def _assignment(row: sqlite3.Row) -> WakeAssignment:
+    return WakeAssignment(
+        assignment_id=row["claim_id"],
         recipient=row["recipient"],
         recipient_lookup=row["recipient_lookup"],
         wire_seq=row["wire_seq"],
@@ -298,7 +294,7 @@ def _claim(row: sqlite3.Row) -> WakeClaim:
         revision=row["revision"],
         resolver_version=row["resolver_version"],
         policy_version=row["policy_version"],
-        lifecycle=ClaimState.decode(row["disposition"]).load(
+        lifecycle=AssignmentState.decode(row["disposition"]).load(
             WakePolicy.decode(row["wake_mode"])(),
             row["triage_verdict"],
             row["execution_id"],
@@ -494,7 +490,7 @@ class MutationStore(CoordinationStore):
                 raise ValueError("alias and display name must be bounded")
         with self._transaction() as db:
             person = self._participant(lookup)
-            if person.generation != expected_generation:
+            if person.participant_generation != expected_generation:
                 raise StaleRevision("owner generation changed")
             existing = self._row("participant_aliases", "alias", alias)
             if existing is not None:
@@ -528,7 +524,7 @@ class MutationStore(CoordinationStore):
             person = self._participant(lookup)
             if not person.committed:
                 raise IdentityConflict("uncommitted participant cannot own a generation")
-            if person.generation != expected_generation:
+            if person.participant_generation != expected_generation:
                 raise StaleRevision("owner generation changed")
             db.execute(
                 "UPDATE owner_generations SET owner_thread=?,generation=generation+1 "
@@ -537,33 +533,35 @@ class MutationStore(CoordinationStore):
             )
             return Applied(self._participant(lookup))
 
-    def claim(self, claim_id: str) -> WakeClaim:
-        row = self._row("wake_claims", "claim_id", claim_id)
+    def assignment(self, assignment_id: str) -> WakeAssignment:
+        row = self._row("wake_claims", "claim_id", assignment_id)
         if row is None:
             raise IdentityConflict("unknown claim")
-        return _claim(row)
+        return _assignment(row)
 
-    def accept_claim(self, claim: WakeClaim) -> Applied[WakeClaim] | AlreadyApplied[WakeClaim]:
+    def accept_assignment(
+        self, assignment: WakeAssignment
+    ) -> Applied[WakeAssignment] | AlreadyApplied[WakeAssignment]:
         if (
-            claim.revision != 1
-            or claim.lifecycle.execution_id is not None
-            or claim.lifecycle.exact_target is not None
-            or claim.updated_at_ms != claim.accepted_at_ms
-            or claim.lifecycle.verdict is not None
-            or type(claim.lifecycle) is not claim.lifecycle.mode.initial_state()
-            or claim.resolver_version != RESOLVER_VERSION
-            or claim.policy_version != POLICY_VERSION
+            assignment.revision != 1
+            or assignment.lifecycle.execution_id is not None
+            or assignment.lifecycle.exact_target is not None
+            or assignment.updated_at_ms != assignment.accepted_at_ms
+            or assignment.lifecycle.verdict is not None
+            or type(assignment.lifecycle) is not assignment.lifecycle.mode.initial_state()
+            or assignment.resolver_version != RESOLVER_VERSION
+            or assignment.policy_version != POLICY_VERSION
         ):
             raise IdentityConflict("claim acceptance requires initial frozen decision")
         with self._transaction() as db:
             row = db.execute(
                 "SELECT * FROM wake_claims WHERE claim_id=? OR (recipient_lookup=? AND wire_seq=?)",
-                (claim.claim_id, claim.recipient_lookup, claim.wire_seq),
+                (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq),
             ).fetchone()
             if row is not None:
-                current = _claim(row)
+                current = _assignment(row)
                 immutable = (
-                    "claim_id",
+                    "assignment_id",
                     "recipient",
                     "recipient_lookup",
                     "wire_seq",
@@ -573,8 +571,8 @@ class MutationStore(CoordinationStore):
                     "policy_version",
                     "accepted_at_ms",
                 )
-                if current.lifecycle.mode != claim.lifecycle.mode or any(
-                    getattr(current, name) != getattr(claim, name) for name in immutable
+                if current.lifecycle.mode != assignment.lifecycle.mode or any(
+                    getattr(current, name) != getattr(assignment, name) for name in immutable
                 ):
                     raise IdentityConflict("accepted claim identity conflicts")
                 return AlreadyApplied(current)
@@ -584,35 +582,35 @@ class MutationStore(CoordinationStore):
                 "resolver_version,policy_version,accepted_at_ms,updated_at_ms,"
                 "revision,execution_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    claim.claim_id,
-                    claim.recipient,
-                    claim.recipient_lookup,
-                    claim.wire_seq,
-                    claim.message_id,
+                    assignment.assignment_id,
+                    assignment.recipient,
+                    assignment.recipient_lookup,
+                    assignment.wire_seq,
+                    assignment.message_id,
                     None,
-                    claim.audience.value,
-                    claim.lifecycle.mode.declared_name,
-                    claim.lifecycle.verdict if claim.lifecycle.verdict else None,
-                    claim.lifecycle.declared_name,
-                    claim.resolver_version,
-                    claim.policy_version,
-                    claim.accepted_at_ms,
-                    claim.updated_at_ms,
+                    assignment.audience.value,
+                    assignment.lifecycle.mode.declared_name,
+                    assignment.lifecycle.verdict if assignment.lifecycle.verdict else None,
+                    assignment.lifecycle.declared_name,
+                    assignment.resolver_version,
+                    assignment.policy_version,
+                    assignment.accepted_at_ms,
+                    assignment.updated_at_ms,
                     1,
                     None,
                 ),
             )
-            return Applied(claim)
+            return Applied(assignment)
 
     def transition_preengagement(
         self,
-        claim_id: str,
-        disposition: type[ClaimState],
+        assignment_id: str,
+        disposition: type[AssignmentState],
         *,
         expected_revision: int,
-    ) -> Applied[WakeClaim]:
+    ) -> Applied[WakeAssignment]:
         with self._transaction() as db:
-            current = self.claim(claim_id)
+            current = self.assignment(assignment_id)
             if current.revision != expected_revision:
                 raise StaleRevision("claim revision changed")
             if (
@@ -641,7 +639,7 @@ class MutationStore(CoordinationStore):
                     after.lifecycle.verdict,
                     after.updated_at_ms,
                     after.revision,
-                    claim_id,
+                    assignment_id,
                     expected_revision,
                 ),
             )
@@ -663,13 +661,13 @@ class MutationStore(CoordinationStore):
         ).fetchone()
         attempt = _attempt(attempt_row) if attempt_row else None
         links = tuple(
-            ExecutionClaimLink(r["execution_id"], r["claim_id"], r["ordinal"])
+            ExecutionAssignmentLink(r["execution_id"], r["claim_id"], r["ordinal"])
             for r in db.execute(
                 "SELECT * FROM execution_claims WHERE execution_id=? ORDER BY ordinal",
                 (execution_id,),
             )
         )
-        claims = tuple(self.claim(link.claim_id) for link in links)
+        assignments = tuple(self.assignment(link.assignment_id) for link in links)
         replay_row = self._row("replay_assessments", "execution_id", execution_id)
         replay = (
             ReplayAssessment(
@@ -768,7 +766,7 @@ class MutationStore(CoordinationStore):
         return RecoverySnapshot(
             execution,
             attempt,
-            claims,
+            assignments,
             links,
             replay,
             obligation,
@@ -790,13 +788,13 @@ class MutationStore(CoordinationStore):
         owner_thread: str,
         max_attempts: int,
         *,
-        claim_ids: tuple[str, ...] = (),
+        assignment_ids: tuple[str, ...] = (),
         exact_target: str | None = None,
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         origin = ExecutionOrigin(origin)
-        if origin is ExecutionOrigin.WIRE and (not claim_ids or not exact_target):
+        if origin is ExecutionOrigin.WIRE and (not assignment_ids or not exact_target):
             raise IdentityConflict("wire execution requires ordered claims and target")
-        if origin is not ExecutionOrigin.WIRE and (claim_ids or exact_target is not None):
+        if origin is not ExecutionOrigin.WIRE and (assignment_ids or exact_target is not None):
             raise IdentityConflict("claimless execution cannot bind claims")
         with self._transaction() as db:
             row = self._row("executions", "execution_id", execution_id)
@@ -809,8 +807,15 @@ class MutationStore(CoordinationStore):
                     e.owner_thread,
                     e.max_attempts,
                     e.exact_target,
-                    tuple(link.claim_id for link in snapshot.links),
-                ) != (origin, owner_lookup, owner_thread, max_attempts, exact_target, claim_ids):
+                    tuple(link.assignment_id for link in snapshot.links),
+                ) != (
+                    origin,
+                    owner_lookup,
+                    owner_thread,
+                    max_attempts,
+                    exact_target,
+                    assignment_ids,
+                ):
                     raise IdentityConflict("execution identity conflicts")
                 return AlreadyApplied(snapshot)
             participant = self._participant(owner_lookup)
@@ -818,7 +823,7 @@ class MutationStore(CoordinationStore):
                 raise IdentityConflict("execution requires committed current owner")
             if not isinstance(max_attempts, int) or max_attempts <= 0:
                 raise ValueError("max_attempts must be positive")
-            if len(set(claim_ids)) != len(claim_ids):
+            if len(set(assignment_ids)) != len(assignment_ids):
                 raise IdentityConflict("duplicate claim membership")
             now = self._now()
             db.execute(
@@ -837,15 +842,17 @@ class MutationStore(CoordinationStore):
                     now,
                 ),
             )
-            for ordinal, claim_id in enumerate(claim_ids):
-                claim = self.claim(claim_id)
+            for ordinal, assignment_id in enumerate(assignment_ids):
+                assignment = self.assignment(assignment_id)
                 if (
-                    claim.recipient_lookup != owner_lookup
-                    or claim.lifecycle.execution_id is not None
-                    or not claim.lifecycle.engageable
+                    assignment.recipient_lookup != owner_lookup
+                    or assignment.lifecycle.execution_id is not None
+                    or not assignment.lifecycle.engageable
                 ):
                     raise IdentityConflict("claim cannot engage this execution")
-                decision = EngagedClaim.build(claim.lifecycle.mode, execution_id, exact_target)
+                decision = EngagedAssignment.build(
+                    assignment.lifecycle.mode, execution_id, exact_target
+                )
                 db.execute(
                     "UPDATE wake_claims SET disposition=?,triage_verdict=?,exact_target=?,"
                     "execution_id=?,revision=revision+1,updated_at_ms=? WHERE claim_id=?",
@@ -854,12 +861,13 @@ class MutationStore(CoordinationStore):
                         decision.verdict,
                         decision.exact_target,
                         decision.execution_id,
-                        self._now(claim.updated_at_ms),
-                        claim_id,
+                        self._now(assignment.updated_at_ms),
+                        assignment_id,
                     ),
                 )
                 db.execute(
-                    "INSERT INTO execution_claims VALUES (?,?,?)", (execution_id, claim_id, ordinal)
+                    "INSERT INTO execution_claims VALUES (?,?,?)",
+                    (execution_id, assignment_id, ordinal),
                 )
             if origin is ExecutionOrigin.WIRE:
                 db.execute(
@@ -917,11 +925,11 @@ class MutationStore(CoordinationStore):
                     "reason_code=?,updated_at_ms=? WHERE execution_id=?",
                     (state, reason_code, self._now(before.obligation.updated_at_ms), execution_id),
                 )
-            for claim in before.claims:
+            for assignment in before.assignments:
                 db.execute(
                     "UPDATE wake_claims SET disposition=?,revision=revision+1,"
                     "updated_at_ms=? WHERE claim_id=?",
-                    (state, self._now(claim.updated_at_ms), claim.claim_id),
+                    (state, self._now(assignment.updated_at_ms), assignment.assignment_id),
                 )
             return Applied(self.snapshot(execution_id))
 
@@ -935,7 +943,8 @@ class MutationStore(CoordinationStore):
             or attempt.owner_thread != fence.owner_thread
             or attempt.owner_generation != fence.owner_generation
             or attempt.owner_token_digest != _digest(fence.token)
-            or self._participant(attempt.owner_lookup).generation != fence.owner_generation
+            or self._participant(attempt.owner_lookup).participant_generation
+            != fence.owner_generation
             or self._participant(attempt.owner_lookup).owner_thread != fence.owner_thread
         ):
             raise StaleFence("attempt fence is not current")
@@ -1003,7 +1012,10 @@ class MutationStore(CoordinationStore):
             ).fetchone():
                 raise IdentityConflict("prepared fence token has already been issued")
             participant = self._participant(execution.owner_lookup)
-            if not participant.committed or (participant.owner_thread, participant.generation) != (
+            if not participant.committed or (
+                participant.owner_thread,
+                participant.participant_generation,
+            ) != (
                 owner_thread,
                 owner_generation,
             ):
@@ -1085,11 +1097,11 @@ class MutationStore(CoordinationStore):
                     (self._now(snapshot.obligation.updated_at_ms), execution_id),
                 )
             if execution.lifecycle.retry:
-                for claim in snapshot.claims:
+                for assignment in snapshot.assignments:
                     db.execute(
                         "UPDATE wake_claims SET disposition='engaged',revision=revision+1,"
                         "updated_at_ms=? WHERE claim_id=?",
-                        (self._now(claim.updated_at_ms), claim.claim_id),
+                        (self._now(assignment.updated_at_ms), assignment.assignment_id),
                     )
             current = self.snapshot(execution_id)
             return Applied(
@@ -1362,11 +1374,11 @@ class MutationStore(CoordinationStore):
                 "updated_at_ms=?,reason_code=? WHERE execution_id=?",
                 (target, self._now(obligation.updated_at_ms), reason_code, execution.execution_id),
             )
-        for claim in snapshot.claims:
+        for assignment in snapshot.assignments:
             db.execute(
                 "UPDATE wake_claims SET disposition=?,revision=revision+1,"
                 "updated_at_ms=? WHERE claim_id=?",
-                (disposition, self._now(claim.updated_at_ms), claim.claim_id),
+                (disposition, self._now(assignment.updated_at_ms), assignment.assignment_id),
             )
         db.execute(
             "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
@@ -1449,7 +1461,7 @@ class RecoveryMonitorCapability:
                     binding.owner_lookup,
                     binding.owner_thread,
                     binding.owner_generation,
-                    binding.claim_id,
+                    binding.assignment_id,
                     binding.stage,
                 )
                 != (
