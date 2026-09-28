@@ -2,7 +2,8 @@
 
 Implementation tree: `~/wt/comms-native-postwrite-cause-20260928`.
 Branch: `fix/native-postwrite-cause-20260928`.
-Developed on installed integration e211e50; rebase onto current fork main before PR.
+Developed on installed integration e211e50; the single fix commit was rebased
+cleanly onto current fork main 0ac0568, excluding inherited integration history.
 
 ## Read-only live evidence
 
