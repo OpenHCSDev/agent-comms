@@ -16,9 +16,11 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.owner_compaction_settings import PiCompactionDecision
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.store_files import _store_lock
@@ -42,8 +44,15 @@ def record_fixture_history(inputs, owner, admission):
 
 @asynccontextmanager
 async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
-    package = Path(PACKAGE)
-    launcher = os.environ.get("AC_NATIVE_STACK_BIN", str(package.parents[3] / "bin/pi-native"))
+    package = Path(PACKAGE).resolve()
+    monkeypatch.setattr(
+        "agent_comms.private_nk_entrypoint.private_nk_from_environment",
+        lambda: PrivateNkLaunch(tmp_path, "f" * 32, package, None),
+    )
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
+    monkeypatch.delenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", raising=False)
+    monkeypatch.delenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", raising=False)
+    launcher = "pi"
     repo = Path(__file__).resolve().parents[1]
     child = await AttachedChild.start(
         (
@@ -80,7 +89,10 @@ async def owner_fixture(tmp_path, monkeypatch, *, real_host=False, goal=True):
             fixture["sessionId"] if real_host else fixture["witness"]["sessionId"]
         )
         persistent.revision = _session_revision(file)
-        persistent.launch_key = (launcher,)
+        persistent.launch_key = (
+            NativePiRpcLaunch(("node",), tmp_path, {}, Path(file).parent, Path(file), package),
+            (0, 0),
+        )
         registry = Registration(tmp_path / "registry.json")
         registry.register(
             Thread(
@@ -225,6 +237,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
     ):
         root = tmp_path if private_session else tmp_path / "acp-wire"
         comms = wire(root)
+        root_id = comms.messaging.initialize_private_initial_protocol()
         project = tmp_path / "proj"
         project.mkdir()
 
@@ -238,6 +251,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             agent_args=[],
             runtime_enabled=True,
             auto_wake=False,
+            private_nk_native_package=Path(PACKAGE).resolve(),
+            private_nk_wire_root_id=root_id,
         )
         agent.on_connect(Client())
         await agent.new_session(cwd=str(project), mcp_servers=[])
@@ -320,23 +335,26 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             # Use the real backend subprocess/reopen/proof protocol. Replace
             # only its executable with an offline host of the same prepared
             # SDK and RPC; the selected model stream never accesses a network.
-            spawn = asyncio.create_subprocess_exec
+            managed = NativePiRpcLaunch.managed
 
-            async def offline_spawn(program, *args, **kwargs):
-                if program == launcher:
-                    kwargs["env"]["PR95_OWNER_FIXTURE_ROOT"] = str(tmp_path)
-                    return await spawn(
+            def offline_launch(command, arguments, **kwargs):
+                launch = managed(command, arguments, **kwargs)
+                environment = dict(launch.env, PR95_OWNER_FIXTURE_ROOT=str(tmp_path))
+                return replace(
+                    launch,
+                    argv=(
                         "node",
                         str(
                             Path(__file__).resolve().parents[1]
                             / "stack/test-native-selected-owner-host.mjs"
                         ),
-                        *args,
-                        **kwargs,
-                    )
-                return await spawn(program, *args, **kwargs)
+                        "--session",
+                        launch.session_file,
+                    ),
+                    env=environment,
+                )
 
-            monkeypatch.setattr(asyncio, "create_subprocess_exec", offline_spawn)
+            monkeypatch.setattr(NativePiRpcLaunch, "managed", offline_launch)
         else:
             monkeypatch.setattr(backend, "stream_agent_events", native_stream)
         try:

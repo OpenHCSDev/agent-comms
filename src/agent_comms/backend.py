@@ -212,7 +212,7 @@ class PersistentPiSession:
         self.proc: AttachedChild | None = None
         self.reader: PiRpcChannel | None = None
         self.stderr_task: asyncio.Task[str] | None = None
-        self.launch_key: tuple[Any, ...] | None = None
+        self.launch_key: tuple[NativePiRpcLaunch, tuple[int, int]] | None = None
         self.session_file: str | None = None
         self.session_id: str | None = None
         self.revision: tuple[_FileRevision, _FileRevision | None] | None = None
@@ -223,7 +223,9 @@ class PersistentPiSession:
         # reaped. Every later borrower waits for this task before launching.
         self._close_task: asyncio.Task[None] | None = None
 
-    def reusable(self, launch_key: tuple[Any, ...], session_file: str | None) -> bool:
+    def reusable(
+        self, launch_key: tuple[NativePiRpcLaunch, tuple[int, int]], session_file: str | None
+    ) -> bool:
         return (
             self.reopen_required is None
             and self._close_task is None
@@ -1207,12 +1209,7 @@ class TurnSession:
         self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
         if not self.require_input_id:
             self.stdin_payload += self.prompt_payload
-        self.launch_key = (
-            self.launch.argv,
-            self.cwd,
-            tuple(sorted(self.launch.env.items())),
-            auth_revision(),
-        )
+        self.launch_key = (self.launch, auth_revision())
 
     async def validate_reopen(self) -> AsyncIterator[events.AgentEvent]:
         self.reused = False

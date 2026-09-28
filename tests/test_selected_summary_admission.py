@@ -476,7 +476,15 @@ os._exit(17)
 @pytest.mark.asyncio
 async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    agent = CommsAgent(
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
+        private_nk_native_package=tmp_path,
+        private_nk_wire_root_id=root_id,
+    )
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
