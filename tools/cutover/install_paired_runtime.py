@@ -26,7 +26,8 @@ from agent_comms.store_files import _atomic_write_text, _store_lock, file_revisi
 RUNTIME = Path.home() / ".local/share/agent-comms/runtime-failure-recovery-candidate-20260928"
 NATIVE = (
     Path.home()
-    / ".local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent"
+    / ".local/share/agent-comms/native-current-5fdef596596173bd"
+    / "node_modules/@earendil-works/pi-coding-agent"
 )
 LINKS = ("toad", "agent-comms", "agent-comms-acp", "agent-comms-agent", "agent-comms-nk-foreground")
 RESET = (
