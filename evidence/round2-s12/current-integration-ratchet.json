@@ -1,0 +1,41 @@
+{
+  "base_revision": "b4cb42acc500a112b0f6bf36bad6a171df1ae5dd",
+  "head_revision": "874dcd09550fe90e2eb1283b8610ff107259388f",
+  "paths": [
+    "src/agent_comms/bus_page_index.py",
+    "src/agent_comms/continued_private_session.py",
+    "src/agent_comms/coordinated_runtime.py",
+    "src/agent_comms/coordinated_runtime_schema.py",
+    "src/agent_comms/coordination.py",
+    "src/agent_comms/coordination_response.py",
+    "src/agent_comms/coordination_store.py",
+    "src/agent_comms/historical_native_inputs.py",
+    "src/agent_comms/native_prompt_binding.py",
+    "src/agent_comms/native_runtime_input.py",
+    "src/agent_comms/native_source_cursor.py",
+    "src/agent_comms/passive_channel_awareness.py",
+    "src/agent_comms/private_sidecar.py",
+    "src/agent_comms/publisher.py",
+    "src/agent_comms/todos.py",
+    "src/agent_comms/transcript_routes.py",
+    "src/agent_comms/transcripts.py",
+    "src/agent_comms/typed_table.py",
+    "src/agent_comms/view_unread.py",
+    "src/agent_comms/wire_log.py"
+  ],
+  "base": {
+    "TypeIdentity": 93,
+    "LongBooleanChain": 71,
+    "StringSubscript": 260
+  },
+  "head": {
+    "TypeIdentity": 88,
+    "LongBooleanChain": 69,
+    "StringSubscript": 88
+  },
+  "delta": {
+    "TypeIdentity": -5,
+    "LongBooleanChain": -2,
+    "StringSubscript": -172
+  }
+}

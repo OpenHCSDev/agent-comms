@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from agent_comms.bus_page_index import BusPageRow
 from agent_comms.comms import Comms
 from agent_comms.messages import Message, MessageType
 from agent_comms.threads import Thread
@@ -50,6 +51,6 @@ def test_bad_cached_offset_uses_authoritative_current_source(tmp_path):
     bus = retained_source(tmp_path, 9)
     assert bus.incoming_page("b", after=6).newest_seq == 9
     with sqlite3.connect(tmp_path / "bus_page_index.sqlite3") as connection:
-        connection.execute("UPDATE rows SET offset=0 WHERE seq=9")
+        connection.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
     page = bus.incoming_page("b", after=6)
     assert [message.seq for message in page.messages] == [9]

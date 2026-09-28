@@ -1,8 +1,8 @@
 """Read Pi's effective compaction settings without its mutable settings storage.
 
 This is trigger evidence only, not owner authority, source capture, or a
-provider request. A future ACP caller must bind the selected model/window and
-recheck its source before a native commit; nothing invokes this automatically.
+provider request. The ACP owner binds the selected model/window and rechecks its source before
+a native commit.
 """
 
 from __future__ import annotations
@@ -65,8 +65,8 @@ def read_compaction_decision(
 ) -> PiCompactionDecision:
     """Evaluate Pi's declared trigger on bounded evidence without mutating Pi.
 
-    This returns no grant to generate a summary or write a session. The future
-    owner caller must separately capture/recheck turn, model and ingress.
+    This returns no grant to generate a summary or write a session. The
+    owner separately captures/rechecks turn, model and ingress.
     """
     try:
         package = package.resolve(strict=True)

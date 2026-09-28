@@ -5,22 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from dataclasses import dataclass
 
 from .coordination_store import MutationStore, PublicationActivationBlocked
 from .native_runtime_input import NativeRuntimeSchemaMeta, NativeRuntimeTable
-from .typed_table import TypedRow, TypedTable
-
-
-@dataclass(frozen=True)
-class _SchemaObject(TypedRow):
-    name: str
-    sql: str
-
-
-@dataclass(frozen=True)
-class _ForeignKeys(TypedRow):
-    foreign_keys: bool
+from .typed_table import SQLiteForeignKeys, SQLiteSchemaObject, TypedTable
 
 
 def _schema() -> dict[str, str]:
@@ -39,7 +27,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
     schema = _schema()
     try:
         meta = NativeRuntimeSchemaMeta.one(db, singleton=1)
-        actual = _SchemaObject.read(
+        actual = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
                 "AND (name LIKE 'native_runtime_%' OR name LIKE 'current_native_cursor%')"
@@ -49,9 +37,9 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
     if meta != NativeRuntimeSchemaMeta(1, 4, _digest(schema)):
         raise PublicationActivationBlocked("native runtime schema version differs")
-    if {row.name: row.sql for row in actual} != schema or _ForeignKeys.read(
+    if {row.name: row.sql for row in actual} != schema or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
-    ) != [_ForeignKeys(True)]:
+    ) != [SQLiteForeignKeys(True)]:
         raise PublicationActivationBlocked("native runtime schema has drifted")
 
 
@@ -60,7 +48,7 @@ def install_native_runtime_schema(store: MutationStore) -> None:
     if type(store) is not MutationStore:
         raise TypeError("native runtime requires the actual coordinator store")
     with store._transaction() as db:
-        present = _SchemaObject.read(
+        present = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",
                 (NativeRuntimeSchemaMeta.declared_name,),

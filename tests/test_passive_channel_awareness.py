@@ -11,13 +11,21 @@ from agent_comms import agent_events as ae
 from agent_comms import passive_channel_awareness as passive_store
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
 
 def _sender(comms, tmp_path):
-    comms.threads.register(Thread("speaker", frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "speaker",
+            frozenset({"comms"}),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
 
 
 def _cursor(comms, owner):
@@ -384,7 +392,14 @@ async def test_overwritten_source_and_owner_replacement_fail_closed_after_captur
         assert "passive channel awareness" not in captured[-1]
         comms.registry.unregister(owner)
         comms.registry.remove(owner)
-        comms.threads.register(Thread(owner, frozenset({"comms"}), str(tmp_path), pid=os.getpid()))
+        comms.threads.register(
+            Thread(
+                owner,
+                frozenset({"comms"}),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         new_owner = comms.registry.require(owner)
         snapshot = comms.registry.snapshot()
         assert not agent.inputs.passive_awareness.frame(

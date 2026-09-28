@@ -49,7 +49,7 @@ def bound(tmp_path):
         "owner",
         frozenset(),
         "/private-worktree",
-        process_identity=ProcessIdentity(123, 1),
+        process_identity=ProcessIdentity.capture(os.getpid()),
         created_at=10.0,
         goal=goal,
         turn_generation=7,

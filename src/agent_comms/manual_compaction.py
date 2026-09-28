@@ -20,9 +20,10 @@ from typing import Any
 from uuid import uuid4
 
 from . import pi_events as pi
-from .backend import compaction_summary, configured_model, rpc_args_for
+from .backend import compaction_summary, configured_model
 from .child_process import AttachedChild, Platform, ProcessGroups
 from .native_entries import StartupMetadataEntry
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_commands import Compact, GetState, PiCommand
 from .pi_helper import PiHelper, PiHelperError, SessionHelperRequest
@@ -93,7 +94,6 @@ _FLAGS = (
 # No arbitrary CLI args: --session/--no-session, --approve, --mode, --,
 # --extension and positional prompts must never override this invocation.
 _VALUE_FLAGS = frozenset({"--provider", "--model", "--api-key", "--thinking"})
-_SWITCH_FLAGS = frozenset({"--print"})
 
 
 def _pinned_package() -> Path:
@@ -171,9 +171,7 @@ def _safe_args(args: Sequence[str]) -> bool:
         arg = args[i]
         if not isinstance(arg, str):
             return False
-        if arg in _SWITCH_FLAGS:
-            i += 1
-        elif arg in _VALUE_FLAGS and i + 1 < len(args):
+        if arg in _VALUE_FLAGS and i + 1 < len(args):
             value = args[i + 1]
             if not isinstance(value, str) or not value or value.startswith("-") or "\x00" in value:
                 return False
@@ -340,11 +338,12 @@ class ManualCompaction:
         self.clean = False
 
     def _validate(self) -> str | None:
-        self.rpc_args = rpc_args_for(self.agent_bin, self.agent_args)
-        if self.rpc_args is None:
-            return "Compaction requires a Pi RPC backend."
         if not _safe_args(self.agent_args):
             return "Compaction arguments could override the saved session."
+        try:
+            self.rpc_args = NativePiRpcLaunch.rpc_arguments(self.agent_args)
+        except NativePiUnavailable as error:
+            return str(error)
         selected = configured_model(self.agent_args)
         assert selected is not None and "/" in selected
         self.provider, self.model = selected.split("/", 1)

@@ -1,0 +1,857 @@
+..............................FFFFFFFF
+=================================== FAILURES ===================================
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a492ae40>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a49e39a0>
+outcome = 'failed_done', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+                    await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+            else:
+>               await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+
+tests/test_goal_failure_observation.py:372:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a38dc050>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+__ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-eof] ___
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a47c0410>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a49e3700>
+outcome = 'eof', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+                    await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+            else:
+>               await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+
+tests/test_goal_failure_observation.py:372:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a4918910>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-observation_error] _
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a4918050>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a3a51630>
+outcome = 'observation_error', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+                    await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+            else:
+>               await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+
+tests/test_goal_failure_observation.py:372:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a491bed0>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-observation_rollback] _
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a4966190>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a3a51710>
+outcome = 'observation_rollback', owner_pauses = False
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+>                   await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+
+tests/test_goal_failure_observation.py:368:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a4749a70>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-failed_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a4748b00>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a39db7e0>
+outcome = 'failed_done', owner_pauses = True
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+                    await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+            else:
+>               await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+
+tests/test_goal_failure_observation.py:372:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a39a48a0>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+___ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-eof] ___
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a38a9250>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a3a53f50>
+outcome = 'eof', owner_pauses = True
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+                    await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+            else:
+>               await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+
+tests/test_goal_failure_observation.py:372:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a474bce0>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-observation_error] _
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a38c27a0>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a39db770>
+outcome = 'observation_error', owner_pauses = True
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+                    await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+            else:
+>               await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
+
+tests/test_goal_failure_observation.py:372:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a47489d0>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+_ test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-observation_rollback] _
+
+wired = <agent_comms.comms.Comms object at 0x7fe3a38c3f00>
+tmp_path = PosixPath('/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/pytest-of-ts/pytest-3/test_acp_terminal_binding_reta7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe3a3957540>
+outcome = 'observation_rollback', owner_pauses = True
+
+    @pytest.mark.parametrize(
+        "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
+    )
+    @pytest.mark.parametrize("owner_pauses", [False, True])
+    async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
+        wired, tmp_path, monkeypatch, outcome, owner_pauses
+    ):
+        from agent_comms.acp import CommsAgent
+        from test_acp import TestAgentTurn as GoalFixture
+
+        agent = CommsAgent(wired, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+        await agent.new_session(str(tmp_path / "project"))
+        goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
+        GoalFixture()._authorize_test_goal(agent, wired, goal)
+        store = agent.turns.goal_store
+        admission = wired.registry.snapshot().admission_generations["project"]
+        for state in ("unknown", "started"):
+            key = f"acp:earlier-{state}"
+            agent.inputs.dispositions.record(
+                key,
+                seq=None,
+                owner="project",
+                admission=admission,
+                target="project",
+                text="private earlier input",
+            )
+            if state == "started":
+                binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
+                assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
+                assert agent.inputs.dispositions.started(key, **binding)
+        ledger_before = agent.inputs.dispositions.path.read_bytes()
+        cursors = wired.root / "acp_delivery_cursors.json"
+        cursor_before = cursors.read_bytes() if cursors.exists() else None
+        if outcome in {"observation_error", "observation_rollback"}:
+            action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
+            with sqlite3.connect(store.path) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_observations "
+                    f"BEGIN SELECT RAISE({action},'injected error'); END"
+                )
+        pause_bytes = None
+
+        async def failed_events(*args, **kwargs):
+            nonlocal pause_bytes
+            if owner_pauses:
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                )
+                pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
+            yield ae.StreamSettled()
+            if outcome != "eof":
+                yield ae.Done(
+                    ok=False,
+                    text="private provider text",
+                    reason_code="assistant_final_stop_missing",
+                    diagnostic={"exit_code": 0},
+                )
+
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
+        try:
+            if outcome == "observation_rollback":
+                with pytest.raises(StorageUncertainError):
+>                   await agent.turns.run_agent_turn(
+                        "project", "project", "Continue", autonomous_goal=True
+                    )
+
+tests/test_goal_failure_observation.py:368:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/agent_comms/turn_runner.py:682: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:732: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:557: in prepare_native
+    await self.runner.inputs.drain_inbox(self.session_id)
+src/agent_comms/input_drain.py:315: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <agent_comms.input_drain.InputDrain object at 0x7fe3a474bce0>
+session_id = 'project'
+
+    async def drain_owned_inbox(self, session_id: str) -> int:
+        if private_root := self.effects._private_nk_marker():
+            pushed = await self._drain_private_if_changed(session_id, private_root)
+            self.schedule_wake(session_id)
+            return pushed
+>       raise PublicationActivationBlocked(
+            "This bus has no canonical protocol marker. Archive and migrate "
+            "existing history into the current source format before starting delivery."
+        )
+E       agent_comms.coordination_store.PublicationActivationBlocked: This bus has no canonical protocol marker. Archive and migrate existing history into the current source format before starting delivery.
+
+src/agent_comms/input_drain.py:353: PublicationActivationBlocked
+=========================== short test summary info ============================
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-failed_done]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-eof]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-observation_error]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[False-observation_rollback]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-failed_done]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-eof]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-observation_error]
+FAILED tests/test_goal_failure_observation.py::test_acp_terminal_binding_retains_inputs_pause_and_no_schedule[True-observation_rollback]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 8 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+8 failed, 30 passed in 12.71s

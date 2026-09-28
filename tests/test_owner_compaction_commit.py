@@ -765,6 +765,7 @@ from pathlib import Path
 from dataclasses import replace
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.child_process import ProcessIdentity
 bridge = OwnerCompactionCommit(Path(sys.argv[1]), Path(sys.argv[2]))
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
@@ -881,6 +882,7 @@ from pathlib import Path
 from dataclasses import replace
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.child_process import ProcessIdentity
 import agent_comms.native_package as provenance
 provenance.MANIFEST = Path(sys.argv[6])  # Test-only published tree including barrier.
 bridge = OwnerCompactionCommit(Path(sys.argv[1]),Path(sys.argv[2]))

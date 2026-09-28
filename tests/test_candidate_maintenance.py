@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -23,8 +24,19 @@ def _wire(base: Path) -> tuple[Comms, str]:
     root = base / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root)
-    comms.threads.register(Thread("sender", frozenset(), str(base), pid=os.getpid()))
-    comms.threads.register(Thread("beta", frozenset({"team"}), str(base), pid=os.getpid()))
+    comms.threads.register(
+        Thread(
+            "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
+    comms.threads.register(
+        Thread(
+            "beta",
+            frozenset({"team"}),
+            str(base),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
     return comms, comms.messaging.initialize_private_initial_protocol()
 
 

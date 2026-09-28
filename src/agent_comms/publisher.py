@@ -378,10 +378,9 @@ class Publisher:
                 raise RelationViolationError("A saved/aggregate view is not routable.")
             target = BuiltinChannel.canonical(message.target)
             if not is_channel_target(target):
-                if snapshot.aliases.get(target, target) != target:
-                    raise RelationViolationError(
-                        "Initial direct aliases need a stable send binding."
-                    )
+                # Bind the alias in this guarded publication snapshot. The
+                # envelope and frozen audience carry its canonical incarnation.
+                target = snapshot.aliases.get(target, target)
                 recipient = snapshot.threads.get(target)
                 if recipient is None or not snapshot.statuses[target].visible:
                     raise RelationViolationError("Initial direct target must be visible.")

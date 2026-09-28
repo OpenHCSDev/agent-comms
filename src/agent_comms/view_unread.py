@@ -4,23 +4,47 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
 from weakref import WeakValueDictionary
 
-from .read_ledger import ReadLedger
 from .native_entries import NativeEntry
+from .read_ledger import ReadLedger
 from .store_files import file_revision
+from .typed_table import Column, TypedRow, TypedTable
 
-_INDEX_VERSION = 1
+_INDEX_VERSION = 2
+
+
+class ReplyIndexTable:
+    """Tables belonging to this disposable transcript reply index."""
 
 
 @dataclass(frozen=True)
-class ReplyIndex:
+class ReplyIndex(ReplyIndexTable, TypedTable):
     revision: tuple[int, int, int, int] | None = None
     through: int = 0
     total: int = 0
+    source: str = field(default="", metadata={"sql": Column(primary_key=True, check="source<>''")})
+
+
+@dataclass(frozen=True)
+class TranscriptReply(ReplyIndexTable, TypedTable):
+    source: str = field(metadata={"sql": Column(primary_key=True)})
+    end: int = field(metadata={"sql": Column(primary_key=True)})
+    ordinal: int
+    without_rowid = True
+
+
+@dataclass(frozen=True)
+class _IndexVersion(TypedRow):
+    user_version: int
+
+
+@dataclass(frozen=True)
+class _IndexTable(TypedRow):
+    name: str
 
 
 class TranscriptReadState:
@@ -65,26 +89,20 @@ class TranscriptReadState:
             connection = sqlite3.connect(self._index_path, check_same_thread=False)
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
-                # A future reply-classification change increments this version;
-                # an old derived projection must then be rebuilt from the file.
-                version = connection.execute("PRAGMA user_version").fetchone()[0]
-                if version != _INDEX_VERSION:
-                    connection.execute("DROP TABLE IF EXISTS replies")
-                    connection.execute("DROP TABLE IF EXISTS sources")
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS sources ("
-                    "source TEXT PRIMARY KEY, inode INTEGER NOT NULL, size INTEGER NOT NULL, "
-                    "mtime_ns INTEGER NOT NULL, ctime_ns INTEGER NOT NULL, "
-                    "through INTEGER NOT NULL, total INTEGER NOT NULL)"
-                )
-                connection.execute(
-                    "CREATE TABLE IF NOT EXISTS replies ("
-                    "source TEXT NOT NULL, end INTEGER NOT NULL, ordinal INTEGER NOT NULL, "
-                    "PRIMARY KEY(source, end)) WITHOUT ROWID"
-                )
-                connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
+                connection.execute("BEGIN IMMEDIATE")
+                (version,) = _IndexVersion.read(connection.execute("PRAGMA user_version"))
+                if version.user_version == 0:
+                    if _IndexTable.read(
+                        connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    ):
+                        raise ValueError("Reply index requires the quiet runtime reset")
+                    for table in TypedTable.members_with(ReplyIndexTable):
+                        table.create(connection)
+                    connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
+                elif version.user_version != _INDEX_VERSION:
+                    raise ValueError("Reply index requires the quiet runtime reset")
                 connection.commit()
-            except sqlite3.DatabaseError:
+            except (sqlite3.DatabaseError, ValueError):
                 connection.close()
                 raise
             self._connection = connection
@@ -102,12 +120,7 @@ class TranscriptReadState:
         if revision is None:
             return ReplyIndex()
         database = self._database()
-        row = database.execute(
-            "SELECT inode, size, mtime_ns, ctime_ns, through, total "
-            "FROM sources WHERE source = ?",
-            (source,),
-        ).fetchone()
-        cached = ReplyIndex(tuple(row[:4]), row[4], row[5]) if row else ReplyIndex()
+        cached = ReplyIndex.one(database, source=source) or ReplyIndex()
         if cached.revision == revision and cached.through <= revision[1]:
             return cached
         append = (
@@ -119,7 +132,9 @@ class TranscriptReadState:
         through, total = (cached.through, cached.total) if append else (0, 0)
         with database:
             if not append:
-                database.execute("DELETE FROM replies WHERE source = ?", (source,))
+                database.execute(
+                    f"DELETE FROM {TranscriptReply.declared_name} WHERE source = ?", (source,)
+                )
             with path.open("rb") as stream:
                 stream.seek(through)
                 while stream.tell() < revision[1]:
@@ -133,17 +148,9 @@ class TranscriptReadState:
                         continue
                     if record.unread_reply:
                         total += 1
-                        database.execute(
-                            "INSERT INTO replies(source, end, ordinal) VALUES (?, ?, ?)",
-                            (source, through, total),
-                        )
-            database.execute(
-                "INSERT OR REPLACE INTO sources "
-                "(source, inode, size, mtime_ns, ctime_ns, through, total) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (source, *revision, through, total),
-            )
-        return ReplyIndex(revision, through, total)
+                        TranscriptReply(source, through, total).insert(database)
+            ReplyIndex(revision, through, total, source).upsert(database)
+        return ReplyIndex(revision, through, total, source)
 
     def counts(self, viewer: str, sources: Mapping[str, str]) -> dict[str, int]:
         with self._lock:
@@ -169,16 +176,15 @@ class TranscriptReadState:
             seen = self.reads.transcript_seen(viewer, source, index.revision[0])
             if seen > index.through:
                 seen = 0  # A truncated/rebuilt source is a new conversation tail.
-            row = (
-                self._database()
-                .execute(
-                    "SELECT ordinal FROM replies WHERE source = ? AND end <= ? "
+            replies = TranscriptReply.read(
+                self._database().execute(
+                    f"SELECT * FROM {TranscriptReply.declared_name} WHERE source=? AND end<=? "
                     "ORDER BY end DESC LIMIT 1",
                     (source, seen),
                 )
-                .fetchone()
             )
-            result[name] = index.total - (row[0] if row else 0)
+            last = next(iter(replies), None)
+            result[name] = index.total - (last.ordinal if last is not None else 0)
         return result
 
     def mark_read(self, viewer: str, source: str, through: int) -> None:

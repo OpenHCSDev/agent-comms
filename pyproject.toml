@@ -53,7 +53,7 @@ Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 [project.scripts]
 agent-comms = "agent_comms.cli:main"
 agent-comms-acp = "agent_comms.acp:main"
-agent-comms-agent = "agent_comms.agent_loop:main"
+agent-comms-agent = "agent_comms.worker:main"
 agent-comms-nk-foreground = "agent_comms.nk_foreground:main"
 pi-comms-native = "agent_comms.native_pi:main"
 

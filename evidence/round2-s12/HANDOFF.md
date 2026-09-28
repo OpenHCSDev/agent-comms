@@ -156,3 +156,94 @@ This is an explicit remaining integration requirement, not completed behavior.
 
 Current source diff: -105/+503 lines. Tests: -0/+176 lines. Additions establish
 A13 and typed join shapes; existing behavior tests were not ported or weakened.
+
+
+## S12 durable transcript annotation cutover contract
+
+`transcript_routes.sqlite3` and any saved `transcript_routes.json` contain owner-authored data. NEVER reset them as transcript indexes. Parent owns the one-shot tool under tools/cutover and quiet installation; no runtime converter remains in #237.
+
+New declarations in transcript_routes.py: `TranscriptRoute(session_file, entry_id, routing: TurnRouting)`, physical `transcript_route`; existing `InputDisplay` is the sole display/binding row (`native_id`, `text`, `routing: TurnRouting|None`, `sent_text_digest: str|None`), physical `input_display`. All schemas/writes/reads derive from A13. `TranscriptRoutingStorage` uses the existing TranscriptCodec (Message boundary retained), selected by the routing field, not a second serializer. `TranscriptRoutes.input_bindings()` now returns dict[str, InputDisplay], and its sole current consumer compares typed digest/routing facts.
+
+One-shot input inventory must preserve:
+- routes rows keyed by exact session_file/entry_id, including paths for archived sessions;
+- display_text, including NULL (internal) versus missing row versus empty text;
+- all input_routing digest/routing rows; reject/report orphan input_routing without input_display instead of silently discarding it or manufacturing human display;
+- optional JSON source and source-column precedence: current indexed SQLite entries win; in the retired source-column shape, JSON replaces only source='legacy' rows and supplies absent keys; in the source-free current predecessor, SQLite wins. If metadata routes_imported exists, JSON was retired and must not overwrite current SQLite. legacy_revision/routes_imported metadata and source column do not enter the new store.
+
+Read old stores read-only under the parent's quiet lock, decode existing routing with TranscriptCodec, create a NEW exclusive stage via current TranscriptRoutes/typed rows. Preserve each native ID, digest, text and routing semantically, plus per-session entry keys; verify counts and reopened paged input/reply attribution. Reject invalid/conflicting rows with source identity; leave originals unchanged. No installation on partial success. Parent installs only after full verification, then retires the old JSON/schema and deletes the one-shot tool.
+
+Runtime/derived `transcript_reply_index.sqlite3` is separately resettable; new declared ReplyIndex/TranscriptReply tables replace the prior schema. `ReadLedger.filename` is durable human read position and MUST remain intact. No source data is deleted here.
+
+### Current local closure evidence
+
+- durable-route-closure-final.log: 38 passed, including current native transcript/page
+  attribution, bounded 10,000-entry route paging, immutable input binding, durable
+  incomplete-schema refusal without writes, reply/unread behavior and A13 guards.
+- native-consumers-bounded.log: 88 passed, 1 deselected. Large certificate fixture
+  construction (>8MiB and 1001 fsynced publications) exceeded a prior bounded run;
+  that test is not counted green. UNKNOWN tests use real subprocess/filesystem
+  boundaries; replies are test fixtures, not installed Pi/provider acceptance.
+- Removed old JSON/source-column importer, migration_source/routes_imported runtime
+  paths, split input_routing schema, and four exclusive compatibility tests.
+- Current parent b4cb42a has OwnerReleaseStore but VerifiedOwnerLoss still calls
+  removed _read_owner_release_receipts. S12 owns the typed current caller fix;
+  no old receipt fallback. Integrate parent process-identity/release declarations
+  before validating that fix.
+
+## Parent b4cb42a integration and current response/page closure
+
+Parent229/b4cb42a integrated without conflicts, preserving access/admission floor,
+current history validation and parent one-shot tools. Changes below are S12;
+inherited parent/Darwin/Pascal/Copernicus changes retain their original owners.
+
+- VerifiedOwnerLoss now reads the typed OwnerReleaseStore; no removed raw reader,
+  nested thread JSON decoding or PID-only liveness. Require the released/current
+  exact process identity, then identity-bound death. Prior admitted generations
+  can still settle after a later attested release of the same incarnation. Unsent
+  UNKNOWN requires exact stopped generation; source input/proof stays unchanged.
+  35 checks pass including real child lifetime, PID/start-time mismatch refusal,
+  later release and UNKNOWN abandonment followed only by new input.
+- coordination_response.py fully adopts A13: ResponseSchemaMeta (version2),
+  PublicationAppendDispatches and SelectedResponseRoute projection. Deleted
+  response DDL roster, raw fetches, positional writes and handwritten updates.
+  All terminal obligation/attempt/execution/assignment/pointer writes use their
+  row declarations. Existing transaction/dispatch no-resend fences remain.
+- Runtime reset: coordination.sqlite3 additionally includes response_schema_meta
+  and publication_append_dispatches; same whole-file quiet reset, not migration.
+- BusPageSource and BusPageRow derive the bus page index schema (physical names
+  bus_page_source and bus_page). Typed offsets STREAM, close their cursors, and
+  validate only consumed rows; history never materializes the whole index.
+  bus_page_index.sqlite3 is derived/resettable at quiet cutover. Current cache
+  damage still uses authoritative bus rows; old schemas are not interpreted.
+  MessageBus history needs no edits; passive_channel_awareness._exact adopts the
+  typed iterator with next(), retaining exact-source checks and no wake rebuild.
+- SQLiteSchemaObject/SQLiteForeignKeys are shared A13 projections; deleted copies
+  from sidecar/native schema modules rather than adding more metadata mirrors.
+- 24 page/response/admission-floor/A13 checks pass (pages-response-floor-focused),
+  including real DB reset/reopen/index rebuild excluding rows <= admission floor.
+  Broad passive-awareness testing is blocked on Darwin's current registration
+  source: ThreadManagement.claim_thread still passes removed pid argument.
+  Reported concretely on235; no registration compatibility added here.
+
+## Durable goal history table closure and parent tool contract
+
+`goal_history.sqlite3` is durable, NEVER reset. Existing GoalHistoryEntry now
+owns its table/schema/index, typed Goal before/after values, owner_created_at,
+and pending/committed/aborted/uncertain state. Old entries/metadata DDL, _encode,
+_decode and positional row reconstruction are deleted. Its public to_wire keeps
+exact original five fields and nested Goal state tags, excluding internal owner
+and journal state.12 behavior/family/guard checks pass, including crash before
+registry write, lost commit ACK, fsync uncertainty, reopen/rename and observed gaps.
+
+Parent tool `tools/cutover/registry_history.py` currently rewrites JSON inside
+retired `entries`; it must instead create a NEW current GoalHistoryStore stage
+and insert typed GoalHistoryEntry rows, preserving ALL source rows (including
+pending/aborted/uncertain), exact sequence, owner_created_at, kind, state,
+observed_at, and converted before_goal/after_goal as before/after. Constructors:
+`GoalHistoryEntry(sequence, kind, observed_at, before, after,
+                  owner_created_at=..., state=...).insert(db)`.
+Physical table is `goal_history_entry`; schema comes from its declaration. Use
+existing StoredGoal.current for snapshot rewrite; no new runtime reader. Preserve
+source backup, no resequencing/re-timestamping or observe()/automatic reconciliation
+while staging. Compare all rows after close/reopen; do not install old metadata.
+This extends parent's existing one-shot, not a second tool or migration store.

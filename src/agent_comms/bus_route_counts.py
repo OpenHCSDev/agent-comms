@@ -20,8 +20,12 @@ from .routing import DeliveryMessage
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 
+class RouteTable:
+    """Disposable tables owned and reset together by the route projection."""
+
+
 @dataclass(frozen=True)
-class RouteSourceRow(TypedTable):
+class RouteSourceRow(RouteTable, TypedTable):
     id: int = field(metadata={"sql": Column(primary_key=True)})
     identity: tuple[int, int, int, int] | None
     offset: int
@@ -29,7 +33,7 @@ class RouteSourceRow(TypedTable):
 
 
 @dataclass(frozen=True)
-class RouteEntryRow(TypedTable):
+class RouteEntryRow(RouteTable, TypedTable):
     seq: int = field(metadata={"sql": Column(primary_key=True)})
     target: str
     sender: str
@@ -39,7 +43,7 @@ class RouteEntryRow(TypedTable):
 
 
 @dataclass(frozen=True)
-class RouteTotalRow(TypedTable):
+class RouteTotalRow(RouteTable, TypedTable):
     target: str = field(metadata={"sql": Column(primary_key=True)})
     sender: str = field(metadata={"sql": Column(primary_key=True)})
     sender_lookup: str = field(metadata={"sql": Column(primary_key=True)})
@@ -80,7 +84,7 @@ class BusRouteCounts:
         self.connection.execute("PRAGMA synchronous=FULL")
         if fresh:
             with self.connection:
-                for owner in (RouteSourceRow, RouteEntryRow, RouteTotalRow):
+                for owner in TypedTable.members_with(RouteTable):
                     owner.create(self.connection)
 
     def __enter__(self) -> BusRouteCounts:
@@ -129,8 +133,8 @@ class BusRouteCounts:
             totals: dict[tuple[str, str, str], RouteTotalRow] = {}
             with self.connection:
                 if rebuild:
-                    self.connection.execute(f'DELETE FROM "{RouteEntryRow.declared_name}"')
-                    self.connection.execute(f'DELETE FROM "{RouteTotalRow.declared_name}"')
+                    for owner in TypedTable.members_with(RouteTable):
+                        self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
                 if source is not None:
                     source.seek(offset)
                     for raw in source:

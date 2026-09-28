@@ -15,18 +15,18 @@ fut = <coroutine object Event.wait at 0x7f44ced77d80>, timeout = 10
 
     async def wait_for(fut, timeout):
         """Wait for the single Future or coroutine to complete, with timeout.
-    
+
         Coroutine will be wrapped in Task.
-    
+
         Returns result of the Future or coroutine.  When a timeout occurs,
         it cancels the task and raises TimeoutError.  To avoid the task
         cancellation, wrap it in shield().
-    
+
         If the wait is cancelled, the task is also cancelled.
-    
+
         If the task suppresses the cancellation and returns a value instead,
         that value is returned.
-    
+
         This function is a coroutine.
         """
         # The special case for timeout <= 0 is for the following case:
@@ -46,39 +46,39 @@ fut = <coroutine object Event.wait at 0x7f44ced77d80>, timeout = 10
         #         assert False
         #
         # asyncio.run(test_waitfor())
-    
-    
+
+
         if timeout is not None and timeout <= 0:
             fut = ensure_future(fut)
-    
+
             if fut.done():
                 return fut.result()
-    
+
             await _cancel_and_wait(fut)
             try:
                 return fut.result()
             except exceptions.CancelledError as exc:
                 raise TimeoutError from exc
-    
+
         async with timeouts.timeout(timeout):
 >           return await fut
                    ^^^^^^^^^
 
-/usr/lib/python3.14/asyncio/tasks.py:488: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/asyncio/tasks.py:488:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <asyncio.locks.Event object at 0x7f44ceddc440 [unset]>
 
     async def wait(self):
         """Block until the internal flag is true.
-    
+
         If the internal flag is true on entry, return True
         immediately.  Otherwise, block until another task calls
         set() to set the flag to true, then return True.
         """
         if self._value:
             return True
-    
+
         fut = self._get_loop().create_future()
         self._waiters.append(fut)
         try:
@@ -107,14 +107,14 @@ tmp_path = PosixPath('/home/ts/wt/comms-l0a-incarnation-delivery-20260928/.artif
         first = CommsClient(comms, agent_bin=sys.executable, agent_args=[str(program)])
         second, third = CommsClient(comms), CommsClient(comms)
         started, settled = asyncio.Event(), asyncio.Event()
-    
+
         class Client:
             async def session_update(self, session_id, update):
                 if "TURN_STARTED" in update.get("content", {}).get("text", ""):
                     started.set()
                 if update.get("_meta", {}).get("agentComms", {}).get("turnSettled"):
                     settled.set()
-    
+
         first.on_connect(Client())
         second.on_connect(Client())
         response = await first.new_session(str(project))
@@ -125,12 +125,12 @@ tmp_path = PosixPath('/home/ts/wt/comms-l0a-incarnation-delivery-20260928/.artif
         try:
 >           await asyncio.wait_for(started.wait(), 10)
 
-tests/test_detached_owner.py:46: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_detached_owner.py:46:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib/python3.14/asyncio/tasks.py:487: in wait_for
     async with timeouts.timeout(timeout):
                ^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <Timeout [expired]>
 exc_type = <class 'asyncio.exceptions.CancelledError'>
@@ -143,14 +143,14 @@ exc_val = CancelledError(), exc_tb = <traceback object at 0x7f44cedcc480>
         exc_tb: TracebackType | None,
     ) -> bool | None:
         assert self._state in (_State.ENTERED, _State.EXPIRING)
-    
+
         if self._timeout_handler is not None:
             self._timeout_handler.cancel()
             self._timeout_handler = None
-    
+
         if self._state is _State.EXPIRING:
             self._state = _State.EXPIRED
-    
+
             if self._task.uncancel() <= self._cancelling and exc_type is not None:
                 # Since there are no new cancel requests, we're
                 # handling this.

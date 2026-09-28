@@ -94,3 +94,20 @@ def test_route_storage_and_decoder_have_one_declaration_owner():
                 isinstance(base, ast.Name) and base.id in {"TypedTable", "TypedRow"}
                 for base in declaration.bases
             )
+
+
+def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
+    from dataclasses import dataclass
+    from agent_comms.bus_route_counts import RouteTable
+    from agent_comms.typed_table import TypedTable
+
+    @dataclass(frozen=True)
+    class ExtraRouteStatisticRow(RouteTable, TypedTable):
+        observed: int
+
+    with BusRouteCounts(tmp_path / "bus.jsonl") as index:
+        ExtraRouteStatisticRow(7).insert(index.connection)
+        index.connection.commit()
+        assert ExtraRouteStatisticRow.select(index.connection) == [ExtraRouteStatisticRow(7)]
+        assert index.sync(lambda _: None)
+        assert ExtraRouteStatisticRow.select(index.connection) == []

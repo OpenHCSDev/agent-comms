@@ -1,0 +1,23 @@
+{
+  "method": "S9 first-parent authored commits after channel closure; dependency merge deltas excluded; includes pending local delta",
+  "counts": {
+    "production": {
+      "added": 907,
+      "deleted": 1960
+    },
+    "tests": {
+      "added": 332,
+      "deleted": 1232
+    }
+  },
+  "commits": [
+    "1e468429becbb8d4d42df6ed3746888d7d8f7a8d",
+    "789770067c5639e7866bf301b31564138f3082de",
+    "4896f997151f42b20ef0974faaf835b27f9e0707",
+    "e0c18f36334fab97ea80a9a5d3085a81d9ef8a99",
+    "1e7704b7a22e9316f7ad57e6bc3e3a29fab75d09",
+    "fadd2421d802b2e5d480c34faa2cedb39a746b85",
+    "6639e9bd4bbc3ae9a3b6b5a95152d8fb59931053",
+    "2ebefe8da00247e108ba39472b2247a136d98bd2"
+  ]
+}
