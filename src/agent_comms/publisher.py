@@ -142,7 +142,6 @@ class Publisher:
             mentions=ThreadMention.find(message.body, resolve_mention),
         )
 
-
     def publish_ordinary(
         self, message: Message, *, _human_origin: HumanOrigin | None = None
     ) -> Message:
@@ -382,17 +381,15 @@ class Publisher:
                     raise RelationViolationError(
                         "Initial direct aliases need a stable send binding."
                     )
-                if (
-                    target not in snapshot.threads
-                    or not snapshot.threads[target].role.executable
-                    or not snapshot.statuses[target].visible
-                ):
-                    raise RelationViolationError(
-                        "Initial direct target must be a visible executable."
-                    )
+                recipient = snapshot.threads.get(target)
+                if recipient is None or not snapshot.statuses[target].visible:
+                    raise RelationViolationError("Initial direct target must be visible.")
                 if target == sender:
                     raise RelationViolationError("A thread cannot message itself.")
-                names = [target]
+                names = [target] if recipient.role.executable else []
+                if not recipient.role.executable:
+                    # A human DM is displayed, never admitted as agent work.
+                    message = replace(message, notice=True)
             else:
                 channel = catalog.resolve(target)
                 names = [

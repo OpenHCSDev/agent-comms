@@ -459,32 +459,8 @@ class TurnRunner:
         if (wake := self.inputs.wake_tasks.get(session_id)) is not None and not wake.done():
             return
         thread = self.comms.registry.require(self.sessions.require(session_id))
-        if pending := self.inputs.pending_turns.get(session_id):
-            fresh = [
-                turn
-                for turn in pending
-                if turn.still_current_interrupt(thread.goal)
-                and (
-                    turn.direct_interrupt_goal_id is None
-                    or (
-                        (
-                            row := self.inputs.dispositions.read().rows.get(
-                                turn.direct_interrupt_input_key or ""
-                            )
-                        )
-                        is not None
-                        and row.unresolved
-                        and row.native_id is None
-                    )
-                )
-            ]
-            for turn in pending:
-                if turn not in fresh:
-                    self.inputs.forget_direct_interrupt(session_id, turn)
-            if fresh:
-                self.inputs.pending_turns[session_id] = fresh
-                return
-            self.inputs.pending_turns.pop(session_id, None)
+        if self.inputs.pending_turns.get(session_id):
+            return
         if thread.pid != os.getpid() or not self.comms.registry.status(thread.name).running:
             return
         goal = thread.goal
@@ -673,7 +649,9 @@ class TurnRunner:
         return resumed
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = self.comms.goals.goal_changed(thread_name, self.goal_execution_signatures.get(session_id))
+        event = self.comms.goals.goal_changed(
+            thread_name, self.goal_execution_signatures.get(session_id)
+        )
         if event is None:
             return
         await self.effects._emit_event(session_id, event)
@@ -694,11 +672,6 @@ class TurnRunner:
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
         dependency_wait_id: str | None = None,
-        direct_interrupt_goal_id: str | None = None,
-        direct_interrupt_goal_revision: int | None = None,
-        direct_interrupt_wait_id: str | None = None,
-        direct_interrupt_input_key: str | None = None,
-        direct_interrupt_ticket: str | None = None,
     ) -> None:
         from .owned_turn import OwnedTurn
 
@@ -716,11 +689,6 @@ class TurnRunner:
             original_owner_input=original_owner_input,
             original_goal_id=original_goal_id,
             dependency_wait_id=dependency_wait_id,
-            direct_interrupt_goal_id=direct_interrupt_goal_id,
-            direct_interrupt_goal_revision=direct_interrupt_goal_revision,
-            direct_interrupt_wait_id=direct_interrupt_wait_id,
-            direct_interrupt_input_key=direct_interrupt_input_key,
-            direct_interrupt_ticket=direct_interrupt_ticket,
         ).run()
 
     async def close(self) -> None:

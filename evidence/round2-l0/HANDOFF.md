@@ -35,3 +35,24 @@ and the owner's D22 decision are in merged PR227 docs/refactor/round2.
   it runs at the owner's quiet install, before this surface is called complete.
 - Full scoped L0 guards and integrated local suite remain to run. No installed
   behavior claim is made for this draft; live installed bus is unchanged.
+
+## Continuation: canonical parity and dead admission removal
+
+Agent-to-human ordinary messages now use canonical display-only notices with no
+executable audience or wake. Removed the dead public ACK cursor initializer,
+steering-origin mirrors, direct-interrupt tickets and their consumers in
+ScheduledTurn, OwnedTurn, TurnRunner and TurnProgress. Current ACP/goal queues
+remain; the canonical drain schedules their independent pending continuations.
+Deleted the old direct-interrupt suite because its entire entry path was removed.
+Removed assertions about the deleted cursor dictionary from retained native tests;
+all actual receipt/UNKNOWN/no-provider/claim checks remain.
+
+`canonical-parity.log`: 59 passed, one failure at Darwin's separately fixed
+update_tags caller. `drain-current-contracts.log`: 54 passed after the structural
+assertions were deleted; earlier eight cursor-attribute failures are retained.
+No installed or full-suite claim yet; D22 and remaining L0 guards still open.
+
+R0 PR228 merged. Effective main rules now require only the fast Debt ratchet and
+surface guards check. Real skipped-workflow probe PR233 reported BLOCKED with
+no check runs, proving skipped CI does not satisfy it. Probe closed unmerged;
+receipt in r0-required-check.json. Slow matrix remains asynchronous.

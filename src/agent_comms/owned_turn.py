@@ -50,11 +50,6 @@ class OwnedTurn:
         original_owner_input: bool = False,
         original_goal_id: str | None = None,
         dependency_wait_id: str | None = None,
-        direct_interrupt_goal_id: str | None = None,
-        direct_interrupt_goal_revision: int | None = None,
-        direct_interrupt_wait_id: str | None = None,
-        direct_interrupt_input_key: str | None = None,
-        direct_interrupt_ticket: str | None = None,
     ) -> None:
         self.runner = runner
         self.session_id = session_id
@@ -69,11 +64,6 @@ class OwnedTurn:
         self.original_owner_input = original_owner_input
         self.original_goal_id = original_goal_id
         self.dependency_wait_id = dependency_wait_id
-        self.direct_interrupt_goal_id = direct_interrupt_goal_id
-        self.direct_interrupt_goal_revision = direct_interrupt_goal_revision
-        self.direct_interrupt_wait_id = direct_interrupt_wait_id
-        self.direct_interrupt_input_key = direct_interrupt_input_key
-        self.direct_interrupt_ticket = direct_interrupt_ticket
 
     def admit(self):
         self.original_display = (
@@ -91,55 +81,9 @@ class OwnedTurn:
             return
         self.goal = self.thread.goal
         self.wait = self.runner.comms.goals.goal_wait(self.thread_name)
-        self.direct_interrupt = self.direct_interrupt_goal_id is not None
-        if self.direct_interrupt:
-            self.tickets = self.runner.inputs.direct_interrupt_tickets.get(self.session_id, {})
-            if (
-                self.direct_interrupt_input_key is None
-                or self.direct_interrupt_ticket is None
-                or self.tickets.get(self.direct_interrupt_input_key) != self.direct_interrupt_ticket
-            ):
-                return
-            self.tickets.pop(
-                self.direct_interrupt_input_key, None
-            )  # one admission, one turn at most
-            # A typed interruption must be one NEW exact direct input whose
-            # goal revision and wait ID were captured AT DISPATCH; any change
-            # after dispatch denies without retry. Benign bumps before
-            # dispatch are handled by the dispatcher's fresh rebind.
-            self.aliases = self.runner.comms.registry.aliases_for(self.thread_name)
-            if (
-                self.autonomous_goal
-                or self.original_owner_input
-                or self.dependency_wait_id is not None
-                or self.goal is None
-                or not self.goal.state.active
-                or self.goal.id != self.direct_interrupt_goal_id
-                or self.goal.revision != self.direct_interrupt_goal_revision
-                or (self.wait.wait_id if self.wait else None) != self.direct_interrupt_wait_id
-                or len(self.origins) != 1
-                or self.origins[0].seq <= 0
-                or self.origins[0].target not in self.aliases
-                or self.direct_interrupt_input_key is None
-                or self.original_keys
-                or self.direct_interrupt_input_key
-                != self.runner.inputs.dispositions.bus_key(self.origins[0], self.thread)
-            ):
-                return
-            self.row = self.runner.inputs.dispositions.read().rows.get(
-                self.direct_interrupt_input_key
-            )
-            if (
-                self.row is None
-                or not self.row.unresolved
-                or self.row.native_id is not None
-                or self.row.sequence != self.origins[0].seq
-            ):
-                return
         if (
             self.wait is not None
             and not self.original_owner_input
-            and not self.direct_interrupt
             and self.wait.wait_id != self.dependency_wait_id
         ):
             return
@@ -154,7 +98,7 @@ class OwnedTurn:
         self.goal_permit: LaunchPermit | None = None
         if self.autonomous_goal and (self.goal is None or not self.goal.state.active):
             return
-        if self.goal is not None and self.goal.state.active and not self.direct_interrupt:
+        if self.goal is not None and self.goal.state.active:
             if backend.rpc_args_for(self.runner.agent_bin, self.runner.agent_args) is None:
                 if self.autonomous_goal:
                     return
@@ -233,7 +177,6 @@ class OwnedTurn:
                     self.original_keys = (*self.original_keys, self.key)
         self.runner.inputs.turn_input_keys[self.session_id] = set(self.original_keys)
         self.runner.inputs.steering_input_keys[self.session_id] = {}
-        self.runner.inputs.steering_origins[self.session_id] = {}
         self.runner.inputs.steering_goal_ids[self.session_id] = {}
 
         self.passive_frame = ""
@@ -293,18 +236,6 @@ class OwnedTurn:
                 )
             else:
                 goal_ok = current_goal is None or not current_goal.state.active
-            # A parked-goal DM owns no goal attempt. A fresh owner input
-            # may join that SAME interruption, not borrow or retry the goal.
-            interrupt_scope_current = (
-                self.direct_interrupt
-                and current_goal is not None
-                and current_goal.state.active
-                and current_goal.id == self.direct_interrupt_goal_id
-                and current_goal.revision == self.direct_interrupt_goal_revision
-                and (current_wait.wait_id if current_wait else None)
-                == self.direct_interrupt_wait_id
-            )
-            owner_interrupt_followup = False
             input_permit = self.goal_permit
             admitted_goals = self.runner.inputs.steering_goal_ids.get(self.session_id, {})
             owner_followup = public_id is not None and public_id in admitted_goals
@@ -324,8 +255,7 @@ class OwnedTurn:
                     else self.progress.originated_attempts.get(admitted_goal_id or "")
                 )
                 if current_goal_id is not None and input_permit is None:
-                    owner_interrupt_followup = interrupt_scope_current and goal_ok
-                    goal_ok = owner_interrupt_followup
+                    goal_ok = False
             keys = (
                 self.original_keys
                 if public_id is None
@@ -338,21 +268,6 @@ class OwnedTurn:
                     )
                     else ()
                 )
-            )
-            if owner_interrupt_followup:
-                # The permitless exception requires this exact fresh ACP
-                # admission; an absent/foreign mapping cannot skip binding.
-                owner_interrupt_followup = keys == (f"acp:{public_id}",)
-                goal_ok = owner_interrupt_followup
-            interrupt_ok = (
-                interrupt_scope_current
-                and public_id is None
-                and len(self.direct_origins) == 1
-                and len(keys) == 1
-                and current is not None
-                and keys[0] == self.direct_interrupt_input_key
-                and keys[0]
-                == self.runner.inputs.dispositions.bus_key(self.direct_origins[0], current)
             )
             owner_ok = (
                 current is not None
@@ -392,7 +307,6 @@ class OwnedTurn:
                     current_wait is None
                     or owner_followup
                     or (public_id is None and self.original_owner_input)
-                    or interrupt_ok
                     or (
                         public_id is None
                         and current_wait.wait_id == self.dependency_wait_id
@@ -413,11 +327,7 @@ class OwnedTurn:
                     and not owner_followup
                     and not (
                         public_id is None
-                        and (
-                            self.original_owner_input
-                            or self.dependency_wait_id is not None
-                            or interrupt_ok
-                        )
+                        and (self.original_owner_input or self.dependency_wait_id is not None)
                     )
                 )
             )
@@ -522,12 +432,7 @@ class OwnedTurn:
                     ):
                         allowed = False
                         break
-            if (
-                allowed
-                and current_wait is not None
-                and not interrupt_ok
-                and not owner_interrupt_followup
-            ):
+            if allowed and current_wait is not None:
                 allowed = self.runner.comms.goals.consume_goal_wait(canonical, current_wait.wait_id)
             if allowed:
                 if public_id is None:
@@ -536,10 +441,7 @@ class OwnedTurn:
                 else:
                     row = self.runner.inputs.dispositions.read().rows.get(keys[0]) if keys else None
                     display = row.source_text if row is not None else sent_text
-                    origin = self.runner.inputs.steering_origins.get(self.session_id, {}).get(
-                        public_id
-                    )
-                    input_origins = (origin,) if origin is not None else ()
+                    input_origins = ()
                 self.runner.comms.transcripts.routes.record_input_display(
                     native_id,
                     display,
@@ -603,36 +505,23 @@ class OwnedTurn:
             f"Peer state: {json.dumps(self.peers)}\n\n{self.task}"
         )
         if self.goal is not None and self.goal.state.active:
-            if self.direct_interrupt:
-                self.task = (
-                    f"Persistent goal {self.goal.id} is parked for this ordinary direct-message "
-                    "interruption. This is NOT a goal attempt or declared dependency reply. "
-                    "Respond to this message first; do not call comms_goal merely to finish "
-                    "the DM, report goal progress, clear its standby wait, or retry an UNKNOWN "
-                    "input. The goal remains separately scheduled. Current goal state for "
-                    "answering questions about it only (verify live project state before "
-                    "reporting current PR status):\n"
-                    f"Goal status: {self.goal.state.declared_name}; revision: {self.goal.revision}\n"
-                    f"Objective: {self.goal.text}\nProgress: {self.goal.progress}\n\n" + self.task
-                )
-            else:
-                self.task = (
-                    f"Persistent goal {self.goal.id}: {self.goal.text}\n"
-                    f"Progress: {self.goal.progress}\n"
-                    "Work toward this goal while respecting follow-up instructions. "
-                    "Use comms_goal with this goal_id to record useful progress. "
-                    "Set status completed "
-                    "only after verifying success, blocked when you need user input, or active "
-                    "to continue useful work in another turn. When waiting for delegated work, "
-                    "set status standby with explicit wait_for thread names "
-                    "and explain what you need. "
-                    "The goal stays active without polling; a direct message from a named "
-                    "dependency "
-                    "or an explicit user follow-up starts the next goal turn. "
-                    "Do not return empty output "
-                    "or repeatedly announce waiting. Do not wait or poll; "
-                    "the owner schedules continuation.\n\n" + self.task
-                )
+            self.task = (
+                f"Persistent goal {self.goal.id}: {self.goal.text}\n"
+                f"Progress: {self.goal.progress}\n"
+                "Work toward this goal while respecting follow-up instructions. "
+                "Use comms_goal with this goal_id to record useful progress. "
+                "Set status completed "
+                "only after verifying success, blocked when you need user input, or active "
+                "to continue useful work in another turn. When waiting for delegated work, "
+                "set status standby with explicit wait_for thread names "
+                "and explain what you need. "
+                "The goal stays active without polling; a direct message from a named "
+                "dependency "
+                "or an explicit user follow-up starts the next goal turn. "
+                "Do not return empty output "
+                "or repeatedly announce waiting. Do not wait or poll; "
+                "the owner schedules continuation.\n\n" + self.task
+            )
         if self.thread.auto_title_pending:
             self.task = (
                 "Give this new thread a concise topic title before doing the task: call "
