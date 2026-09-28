@@ -1,0 +1,339 @@
+........................F.FFFFFFFFFFF...                                 [100%]
+=================================== FAILURES ===================================
+___________ test_actual_raw_writes_hold_owner_exclusions[False-True] ___________
+tests/test_native_send_admission.py:140: in test_actual_raw_writes_hold_owner_exclusions
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+___________ test_actual_raw_writes_hold_owner_exclusions[True-True] ____________
+tests/test_native_send_admission.py:140: in test_actual_raw_writes_hold_owner_exclusions
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+___ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[lifecycle] ___
+tests/test_native_send_admission.py:310: in test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "<string>", line 1, in <module>
+E         import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+E         await asyncio.wait_for(task, timeout=3)
+E       File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E         return await fut
+E                ^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/coordinated_runtime.py", line 1416, in run_one_sealed_claim
+E         result = await run_native_pi_turn(
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E         ...<27 lines>...
+E         )
+E         ^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+E         return await native_turn(*args, **kwargs, timeout=0.35)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 679, in run_native_pi_turn
+E         launch = prepare_native_pi_rpc_launch(
+E             package,
+E         ...<9 lines>...
+E             selected_tool_mode=selected_tool_mode,
+E         )
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 570, in prepare_native_pi_rpc_launch
+E         selected_tool_mode.launch_arguments(package)
+E         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/channel_coding_tools.py", line 153, in launch_arguments
+E         raise SelectedToolDenied("Native coding extension is not installed")
+E     agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...n is not installed")\nagent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed\n').returncode
+____ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[timeout] ____
+tests/test_native_send_admission.py:310: in test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "<string>", line 1, in <module>
+E         import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+E         await asyncio.wait_for(task, timeout=3)
+E       File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E         return await fut
+E                ^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/coordinated_runtime.py", line 1416, in run_one_sealed_claim
+E         result = await run_native_pi_turn(
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E         ...<27 lines>...
+E         )
+E         ^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+E         return await native_turn(*args, **kwargs, timeout=0.35)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 679, in run_native_pi_turn
+E         launch = prepare_native_pi_rpc_launch(
+E             package,
+E         ...<9 lines>...
+E             selected_tool_mode=selected_tool_mode,
+E         )
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 570, in prepare_native_pi_rpc_launch
+E         selected_tool_mode.launch_arguments(package)
+E         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/channel_coding_tools.py", line 153, in launch_arguments
+E         raise SelectedToolDenied("Native coding extension is not installed")
+E     agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...n is not installed")\nagent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed\n').returncode
+____ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[cancel] _____
+tests/test_native_send_admission.py:310: in test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "<string>", line 1, in <module>
+E         import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+E         await asyncio.wait_for(task, timeout=3)
+E       File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E         return await fut
+E                ^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/coordinated_runtime.py", line 1416, in run_one_sealed_claim
+E         result = await run_native_pi_turn(
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E         ...<27 lines>...
+E         )
+E         ^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+E         return await native_turn(*args, **kwargs, timeout=0.35)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 679, in run_native_pi_turn
+E         launch = prepare_native_pi_rpc_launch(
+E             package,
+E         ...<9 lines>...
+E             selected_tool_mode=selected_tool_mode,
+E         )
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 570, in prepare_native_pi_rpc_launch
+E         selected_tool_mode.launch_arguments(package)
+E         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/channel_coding_tools.py", line 153, in launch_arguments
+E         raise SelectedToolDenied("Native coding extension is not installed")
+E     agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...n is not installed")\nagent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed\n').returncode
+_ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[repeat-cancel] _
+tests/test_native_send_admission.py:310: in test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "<string>", line 1, in <module>
+E         import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+E         await asyncio.wait_for(task, timeout=3)
+E       File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E         return await fut
+E                ^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/coordinated_runtime.py", line 1416, in run_one_sealed_claim
+E         result = await run_native_pi_turn(
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E         ...<27 lines>...
+E         )
+E         ^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+E         return await native_turn(*args, **kwargs, timeout=0.35)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 679, in run_native_pi_turn
+E         launch = prepare_native_pi_rpc_launch(
+E             package,
+E         ...<9 lines>...
+E             selected_tool_mode=selected_tool_mode,
+E         )
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 570, in prepare_native_pi_rpc_launch
+E         selected_tool_mode.launch_arguments(package)
+E         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/channel_coding_tools.py", line 153, in launch_arguments
+E         raise SelectedToolDenied("Native coding extension is not installed")
+E     agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...n is not installed")\nagent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed\n').returncode
+_ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[preflight-drain] _
+tests/test_native_send_admission.py:310: in test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "<string>", line 1, in <module>
+E         import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+E         return runner.run(main)
+E                ~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+E         return self._loop.run_until_complete(task)
+E                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E       File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E         return future.result()
+E                ~~~~~~~~~~~~~^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 260, in _same_loop_backpressure_case
+E         await asyncio.wait_for(task, timeout=3)
+E       File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E         return await fut
+E                ^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/coordinated_runtime.py", line 1416, in run_one_sealed_claim
+E         result = await run_native_pi_turn(
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E         ...<27 lines>...
+E         )
+E         ^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/tests/test_native_send_admission.py", line 172, in bounded_turn
+E         return await native_turn(*args, **kwargs, timeout=0.35)
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 679, in run_native_pi_turn
+E         launch = prepare_native_pi_rpc_launch(
+E             package,
+E         ...<9 lines>...
+E             selected_tool_mode=selected_tool_mode,
+E         )
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/native_pi.py", line 570, in prepare_native_pi_rpc_launch
+E         selected_tool_mode.launch_arguments(package)
+E         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+E       File "/home/ts/wt/comms-channel-coding-tools-20260927/src/agent_comms/channel_coding_tools.py", line 153, in launch_arguments
+E         raise SelectedToolDenied("Native coding extension is not installed")
+E     agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-refactor-integration-20260927/.venv/bin/python', '-c', 'import asyncio,sys; ...n is not installed")\nagent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed\n').returncode
+_____ test_short_admission_contention_sends_once_after_release[wire-False] _____
+tests/test_native_send_admission.py:390: in test_short_admission_contention_sends_once_after_release
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+__ test_short_admission_contention_sends_once_after_release[bus.jsonl-False] ___
+tests/test_native_send_admission.py:390: in test_short_admission_contention_sends_once_after_release
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+_ test_short_admission_contention_sends_once_after_release[registry.json-False] _
+tests/test_native_send_admission.py:390: in test_short_admission_contention_sends_once_after_release
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+_____ test_short_admission_contention_sends_once_after_release[sql-False] ______
+tests/test_native_send_admission.py:390: in test_short_admission_contention_sends_once_after_release
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+_____ test_short_admission_contention_sends_once_after_release[wire-True] ______
+tests/test_native_send_admission.py:390: in test_short_admission_contention_sends_once_after_release
+    await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1416: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+src/agent_comms/native_pi.py:679: in run_native_pi_turn
+    launch = prepare_native_pi_rpc_launch(
+src/agent_comms/native_pi.py:570: in prepare_native_pi_rpc_launch
+    selected_tool_mode.launch_arguments(package)
+src/agent_comms/channel_coding_tools.py:153: in launch_arguments
+    raise SelectedToolDenied("Native coding extension is not installed")
+E   agent_comms.selected_tool_broker.SelectedToolDenied: Native coding extension is not installed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:210 Optional awareness omitted; original delivered alone (ValueError)
+=========================== short test summary info ============================
+FAILED tests/test_native_send_admission.py::test_actual_raw_writes_hold_owner_exclusions[False-True]
+FAILED tests/test_native_send_admission.py::test_actual_raw_writes_hold_owner_exclusions[True-True]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[lifecycle]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[timeout]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[cancel]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[repeat-cancel]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[preflight-drain]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[wire-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[bus.jsonl-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[registry.json-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[sql-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[wire-True]
+12 failed, 28 passed in 17.88s
