@@ -1,5 +1,7 @@
 # Current original + round-two completion/deletion map
 
+Ownership followthrough: decoder item1 is implemented in [PR283](https://github.com/OpenHCSDev/agent-comms/pull/283), with installed/native/retained-history evidence in `../native-proof-journal-closure/README.md`. Reader capacity item2 is now explicitly Wegener-owned. The unowned snapshot below remains historical; do not duplicate either assignment.
+
 Audited committed core main `46b729cf16812620cf9d419aa30d95450a87687e`,
 2026-09-28. Toad remote main inspected at
 `c3f7b632afce677b66d280ca29531e7879a66236`. This supersedes the **remaining-work

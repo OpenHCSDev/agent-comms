@@ -15,15 +15,16 @@ import stat
 import sys
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from . import pi_commands as commands
 from . import pi_events as pi
 from .child_process import BoundedRun
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .maintenance_barrier import MaintenanceBarrier
 from .native_entries import NativeEntry, SessionEntry
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
 CAPABILITY = "pi-native-input-v1-live-only"
 _INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-_MAX_LINE = 1 << 20
 # Every tracked launch must remove Pi session retry, provider transport retry,
 # and overflow compaction-retry before an input can reach any provider.
 _NATIVE_SETTINGS = (
@@ -112,49 +112,46 @@ def main() -> int:
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextProof:
+class NativeContextRecord:
+    """Native context facts shared by the journal and located evidence."""
+
     input_id: str = field(metadata={"wire_name": "inputId"})
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
     request_generation: int = field(metadata={"wire_name": "requestGeneration"})
     llm_context_digest: str = field(metadata={"wire_name": "llmContextDigest"})
-    session_file: Path
 
-    @classmethod
-    def from_journal(cls, row: dict, session_file: Path) -> NativeContextProof:
-        """Decode only the declared strict journal envelope; never grant acceptance."""
-        from .field_codec import FieldCodec
-
-        names = {
-            item.metadata.get("wire_name", item.name)
-            for item in fields(cls)
-            if item.name != "session_file"
-        }
-        if (
-            set(row) != names | {"schema", "type"}
-            or type(row["schema"]) is not int
-            or row["schema"] != 1
-            or row["type"] != "context_committed"
-        ):
-            raise ValueError("Native Pi proof journal contains an invalid row")
-        hints = FieldCodec._types(cls)
-        proof = cls(
-            **{
-                item.name: FieldCodec.decode(
-                    hints[item.name], row[item.metadata.get("wire_name", item.name)]
-                )
-                for item in fields(cls)
-                if item.name != "session_file"
-            },
-            session_file=session_file,
+    def at(self, session_file: Path) -> NativeContextProof:
+        """Locate recorded facts; this does not grant acceptance or replay."""
+        return NativeContextProof(
+            self.input_id,
+            self.session_id,
+            self.session_entry_id,
+            self.request_generation,
+            self.llm_context_digest,
+            session_file,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class NativeContextJournal(NativeContextRecord):
+    """The unchanged, current native .input-proof journal envelope."""
+
+    schema: Literal[1]
+    type: Literal["context_committed"]
+
+    def __post_init__(self) -> None:
         if (
-            proof.request_generation < 1
-            or not _INPUT_ID.fullmatch(proof.input_id)
-            or not _DIGEST.fullmatch(proof.llm_context_digest)
+            self.request_generation < 1
+            or not _INPUT_ID.fullmatch(self.input_id)
+            or not _DIGEST.fullmatch(self.llm_context_digest)
         ):
             raise ValueError("Native Pi proof journal contains an invalid row")
-        return proof
+
+
+@dataclass(frozen=True, slots=True)
+class NativeContextProof(NativeContextRecord):
+    session_file: Path
 
     @classmethod
     def read_evidence(
@@ -202,7 +199,7 @@ class NativeContextProof:
         seen = set()
         for row in _read_private_file(Path(str(session_file) + ".input-proof")):
             try:
-                proof = cls.from_journal(row, session_file)
+                proof = FieldCodec.decode(NativeContextJournal, row).at(session_file)
                 entry = tracked.get(proof.input_id)
                 if (
                     proof.session_id != header.id
@@ -813,13 +810,13 @@ async def run_native_pi_turn(
         launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = tool_socket.token
     try:
         async with BoundedRun.session(
-            launch.argv, timeout=timeout, cwd=launch.cwd, env=launch.env, limit=_MAX_LINE + 1
+            launch.argv, timeout=timeout, cwd=launch.cwd, env=launch.env
         ) as process:
             if tool_socket is not None:
                 tool_socket.expected_pid = process.pid
             stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
             assert stdin is not None and stdout is not None and stderr is not None
-            stderr_task = asyncio.create_task(stderr.read(_MAX_LINE))
+            stderr_task = asyncio.create_task(process.discard_stderr())
             deadline = asyncio.get_running_loop().time() + timeout
 
             channel = PiRpcChannel(stdout)
@@ -829,17 +826,13 @@ async def run_native_pi_turn(
                 if remaining <= 0:
                     raise NativePiUnavailable("Native Pi turn deadline expired")
                 try:
-                    raw = await asyncio.wait_for(
-                        channel.readline(max_bytes=_MAX_LINE), timeout=remaining
-                    )
-                except ValueError as error:
-                    raise NativePiUnavailable("Native Pi RPC record is incomplete") from error
-                if not raw or len(raw) > _MAX_LINE or not raw.endswith(b"\n"):
-                    raise NativePiUnavailable("Native Pi RPC record is incomplete")
-                try:
-                    event = PiRpcChannel.decode_record(raw, strict=True, max_bytes=_MAX_LINE)
+                    event = await asyncio.wait_for(channel.receive(strict=True), timeout=remaining)
                 except (UnicodeError, ValueError, TypeError) as error:
-                    raise NativePiUnavailable("Native Pi RPC JSON is invalid") from error
+                    raise NativePiUnavailable(
+                        "Native Pi RPC record is invalid or incomplete"
+                    ) from error
+                if event is None:
+                    raise NativePiUnavailable("Native Pi RPC record is incomplete")
                 return event
 
             async def send(command: commands.PiCommand) -> None:
