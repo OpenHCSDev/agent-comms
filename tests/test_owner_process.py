@@ -20,10 +20,13 @@ from agent_comms.turn_lease import ActiveTurn
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
     comms = Comms(tmp_path)
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
     declared = Thread("worker", frozenset(), str(tmp_path), task="retained task")
     comms.threads.register(declared)
     first = comms.owners.start(
-        "worker", agent_bin=sys.executable, agent_args=["-c", "print('local')"]
+        "worker", agent_bin="pi", agent_args=[]
     )
     owner = comms.registry.require("worker")
     try:
@@ -36,7 +39,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert owner.pid != os.getpid()
         assert owner.process_identity is not None
         restarted = comms.owners.restart_owners(
-            ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"]
+            ["worker"], agent_bin="pi", agent_args=[]
         )
         replacement = comms.registry.require("worker")
         assert len(restarted) == 1

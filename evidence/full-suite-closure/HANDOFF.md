@@ -220,3 +220,32 @@ pass. Last failure expected fresh owner correction to block autonomous goal.
 Updated to preserve exact goal and grant, retaining UNKNOWN input/no native send
 and no compaction. Both corrected adaptive ACP cases pass8.97s. No production
 changes this batch. Complete full suite and remainder after owner commit pending.
+
+## Current native243/244 and main252 integration
+
+Merged parent1aef899 as8d02449; resolved modify/delete by deleting
+ tests/test_native_proof_journal_limit.py. Its former fixture fixes are superseded
+by244's deletion, never restored. Merged parent9e3dc3c main252 pins afterward.
+Current acceptance package is
+/home/ts/wt/comms-native-session-entry-store-20260928/stack/.pi-native-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent
+read-only. Prior prepared b3a9c06 receipts are historical, not final-current proof.
+
+Fixed compaction nonowner fixture to use real other process identity. Current
+managed Pi reopen validates corrupt session before any provider CLI spawn;
+cancellation/repeated cancellation/all-tasks tests retain actual native commit
+quiescence assertions. Current native source helper's error contract replaces old
+window text. ACP three-round publication and actual owner start/restart tests now
+use explicitly configured canonical root/package. No model prompt in lifecycle test.
+Focused current-package result34passed2existing-skips70.67s across owner gate,
+compaction preparation and actual owner lifecycle. No production changes.
+
+Parent-transferred test_view_unread: captured-basis race now enters through actual
+ReadLedger.mark_displayed; registry joins during write still leave unseen DM unread.
+Deleted old v1 marker migration test.6passed2.41s on main252-combined tree.
+
+Concrete remaining: test_passive_channel_awareness still expects old advisory
+ledger initialization. Production has no initialize caller, but OwnedTurn and
+channel_management retain consumers.11 failures observed in affected partial
+run; parent global L0 owner notified with exact source references for ownership.
+Do not silently recreate old cursor engine. Other remainder after passive tests
+and final complete suite still pending; no full-suite pass claimed.

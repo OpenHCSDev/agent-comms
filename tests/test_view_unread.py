@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import sys
@@ -109,16 +108,16 @@ def test_any_mode_mark_keeps_captured_basis_if_registry_changes_during_write(tmp
     painted = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     assert [message.seq for message in painted.messages] == [2]
 
-    original_mark = comms.bus.mark_view_read
+    original_mark = comms.bus.reads.mark_displayed
     joined = []
 
-    def join_before_marker(*args, **kwargs):
+    def join_before_marker(ledger, *args, **kwargs):
         carol = comms.registry.require("carol")
         comms.registry.register(replace(carol, tags=frozenset({"team"})))
         joined.append(True)
         original_mark(*args, **kwargs)
 
-    monkeypatch.setattr(comms.bus, "mark_view_read", join_before_marker)
+    monkeypatch.setattr(type(comms.bus.reads), "mark_displayed", join_before_marker)
     comms.views.mark_channel_view_read(
         "#team",
         worktree=str(tmp_path),
@@ -127,20 +126,6 @@ def test_any_mode_mark_keeps_captured_basis_if_registry_changes_during_write(tmp
     )
     assert joined
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
-
-
-def test_v1_exact_channel_marker_resets_with_notice(tmp_path):
-    comms = wire(tmp_path)
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
-    viewer = comms.messaging.user_identity(str(tmp_path)).name
-    message = comms.messaging.send_message("alice", "#team", "message not proven painted")
-    marker = tmp_path / "read_markers.json"
-    marker.write_text(json.dumps({comms.bus._marker_key(viewer, "#team"): message.seq}))
-
-    comms.bus.reads.path.unlink()  # Fixture predates ReadLedger.
-    snapshot = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
-    assert snapshot.channel_unread["#team"] == 1
-    assert snapshot.read_marker_notice
 
 
 @pytest.mark.skipif(os.name != "posix", reason="real /var/tmp crash durability")
