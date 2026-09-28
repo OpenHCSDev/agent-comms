@@ -1,0 +1,18 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-unread-20260928",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "messages_sent": 0,
+  "owner_restarts": 0,
+  "open_user_ui_preserved": true,
+  "snapshot_seconds": 0.064,
+  "threads": 99,
+  "exact_unread_counts": 15,
+  "pending_unread_counts": 84,
+  "index_path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/transcript_reply_index.v3.sqlite3",
+  "ux_badge": "Indexing\u2026",
+  "packages": {
+    "agent-comms": "1b9803779ddefc04e348418719453f00e4e8f1ed",
+    "batrachian-toad": "60a87e05b5cc7e410fe5e48f045a32a1c7428af6",
+    "textual": "16ede007c34bec893b2dbedb3999223381129678"
+  }
+}
