@@ -219,7 +219,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         root_id, selected = stage_private_participants(
             legacy, private, archive, inventory, ["sender", "receiver"]
         )
-        assert private.bus.log._private_marker_unlocked()["claim_envelopes_version"] == 1
+        assert private.bus.log._private_marker_unlocked().claim_envelopes_version == 1
         assert (private.root / "private_bus_checkpoint.sqlite3").is_file()
         assert json.loads((private.root / "bus_meta.json").read_text())["checkpoint_version"] == 1
         staged = private.registry.require("sender")

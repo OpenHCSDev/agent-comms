@@ -368,7 +368,7 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participant(lookup)
-    assert before.owner_thread == "beta" and before.generation == 1
+    assert before.owner_thread == "beta" and before.participant_generation == 1
     renamed = (
         comms.threads.rename_managed_thread("beta", "gamma", owner_pid=os.getpid())
         if managed
@@ -377,7 +377,7 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     assert renamed.previous == "beta" and renamed.current == "gamma"
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         after = store.participant(lookup)
-    assert after.owner_thread == "gamma" and after.generation == 2
+    assert after.owner_thread == "gamma" and after.participant_generation == 2
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
 

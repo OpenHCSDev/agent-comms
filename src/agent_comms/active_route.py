@@ -315,8 +315,8 @@ def rotate_active_route(
     with new.bus.log.locked():
         marker = new.bus.log._private_marker_unlocked()
         if (
-            marker.get("claim_envelopes_version") != 1
-            or marker["last_seq"] != 0
+            not marker.claims
+            or marker.last_seq != 0
             or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
         ):
             raise RelationViolationError("replacement route requires an empty claim-ready bus")
@@ -328,14 +328,14 @@ def rotate_active_route(
         old = Comms(expected.root)
         with old.bus.log.locked():
             marker = old.bus.log._private_marker_unlocked()
-            if marker["wire_root_id"] != expected.wire_root_id:
+            if marker.root_id != expected.wire_root_id:
                 raise RelationViolationError("old private route identity changed")
         _require_unchanged_archive_source(old, archive)
         with new.bus.log.locked():
             marker = new.bus.log._private_marker_unlocked()
             if (
-                marker.get("claim_envelopes_version") != 1
-                or marker["last_seq"] != 0
+                not marker.claims
+                or marker.last_seq != 0
                 or (new.bus.log.path.exists() and new.bus.log.path.stat().st_size != 0)
             ):
                 raise RelationViolationError("replacement route changed before publication")
@@ -378,7 +378,7 @@ def withdraw_active_route(
         comms = Comms(expected.root)
         with comms.bus.log.locked():
             marker = comms.bus.log._private_marker_unlocked()
-        if marker["wire_root_id"] != expected.wire_root_id:
+        if marker.root_id != expected.wire_root_id:
             raise RelationViolationError("active comms route root ID changed")
         receipt = archive_stopped_root(comms, archive_destination)
         if read_active_route(path) != expected:

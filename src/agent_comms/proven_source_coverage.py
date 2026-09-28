@@ -101,9 +101,9 @@ def read_proven_source_coverage(
         if time.monotonic() > deadline:
             raise IdentityConflict("source coverage exceeded its scan deadline")
         marker = bus.log._private_marker_unlocked()
-        if marker["wire_root_id"] != wire_root_id:
+        if marker.root_id != wire_root_id:
             raise IdentityConflict("source coverage private wire root changed")
-        if marker.get("checkpoint_version") == 1:
+        if marker.checkpoint_seal is not None:
             source_witness, addressed, more_initials = certified_initial_page_unlocked(
                 bus.log, marker, recipient_lookup, after=after_seq, limit=limit
             )
