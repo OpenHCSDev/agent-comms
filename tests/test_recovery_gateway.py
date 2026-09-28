@@ -39,10 +39,12 @@ def private_root():
                 "VALUES ('a',NULL,NULL,0)"
             )
             db.execute(
-                "INSERT INTO executions "
-                "(execution_id,origin,status,exact_target,owner_thread,owner_lookup,revision,"
-                "current_attempt_ordinal,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-                "VALUES ('secret-execution','acp','pending',NULL,'Alice','a',1,NULL,2,NULL,1,1)"
+                (
+                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                    "ms) VALUES ('secret-execution','acp',json_object('kind','pending'),NULL,'Ali"
+                    "ce','a',1,2,NULL,1,1)"
+                )
             )
         yield root
     finally:
@@ -196,10 +198,12 @@ async def test_over_budget_is_bounded_before_reader_sort(private_root: Path):
         with sqlite3.connect(private_root / "coordination.sqlite3") as connection:
             # The 257th record is refused *before* the frozen reader sorts.
             connection.executemany(
-                "INSERT INTO executions "
-                "(execution_id,origin,status,exact_target,owner_thread,owner_lookup,revision,"
-                "current_attempt_ordinal,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-                "VALUES (?,'acp','pending',NULL,'Alice','a',1,NULL,2,NULL,1,1)",
+                (
+                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                    "ms) VALUES (?,'acp',json_object('kind','pending'),NULL,'Alice','a',1,2,NULL,"
+                    "1,1)"
+                ),
                 ((f"many-{index}",) for index in range(256)),
             )
         assert json.loads(await request(gateway.path))["reason"] == "gateway_unavailable"

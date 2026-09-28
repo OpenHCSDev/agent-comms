@@ -26,12 +26,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .attempt_states import SucceededAttempt
 from .bus_publication import stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .coordination import (
-    Attempts,
+    AttemptRecord,
     CurrentExecutions,
-    Executions,
+    ExecutionRecord,
     OwnerFence,
     PublicationIntents,
     PublicationReceipts,
@@ -51,6 +52,7 @@ from .coordination_store import (
     StaleFence,
     _digest,
 )
+from .execution_states import CompletedExecution
 from .message_bus import MessageBus
 from .messages import Message, MessageType
 from .obligation_states import PublishedResponse, PublishingResponse
@@ -585,20 +587,19 @@ def _settle_fenced_response(
                 revision=obligation.revision + 1,
                 updated_at_ms=store._now(obligation.updated_at_ms),
             )
-            Attempts.update(
+            AttemptRecord.update(
                 db,
                 where="execution_id=? AND attempt_ordinal=? AND revision=?",
                 parameters=(intent.execution_id, attempt.attempt_ordinal, attempt.revision),
-                phase="succeeded",
-                lease_expires_at_ms=None,
+                lifecycle=SucceededAttempt(),
                 revision=attempt.revision + 1,
                 updated_at_ms=store._now(attempt.updated_at_ms),
             )
-            Executions.update(
+            ExecutionRecord.update(
                 db,
                 where="execution_id=? AND revision=?",
                 parameters=(intent.execution_id, snapshot.execution.revision),
-                status="completed",
+                lifecycle=CompletedExecution(attempt.attempt_ordinal),
                 revision=snapshot.execution.revision + 1,
                 updated_at_ms=store._now(snapshot.execution.updated_at_ms),
             )

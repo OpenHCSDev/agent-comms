@@ -31,7 +31,7 @@ from .child_process import BoundedRun, ParentLifeline
 from .coordination import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
-    Executions,
+    ExecutionRecord,
     OwnerGenerations,
     SchemaMeta,
 )
@@ -178,7 +178,7 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
             if owner.owner_thread != requested:
                 raise GatewayUnavailableError("invalid canonical owner")
             # The declared owner/status index bounds the frozen reader's scan.
-            count = Executions.read(
+            count = ExecutionRecord.read(
                 db.execute(
                     "SELECT * FROM executions WHERE owner_lookup=? LIMIT ?",
                     (owner.owner_lookup, _MAX_OWNER_EXECUTIONS + 1),

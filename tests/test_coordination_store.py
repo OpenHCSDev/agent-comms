@@ -1160,8 +1160,10 @@ def test_frozen_v2_pre_attempt_deferred_execution_cannot_resume(db_path: Path) -
         # deliberately does not expose: ordinal 1 cannot start from DEFERRED.
         with db._transaction() as connection:
             connection.execute(
-                "UPDATE executions SET status='deferred',revision=revision+1 "
-                "WHERE execution_id='exec'"
+                (
+                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
+                    "sion=revision+1 WHERE execution_id='exec'"
+                )
             )
             connection.execute(
                 (

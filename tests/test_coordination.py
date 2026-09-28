@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import json
 import sqlite3
 import subprocess
 import sys
@@ -194,10 +195,18 @@ def sql_execution(
     thread="worker",
 ):
     db.execute(
-        "INSERT INTO executions (execution_id,origin,status,exact_target,owner_thread,"
-        "owner_lookup,revision,current_attempt_ordinal,max_attempts,reason_code,"
-        "created_at_ms,updated_at_ms) VALUES (?,?,?,?,?, ?,1,?,?,NULL,0,0)",
-        (name, origin, status, target, thread, owner, ordinal, max_attempts),
+        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thread,"
+        "owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) "
+        "VALUES (?,?,?,?,?,?,1,?,NULL,0,0)",
+        (
+            name,
+            origin,
+            json.dumps({"kind": status, **({"ordinal": ordinal} if ordinal is not None else {})}),
+            target,
+            thread,
+            owner,
+            max_attempts,
+        ),
     )
 
 
@@ -223,17 +232,20 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("INSERT INTO execution_claims VALUES (?,'a',0)", (name,))
     if pending:
         db.execute(
-            "UPDATE executions SET status='pending',revision=2 WHERE execution_id=?", (name,)
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
+                "ion=2 WHERE execution_id=?"
+            ),
+            (name,),
         )
     db.execute("COMMIT")
 
 
 def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", thread="worker", digest=None):
     db.execute(
-        "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-        "owner_generation,owner_token_digest,phase,revision,lease_expires_at_ms,"
-        "last_progress_at_ms,backend_done,process_dead,reason_code,created_at_ms,"
-        "updated_at_ms) VALUES (?,?,?,?,?,?,'prompt_starting',1,500,NULL,0,0,NULL,0,0)",
+        (
+            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,0,0)"
+        ),
         (
             name,
             ordinal,
@@ -258,8 +270,10 @@ def activate(db, name="e", ordinal=1, generation=1):
     db.execute("BEGIN IMMEDIATE")
     sql_attempt(db, name, ordinal, generation)
     db.execute(
-        "UPDATE executions SET status='active',current_attempt_ordinal=?,"
-        "revision=revision+1 WHERE execution_id=?",
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+            "nal',?),revision=revision+1 WHERE execution_id=?"
+        ),
         (ordinal, name),
     )
     db.execute(
@@ -278,7 +292,10 @@ def fail_defer(db, name="e", ordinal=1):
         db.execute("INSERT INTO replay_assessments VALUES (?,0,1,0,1)", (name,))
     db.execute("BEGIN IMMEDIATE")
     db.execute(
-        "UPDATE executions SET status='deferred',revision=revision+1 WHERE execution_id=?",
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
+            "sion=revision+1 WHERE execution_id=?"
+        ),
         (name,),
     )
     db.execute(
@@ -286,9 +303,10 @@ def fail_defer(db, name="e", ordinal=1):
         "pointer_revision=pointer_revision+1 WHERE owner_lookup='p'"
     )
     db.execute(
-        "UPDATE attempts SET phase='attempt_failed',lease_expires_at_ms=NULL,"
-        "backend_done=1,process_dead=1,revision=revision+1 "
-        "WHERE execution_id=? AND attempt_ordinal=?",
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+            "revision+1 WHERE execution_id=? AND attempt_ordinal=?"
+        ),
         (name, ordinal),
     )
     db.execute("COMMIT")
@@ -668,7 +686,8 @@ def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):
         thread.join(timeout=20)
     assert not thread.is_alive() and not errors
 
-    probe = """import sqlite3, sys
+    probe = """import json
+import sqlite3, sys
 c = sqlite3.connect(f"file:{sys.argv[1]}?mode=rw", uri=True, timeout=0.15)
 try:
     c.execute("BEGIN IMMEDIATE")
@@ -708,8 +727,10 @@ def test_activating_requires_transactional_exact_pointer_and_fence(db):
     sql_execution(connection)
     with pytest.raises(sqlite3.IntegrityError):
         connection.execute(
-            "UPDATE executions SET status='active',"
-            "current_attempt_ordinal=1,revision=2 WHERE execution_id='e'"
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+                "nal',1),revision=2 WHERE execution_id='e'"
+            )
         )
     with pytest.raises(sqlite3.IntegrityError):
         sql_attempt(connection, generation=2)
@@ -752,8 +773,10 @@ def test_invalid_multistatement_commit_rolls_back_and_reopens(db):
     connection.execute("BEGIN IMMEDIATE")
     sql_attempt(connection)
     connection.execute(
-        "UPDATE executions SET status='active',"
-        "current_attempt_ordinal=1,revision=2 WHERE execution_id='e'"
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+            "nal',1),revision=2 WHERE execution_id='e'"
+        )
     )
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         connection.execute("COMMIT")
@@ -771,23 +794,34 @@ def test_attempt_terminal_commit_requires_matching_execution_and_no_pointer(db):
     activate(c)
     with pytest.raises(sqlite3.IntegrityError):
         c.execute(
-            "UPDATE attempts SET phase='attempt_failed',lease_expires_at_ms=NULL,"
-            "revision=2 WHERE execution_id='e'"
+            (
+                "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+                "2 WHERE execution_id='e'"
+            )
         )
     c.execute("BEGIN IMMEDIATE")
     c.execute(
-        "UPDATE attempts SET phase='attempt_failed',backend_done=1,process_dead=1,"
-        "lease_expires_at_ms=NULL,revision=2 WHERE execution_id='e'"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+            "2 WHERE execution_id='e'"
+        )
     )
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         c.execute("COMMIT")
     c.execute("ROLLBACK")
     c.execute("INSERT INTO replay_assessments VALUES ('e',0,1,0,1)")
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE executions SET status='deferred',revision=3 WHERE execution_id='e'")
     c.execute(
-        "UPDATE attempts SET phase='attempt_failed',backend_done=1,process_dead=1,"
-        "lease_expires_at_ms=NULL,revision=2 WHERE execution_id='e'"
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
+            "sion=3 WHERE execution_id='e'"
+        )
+    )
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+            "2 WHERE execution_id='e'"
+        )
     )
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         c.execute("COMMIT")
@@ -815,8 +849,10 @@ def test_retry_creates_contiguous_fresh_attempt_and_preserves_n(db):
     c.execute("BEGIN IMMEDIATE")
     sql_attempt(c, ordinal=2, generation=2)
     c.execute(
-        "UPDATE executions SET status='active',current_attempt_ordinal=2,revision=4 "
-        "WHERE execution_id='e'"
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+            "nal',2),revision=4 WHERE execution_id='e'"
+        )
     )
     c.execute(
         "UPDATE current_executions SET execution_id='e',attempt_ordinal=2,"
@@ -838,26 +874,38 @@ def test_retry_creates_contiguous_fresh_attempt_and_preserves_n(db):
         ).fetchone() == ("active", 2)
     c.execute("BEGIN IMMEDIATE")
     c.execute(
-        "UPDATE attempts SET phase='prompt_accepted',revision=2 "
-        "WHERE execution_id='e' AND attempt_ordinal=2"
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','prompt_accepted')"
+            ",revision=2 WHERE execution_id='e' AND attempt_ordinal=2"
+        )
     )
     c.execute(
-        "UPDATE attempts SET phase='model_running',revision=3 "
-        "WHERE execution_id='e' AND attempt_ordinal=2"
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','model_running'),r"
+            "evision=3 WHERE execution_id='e' AND attempt_ordinal=2"
+        )
     )
     c.execute(
-        "UPDATE attempts SET phase='settling',revision=4 "
-        "WHERE execution_id='e' AND attempt_ordinal=2"
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','settling'),revisi"
+            "on=4 WHERE execution_id='e' AND attempt_ordinal=2"
+        )
     )
-    c.execute("UPDATE executions SET status='completed',revision=5 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','completed'),rev"
+            "ision=5 WHERE execution_id='e'"
+        )
+    )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=4 WHERE owner_lookup='p'"
     )
     c.execute(
-        "UPDATE attempts SET phase='succeeded',backend_done=1,process_dead=1,"
-        "lease_expires_at_ms=NULL,revision=5 "
-        "WHERE execution_id='e' AND attempt_ordinal=2"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','succeeded'),revision=5 WHE"
+            "RE execution_id='e' AND attempt_ordinal=2"
+        )
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -911,12 +959,18 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
     if authority == "budget":
         with pytest.raises(sqlite3.IntegrityError):
             c.execute(
-                "UPDATE executions SET status='deferred',revision=revision+1 WHERE execution_id='e'"
+                (
+                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
+                    "sion=revision+1 WHERE execution_id='e'"
+                )
             )
         c.execute("ROLLBACK")
     else:
         c.execute(
-            "UPDATE executions SET status='deferred',revision=revision+1 WHERE execution_id='e'"
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','deferred'),revi"
+                "sion=revision+1 WHERE execution_id='e'"
+            )
         )
         if authority == "published":
             c.execute("UPDATE wake_claims SET disposition='deferred',revision=2 WHERE claim_id='a'")
@@ -925,14 +979,21 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
             "pointer_revision=2 WHERE owner_lookup='p'"
         )
         c.execute(
-            "UPDATE attempts SET phase='attempt_failed',backend_done=1,process_dead=1,"
-            "lease_expires_at_ms=NULL,revision=2 WHERE execution_id='e'"
+            (
+                "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+                "2 WHERE execution_id='e'"
+            )
         )
         with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
             c.execute("COMMIT")
         c.execute("ROLLBACK")
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE executions SET status='failed',revision=revision+1 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+            "on=revision+1 WHERE execution_id='e'"
+        )
+    )
     if authority == "published":
         c.execute("UPDATE wake_claims SET disposition='failed',revision=2 WHERE claim_id='a'")
     c.execute(
@@ -940,8 +1001,10 @@ def test_failed_attempt_must_settle_failed_when_retry_unauthorized(db, authority
         "pointer_revision=2 WHERE owner_lookup='p'"
     )
     c.execute(
-        "UPDATE attempts SET phase='attempt_failed',backend_done=1,process_dead=1,"
-        "lease_expires_at_ms=NULL,revision=2 WHERE execution_id='e'"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+            "2 WHERE execution_id='e'"
+        )
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -960,17 +1023,29 @@ def test_authorized_retry_rejects_post_attempt_failed_and_cannot_arrive_later(db
     activate(c)
     c.execute("INSERT INTO replay_assessments VALUES ('e',0,1,0,1)")
     with pytest.raises(sqlite3.IntegrityError, match="authorized retry"):
-        c.execute("UPDATE executions SET status='failed',revision=3 WHERE execution_id='e'")
+        c.execute(
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+                "on=3 WHERE execution_id='e'"
+            )
+        )
     c.execute("UPDATE replay_assessments SET replay_safe=0,revision=2 WHERE execution_id='e'")
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE executions SET status='failed',revision=3 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+            "on=3 WHERE execution_id='e'"
+        )
+    )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
     )
     c.execute(
-        "UPDATE attempts SET phase='attempt_failed',backend_done=1,process_dead=1,"
-        "lease_expires_at_ms=NULL,revision=2 WHERE execution_id='e'"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+            "2 WHERE execution_id='e'"
+        )
     )
     c.execute("COMMIT")
     with pytest.raises(sqlite3.IntegrityError):
@@ -986,14 +1061,21 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
     sql_execution(c)
     activate(c)
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE executions SET status='failed',revision=3 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+            "on=3 WHERE execution_id='e'"
+        )
+    )
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
     )
     c.execute(
-        "UPDATE attempts SET phase='attempt_failed',backend_done=1,process_dead=1,"
-        "lease_expires_at_ms=NULL,revision=2 WHERE execution_id='e'"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','attempt_failed'),revision="
+            "2 WHERE execution_id='e'"
+        )
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -1097,14 +1179,24 @@ def test_direct_sql_immutable_attempt_identity_and_monotonic_evidence(db):
         "owner_generation=2",
         "owner_token_digest='changed'",
         "owner_thread='renamed'",
-        "backend_done=1,process_dead=1,revision=2,"
-        "last_progress_at_ms=5,updated_at_ms=5,lease_expires_at_ms=499",
+        "lifecycle=json_set(lifecycle,'$.backend_done',json('true'),'$.process_dead',json('true'),"
+        "'$.lease_expires_at_ms',499),revision=2,last_progress_at_ms=5,updated_at_ms=5",
     ):
         with pytest.raises(sqlite3.IntegrityError):
             c.execute(f"UPDATE attempts SET {clause} WHERE execution_id='e'")
-    c.execute("UPDATE attempts SET backend_done=1,revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.backend_done',json('true"
+            "')),revision=2 WHERE execution_id='e'"
+        )
+    )
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute("UPDATE attempts SET backend_done=0,revision=3 WHERE execution_id='e'")
+        c.execute(
+            (
+                "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.backend_done',json('fals"
+                "e')),revision=3 WHERE execution_id='e'"
+            )
+        )
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
         assert reopened._connection.execute(
@@ -1132,41 +1224,85 @@ def test_completed_wire_requires_succeeded_attempt_and_terminal_obligation(db):
     sql_wire_execution(c)
     activate(c)
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE attempts SET phase='prompt_accepted',revision=2 WHERE execution_id='e'")
-    c.execute("UPDATE attempts SET phase='model_running',revision=3 WHERE execution_id='e'")
-    c.execute("UPDATE attempts SET phase='settling',revision=4 WHERE execution_id='e'")
-    c.execute("UPDATE executions SET status='completed',revision=revision+1 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','prompt_accepted')"
+            ",revision=2 WHERE execution_id='e'"
+        )
+    )
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','model_running'),r"
+            "evision=3 WHERE execution_id='e'"
+        )
+    )
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','settling'),revisi"
+            "on=4 WHERE execution_id='e'"
+        )
+    )
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','completed'),rev"
+            "ision=revision+1 WHERE execution_id='e'"
+        )
+    )
     c.execute("UPDATE wake_claims SET disposition='completed',revision=2 WHERE claim_id='a'")
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
     )
     c.execute(
-        "UPDATE attempts SET phase='succeeded',lease_expires_at_ms=NULL,"
-        "backend_done=1,process_dead=1,revision=5 WHERE execution_id='e'"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','succeeded'),revision=5 WHE"
+            "RE execution_id='e'"
+        )
     )
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         c.execute("COMMIT")
     c.execute("ROLLBACK")
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE attempts SET phase='prompt_accepted',revision=2 WHERE execution_id='e'")
-    c.execute("UPDATE attempts SET phase='model_running',revision=3 WHERE execution_id='e'")
-    c.execute("UPDATE attempts SET phase='settling',revision=4 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','prompt_accepted')"
+            ",revision=2 WHERE execution_id='e'"
+        )
+    )
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','model_running'),r"
+            "evision=3 WHERE execution_id='e'"
+        )
+    )
+    c.execute(
+        (
+            "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','settling'),revisi"
+            "on=4 WHERE execution_id='e'"
+        )
+    )
     c.execute(
         (
             "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
             "RE execution_id='e'"
         )
     )
-    c.execute("UPDATE executions SET status='completed',revision=revision+1 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','completed'),rev"
+            "ision=revision+1 WHERE execution_id='e'"
+        )
+    )
     c.execute("UPDATE wake_claims SET disposition='completed',revision=2 WHERE claim_id='a'")
     c.execute(
         "UPDATE current_executions SET execution_id=NULL,attempt_ordinal=NULL,"
         "pointer_revision=2 WHERE owner_lookup='p'"
     )
     c.execute(
-        "UPDATE attempts SET phase='succeeded',lease_expires_at_ms=NULL,"
-        "backend_done=1,process_dead=1,revision=5 WHERE execution_id='e'"
+        (
+            "UPDATE attempts SET lifecycle=json_object('kind','succeeded'),revision=5 WHE"
+            "RE execution_id='e'"
+        )
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -1186,9 +1322,19 @@ def test_claim_execution_status_partition_is_atomic_at_commit(db):
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         c.execute("UPDATE wake_claims SET disposition='failed',revision=2 WHERE claim_id='a'")
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        c.execute("UPDATE executions SET status='failed',revision=2 WHERE execution_id='e'")
+        c.execute(
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+                "on=2 WHERE execution_id='e'"
+            )
+        )
     c.execute("BEGIN IMMEDIATE")
-    c.execute("UPDATE executions SET status='failed',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+            "on=2 WHERE execution_id='e'"
+        )
+    )
     c.execute("UPDATE wake_claims SET disposition='failed',revision=2 WHERE claim_id='a'")
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
@@ -1222,7 +1368,12 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
         c.execute("INSERT INTO execution_claims VALUES ('e','b',2)")
     c.execute("INSERT INTO execution_claims VALUES ('e','b',1)")
     c.execute("COMMIT")
-    c.execute("UPDATE executions SET status='pending',revision=2 WHERE execution_id='e'")
+    c.execute(
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
+            "ion=2 WHERE execution_id='e'"
+        )
+    )
     c.execute("BEGIN IMMEDIATE")
     bind("c", 4)
     c.execute("INSERT INTO execution_claims VALUES ('e','c',2)")
@@ -1256,8 +1407,10 @@ def test_new_attempt_fence_must_advance_and_change_digest(db):
     c.execute("BEGIN IMMEDIATE")
     sql_attempt(c, ordinal=2, generation=3)
     c.execute(
-        "UPDATE executions SET status='active',current_attempt_ordinal=2,revision=4 "
-        "WHERE execution_id='e'"
+        (
+            "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+            "nal',2),revision=4 WHERE execution_id='e'"
+        )
     )
     c.execute(
         "UPDATE current_executions SET execution_id='e',attempt_ordinal=2,"
@@ -1924,7 +2077,8 @@ def test_publication_sql_validator_two_stores_raw_connection_and_process(db):
             == 1
         )
     # A fresh process must install the function before a direct SQL write.
-    script = """import sqlite3, sys
+    script = """import json
+import sqlite3, sys
 from agent_comms.coordination import CoordinationStore, COORDINATION_SCHEMA_VERSION
 with CoordinationStore(sys.argv[1]) as store:
     db = store._connection
@@ -2064,7 +2218,12 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
     with pytest.raises(sqlite3.IntegrityError):
         c.execute("UPDATE publication_receipts SET seq=2 WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError, match="cannot erase publication receipt"):
-        c.execute("UPDATE executions SET status='failed',revision=2 WHERE execution_id='e'")
+        c.execute(
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"
+                "on=2 WHERE execution_id='e'"
+            )
+        )
     with CoordinationStore(path) as reopened:
         assert (
             reopened._connection.execute(

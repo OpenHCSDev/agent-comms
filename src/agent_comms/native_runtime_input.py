@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .coordination import Executions, Participants, WakeClaims
+from .coordination import ExecutionRecord, Participants, WakeClaims
 from .typed_table import Column, TypedTable
 
 
@@ -46,7 +46,7 @@ class NativeRuntimeInput(NativeRuntimeTable, TypedTable):
     stage: Literal["triage", "full"]
     assignment_id: str = field(metadata={"sql": Column(references=(WakeClaims, "claim_id"))})
     execution_id: str | None = field(
-        metadata={"sql": Column(references=(Executions, "execution_id"))}
+        metadata={"sql": Column(references=(ExecutionRecord, "execution_id"))}
     )
     attempt_ordinal: int | None
     owner_lookup: str = field(

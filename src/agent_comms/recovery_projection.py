@@ -24,7 +24,7 @@ from .coordination import (
     ACPClientConnectivity,
     CurrentExecutions,
     ExecutionOrigin,
-    Executions,
+    ExecutionRecord,
     OwnerConnectivity,
     OwnerGenerations,
     SchemaMeta,
@@ -216,7 +216,7 @@ def _read_in_transaction(
     pointer = CurrentExecutions.one(connection, owner_lookup=owner_lookup)
     if pointer is None:
         return UnavailableRecoveryProjection("invalid_store")
-    active = Executions.read(
+    active = ExecutionRecord.read(
         connection.execute(
             "SELECT * FROM executions WHERE owner_lookup=? AND status='active' LIMIT 2",
             (owner_lookup,),

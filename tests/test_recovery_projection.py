@@ -35,10 +35,11 @@ def register(db: sqlite3.Connection, lookup: str, name: str) -> None:
 
 def pending(db: sqlite3.Connection, lookup: str, name: str, execution: str) -> None:
     db.execute(
-        "INSERT INTO executions (execution_id, origin, status, exact_target, owner_thread, "
-        "owner_lookup, revision, current_attempt_ordinal, max_attempts, reason_code, "
-        "created_at_ms, updated_at_ms) "
-        "VALUES (?, 'acp', 'pending', NULL, ?, ?, 1, NULL, 2, NULL, 5, 5)",
+        (
+            "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+            "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+            "ms) VALUES (?,'acp',json_object('kind','pending'),NULL,?,?,1,2,NULL,5,5)"
+        ),
         (execution, name, lookup),
     )
 
@@ -64,15 +65,15 @@ def active_db(private_db: Path) -> Path:
     with sqlite3.connect(private_db) as db:
         db.execute("BEGIN IMMEDIATE")
         db.execute(
-            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-            "owner_generation,owner_token_digest,phase,revision,lease_expires_at_ms,"
-            "last_progress_at_ms,backend_done,process_dead,reason_code,created_at_ms,"
-            "updated_at_ms) VALUES ('alice-execution',1,'a','Alice',1,'private-fence',"
-            "'prompt_starting',1,500,NULL,0,0,NULL,5,5)"
+            (
+                "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES ('alice-execution',1,'a','Alice',1,'private-fence',json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,5,5)"
+            )
         )
         db.execute(
-            "UPDATE executions SET status='active',current_attempt_ordinal=1,revision=2 "
-            "WHERE execution_id='alice-execution'"
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+                "nal',1),revision=2 WHERE execution_id='alice-execution'"
+            )
         )
         db.execute(
             "UPDATE current_executions SET execution_id='alice-execution',attempt_ordinal=1,"
@@ -166,8 +167,10 @@ def test_sqlite_read_transaction_cannot_mix_owner_rows(private_db: Path, monkeyp
         with sqlite3.connect(private_db, timeout=3) as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute(
-                "UPDATE executions SET status='failed', revision=2, updated_at_ms=11 "
-                "WHERE execution_id='alice-execution'"
+                (
+                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'), revis"
+                    "ion=2, updated_at_ms=11 WHERE execution_id='alice-execution'"
+                )
             )
             update_started.set()
         committed.set()
@@ -202,15 +205,15 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
             "UPDATE executions SET revision=2,updated_at_ms=100 WHERE execution_id='later-pending'"
         )
         db.execute(
-            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-            "owner_generation,owner_token_digest,phase,revision,lease_expires_at_ms,"
-            "last_progress_at_ms,backend_done,process_dead,reason_code,created_at_ms,"
-            "updated_at_ms) VALUES ('alice-execution',1,'a','Alice',1,'private-fence',"
-            "'prompt_starting',1,500,NULL,0,0,NULL,5,5)"
+            (
+                "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES ('alice-execution',1,'a','Alice',1,'private-fence',json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,5,5)"
+            )
         )
         db.execute(
-            "UPDATE executions SET status='active',current_attempt_ordinal=1,revision=2 "
-            "WHERE execution_id='alice-execution'"
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+                "nal',1),revision=2 WHERE execution_id='alice-execution'"
+            )
         )
         db.execute(
             "UPDATE current_executions SET execution_id='alice-execution',attempt_ordinal=1,"
@@ -221,16 +224,22 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
         )
         db.execute("COMMIT")
         db.execute(
-            "UPDATE attempts SET phase='prompt_accepted',revision=2 "
-            "WHERE execution_id='alice-execution'"
+            (
+                "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','prompt_accepted')"
+                ",revision=2 WHERE execution_id='alice-execution'"
+            )
         )
         db.execute(
-            "UPDATE attempts SET phase='model_running',revision=3 "
-            "WHERE execution_id='alice-execution'"
+            (
+                "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','model_running'),r"
+                "evision=3 WHERE execution_id='alice-execution'"
+            )
         )
         db.execute(
-            "UPDATE attempts SET phase='compaction',revision=4,backend_done=1 "
-            "WHERE execution_id='alice-execution'"
+            (
+                "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.kind','compaction','$.ba"
+                "ckend_done',json('true')),revision=4 WHERE execution_id='alice-execution'"
+            )
         )
     result = view(private_db)
     assert isinstance(result, AvailableRecoveryProjection)
@@ -252,7 +261,10 @@ def test_current_pointer_and_offline_compaction_phase_are_evidence_not_lifecycle
     # Pi RPC child exit and registry-owner connectivity are independent facts.
     with sqlite3.connect(private_db) as db:
         db.execute(
-            "UPDATE attempts SET process_dead=1,revision=5 WHERE execution_id='alice-execution'"
+            (
+                "UPDATE attempts SET lifecycle=json_set(lifecycle,'$.process_dead',json('true"
+                "')),revision=5 WHERE execution_id='alice-execution'"
+            )
         )
         db.execute(
             "UPDATE connectivity SET owner='connected',revision=2,"
@@ -274,7 +286,7 @@ def test_invalid_backend_boolean_never_becomes_truthy(active_db: Path, column: s
     with sqlite3.connect(active_db) as db:
         db.execute("PRAGMA ignore_check_constraints=ON")
         db.execute(
-            f"UPDATE attempts SET {column}=?,revision=revision+1 "
+            f"UPDATE attempts SET lifecycle=json_set(lifecycle, '$.{column}',?),revision=revision+1 "
             "WHERE execution_id='alice-execution'",
             (invalid,),
         )
@@ -335,15 +347,15 @@ def test_other_active_execution_disagrees_with_pointer(active_db: Path):
         db.execute("BEGIN IMMEDIATE")
         pending(db, "a", "Alice", "other-active")
         db.execute(
-            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-            "owner_generation,owner_token_digest,phase,revision,lease_expires_at_ms,"
-            "last_progress_at_ms,backend_done,process_dead,reason_code,created_at_ms,"
-            "updated_at_ms) VALUES ('other-active',1,'a','Alice',1,'other-token',"
-            "'prompt_starting',1,500,NULL,0,0,NULL,5,5)"
+            (
+                "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES ('other-active',1,'a','Alice',1,'other-token',json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,5,5)"
+            )
         )
         db.execute(
-            "UPDATE executions SET status='active',current_attempt_ordinal=1,revision=2 "
-            "WHERE execution_id='other-active'"
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+                "nal',1),revision=2 WHERE execution_id='other-active'"
+            )
         )
         db.execute("COMMIT")
     assert view(active_db) == UnavailableRecoveryProjection("invalid_store")
@@ -368,10 +380,12 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
         register(db, "a", "Alice")
         db.execute("BEGIN IMMEDIATE")
         db.execute(
-            "INSERT INTO executions (execution_id,origin,status,exact_target,owner_thread,"
-            "owner_lookup,revision,current_attempt_ordinal,max_attempts,reason_code,"
-            "created_at_ms,updated_at_ms) "
-            "VALUES ('e','wire','queued','private-target','Alice','a',1,NULL,2,NULL,0,0)"
+            (
+                "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                "ms) VALUES ('e','wire',json_object('kind','queued'),'private-target','Alice'"
+                ",'a',1,2,NULL,0,0)"
+            )
         )
         db.execute(
             (
@@ -388,17 +402,22 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
             "'direct','full',NULL,'engaged','resolver','policy',0,0,1,'e')"
         )
         db.execute("INSERT INTO execution_claims VALUES ('e','private-claim',0)")
-        db.execute("UPDATE executions SET status='pending',revision=2 WHERE execution_id='e'")
         db.execute(
-            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,"
-            "owner_generation,owner_token_digest,phase,revision,lease_expires_at_ms,"
-            "last_progress_at_ms,backend_done,process_dead,reason_code,created_at_ms,"
-            "updated_at_ms) VALUES ('e',1,'a','Alice',1,'private-token',"
-            "'prompt_starting',1,500,NULL,0,0,NULL,0,0)"
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
+                "ion=2 WHERE execution_id='e'"
+            )
         )
         db.execute(
-            "UPDATE executions SET status='active',current_attempt_ordinal=1,revision=3 "
-            "WHERE execution_id='e'"
+            (
+                "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES ('e',1,'a','Alice',1,'private-token',json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,0,0)"
+            )
+        )
+        db.execute(
+            (
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','active','$.ordi"
+                "nal',1),revision=3 WHERE execution_id='e'"
+            )
         )
         db.execute(
             "UPDATE current_executions SET execution_id='e',attempt_ordinal=1,"

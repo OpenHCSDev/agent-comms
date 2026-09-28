@@ -403,3 +403,23 @@ concurrent fresh-process stress test deselected). No installed activation claim.
 Runtime reset remains the entire coordination.sqlite3 under parent's quiet
 cutover; no new durable store. ExecutionRecord/AttemptRecord/WakeAssignment
 consolidation and the parent notification reader crossing remain open.
+
+## Execution and attempt owner closure
+
+Integrated parent720316a and notification241 at92b42ba before continuing.
+ExecutionRecord and AttemptRecord now own executions/attempts; removed Executions,
+Attempts, _execution, _attempt and generic _row. Typed lifecycle writes cover
+creation, retry, lease renewal, progress/finality, response settlement and verified
+owner loss. Lifecycle-derived generated query/FK columns preserve actual SQL
+constraints; BEFORE triggers use base lifecycle expressions, including declared
+transition edges. Coordinator schema7. Both remain runtime-only coordination.sqlite3.
+Current snapshot names remain projected; generated SQL columns cannot be supplied
+as constructor state. No compatibility readers or aliases.
+
+Execution acceptance:196pass with one stale constructor-field assertion corrected.
+Attempt acceptance:84 coordinator constraint cases passed, then85 changed store,
+response, nominal, recovery and family guard cases passed after correcting the
+optional no-attempt lookup. Raw SQL fixtures now write current lifecycle JSON;
+actual corruption and immutable-identity/finality tests retained. No repeated
+unchanged gateway suite. Remaining production consolidation: WakeAssignment and
+its notification/cohort/caller boundary, then global guards and final integration.

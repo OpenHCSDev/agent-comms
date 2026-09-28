@@ -42,7 +42,7 @@ from .typed_table import (
 )
 from .wake_policy import WakePolicy
 
-COORDINATION_SCHEMA_VERSION: Final = 5
+COORDINATION_SCHEMA_VERSION: Final = 7
 COORDINATION_SNAPSHOT_VERSION: Final = 2
 RESOLVER_VERSION: Final = "resolver-v1"
 POLICY_VERSION: Final = "policy-v1"
@@ -370,7 +370,7 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
         return (
             ForeignKey(
                 ("execution_id",),
-                Executions,
+                ExecutionRecord,
                 ("execution_id",),
                 deferred=False,
                 on_delete="RESTRICT",
@@ -505,14 +505,14 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
             ),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
-                Executions,
+                ExecutionRecord,
                 ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
                 deferred=True,
                 on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
-                Attempts,
+                AttemptRecord,
                 ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
                 deferred=True,
                 on_delete=None,
@@ -544,18 +544,43 @@ END"""
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRecord:
-    execution_id: str
+class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
+    execution_id: str = dataclass_field(
+        metadata={
+            "sql": Column(
+                primary_key=True,
+                check=(
+                    "\n"
+                    "        length(execution_id) BETWEEN 1 AND 256 AND instr(executi"
+                    "on_id, ':') = 0\n"
+                    "    "
+                ),
+            )
+        }
+    )
     origin: ExecutionOrigin
     lifecycle: ExecutionState = dataclass_field(metadata={"snapshot_exclude": True})
-    owner_thread: str
+    owner_thread: str = dataclass_field(
+        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
+    )
     owner_lookup: str
-    revision: int
-    max_attempts: int
-    reason_code: str | None
-    created_at_ms: int
-    updated_at_ms: int
-    exact_target: str | None = None
+    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+    max_attempts: int = dataclass_field(metadata={"sql": Column(check="max_attempts > 0")})
+    reason_code: str | None = dataclass_field(
+        metadata={
+            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
+        }
+    )
+    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
+    updated_at_ms: int = dataclass_field(
+        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
+    )
+    exact_target: str | None = dataclass_field(
+        default=None,
+        metadata={
+            "sql": Column(check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256")
+        },
+    )
 
     @projected(view="snapshot", name="status")
     def snapshot_status(self):
@@ -588,21 +613,360 @@ class ExecutionRecord:
         elif self.exact_target is not None:
             raise IntegrityViolationError("claimless execution requires null target")
 
+    status: str = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.kind')",
+                check="status IN\n      ({execution_names})",
+            ),
+        },
+    )
+    current_attempt_ordinal: int | None = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.ordinal')",
+                check=(
+                    "\n"
+                    "        current_attempt_ordinal IS NULL OR current_attempt_ordin"
+                    "al BETWEEN 1 AND max_attempts\n"
+                    "    "
+                ),
+            ),
+        },
+    )
+    required_attempt_kind: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE\n"
+                    "        WHEN status = 'active' THEN 'active'\n"
+                    "        WHEN status = 'completed' THEN 'succeeded'\n"
+                    "        WHEN status IN ({optional_attempt_execution_names}) AND "
+                    "current_attempt_ordinal IS NOT NULL\n"
+                    "          THEN 'attempt_failed'\n"
+                    "    END"
+                )
+            ),
+        },
+    )
+    active_execution_id: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="CASE WHEN status = 'active' THEN execution_id END"),
+        },
+    )
+    active_attempt_ordinal: int | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END"),
+        },
+    )
+    wire_execution_id: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="CASE WHEN origin = 'wire' THEN execution_id END"),
+        },
+    )
+    wire_claim_ordinal: int | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="CASE WHEN origin = 'wire' THEN 0 END"),
+        },
+    )
+    claim_status_kind: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE\n"
+                    "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
+                    "'\n"
+                    "        ELSE status END"
+                )
+            ),
+        },
+    )
+    completed_wire_id: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="CASE WHEN status = 'completed' AND origin = 'wire' THEN execution_id END"
+            ),
+        },
+    )
+    required_obligation_terminal: int | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="CASE WHEN status = 'completed' AND origin = 'wire' THEN 1 END"
+            ),
+        },
+    )
+    deferred_replay_id: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    " NULL\n"
+                    "              THEN execution_id END"
+                )
+            ),
+        },
+    )
+    deferred_replay_required: int | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    " NULL\n"
+                    "              THEN 1 END"
+                )
+            ),
+        },
+    )
+    deferred_obligation_id: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    " NULL\n"
+                    "                   AND origin = 'wire' THEN execution_id END"
+                )
+            ),
+        },
+    )
+    deferred_obligation_required: int | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    " NULL\n"
+                    "                   AND origin = 'wire' THEN 1 END"
+                )
+            ),
+        },
+    )
+    checks = (
+        (
+            "(status IN ({unstarted_execution_names}) AND current_attempt_ord"
+            "inal IS NULL)\n"
+            "      OR (status IN ({required_attempt_execution_names}) AND cur"
+            "rent_attempt_ordinal IS NOT NULL)\n"
+            "      OR status IN ({optional_attempt_execution_names})"
+        ),
+        (
+            "status != 'deferred' OR current_attempt_ordinal IS NULL\n"
+            "           OR current_attempt_ordinal < max_attempts"
+        ),
+        (
+            "(origin = 'wire' AND exact_target IS NOT NULL)\n"
+            "      OR (origin != 'wire' AND exact_target IS NULL)"
+        ),
+    )
+    unique = (
+        ("execution_id", "owner_lookup"),
+        ("execution_id", "claim_status_kind"),
+        ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
+    )
+    indexes = (Index(("owner_lookup", "status"), unique=False, where=None),)
+
+    @classmethod
+    def references(cls):
+        return (
+            ForeignKey(
+                ("owner_lookup",),
+                Participants,
+                ("participant_lookup",),
+                deferred=False,
+                on_delete=None,
+            ),
+            ForeignKey(
+                (
+                    "execution_id",
+                    "current_attempt_ordinal",
+                    "owner_lookup",
+                    "required_attempt_kind",
+                ),
+                AttemptRecord,
+                ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("owner_lookup", "active_execution_id", "active_attempt_ordinal"),
+                CurrentExecutions,
+                ("owner_lookup", "execution_id", "attempt_ordinal"),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("wire_execution_id", "wire_claim_ordinal"),
+                ExecutionAssignmentLink,
+                ("execution_id", "ordinal"),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("wire_execution_id",),
+                ResponseObligation,
+                ("execution_id",),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("completed_wire_id", "required_obligation_terminal"),
+                ResponseObligation,
+                ("execution_id", "success_terminal"),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("deferred_replay_id", "deferred_replay_required"),
+                ReplayAssessments,
+                ("execution_id", "retry_authorized"),
+                deferred=True,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("deferred_obligation_id", "deferred_obligation_required"),
+                ResponseObligation,
+                ("execution_id", "retryable"),
+                deferred=True,
+                on_delete=None,
+            ),
+        )
+
+    @classmethod
+    def triggers(cls):
+        return {
+            "execution_status_edge": (
+                """CREATE TRIGGER execution_status_edge BEFORE UPDATE OF lifecycle ON executions
+WHEN json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges})
+BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
+            ),
+            "execution_frozen_facts": (
+                """CREATE TRIGGER execution_frozen_facts BEFORE UPDATE ON executions
+WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
+ OR NEW.exact_target IS NOT OLD.exact_target OR NEW.owner_lookup IS NOT OLD.owner_lookup
+ OR NEW.owner_thread IS NOT OLD.owner_thread OR NEW.max_attempts != OLD.max_attempts
+ OR NEW.created_at_ms != OLD.created_at_ms OR NEW.revision != OLD.revision + 1
+ OR NEW.updated_at_ms < OLD.updated_at_ms OR
+ (json_extract(NEW.lifecycle, '$.kind') = 'active' AND
+  (json_extract(OLD.lifecycle, '$.kind') NOT IN ({startable_execution_names}) OR
+   json_extract(NEW.lifecycle, '$.ordinal') != coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR
+ (json_extract(NEW.lifecycle, '$.kind') != 'active' AND
+  json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))
+BEGIN SELECT RAISE(ABORT, 'execution transition rewrites frozen authority'); END"""
+            ),
+            "execution_failure_receipt_guard": (
+                """CREATE TRIGGER execution_failure_receipt_guard BEFORE UPDATE OF lifecycle
+ON executions
+WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
+  SELECT 1 FROM publication_receipts WHERE execution_id =
+  NEW.execution_id)
+BEGIN SELECT RAISE(ABORT,
+'failed execution cannot erase publication receipt' ); END"""
+            ),
+            "execution_delete_frozen": (
+                """CREATE TRIGGER execution_delete_frozen BEFORE DELETE ON executions BEGIN
+    SELECT RAISE(ABORT, 'execution cannot be deleted');
+END"""
+            ),
+            "failed_retry_partition_update": (
+                """CREATE TRIGGER failed_retry_partition_update BEFORE UPDATE OF lifecycle
+ON executions
+WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
+ AND EXISTS (SELECT 1 FROM retry_disposition_basis b
+             WHERE b.execution_id = NEW.execution_id AND b.authorized
+             = 1)
+BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
+END"""
+            ),
+        }
+
 
 @dataclass(frozen=True, slots=True)
-class AttemptRecord:
-    execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
-    attempt_ordinal: int
+class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
+    execution_id: str = dataclass_field(
+        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
+    )
+    attempt_ordinal: int = dataclass_field(
+        metadata={"sql": Column(primary_key=True, check="attempt_ordinal > 0")}
+    )
     owner_lookup: str
-    owner_thread: str
-    owner_generation: int
-    owner_token_digest: str = dataclass_field(metadata={"snapshot_exclude": True})
+    owner_thread: str = dataclass_field(
+        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
+    )
+    owner_generation: int = dataclass_field(metadata={"sql": Column(check="owner_generation > 0")})
+    owner_token_digest: str = dataclass_field(
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
+        }
+    )
     lifecycle: AttemptState = dataclass_field(metadata={"snapshot_exclude": True})
-    revision: int
+    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
     last_progress_at_ms: int | None
-    reason_code: str | None
-    created_at_ms: int
-    updated_at_ms: int
+    reason_code: str | None = dataclass_field(
+        metadata={
+            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
+        }
+    )
+    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
+    updated_at_ms: int = dataclass_field(
+        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
+    )
 
     @projected(view="snapshot", name="phase")
     def snapshot_phase(self):
@@ -638,6 +1002,193 @@ class AttemptRecord:
             self.created_at_ms <= self.last_progress_at_ms <= self.updated_at_ms
         ):
             raise ValueError("attempt progress time is inconsistent")
+
+    phase: str = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"
+            ),
+        },
+    )
+    lease_expires_at_ms: int | None = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
+                check="lease_expires_at_ms >= 0",
+            ),
+        },
+    )
+    backend_done: bool = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
+                check="backend_done IN (0,1)",
+            ),
+        },
+    )
+    process_dead: bool = dataclass_field(
+        init=False,
+        compare=False,
+        repr=False,
+        default=None,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
+                check="process_dead IN (0,1)",
+            ),
+        },
+    )
+    phase_kind: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(
+                generated=(
+                    "CASE\n"
+                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
+                    "'active' END"
+                )
+            ),
+        },
+    )
+    active_required_status: str | None = dataclass_field(
+        init=False,
+        default=None,
+        compare=False,
+        metadata={
+            "snapshot_exclude": True,
+            "sql": Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END"),
+        },
+    )
+    checks = (
+        (
+            "last_progress_at_ms IS NULL OR\n"
+            "           last_progress_at_ms BETWEEN created_at_ms AND updated"
+            "_at_ms"
+        ),
+        (
+            "(phase_kind = 'active' AND lease_expires_at_ms IS NOT NULL)\n"
+            "       OR (phase_kind != 'active' AND lease_expires_at_ms IS NUL"
+            "L\n"
+            "           AND backend_done = 1 AND process_dead = 1)"
+        ),
+    )
+    unique = (("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),)
+
+    @classmethod
+    def references(cls):
+        return (
+            ForeignKey(
+                ("execution_id",),
+                ExecutionRecord,
+                ("execution_id",),
+                deferred=False,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("owner_lookup",),
+                Participants,
+                ("participant_lookup",),
+                deferred=False,
+                on_delete=None,
+            ),
+            ForeignKey(
+                ("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
+                ExecutionRecord,
+                ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
+                deferred=True,
+                on_delete=None,
+            ),
+        )
+
+    @classmethod
+    def triggers(cls):
+        return {
+            "attempt_insert_authorized": (
+                """CREATE TRIGGER attempt_insert_authorized BEFORE INSERT ON attempts BEGIN
+    SELECT RAISE(ABORT, 'attempt must be contiguous and within execution budget')
+    WHERE NOT EXISTS (
+        SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id
+        AND e.owner_lookup = NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts
+        AND ((NEW.attempt_ordinal = 1 AND
+              (e.status = 'pending' OR
+               (e.status = 'active' AND e.current_attempt_ordinal = 1)))
+          OR (NEW.attempt_ordinal > 1 AND
+              (e.status = 'deferred' OR
+               (e.status = 'active' AND e.current_attempt_ordinal = NEW.attempt_ordinal))))
+        AND NEW.attempt_ordinal = 1 + coalesce(
+            (SELECT max(a.attempt_ordinal) FROM attempts a
+              WHERE a.execution_id = e.execution_id), 0));
+    SELECT RAISE(ABORT, 'attempt generation must match owner counter')
+    WHERE NOT EXISTS (SELECT 1 FROM owner_generations g
+      WHERE g.owner_lookup = NEW.owner_lookup AND g.owner_thread = NEW.owner_thread
+        AND g.generation = NEW.owner_generation);
+    SELECT RAISE(ABORT, 'new attempt requires a fresh active fence')
+    WHERE (json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1
+       OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) != 0 OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) != 0;
+    SELECT RAISE(ABORT, 'retry requires derived authorization and no current owner')
+    WHERE NEW.attempt_ordinal > 1 AND (
+      NOT EXISTS (SELECT 1 FROM retry_disposition_basis b
+        WHERE b.execution_id = NEW.execution_id AND b.authorized = 1)
+      OR EXISTS (SELECT 1 FROM current_executions p
+        WHERE p.owner_lookup = NEW.owner_lookup AND p.execution_id IS NOT NULL));
+    SELECT RAISE(ABORT, 'previous attempt must be dead with an older distinct fence')
+    WHERE NEW.attempt_ordinal > 1 AND NOT EXISTS (
+      SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
+      AND a.attempt_ordinal = NEW.attempt_ordinal - 1
+      AND a.phase = 'attempt_failed' AND a.backend_done = 1 AND a.process_dead = 1
+      AND NEW.owner_generation > a.owner_generation
+      AND NEW.owner_token_digest != a.owner_token_digest);
+END"""
+            ),
+            "attempt_phase_edge": (
+                """CREATE TRIGGER attempt_phase_edge BEFORE UPDATE OF lifecycle ON attempts
+WHEN (json_extract(NEW.lifecycle, '$.kind')) != (json_extract(OLD.lifecycle, '$.kind')) AND NOT ({attempt_edges})
+BEGIN SELECT RAISE(ABORT, 'attempt phase transition is not declared'); END"""
+            ),
+            "attempt_frozen_facts": (
+                """CREATE TRIGGER attempt_frozen_facts BEFORE UPDATE ON attempts
+WHEN NEW.execution_id IS NOT OLD.execution_id
+ OR NEW.attempt_ordinal != OLD.attempt_ordinal
+ OR NEW.owner_lookup IS NOT OLD.owner_lookup OR NEW.owner_thread IS NOT OLD.owner_thread
+ OR NEW.owner_generation != OLD.owner_generation
+ OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
+ OR NEW.created_at_ms != OLD.created_at_ms
+ OR NEW.revision != OLD.revision + 1
+ OR NEW.updated_at_ms < OLD.updated_at_ms
+ OR ((CASE WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(OLD.lifecycle, '$.backend_done') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) = 0)
+ OR ((CASE WHEN json_extract(OLD.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(OLD.lifecycle, '$.process_dead') END) = 1 AND (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(NEW.lifecycle, '$.process_dead') END) = 0)
+ OR (OLD.last_progress_at_ms IS NOT NULL AND
+      (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms < OLD.last_progress_at_ms))
+ OR ((json_extract(OLD.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) IS NOT NULL
+      AND (json_extract(NEW.lifecycle, '$.lease_expires_at_ms')) < (json_extract(OLD.lifecycle, '$.lease_expires_at_ms')))
+ OR ((json_extract(OLD.lifecycle, '$.kind')) IN ({terminal_attempt_names}) AND (json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle, '$.kind')))
+BEGIN SELECT RAISE(ABORT, 'attempt transition rewrites frozen facts'); END"""
+            ),
+            "attempt_delete_frozen": (
+                """CREATE TRIGGER attempt_delete_frozen BEFORE DELETE ON attempts BEGIN
+    SELECT RAISE(ABORT, 'attempt cannot be deleted');
+END"""
+            ),
+        }
 
 
 def attempt_retry_identity_allowed(
@@ -714,7 +1265,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         return (
             ForeignKey(
                 ("execution_id",),
-                Executions,
+                ExecutionRecord,
                 ("execution_id",),
                 deferred=False,
                 on_delete="RESTRICT",
@@ -935,7 +1486,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         return (
             ForeignKey(
                 ("execution_id",),
-                Executions,
+                ExecutionRecord,
                 ("execution_id",),
                 deferred=False,
                 on_delete="RESTRICT",
@@ -1238,7 +1789,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         return (
             ForeignKey(
                 ("execution_id",),
-                Executions,
+                ExecutionRecord,
                 ("execution_id",),
                 deferred=False,
                 on_delete="RESTRICT",
@@ -1358,7 +1909,7 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
         return (
             ForeignKey(
                 ("execution_id",),
-                Executions,
+                ExecutionRecord,
                 ("execution_id",),
                 deferred=False,
                 on_delete="RESTRICT",
@@ -1419,14 +1970,14 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
         return (
             ForeignKey(
                 ("execution_id",),
-                Executions,
+                ExecutionRecord,
                 ("execution_id",),
                 deferred=False,
                 on_delete="RESTRICT",
             ),
             ForeignKey(
                 ("execution_id", "attempt"),
-                Attempts,
+                AttemptRecord,
                 ("execution_id", "attempt_ordinal"),
                 deferred=False,
                 on_delete=None,
@@ -1807,491 +2358,6 @@ BEGIN SELECT RAISE(ABORT, 'owner generation cannot advance with active attempts'
 
 
 @dataclass(frozen=True, kw_only=True)
-class Executions(CoordinatorTable, TypedTable):
-    execution_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                primary_key=True,
-                check=(
-                    "\n"
-                    "        length(execution_id) BETWEEN 1 AND 256 AND instr(executi"
-                    "on_id, ':') = 0\n"
-                    "    "
-                ),
-            )
-        }
-    )
-    origin: str = dataclass_field(
-        metadata={"sql": Column(check="origin IN ('wire', 'acp', 'goal', 'system')")}
-    )
-    status: str = dataclass_field(
-        metadata={"sql": Column(check="status IN\n      ({execution_names})")}
-    )
-    exact_target: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256")
-        }
-    )
-    owner_thread: str = dataclass_field(
-        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
-    )
-    owner_lookup: str
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
-    current_attempt_ordinal: int | None = dataclass_field(
-        metadata={
-            "sql": Column(
-                check=(
-                    "\n"
-                    "        current_attempt_ordinal IS NULL OR current_attempt_ordin"
-                    "al BETWEEN 1 AND max_attempts\n"
-                    "    "
-                )
-            )
-        }
-    )
-    max_attempts: int = dataclass_field(metadata={"sql": Column(check="max_attempts > 0")})
-    reason_code: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
-        }
-    )
-    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
-    )
-    required_attempt_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE\n"
-                    "        WHEN status = 'active' THEN 'active'\n"
-                    "        WHEN status = 'completed' THEN 'succeeded'\n"
-                    "        WHEN status IN ({optional_attempt_execution_names}) AND "
-                    "current_attempt_ordinal IS NOT NULL\n"
-                    "          THEN 'attempt_failed'\n"
-                    "    END"
-                )
-            )
-        },
-    )
-    active_execution_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={"sql": Column(generated="CASE WHEN status = 'active' THEN execution_id END")},
-    )
-    active_attempt_ordinal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END")
-        },
-    )
-    wire_execution_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={"sql": Column(generated="CASE WHEN origin = 'wire' THEN execution_id END")},
-    )
-    wire_claim_ordinal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={"sql": Column(generated="CASE WHEN origin = 'wire' THEN 0 END")},
-    )
-    claim_status_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE\n"
-                    "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
-                    "'\n"
-                    "        ELSE status END"
-                )
-            )
-        },
-    )
-    completed_wire_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated="CASE WHEN status = 'completed' AND origin = 'wire' THEN execution_id END"
-            )
-        },
-    )
-    required_obligation_terminal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(generated="CASE WHEN status = 'completed' AND origin = 'wire' THEN 1 END")
-        },
-    )
-    deferred_replay_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "              THEN execution_id END"
-                )
-            )
-        },
-    )
-    deferred_replay_required: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "              THEN 1 END"
-                )
-            )
-        },
-    )
-    deferred_obligation_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "                   AND origin = 'wire' THEN execution_id END"
-                )
-            )
-        },
-    )
-    deferred_obligation_required: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
-                    " NULL\n"
-                    "                   AND origin = 'wire' THEN 1 END"
-                )
-            )
-        },
-    )
-    checks = (
-        (
-            "(status IN ({unstarted_execution_names}) AND current_attempt_ord"
-            "inal IS NULL)\n"
-            "      OR (status IN ({required_attempt_execution_names}) AND cur"
-            "rent_attempt_ordinal IS NOT NULL)\n"
-            "      OR status IN ({optional_attempt_execution_names})"
-        ),
-        (
-            "status != 'deferred' OR current_attempt_ordinal IS NULL\n"
-            "           OR current_attempt_ordinal < max_attempts"
-        ),
-        (
-            "(origin = 'wire' AND exact_target IS NOT NULL)\n"
-            "      OR (origin != 'wire' AND exact_target IS NULL)"
-        ),
-    )
-    unique = (
-        ("execution_id", "owner_lookup"),
-        ("execution_id", "claim_status_kind"),
-        ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
-    )
-    indexes = (Index(("owner_lookup", "status"), unique=False, where=None),)
-
-    @classmethod
-    def references(cls):
-        return (
-            ForeignKey(
-                ("owner_lookup",),
-                Participants,
-                ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
-            ),
-            ForeignKey(
-                (
-                    "execution_id",
-                    "current_attempt_ordinal",
-                    "owner_lookup",
-                    "required_attempt_kind",
-                ),
-                Attempts,
-                ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("owner_lookup", "active_execution_id", "active_attempt_ordinal"),
-                CurrentExecutions,
-                ("owner_lookup", "execution_id", "attempt_ordinal"),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("wire_execution_id", "wire_claim_ordinal"),
-                ExecutionAssignmentLink,
-                ("execution_id", "ordinal"),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("wire_execution_id",),
-                ResponseObligation,
-                ("execution_id",),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("completed_wire_id", "required_obligation_terminal"),
-                ResponseObligation,
-                ("execution_id", "success_terminal"),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("deferred_replay_id", "deferred_replay_required"),
-                ReplayAssessments,
-                ("execution_id", "retry_authorized"),
-                deferred=True,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("deferred_obligation_id", "deferred_obligation_required"),
-                ResponseObligation,
-                ("execution_id", "retryable"),
-                deferred=True,
-                on_delete=None,
-            ),
-        )
-
-    @classmethod
-    def triggers(cls):
-        return {
-            "execution_status_edge": (
-                """CREATE TRIGGER execution_status_edge BEFORE UPDATE OF status ON executions
-WHEN NEW.status != OLD.status AND NOT ({execution_edges})
-BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
-            ),
-            "execution_frozen_facts": (
-                """CREATE TRIGGER execution_frozen_facts BEFORE UPDATE ON executions
-WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
- OR NEW.exact_target IS NOT OLD.exact_target OR NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.owner_thread IS NOT OLD.owner_thread OR NEW.max_attempts != OLD.max_attempts
- OR NEW.created_at_ms != OLD.created_at_ms OR NEW.revision != OLD.revision + 1
- OR NEW.updated_at_ms < OLD.updated_at_ms OR
- (NEW.status = 'active' AND
-  (OLD.status NOT IN ({startable_execution_names}) OR
-   NEW.current_attempt_ordinal != coalesce(OLD.current_attempt_ordinal, 0) + 1)) OR
- (NEW.status != 'active' AND
-  NEW.current_attempt_ordinal IS NOT OLD.current_attempt_ordinal)
-BEGIN SELECT RAISE(ABORT, 'execution transition rewrites frozen authority'); END"""
-            ),
-            "execution_failure_receipt_guard": (
-                """CREATE TRIGGER execution_failure_receipt_guard BEFORE UPDATE OF status
-ON executions
-WHEN NEW.status = 'failed' AND EXISTS (
-  SELECT 1 FROM publication_receipts WHERE execution_id =
-  NEW.execution_id)
-BEGIN SELECT RAISE(ABORT,
-'failed execution cannot erase publication receipt' ); END"""
-            ),
-            "execution_delete_frozen": (
-                """CREATE TRIGGER execution_delete_frozen BEFORE DELETE ON executions BEGIN
-    SELECT RAISE(ABORT, 'execution cannot be deleted');
-END"""
-            ),
-            "failed_retry_partition_update": (
-                """CREATE TRIGGER failed_retry_partition_update BEFORE UPDATE OF status
-ON executions
-WHEN NEW.status = 'failed' AND NEW.current_attempt_ordinal IS NOT NULL
- AND EXISTS (SELECT 1 FROM retry_disposition_basis b
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END"""
-            ),
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
-class Attempts(CoordinatorTable, TypedTable):
-    execution_id: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
-    attempt_ordinal: int = dataclass_field(
-        metadata={"sql": Column(primary_key=True, check="attempt_ordinal > 0")}
-    )
-    owner_lookup: str
-    owner_thread: str = dataclass_field(
-        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
-    )
-    owner_generation: int = dataclass_field(metadata={"sql": Column(check="owner_generation > 0")})
-    owner_token_digest: str = dataclass_field(
-        metadata={"sql": Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256")}
-    )
-    phase: str = dataclass_field(metadata={"sql": Column(check="phase IN ({attempt_names})")})
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
-    lease_expires_at_ms: int | None = dataclass_field(
-        metadata={"sql": Column(check="lease_expires_at_ms >= 0")}
-    )
-    last_progress_at_ms: int | None
-    backend_done: int = dataclass_field(metadata={"sql": Column(check="backend_done IN (0,1)")})
-    process_dead: int = dataclass_field(metadata={"sql": Column(check="process_dead IN (0,1)")})
-    reason_code: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
-        }
-    )
-    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
-    )
-    phase_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE\n"
-                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
-                    "'active' END"
-                )
-            )
-        },
-    )
-    active_required_status: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={"sql": Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END")},
-    )
-    checks = (
-        (
-            "last_progress_at_ms IS NULL OR\n"
-            "           last_progress_at_ms BETWEEN created_at_ms AND updated"
-            "_at_ms"
-        ),
-        (
-            "(phase_kind = 'active' AND lease_expires_at_ms IS NOT NULL)\n"
-            "       OR (phase_kind != 'active' AND lease_expires_at_ms IS NUL"
-            "L\n"
-            "           AND backend_done = 1 AND process_dead = 1)"
-        ),
-    )
-    unique = (("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),)
-
-    @classmethod
-    def references(cls):
-        return (
-            ForeignKey(
-                ("execution_id",), Executions, ("execution_id",), deferred=False, on_delete=None
-            ),
-            ForeignKey(
-                ("owner_lookup",),
-                Participants,
-                ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
-            ),
-            ForeignKey(
-                ("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
-                Executions,
-                ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
-                deferred=True,
-                on_delete=None,
-            ),
-        )
-
-    @classmethod
-    def triggers(cls):
-        return {
-            "attempt_insert_authorized": (
-                """CREATE TRIGGER attempt_insert_authorized BEFORE INSERT ON attempts BEGIN
-    SELECT RAISE(ABORT, 'attempt must be contiguous and within execution budget')
-    WHERE NOT EXISTS (
-        SELECT 1 FROM executions e WHERE e.execution_id = NEW.execution_id
-        AND e.owner_lookup = NEW.owner_lookup AND NEW.attempt_ordinal <= e.max_attempts
-        AND ((NEW.attempt_ordinal = 1 AND
-              (e.status = 'pending' OR
-               (e.status = 'active' AND e.current_attempt_ordinal = 1)))
-          OR (NEW.attempt_ordinal > 1 AND
-              (e.status = 'deferred' OR
-               (e.status = 'active' AND e.current_attempt_ordinal = NEW.attempt_ordinal))))
-        AND NEW.attempt_ordinal = 1 + coalesce(
-            (SELECT max(a.attempt_ordinal) FROM attempts a
-              WHERE a.execution_id = e.execution_id), 0));
-    SELECT RAISE(ABORT, 'attempt generation must match owner counter')
-    WHERE NOT EXISTS (SELECT 1 FROM owner_generations g
-      WHERE g.owner_lookup = NEW.owner_lookup AND g.owner_thread = NEW.owner_thread
-        AND g.generation = NEW.owner_generation);
-    SELECT RAISE(ABORT, 'new attempt requires a fresh active fence')
-    WHERE NEW.phase != 'prompt_starting' OR NEW.revision != 1
-       OR NEW.backend_done != 0 OR NEW.process_dead != 0;
-    SELECT RAISE(ABORT, 'retry requires derived authorization and no current owner')
-    WHERE NEW.attempt_ordinal > 1 AND (
-      NOT EXISTS (SELECT 1 FROM retry_disposition_basis b
-        WHERE b.execution_id = NEW.execution_id AND b.authorized = 1)
-      OR EXISTS (SELECT 1 FROM current_executions p
-        WHERE p.owner_lookup = NEW.owner_lookup AND p.execution_id IS NOT NULL));
-    SELECT RAISE(ABORT, 'previous attempt must be dead with an older distinct fence')
-    WHERE NEW.attempt_ordinal > 1 AND NOT EXISTS (
-      SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
-      AND a.attempt_ordinal = NEW.attempt_ordinal - 1
-      AND a.phase = 'attempt_failed' AND a.backend_done = 1 AND a.process_dead = 1
-      AND NEW.owner_generation > a.owner_generation
-      AND NEW.owner_token_digest != a.owner_token_digest);
-END"""
-            ),
-            "attempt_phase_edge": (
-                """CREATE TRIGGER attempt_phase_edge BEFORE UPDATE OF phase ON attempts
-WHEN NEW.phase != OLD.phase AND NOT ({attempt_edges})
-BEGIN SELECT RAISE(ABORT, 'attempt phase transition is not declared'); END"""
-            ),
-            "attempt_frozen_facts": (
-                """CREATE TRIGGER attempt_frozen_facts BEFORE UPDATE ON attempts
-WHEN NEW.execution_id IS NOT OLD.execution_id
- OR NEW.attempt_ordinal != OLD.attempt_ordinal
- OR NEW.owner_lookup IS NOT OLD.owner_lookup OR NEW.owner_thread IS NOT OLD.owner_thread
- OR NEW.owner_generation != OLD.owner_generation
- OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
- OR NEW.created_at_ms != OLD.created_at_ms
- OR NEW.revision != OLD.revision + 1
- OR NEW.updated_at_ms < OLD.updated_at_ms
- OR (OLD.backend_done = 1 AND NEW.backend_done = 0)
- OR (OLD.process_dead = 1 AND NEW.process_dead = 0)
- OR (OLD.last_progress_at_ms IS NOT NULL AND
-      (NEW.last_progress_at_ms IS NULL OR NEW.last_progress_at_ms < OLD.last_progress_at_ms))
- OR (OLD.lease_expires_at_ms IS NOT NULL AND NEW.lease_expires_at_ms IS NOT NULL
-      AND NEW.lease_expires_at_ms < OLD.lease_expires_at_ms)
- OR (OLD.phase IN ({terminal_attempt_names}) AND NEW.phase = OLD.phase)
-BEGIN SELECT RAISE(ABORT, 'attempt transition rewrites frozen facts'); END"""
-            ),
-            "attempt_delete_frozen": (
-                """CREATE TRIGGER attempt_delete_frozen BEFORE DELETE ON attempts BEGIN
-    SELECT RAISE(ABORT, 'attempt cannot be deleted');
-END"""
-            ),
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
 class WakeClaims(CoordinatorTable, TypedTable):
     claim_id: str = dataclass_field(
         metadata={"sql": Column(primary_key=True, check="length(claim_id) BETWEEN 1 AND 256")}
@@ -2405,7 +2471,11 @@ class WakeClaims(CoordinatorTable, TypedTable):
                 on_delete=None,
             ),
             ForeignKey(
-                ("execution_id",), Executions, ("execution_id",), deferred=False, on_delete=None
+                ("execution_id",),
+                ExecutionRecord,
+                ("execution_id",),
+                deferred=False,
+                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "claim_id"),
@@ -2416,7 +2486,7 @@ class WakeClaims(CoordinatorTable, TypedTable):
             ),
             ForeignKey(
                 ("execution_id", "claim_status_kind"),
-                Executions,
+                ExecutionRecord,
                 ("execution_id", "claim_status_kind"),
                 deferred=True,
                 on_delete=None,
@@ -2576,8 +2646,8 @@ def _sql_members(family, predicate=lambda member: True):
 def _sql_edges(family, column):
     return (
         " OR ".join(
-            f"(OLD.{column} = {_sql_values((name,))} "
-            f"AND NEW.{column} IN ({_sql_values(sorted(edges))}))"
+            f"({column.format(row='OLD')} = {_sql_values((name,))} "
+            f"AND {column.format(row='NEW')} IN ({_sql_values(sorted(edges))}))"
             for name, edges in family.transition_table().items()
             if edges
         )
@@ -2593,10 +2663,10 @@ def _schema_context():
         wake_names=_sql_members(WakePolicy),
         response_names=_sql_members(ResponseState),
         recovery_names=_sql_members(RecoveryCondition),
-        execution_edges=_sql_edges(ExecutionState, "status"),
-        attempt_edges=_sql_edges(AttemptState, "phase"),
-        assignment_edges=_sql_edges(AssignmentState, "disposition"),
-        obligation_edges=_sql_edges(ResponseState, "state"),
+        execution_edges=_sql_edges(ExecutionState, "json_extract({row}.lifecycle, '$.kind')"),
+        attempt_edges=_sql_edges(AttemptState, "json_extract({row}.lifecycle, '$.kind')"),
+        assignment_edges=_sql_edges(AssignmentState, "{row}.disposition"),
+        obligation_edges=_sql_edges(ResponseState, "json_extract({row}.lifecycle, '$.kind')"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
         engaged_execution_names=_sql_members(
             ExecutionState, lambda member: member.assignment_state().engaged

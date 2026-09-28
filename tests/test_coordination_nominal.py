@@ -72,7 +72,9 @@ def test_record_replacement_uses_only_nominal_state():
         created_at_ms=0,
         updated_at_ms=0,
     )
-    assert {"status", "current_attempt_ordinal"}.isdisjoint(f.name for f in fields(record))
+    assert {"status", "current_attempt_ordinal"}.isdisjoint(
+        f.name for f in fields(record) if f.init
+    )
     active = replace(record, revision=2, lifecycle=ActiveExecution.load(1))
     assert active.lifecycle == ActiveExecution(1)
     assert c.execution_status_transition_allowed(record, active)
@@ -131,16 +133,20 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
         with MutationStore(tmp_path / "coordination.sqlite3") as store:
             store.register_participant("owner", "owner", "owner", committed=True)
             store._connection.execute(
-                "INSERT INTO executions(execution_id,origin,status,owner_thread,"
-                "owner_lookup,revision,"
-                "current_attempt_ordinal,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-                "VALUES ('e','acp','paused','owner','owner',1,NULL,2,NULL,1,1)"
+                (
+                    "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,owner_loo"
+                    "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
+                    "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
+                )
             )
             record = store.snapshot("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
             assert FieldCodec.decode(type(record), FieldCodec.encode(record)) == record
             store._connection.execute(
-                "UPDATE executions SET status='pending',revision=2 WHERE execution_id='e'"
+                (
+                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
+                    "ion=2 WHERE execution_id='e'"
+                )
             )
             assert isinstance(store.snapshot("e").execution.lifecycle, PendingExecution)
             projection = ProjectedExecution(
@@ -245,10 +251,12 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             store.register_participant("p", "owner", "owner", committed=True)
             with store._transaction() as db:
                 db.execute(
-                    "INSERT INTO executions(execution_id,origin,status,exact_target,owner_thread,"
-                    "owner_lookup,revision,current_attempt_ordinal,max_attempts,"
-                    "reason_code,created_at_ms,updated_at_ms) "
-                    "VALUES ('e','wire','queued','requester','owner','p',1,NULL,2,NULL,0,0)"
+                    (
+                        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                        "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                        "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
+                        "1,2,NULL,0,0)"
+                    )
                 )
                 db.execute(
                     (
