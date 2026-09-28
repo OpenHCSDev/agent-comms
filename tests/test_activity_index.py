@@ -6,11 +6,12 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.activity import Activity, ActivityLog, ActivityState
+from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import _atomic_write_text
 
 
 def encoded(name="a", detail="before"):
-    return json.dumps(Activity(name, ActivityState.WORKING, detail).to_wire())
+    return json.dumps(FieldCodec.encode(Activity(name, ActivityState.WORKING, detail)))
 
 
 def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tmp_path):
@@ -18,14 +19,14 @@ def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tm
     path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
     reader, writer = ActivityLog(path), ActivityLog(path)
     previous = reader._latest_events()
-    with patch.object(Activity, "from_wire", wraps=Activity.from_wire) as parse:
+    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
         for _ in range(10):
             reader.all_current()
-        assert parse.call_count == 0
+        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 0
         writer.emit(Activity("new-worker", ActivityState.THINKING, "latest"))
         current = reader.all_current()
         assert current["new-worker"].detail == "latest"
-        assert parse.call_count == 1
+        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 1
     assert "new-worker" not in previous
 
 
@@ -33,14 +34,14 @@ def test_fresh_reader_loads_latest_threads_without_replaying_activity_history(tm
     path = tmp_path / "activity.jsonl"
     path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
     assert len(ActivityLog(path).all_current()) == 10
-    with patch.object(Activity, "from_wire", wraps=Activity.from_wire) as parse:
+    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
         assert len(ActivityLog(path).all_current()) == 10
-        assert parse.call_count == 10
+        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 10
     ActivityLog(path).emit(Activity("new-worker", ActivityState.THINKING, "latest"))
-    with patch.object(Activity, "from_wire", wraps=Activity.from_wire) as parse:
+    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
         current = ActivityLog(path).all_current()
         assert current["new-worker"].detail == "latest"
-        assert parse.call_count == 11
+        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 11
 
 
 def test_fresh_reader_rebuilds_after_activity_rewrite_before_append(tmp_path):

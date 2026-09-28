@@ -1,0 +1,48 @@
+........................................................................ [ 67%]
+...........................FF......                                      [100%]
+=================================== FAILURES ===================================
+__ test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots ___
+
+tmp_path = PosixPath('/home/ts/wt/.r5doc/basics/test_appends_parse_only_new_re0')
+
+    def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tmp_path):
+        path = tmp_path / "activity.jsonl"
+        path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
+        reader, writer = ActivityLog(path), ActivityLog(path)
+        previous = reader._latest_events()
+        with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
+            for _ in range(10):
+                reader.all_current()
+            assert sum(call.args[0] is Activity for call in parse.call_args_list) == 0
+            writer.emit(Activity("new-worker", ActivityState.THINKING, "latest"))
+            current = reader.all_current()
+            assert current["new-worker"].detail == "latest"
+>           assert sum(call.args[0] is Activity for call in parse.call_args_list) == 1
+E           assert 11 == 1
+E            +  where 11 = sum(<generator object test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots.<locals>.<genexpr> at 0x7f1b1b65b6b0>)
+
+tests/test_activity_index.py:29: AssertionError
+__ test_fresh_reader_loads_latest_threads_without_replaying_activity_history ___
+
+tmp_path = PosixPath('/home/ts/wt/.r5doc/basics/test_fresh_reader_loads_latest0')
+
+    def test_fresh_reader_loads_latest_threads_without_replaying_activity_history(tmp_path):
+        path = tmp_path / "activity.jsonl"
+        path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
+        assert len(ActivityLog(path).all_current()) == 10
+        with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
+            assert len(ActivityLog(path).all_current()) == 10
+            assert sum(call.args[0] is Activity for call in parse.call_args_list) == 10
+        ActivityLog(path).emit(Activity("new-worker", ActivityState.THINKING, "latest"))
+        with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
+            current = ActivityLog(path).all_current()
+            assert current["new-worker"].detail == "latest"
+>           assert sum(call.args[0] is Activity for call in parse.call_args_list) == 11
+E           assert 21 == 11
+E            +  where 21 = sum(<generator object test_fresh_reader_loads_latest_threads_without_replaying_activity_history.<locals>.<genexpr> at 0x7f1b1b651220>)
+
+tests/test_activity_index.py:44: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_activity_index.py::test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots
+FAILED tests/test_activity_index.py::test_fresh_reader_loads_latest_threads_without_replaying_activity_history
+2 failed, 105 passed in 4.74s

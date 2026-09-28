@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from collections.abc import Mapping
@@ -12,6 +11,7 @@ from enum import Enum
 from pathlib import Path
 
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .store_files import (
     _append_jsonl,
     _atomic_write_text,
@@ -52,7 +52,9 @@ class Activity:
     thread: str
     state: ActivityState
     detail: str = ""
-    timestamp: float = field(default_factory=time.time)
+    timestamp: float = field(
+        default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
+    )
 
     def __post_init__(self) -> None:
         if not self.thread:
@@ -62,22 +64,10 @@ class Activity:
         if len(self.detail) > 200:
             raise ValueError("Activity detail cannot exceed 200 characters.")
 
-    def to_wire(self) -> dict:
-        return {
-            "thread": self.thread,
-            "state": self.state.value,
-            "detail": self.detail,
-            "ts": self.timestamp,
-        }
-
     @classmethod
     def from_wire(cls, data: Mapping) -> Activity:
-        return cls(
-            thread=data["thread"],
-            state=ActivityState(data["state"]),
-            detail=data.get("detail", ""),
-            timestamp=data.get("ts", 0.0),
-        )
+        # Historical event timestamps may be absent; they remain unknown.
+        return FieldCodec.decode(cls, {"ts": 0.0, **data})
 
 
 class ActivityLog:
@@ -89,7 +79,11 @@ class ActivityLog:
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
         self._path = store_path
-        self._checkpoint_path = store_path.with_name("activity_latest.json")
+        from .activity_checkpoint import ActivityCheckpointStore
+
+        self.checkpoint = ActivityCheckpointStore(
+            store_path.with_name(ActivityCheckpointStore.filename)
+        )
         self._stale_after = stale_after
         self._revision: tuple | None = None
         self._latest: dict[str, Activity] = {}
@@ -99,7 +93,7 @@ class ActivityLog:
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with _store_lock(self._path):
-            _append_jsonl(self._path, activity.to_wire())
+            _append_jsonl(self._path, FieldCodec.encode(activity))
 
     def current(self, thread: str, *, active: bool = False) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
@@ -137,12 +131,12 @@ class ActivityLog:
             # Publish a new map: other threads may still be iterating the old
             # snapshot after the store lock has been released.
             checkpoint = (
-                self._read_checkpoint_unlocked(revision)
-                if self._revision is None and revision is not None
-                else None
+                self.checkpoint.read() if self._revision is None and revision is not None else None
             )
+            if checkpoint is not None and not checkpoint.matches(self._path, revision):
+                checkpoint = None
             if checkpoint is not None:
-                complete, offset = checkpoint
+                complete, offset = checkpoint.latest, checkpoint.offset
             else:
                 complete = self._complete_latest.copy() if append else {}
                 offset = self._offset if append else 0
@@ -177,68 +171,11 @@ class ActivityLog:
                 # The log remains authoritative if its disposable read
                 # projection cannot be persisted.
                 with suppress(OSError):
-                    self._write_checkpoint_unlocked(revision, complete, offset)
+                    from .activity_checkpoint import ActivityCheckpoint
+
+                    captured = ActivityCheckpoint.capture(self._path, revision, complete, offset)
+                    self.checkpoint.replace(captured)
             return self._latest
-
-    def _read_checkpoint_unlocked(
-        self, revision: tuple[int, int, int, int]
-    ) -> tuple[dict[str, Activity], int] | None:
-        try:
-            stored = json.loads(self._checkpoint_path.read_text())
-            source = stored["source"]
-            offset = stored["offset"]
-            if (
-                stored.get("schema") != 1
-                or not isinstance(source, list)
-                or len(source) != 4
-                or type(offset) is not int
-                or offset < 0
-                or source[0] != revision[0]
-                or offset > revision[1]
-                or (source[1] == revision[1] and source[2:] != list(revision[2:]))
-            ):
-                return None
-            with self._path.open("rb") as stream:
-                start = max(0, offset - 4096)
-                stream.seek(start)
-                if hashlib.sha256(stream.read(offset - start)).hexdigest() != stored["tail"]:
-                    return None
-            rows = stored["latest"]
-            if not isinstance(rows, dict):
-                return None
-            latest = {name: Activity.from_wire(row) for name, row in rows.items()}
-            if any(name != activity.thread for name, activity in latest.items()):
-                return None
-            return latest, offset
-        except (OSError, ValueError, TypeError, KeyError, AttributeError):
-            return None
-
-    def _write_checkpoint_unlocked(
-        self,
-        revision: tuple[int, int, int, int],
-        complete: Mapping[str, Activity],
-        offset: int,
-    ) -> None:
-        with self._path.open("rb") as stream:
-            start = max(0, offset - 4096)
-            stream.seek(start)
-            tail = hashlib.sha256(stream.read(offset - start)).hexdigest()
-        _atomic_write_text(
-            self._checkpoint_path,
-            json.dumps(
-                {
-                    "schema": 1,
-                    "source": list(revision),
-                    "offset": offset,
-                    "tail": tail,
-                    "latest": {name: activity.to_wire() for name, activity in complete.items()},
-                }
-            ),
-        )
-
-    def _load(self) -> list[Activity]:
-        with _store_lock(self._path):
-            return [Activity.from_wire(record) for record in _jsonl_records(self._path)]
 
     def remove_thread(self, thread: str) -> int:
         """Remove all persisted activity for one thread."""
