@@ -13,6 +13,7 @@ from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.operations import wire
+from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 
 
 async def owner(tmp_path, monkeypatch):
@@ -98,7 +99,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         yield ae.InputStarted(id=None)
         if queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
-        goal = comms.update_goal("project", "set", text="Read files until stopped")
+        goal = comms.update_goal('project', SetGoalAction(text='Read files until stopped'))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
         assert agent._goal_store.snapshot(goal.id).state == "reserved"
         if not queued_before_activation:
@@ -142,9 +143,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 ):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = agent._open_goal_store()
-    original_goal = comms.update_goal(
-        "project", "set", text="Read files until stopped", owner_store=store
-    )
+    original_goal = comms.update_goal('project', SetGoalAction(text='Read files until stopped'), owner_store=store)
     observed = {}
 
     async def events(*args, **kwargs):
@@ -157,11 +156,9 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         public_id, command = await queue_followup(agent, kwargs)
         observed["public_id"] = public_id
         if change == "clear":
-            comms.update_goal("project", "clear")
+            comms.update_goal('project', ClearGoalAction())
         elif change == "replace":
-            observed["replacement"] = comms.update_goal(
-                "project", "set", text="A different goal", owner_store=store
-            )
+            observed["replacement"] = comms.update_goal('project', SetGoalAction(text='A different goal'), owner_store=store)
         with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
             assert allowed is (change is None)
         if change is None:

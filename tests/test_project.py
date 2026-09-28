@@ -14,6 +14,7 @@ from agent_comms import Thread, wire
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.tools import invoke_tool
+from agent_comms.goal_actions import SetGoalAction
 
 
 def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path, monkeypatch):
@@ -33,7 +34,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
             created_at=123,
         )
     )
-    goal = comms.update_goal("worker", "set", text="Keep this objective")
+    goal = comms.update_goal('worker', SetGoalAction(text='Keep this objective'))
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     result = invoke_tool(comms, "comms_set_project", {"path": "../new project"})
     assert result["current"] == str(new) and result["changed"]

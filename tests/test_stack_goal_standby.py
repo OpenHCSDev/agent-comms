@@ -13,6 +13,7 @@ import pytest
 
 from agent_comms import GoalExecutionState, Thread, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.goal_actions import SetGoalAction
 
 
 @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
@@ -187,9 +188,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             await agent.new_session(str(project))
             comms.register(Thread("child", frozenset(), str(project), pid=os.getpid()))
             comms.begin_turn("child", "child-report-in-flight")
-            goal = comms.update_goal(
-                "parent", "set", text="Review @child report", owner_store=agent._open_goal_store()
-            )
+            goal = comms.update_goal('parent', SetGoalAction(text='Review @child report'), owner_store=agent._open_goal_store())
             goal_id = goal.id
             if review_pending:
                 # Stage unresolved inputs without allowing an unrelated direct

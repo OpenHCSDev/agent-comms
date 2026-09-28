@@ -8,6 +8,7 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.goal_actions import OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -18,8 +19,8 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))
     session = response.session_id
-    goal = comms.update_goal(session, "set", text="Review @child's implementation")
-    paused = comms.update_goal(session, "paused", owner_action=True)
+    goal = comms.update_goal(session, SetGoalAction(text="Review @child's implementation"))
+    paused = comms.update_goal(session, PausedGoalAction(), actor=OwnerInvocable)
     updates = []
 
     class Client:

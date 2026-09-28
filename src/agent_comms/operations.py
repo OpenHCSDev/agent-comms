@@ -47,6 +47,7 @@ from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
+    from .goal_attempts import GoalAttemptStore
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .relationships import ThreadRelationships
 from .declarations import (
@@ -3033,18 +3034,13 @@ class Comms:
         info = self.agent_info_of(thread.name)
         return (info.model if info else None) or fallback
 
-    def update_goal(self, name: str, action: str | GoalAction, **options: Any) -> Goal | None:
-        """Decode legacy ingress once; typed actions own the transition algorithm."""
-        if isinstance(action, str):
-            command, actor, owner_store = GoalAction.from_legacy(action, options)
-        else:
-            command = action
-            actor = options.pop("actor", RuntimeInvocable)
-            owner_store = options.pop("owner_store", None)
-            if options:
-                raise TypeError(f"Unexpected goal options: {tuple(options)}")
+    def update_goal(
+        self, name: str, action: GoalAction, *, actor: type = RuntimeInvocable,
+        owner_store: GoalAttemptStore | None = None,
+    ) -> Goal | None:
+        """Apply one declared command; external ingress owns decoding."""
         with _store_lock(self._wire_lock_path):
-            return command.apply(
+            return action.apply(
                 GoalActionContext(self, self.registry.require(name), actor, owner_store)
             )
 

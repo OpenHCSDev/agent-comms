@@ -11,6 +11,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
 from test_goal_direct_interrupt import _owner
+from agent_comms.goal_actions import ActiveGoalAction, GoalPrecondition, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 @pytest.mark.parametrize(
@@ -70,11 +71,11 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         command = kwargs["steering_queue"].get_nowait()
         assert command["_input_id"] == public_id
         if change == "goal_revision":
-            comms.update_goal(session, "active", goal_id=goal.id, progress="New revision")
+            comms.update_goal(session, ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='New revision'))
         elif change == "goal_replaced":
-            comms.update_goal(session, "set", text="New goal")
+            comms.update_goal(session, SetGoalAction(text='New goal'))
         elif change == "owner_pause":
-            comms.update_goal(session, "paused", goal_id=goal.id, owner_action=True)
+            comms.update_goal(session, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
         elif change == "wait_cleared":
             assert comms.consume_goal_wait(session, before_wait.wait_id)
         elif change == "owner_replaced":

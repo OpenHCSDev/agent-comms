@@ -11,6 +11,7 @@ import pytest
 from agent_comms import Comms, Thread
 from agent_comms.declarations import ThreadRole
 from agent_comms.tools import invoke_tool
+from agent_comms.goal_actions import ActiveGoalAction, CompletedGoalAction, EditGoalAction, GoalPrecondition, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 def _wire(tmp_path: Path) -> Comms:
@@ -33,9 +34,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms = _wire(tmp_path)
-    goal = comms.update_goal(
-        "owner", "set", text="Work with @peer and @peer, not @owner or @unknown."
-    )
+    goal = comms.update_goal('owner', SetGoalAction(text='Work with @peer and @peer, not @owner or @unknown.'))
     assert goal is not None
     assert goal.mention_source is not None
     source = goal.mention_source
@@ -86,11 +85,7 @@ def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(
 ) -> None:
     comms = _wire(tmp_path)
     comms.registry.rename("other", "renamed")
-    goal = comms.update_goal(
-        "owner",
-        "set",
-        text="@peer.bad @peer/path @peer@host @Peer @other @human @owner @renamed",
-    )
+    goal = comms.update_goal('owner', SetGoalAction(text='@peer.bad @peer/path @peer@host @Peer @other @human @owner @renamed'))
     assert goal is not None and goal.mention_source is not None
     assert [(row.token, row.resolution) for row in goal.mention_source.bindings] == [
         ("peer.bad", "malformed"),
@@ -109,7 +104,7 @@ def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(
 def test_over_limit_goal_mentions_fail_closed_as_a_whole(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     text = "@peer " + " ".join(f"@unknown{number}" for number in range(129))
-    goal = comms.update_goal("owner", "set", text=text)
+    goal = comms.update_goal('owner', SetGoalAction(text=text))
     assert goal is not None and goal.mention_source is not None
     assert [(row.token, row.resolution) for row in goal.mention_source.bindings] == [
         ("<goal-mentions>", "limit_exceeded")
@@ -126,7 +121,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     tmp_path: Path,
 ) -> None:
     comms = _wire(tmp_path)
-    goal = comms.update_goal("owner", "set", text="@peer please inspect")
+    goal = comms.update_goal('owner', SetGoalAction(text='@peer please inspect'))
     assert goal is not None
     comms.registry.rename("peer", "reviewer")
     renamed_rows, _ = _rows(comms, "owner")
@@ -141,7 +136,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert [(row.token, row.reason) for row in _rows(comms, "owner")[1]] == [
         ("peer", "stale_incarnation")
     ]
-    edited = comms.update_goal("owner", "edit", text="@peer please inspect", goal_id=goal.id)
+    edited = comms.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='@peer please inspect'))
     assert edited is not None and edited.mention_source is not None
     assert edited.mention_source.text_revision == edited.revision
     assert _rows(comms, "peer")[0][0].goal_contacts[0].peer_created_at == 18002.0
@@ -149,7 +144,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
 
 def test_owner_rename_keeps_only_the_bound_owner_incarnation(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
-    goal = comms.update_goal("owner", "set", text="@peer")
+    goal = comms.update_goal('owner', SetGoalAction(text='@peer'))
     assert goal is not None
     comms.registry.rename("owner", "renamed-owner")
     owner_rows, _ = _rows(comms, "renamed-owner")
@@ -164,30 +159,30 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     comms = _wire(tmp_path)
     manual = comms.relationships.edit("owner", "add", "peer", "Accepted review separately")
     original = (comms.relationships.path).read_bytes()
-    goal = comms.update_goal("owner", "set", text="Please consider @peer")
+    goal = comms.update_goal('owner', SetGoalAction(text='Please consider @peer'))
     assert goal is not None
     rows, _ = _rows(comms, "owner")
     assert len(rows) == 1 and rows[0].sources == ("explicit", "goal_mention")
     assert manual is not None and manual.note in rows[0].detail
-    progress = comms.update_goal("owner", "active", goal_id=goal.id, progress="Progress")
+    progress = comms.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Progress'))
     assert progress is not None and progress.revision > goal.revision
     assert _rows(comms, "owner")[0][0].goal_contacts[0].text_revision == 1
     assert comms.relationships.path.read_bytes() == original
-    comms.update_goal("owner", "paused", goal_id=goal.id, owner_action=True)
+    comms.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
     assert _rows(comms, "owner")[0][0].sources == ("explicit",)
-    comms.update_goal("owner", "active", goal_id=goal.id, owner_action=True)
+    comms.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
     assert _rows(comms, "owner")[0][0].sources == ("explicit", "goal_mention")
     comms.relationships.edit("owner", "remove", "peer")
     assert _rows(comms, "owner")[0][0].sources == ("goal_mention",)
     comms.relationships.edit("owner", "add", "peer", "Explicit retained note")
-    comms.update_goal("owner", "edit", text="No peer mention", goal_id=goal.id)
+    comms.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='No peer mention'))
     assert _rows(comms, "owner")[0][0].sources == ("explicit",)
     assert comms.relationships.collaborations("peer")[0].note == "Explicit retained note"
-    comms.update_goal("owner", "edit", text="@peer reconsider", goal_id=goal.id)
+    comms.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='@peer reconsider'))
     assert _rows(comms, "owner")[0][0].sources == ("explicit", "goal_mention")
-    comms.update_goal("owner", "completed", goal_id=goal.id)
+    comms.update_goal('owner', CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     assert _rows(comms, "owner")[0][0].sources == ("explicit",)
-    replacement = comms.update_goal("owner", "set", text="@other", goal_id=goal.id)
+    replacement = comms.update_goal('owner', SetGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='@other'))
     assert replacement is not None and replacement.id != goal.id
     assert {row.target for row in _rows(comms, "owner")[0]} == {"other", "peer"}
     assert comms.relationships.collaborations("owner")[0].note == "Explicit retained note"
@@ -201,7 +196,7 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     manual = comms.relationships.edit("owner", "add", "peer", "Explicit note survives")
     assert manual is not None
     if goal_mention:
-        comms.update_goal("owner", "set", text="Review with @peer")
+        comms.update_goal('owner', SetGoalAction(text='Review with @peer'))
     bus = comms.bus._path
     bus.write_bytes(b'{"seq":1}\n')  # Complete JSON row, malformed as a Message.
     bus.chmod(0o600)
@@ -231,7 +226,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
 
     monkeypatch.setattr(comms.registry, "_save_unlocked", fail_save)
     with pytest.raises(OSError, match="injected registry write failure"):
-        comms.update_goal("owner", "set", text="@peer")
+        comms.update_goal('owner', SetGoalAction(text='@peer'))
     assert comms.registry.store.path.read_bytes() == before
     fresh = Comms(comms.root)
     assert fresh.registry.require("owner").goal is None
@@ -241,7 +236,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
 
 def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
-    goal = comms.update_goal("owner", "set", text="@peer")
+    goal = comms.update_goal('owner', SetGoalAction(text='@peer'))
     assert goal is not None
     comms.stop("owner")
     comms.delete("owner")
@@ -253,7 +248,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
 
 def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
-    goal = comms.update_goal("owner", "set", text="@peer")
+    goal = comms.update_goal('owner', SetGoalAction(text='@peer'))
     assert goal is not None
     path = comms.registry.store.path
     raw = json.loads(path.read_text())

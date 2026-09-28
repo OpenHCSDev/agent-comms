@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, fields, replace
-from typing import TYPE_CHECKING, Any, ClassVar
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from .command import Command
@@ -104,28 +104,6 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     def model_choices(cls) -> tuple[str, ...]:
         return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
-    @classmethod
-    def from_legacy(cls, action: str, options: dict[str, Any]) -> tuple[GoalAction, type, Any]:
-        """Compatibility ingress for existing callers; semantic dispatch ends here."""
-        options = dict(options)
-        owner = options.pop("owner_action", False)
-        model = options.pop("model_report", False)
-        actor = OwnerInvocable if owner else ModelInvocable if model else RuntimeInvocable
-        owner_store = options.pop("owner_store", None)
-        expect = GoalPrecondition(
-            **{f.name: options.pop(f.name) for f in fields(GoalPrecondition) if f.name in options}
-        )
-        member = cls.decode(action)
-        names = {f.name for f in fields(member)}
-        # Legacy callers supply optional empty arguments for other commands.
-        options = {k: v for k, v in options.items() if k in names or v not in (None, (), [], "")}
-        command = member.from_payload(
-            {
-                "kind": action,
-                **{k: list(v) if isinstance(v, tuple) else v for k, v in options.items()},
-            }
-        )
-        return replace(command, expect=expect), actor, owner_store
 
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is not None:
@@ -180,7 +158,7 @@ class TransitionGoalAction(GoalAction):
         self.before_transition(ctx)
         return replace(
             goal,
-            state=state,  # type: ignore[call-arg]  # Goal compatibility constructor
+            state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
@@ -224,7 +202,7 @@ class ActiveGoalAction(
                 )
                 blocked = replace(
                     goal,
-                    state=BlockedGoal(refusal),  # type: ignore[call-arg]
+                    state=BlockedGoal(refusal),
                     progress=goal.progress,
                     revision=goal.revision + 1,
                 )
@@ -483,4 +461,4 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
             generation = store.snapshot(goal.id)
             assert generation is not None
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
-        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)  # type: ignore[call-arg]
+        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)

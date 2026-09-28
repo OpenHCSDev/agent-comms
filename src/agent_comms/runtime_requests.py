@@ -269,7 +269,7 @@ class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         history = ctx.server.agent._comms.goal_history(ctx.name, goal_id=self.goal_id)
-        return {"history": [asdict(row) for row in history]}
+        return {"history": [row.to_wire() for row in history]}
 
 
 class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
@@ -280,7 +280,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
         await self.change(ctx)
         goal, execution = ctx.server.agent._comms.goal_snapshot(ctx.name)
         return {
-            "goal": asdict(goal) if goal is not None else None,
+            "goal": goal.to_wire() if goal is not None else None,
             "goalExecution": asdict(execution) if execution is not None else None,
         }
 
@@ -347,11 +347,11 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
         goal = await ctx.server.agent.retry_goal(
             ctx.session_id, self.goal_id, self.expected_revision
         )
-        return {"goal": asdict(goal)}
+        return {"goal": goal.to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         goal = await ctx.server.agent.set_goal(ctx.session_id, self.text)
-        return {"goal": asdict(goal)}
+        return {"goal": goal.to_wire()}

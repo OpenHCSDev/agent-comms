@@ -16,6 +16,7 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.input_drain import InputDrain
 from agent_comms.operations import wire
 from agent_comms.tools import TOOLS
+from agent_comms.goal_actions import EditGoalAction, GoalPrecondition, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 
 
 @pytest.mark.parametrize("wake", ["child", "owner", "revoked"])
@@ -32,7 +33,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
     comms.begin_turn("child", "child-review-in-flight")
     comms.register(Thread("other", frozenset(), str(tmp_path)))
     store = agent._open_goal_store()
-    goal = comms.update_goal("parent", "set", text="Review @child work", owner_store=store)
+    goal = comms.update_goal('parent', SetGoalAction(text='Review @child work'), owner_store=store)
     report = next(tool for tool in TOOLS if tool.name == "comms_goal")
     calls = []
     updates = []
@@ -95,9 +96,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
         agent._schedule_goal("parent")
         assert not agent._pending_turns.get("parent")
 
-        edited = comms.update_goal(
-            "parent", "edit", text="Review @child thoroughly", expected_goal=current
-        )
+        edited = comms.update_goal('parent', EditGoalAction(expect=GoalPrecondition(expected_goal=current), text='Review @child thoroughly'))
         assert edited.id == goal.id and edited.revision == current.revision + 1
         assert comms.goal_wait("parent") == wait
         # Ordinary nondependency direct DMs now have their own no-goal-permit
@@ -113,7 +112,7 @@ async def test_standby_waits_for_declared_identity_and_preserves_goal_authority(
                 monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
             await agent._drain_inbox("parent")
             if wake == "revoked":
-                comms.update_goal("parent", "paused", goal_id=goal.id, owner_action=True)
+                comms.update_goal('parent', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
                 InputDrain.schedule_wake(agent.inputs, "parent")
             await asyncio.wait_for(agent._wake_tasks["parent"], timeout=2)
             assert agent._dispositions.status(f"bus:{message.seq}") == (
@@ -136,7 +135,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
     store = agent._open_goal_store()
-    goal = comms.update_goal("parent", "set", text="Work", owner_store=store)
+    goal = comms.update_goal('parent', SetGoalAction(text='Work'), owner_store=store)
     owner = comms.registry.require("parent")
     admission = comms.registry.snapshot().admission_generations["parent"]
     if changed == "admission":
@@ -157,11 +156,11 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
     comms = wire(tmp_path)
     comms.register(Thread("parent", frozenset(), str(tmp_path)))
-    goal = comms.update_goal("parent", "set", text="Goal with @mention")
+    goal = comms.update_goal('parent', SetGoalAction(text='Goal with @mention'))
     with pytest.raises(ValueError, match="wait_for"):
-        comms.update_goal("parent", "standby", goal_id=goal.id)
-    comms.update_goal("parent", "paused", owner_action=True)
-    comms.update_goal("parent", "edit", text="Edited @mention")
+        comms.update_goal('parent', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
+    comms.update_goal('parent', PausedGoalAction(), actor=OwnerInvocable)
+    comms.update_goal('parent', EditGoalAction(text='Edited @mention'))
     assert comms.goal_pause("parent").source == "owner"
 
 
@@ -170,17 +169,17 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     for name in ("alice", "bob"):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
         comms.begin_turn(name, f"{name}-turn")
-    alice = comms.update_goal("alice", "set", text="Wait for Bob")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
     assert alice is not None and bob is not None
 
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))
     alice_wait = comms.goal_wait("alice")
     assert alice_wait is not None
     assert alice_wait.report_turn_id == "alice-turn"
     assert alice_wait.report_turn_generation == comms.registry.require("alice").turn_generation
     with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
-        comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+        comms.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))
 
     assert comms.goal_wait("alice") is not None
     assert comms.goal_wait("bob") is None
@@ -192,12 +191,12 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     for name in ("alice", "bob", "carol"):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
         comms.begin_turn(name, f"{name}-turn")
-    alice = comms.update_goal("alice", "set", text="Wait for Bob or Carol")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob or Carol'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
     assert alice is not None and bob is not None
 
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob", "carol"])
-    comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob', 'carol')))
+    comms.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))
 
     assert comms.goal_wait("alice") is not None
     assert comms.goal_wait("bob") is not None
@@ -209,14 +208,14 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
     for name in ("alice", "bob"):
         comms.begin_turn(name, f"{name}-turn")
-    alice = comms.update_goal("alice", "set", text="Wait for Bob or Carol")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
-    carol = comms.update_goal("carol", "set", text="Idle goal")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob or Carol'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
+    carol = comms.update_goal('carol', SetGoalAction(text='Idle goal'))
     assert alice is not None and bob is not None and carol is not None
 
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob", "carol"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob', 'carol')))
     with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
-        comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+        comms.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))
 
     assert comms.goal_wait("bob") is None
     assert comms.registry.require("bob").goal == bob
@@ -239,13 +238,13 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
         ),
         comms.registry.status("carol"),
     )
-    alice = comms.update_goal("alice", "set", text="Wait for Bob or Carol")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob or Carol'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
     assert alice is not None and bob is not None
 
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob", "carol"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob', 'carol')))
     with pytest.raises(ValueError, match="dependency wait group.*@alice.*@bob"):
-        comms.update_goal("bob", "standby", goal_id=bob.id, wait_for=["alice"])
+        comms.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))
 
 
 @pytest.mark.parametrize("pending_reply", [False, True])
@@ -254,10 +253,10 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     for name in ("alice", "bob"):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
         comms.begin_turn(name, f"{name}-turn")
-    alice = comms.update_goal("alice", "set", text="Wait for Bob")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
     assert alice is not None and bob is not None
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))
 
     # Represent a wait recorded by an older owner before cycle admission was
     # enforced. Both turns subsequently finish without any dependency reply.
@@ -295,10 +294,10 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     for name in ("alice", "bob"):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
         comms.begin_turn(name, f"{name}-first")
-    alice = comms.update_goal("alice", "set", text="Wait for Bob")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
     assert alice is not None and bob is not None
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
     GoalWaits(tmp_path / "goal_waits.json").record(
@@ -330,10 +329,10 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     for name in ("alice", "bob"):
         comms.register(Thread(name, frozenset(), str(tmp_path), pid=os.getpid()))
         comms.begin_turn(name, f"{name}-turn")
-    alice = comms.update_goal("alice", "set", text="Wait for Bob")
-    bob = comms.update_goal("bob", "set", text="Wait for Alice")
+    alice = comms.update_goal('alice', SetGoalAction(text='Wait for Bob'))
+    bob = comms.update_goal('bob', SetGoalAction(text='Wait for Alice'))
     assert alice is not None and bob is not None
-    comms.update_goal("alice", "standby", goal_id=alice.id, wait_for=["bob"])
+    comms.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))
     GoalWaits(tmp_path / "goal_waits.json").record(
         GoalWait(
             bob.id,
@@ -372,14 +371,14 @@ async def test_standby_refuses_reply_that_arrived_before_wait(
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
     comms.register(Thread("child", frozenset(), str(tmp_path)))
-    goal = comms.update_goal("parent", "set", text="Delegate work")
+    goal = comms.update_goal('parent', SetGoalAction(text='Delegate work'))
     message = comms.send_message("child", "parent", "Finished immediately")
     try:
         if already_drained:
             await agent._drain_inbox("parent")
             assert agent._dispositions.status(f"bus:{message.seq}") == "unknown"
         with pytest.raises(ValueError, match=f"Dependency reply {message.seq}.*pending or UNKNOWN"):
-            comms.update_goal("parent", "standby", goal_id=goal.id, wait_for=["child"])
+            comms.update_goal('parent', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))
         assert comms.goal_wait("parent") is None
         assert comms.registry.require("parent").goal == goal
         if already_drained:

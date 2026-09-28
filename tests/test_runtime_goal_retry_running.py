@@ -11,6 +11,7 @@ from agent_comms import wire
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.goal_actions import BlockedGoalAction, CompletedGoalAction, GoalPrecondition, ModelInvocable, SetGoalAction
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -37,13 +38,11 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     owner.on_connect(Client())
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner._open_goal_store()
-    goal = comms.update_goal(session, "set", text="Finish the blocked objective", owner_store=store)
+    goal = comms.update_goal(session, SetGoalAction(text='Finish the blocked objective'), owner_store=store)
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
     store.record_failed(reservation, "Previous goal attempt failed")
-    blocked = comms.update_goal(
-        session, "blocked", goal_id=goal.id, block_reason="Previous goal attempt failed"
-    )
+    blocked = comms.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Previous goal attempt failed'))
     owner._dispositions.record(
         "acp:old-unknown",
         seq=None,
@@ -81,7 +80,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
                 current = comms.registry.require(session).goal
                 assert current.active and current.id == goal.id
                 assert store.snapshot(goal.id).number == 2
-                comms.update_goal(session, "completed", goal_id=goal.id, model_report=True)
+                comms.update_goal(session, CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=ModelInvocable)
                 yield ae.ToolEnd(id="report", name="alternate_goal_report", ok=True)
                 yield ae.StreamSettled()
                 yield ae.Done(ok=True, text="Goal completed")
@@ -168,15 +167,13 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
     monkeypatch.setattr(owner, "_ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     store = owner._open_goal_store()
-    goal = comms.update_goal(session, "set", text="Keep attempt authority", owner_store=store)
+    goal = comms.update_goal(session, SetGoalAction(text='Keep attempt authority'), owner_store=store)
     reservation = store.reserve(goal.id, 1)
     if fence != "reserved":
         store.claim_launch(reservation)
     if fence in {"owner", "origin"}:
         store.record_failed(reservation, "Known failed attempt")
-    blocked = comms.update_goal(
-        session, "blocked", goal_id=goal.id, block_reason="Owner input required before retry"
-    )
+    blocked = comms.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Owner input required before retry'))
     generation = store.snapshot(goal.id)
     owner._active_turns[session] = "unrelated-turn"
     owner._backend_inboxes[session] = asyncio.Queue()

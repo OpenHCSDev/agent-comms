@@ -49,7 +49,7 @@ class AcpEventConsumer(MroDispatch):
                 session_update="session_info_update",
                 field_meta={
                     "agentComms": {
-                        "goal": asdict(event.goal) if event.goal else None,
+                        "goal": event.goal.to_wire() if event.goal else None,
                         "goalExecution": asdict(event.execution) if event.execution else None,
                     }
                 },

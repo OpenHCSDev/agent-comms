@@ -58,12 +58,9 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     toggle_label: ClassVar[str]
     acp_plan_status: ClassVar[str] = "in_progress"
 
-    @classmethod
-    def from_legacy(cls, status: str, reason: str | None, source: str | None) -> GoalState:
-        return cls.decode(status).load(reason, source)
 
     @classmethod
-    def load(cls, reason: str | None, source: str | None) -> GoalState:
+    def from_wire(cls, reason: str | None, source: str | None) -> GoalState:
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return cls()
@@ -139,7 +136,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     toggle_label = "Resume"
 
     @classmethod
-    def load(cls, reason: str | None, source: str | None) -> PausedGoal:
+    def from_wire(cls, reason: str | None, source: str | None) -> PausedGoal:
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return cls(PauseSource.decode(source)() if source is not None else OwnerPause())
@@ -181,7 +178,7 @@ class BlockedGoal(GoalState, FromOpenGoal):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
 
     @classmethod
-    def load(cls, reason: str | None, source: str | None) -> BlockedGoal:
+    def from_wire(cls, reason: str | None, source: str | None) -> BlockedGoal:
         return cls(reason)
 
     @classmethod
@@ -217,26 +214,3 @@ class CompletedGoal(GoalState, FromOpenGoal):
 
     def transition_refusal(self) -> str:
         return "A completed goal cannot be resumed; set a new goal."
-
-
-class GoalStateProjection:
-    """Legacy dataclass field views of one typed state; no stored replicas."""
-
-    _state: GoalState
-
-    @property
-    def state(self) -> GoalState:
-        return self._state
-
-    @property
-    def status(self) -> str:
-        return self.state.declared_name
-
-    @property
-    def block_reason(self) -> str | None:
-        return self.state.reason
-
-    @property
-    def pause_source(self) -> str | None:
-        source = self.state.pause_source
-        return source.declared_name if source is not None else None

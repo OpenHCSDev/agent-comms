@@ -13,6 +13,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.declarations import ThreadStatus
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.operations import Comms
+from agent_comms.goal_actions import EditGoalAction, GoalPrecondition, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 
 
 def _thread(comms, name, worktree):
@@ -44,10 +45,10 @@ def _waiting(tmp_path, *, second=False):
     if second:
         _thread(comms, "other", tmp_path)
         _begin(comms, "other", "other-turn")
-    goal = comms.update_goal("owner", "set", text="Review the delegated work")
+    goal = comms.update_goal('owner', SetGoalAction(text='Review the delegated work'))
     assert goal is not None
     targets = ["child", "other"] if second else ["child"]
-    comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=targets)
+    comms.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=targets))
     return comms, goal
 
 
@@ -55,7 +56,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
     comms = wire(tmp_path / "wire")
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
-    goal = comms.update_goal("owner", "set", text="Work")
+    goal = comms.update_goal('owner', SetGoalAction(text='Work'))
     assert goal is not None
     authoritative = ("registry.json", "goal_waits.json", "input_dispositions.json")
     before = {
@@ -63,7 +64,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
         for name in authoritative
     }
     with pytest.raises(ValueError, match="No declared dependency has an active turn.*@child"):
-        comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=["child"])
+        comms.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))
     assert {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
         for name in authoritative
@@ -223,7 +224,7 @@ def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
 
 def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
     comms, goal = _waiting(tmp_path)
-    paused = comms.update_goal("owner", "paused", goal_id=goal.id, owner_action=True)
+    paused = comms.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
     assert paused is not None
     fence = _finish(comms, "child", "child-turn")
     assert comms.release_waits_after_terminal_turn(fence) == ()
@@ -264,7 +265,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
 def test_terminal_hook_rechecks_goal_and_owner_identity(tmp_path):
     comms, goal = _waiting(tmp_path)
     child_fence = _finish(comms, "child", "child-turn")
-    newer = comms.update_goal("owner", "edit", goal_id=goal.id, text="new exact objective")
+    newer = comms.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='new exact objective'))
     assert newer is not None
     # Goal text edits preserve wait; the exact current revision is updated, not lost.
     assert comms.release_waits_after_terminal_turn(child_fence) == ("owner",)
@@ -280,10 +281,10 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     comms.begin_turn("child", "work")
     child = comms.registry.require("child")
     comms.registry.register(replace(child, active_turn=None), ThreadStatus.STOPPED)
-    goal = comms.update_goal("owner", "set", text="Review")
+    goal = comms.update_goal('owner', SetGoalAction(text='Review'))
     assert goal is not None
     with pytest.raises(ValueError, match="No declared dependency has an active turn"):
-        comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=["child"])
+        comms.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))
 
 
 def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
@@ -386,7 +387,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
-    goal = comms.update_goal("owner", "set", text="Await child")
+    goal = comms.update_goal('owner', SetGoalAction(text='Await child'))
     assert goal is not None
     terminal = []
     original_emit = agent._emit_event
@@ -397,7 +398,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
         await original_emit(session_id, event, **kwargs)
 
     async def events(*_args, **_kwargs):
-        comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
+        comms.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
@@ -430,15 +431,13 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
-    goal = comms.update_goal(
-        owner, "set", text="Review child work", owner_store=agent._open_goal_store()
-    )
+    goal = comms.update_goal(owner, SetGoalAction(text='Review child work'), owner_store=agent._open_goal_store())
     assert goal is not None
     wakes = []
     monkeypatch.setattr(agent.inputs, "schedule_wake", wakes.append)
     try:
         claim = comms.begin_turn(child, "child-turn")
-        comms.update_goal(owner, "standby", goal_id=goal.id, wait_for=[child])
+        comms.update_goal(owner, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))
         assert not agent._pending_turns.get(owner)
         fence = comms.finish_turn(child, "child-turn", expected=claim)
         assert comms.release_waits_after_terminal_turn(fence) == (owner,)
@@ -458,7 +457,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
-    goal = comms.update_goal("owner", "set", text="Await child")
+    goal = comms.update_goal('owner', SetGoalAction(text='Await child'))
     assert goal is not None
     old_settled = asyncio.Event()
     release_old = asyncio.Event()
@@ -471,7 +470,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
         await real_emit(session_id, event, **kwargs)
 
     async def events(*_args, **_kwargs):
-        comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
+        comms.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
@@ -507,14 +506,14 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     _thread(comms, "owner", tmp_path)
-    goal = comms.update_goal("owner", "set", text="Await child")
+    goal = comms.update_goal('owner', SetGoalAction(text='Await child'))
     assert goal is not None
     streamed = []
 
     async def events(*_args, **_kwargs):
         streamed.append(child)
         # The active child turn began before model events are streamed.
-        comms.update_goal("owner", "standby", goal_id=goal.id, wait_for=[child])
+        comms.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))
         if reply:
             yield ae.Chunk(text="Reported")
         yield ae.StreamSettled()

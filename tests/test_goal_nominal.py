@@ -28,13 +28,14 @@ from agent_comms.goal_states import (
     PauseSource,
 )
 from agent_comms.operations import wire
+from agent_comms.goal_actions import ActiveGoalAction, EditGoalAction, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 @pytest.fixture
 def owner(tmp_path):
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    goal = comms.update_goal("worker", "set", text="Keep the durable objective")
+    goal = comms.update_goal('worker', SetGoalAction(text='Keep the durable objective'))
     return comms, goal
 
 
@@ -94,7 +95,7 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
 
     paused = replace(goal, state=PausedGoal(SpendCapPause()), revision=2)
     comms.registry.register(replace(comms.registry.require("worker"), goal=paused))
-    edited = comms.update_goal("worker", "edit", text="Revised objective")
+    edited = comms.update_goal('worker', EditGoalAction(text='Revised objective'))
     assert edited.pause_source == "spend_cap"
     assert comms.goal_pause("worker").owner_instruction == SpendCapPause().instruction()
     assert wire(comms.root).registry.require("worker").goal.state.source == SpendCapPause()
@@ -103,7 +104,7 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
     )
     assert failed == edited
     with pytest.raises(ValueError, match="Spend cap reached"):
-        comms.update_goal("worker", "active")
+        comms.update_goal('worker', ActiveGoalAction())
 
 
 async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, monkeypatch):
@@ -152,7 +153,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
 )
 def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action, options):
     comms, goal = owner
-    paused = comms.update_goal("worker", "paused", owner_action=True)
+    paused = comms.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)
     changed = comms.update_goal("worker", action, **options)
     assert changed.id == paused.id and changed.revision == paused.revision + 1
     assert isinstance(changed.state, PausedGoal) and isinstance(changed.state.source, OwnerPause)
@@ -177,7 +178,7 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action, o
 @pytest.mark.parametrize("action", ["active", "standby", "completed", "blocked", "paused"])
 def test_automated_transition_cannot_remove_owner_pause(owner, action):
     comms, _ = owner
-    paused = comms.update_goal("worker", "paused", owner_action=True)
+    paused = comms.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)
     with pytest.raises(ValueError, match="paused by the owner"):
         comms.update_goal("worker", action, progress="reason")
     assert comms.registry.require("worker").goal == paused
@@ -186,8 +187,8 @@ def test_automated_transition_cannot_remove_owner_pause(owner, action):
 def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
     comms, goal = owner
     previous = comms.goal_snapshot("worker")
-    current = comms.update_goal("worker", "active", progress="same")
-    current = comms.update_goal("worker", "active", progress="")
+    current = comms.update_goal('worker', ActiveGoalAction(progress='same'))
+    current = comms.update_goal('worker', ActiveGoalAction(progress=''))
     assert current != goal
     action = GoalAction.from_payload({"kind": "completed", "progress": "done"})
     with pytest.raises(ValueError, match="changed during resume"):
@@ -204,7 +205,7 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
     import sys
 
     comms, goal = owner
-    paused = comms.update_goal("worker", "paused", owner_action=True)
+    paused = comms.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)
     environment = {**os.environ, "PI_AGENT_ID": "worker"}
     result = subprocess.run(
         [

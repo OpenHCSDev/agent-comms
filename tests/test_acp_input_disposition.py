@@ -18,6 +18,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_drain import InputDrain
 from agent_comms.operations import wire
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.goal_actions import SetGoalAction
 
 
 def test_each_direct_sequence_gets_its_own_native_turn():
@@ -86,7 +87,7 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         comms.send("peer", "project", "late direct")
         assert await agent._drain_inbox("project") == 1
         assert agent._forwarded_inputs["project"] == {"bus-1"}
-        goal = comms.update_goal("project", "set", text="Long-term architecture work")
+        goal = comms.update_goal('project', SetGoalAction(text='Long-term architecture work'))
         assert goal is not None
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
         command = kwargs["steering_queue"].get_nowait()
@@ -217,7 +218,7 @@ async def test_ui_ack_does_not_hide_unknown_or_authorize_goal_superseded_direct(
         rows = InputDispositions(comms.root).unknown(frozenset({"project"}))
         assert [(row["sequence"], row["status"]) for row in rows] == [(1, "unknown")]
         assert len(agent._pending_turns["project"]) == 1
-        comms.update_goal("project", "set", text="new goal")
+        comms.update_goal('project', SetGoalAction(text='new goal'))
 
         backend_calls = []
 

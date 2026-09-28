@@ -266,7 +266,7 @@ class SessionLifecycle:
         return {
             "agentComms": {
                 "thread": thread_name,
-                "goal": asdict(goal) if goal else None,
+                "goal": goal.to_wire() if goal else None,
                 "goalExecution": asdict(execution) if execution else None,
                 "wireRoot": str(self.comms.root.resolve()),
                 "persistence": "shared on-disk wire",

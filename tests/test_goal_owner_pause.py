@@ -7,13 +7,14 @@ import pytest
 from agent_comms import Thread
 from agent_comms.operations import wire
 from agent_comms.tools import TOOLS
+from agent_comms.goal_actions import ActiveGoalAction, GoalPrecondition, ModelInvocable, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    goal = comms.update_goal("worker", "set", text="Read fifty files")
-    comms.update_goal("worker", "paused", goal_id=goal.id, owner_action=True)
+    goal = comms.update_goal('worker', SetGoalAction(text='Read fifty files'))
+    comms.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
     reopened = wire(tmp_path)
     paused = reopened.registry.require("worker").goal
     assert paused.status == "paused"
@@ -28,7 +29,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
         resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"})
     assert reopened.registry.require("worker").goal == paused
-    active = reopened.update_goal("worker", "active", goal_id=goal.id, owner_action=True)
+    active = reopened.update_goal('worker', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
     assert active.active and reopened.goal_pause("worker") is None
 
 
@@ -37,10 +38,10 @@ def test_model_cannot_pause_and_unattributed_legacy_pause_preserves_owner_stop(
 ):
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    goal = comms.update_goal("worker", "set", text="Read fifty files")
+    goal = comms.update_goal('worker', SetGoalAction(text='Read fifty files'))
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     with pytest.raises(ValueError, match="actor cannot"):
-        comms.update_goal("worker", "paused", goal_id=goal.id, model_report=True)
+        comms.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=ModelInvocable)
     from agent_comms import Goal
 
     assert "paused_by" not in asdict(Goal("legacy", "id", status="paused"))
@@ -51,14 +52,14 @@ def test_failed_pause_attribution_cannot_authorize_model_resume(tmp_path, monkey
 
     comms = wire(tmp_path)
     comms.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    goal = comms.update_goal("worker", "set", text="Read fifty files")
+    goal = comms.update_goal('worker', SetGoalAction(text='Read fifty files'))
 
     def fail_record(*_args):
         raise OSError("injected attribution write failure")
 
     monkeypatch.setattr(GoalPauseEvents, "record", fail_record)
     with pytest.raises(OSError, match="injected"):
-        comms.update_goal("worker", "paused", goal_id=goal.id, owner_action=True)
+        comms.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
     assert comms.registry.require("worker").goal.status == "paused"
     assert comms.goal_pause("worker").source == "owner"
     monkeypatch.setenv("PI_AGENT_ID", "worker")

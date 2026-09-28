@@ -20,6 +20,7 @@ from agent_comms.goal_attempts import (
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
 from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
+from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, RuntimeInvocable, SetGoalAction
 
 
 @pytest.fixture
@@ -297,7 +298,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     agent = CommsAgent(wired, agent_bin="pi")
     monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
-    goal = wired.update_goal("project", "set", text="private goal")
+    goal = wired.update_goal('project', SetGoalAction(text='private goal'))
     GoalFixture()._authorize_test_goal(agent, wired, goal)
     store = agent._goal_store
     admission = wired.registry.snapshot().admission_generations["project"]
@@ -330,7 +331,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     async def failed_events(*args, **kwargs):
         nonlocal pause_bytes
         if owner_pauses:
-            wired.update_goal("project", "paused", goal_id=goal.id, owner_action=True)
+            wired.update_goal('project', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)
             pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
         yield ae.StreamSettled()
         if outcome != "eof":
