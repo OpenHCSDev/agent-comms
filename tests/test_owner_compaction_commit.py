@@ -554,7 +554,7 @@ else:
         owner = registry.snapshot().threads['owner']
         registry.register(replace(owner, goal=Goal('new', 'new-goal')))
     elif mutation == 'bus':
-        MessageBus(root / 'bus.jsonl', registry).publish(Message(sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
+        MessageBus(root / 'bus.jsonl', registry).publisher.publish(Message(sender='owner', target='broadcast', body='late message', type=MessageType.INFO))
     else:
         Comms(root).messaging.send('owner', 'broadcast', 'late message')
 print('changed', flush=True)

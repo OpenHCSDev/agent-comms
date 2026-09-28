@@ -1,16 +1,32 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from unittest.mock import patch
 
 import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms import field_codec
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import StartedInput, UnknownInput
 from agent_comms.input_disposition import AcpDeliveryCursors, InputDispositions
 from agent_comms.locked_store import LockedStore
 from agent_comms.threads import Thread
+
+
+def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
+    @dataclass(frozen=True)
+    class Reading:
+        sequence: int
+
+    with patch.object(field_codec, "get_type_hints", wraps=field_codec.get_type_hints) as resolve:
+        rows = [FieldCodec.decode(Reading, {"sequence": value}) for value in range(100)]
+        assert resolve.call_count == 1
+        assert [row.sequence for row in rows] == list(range(100))
+        with pytest.raises(ValueError):
+            FieldCodec.decode(Reading, {"sequence": True})
 
 
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):

@@ -6,6 +6,7 @@ import math
 import types
 from dataclasses import MISSING, Field, fields, is_dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import (
     Any,
     Literal,
@@ -46,7 +47,10 @@ class FieldCodec:
     """
 
     @staticmethod
-    def _fields(cls: Any) -> list[tuple[Field[Any], str]]:
+    @lru_cache(maxsize=256)
+    def _fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
+        # Declarations are immutable for this process; cache only their derived
+        # schema, never decoded rows, registry membership or document revisions.
         declared = [
             (field, field.metadata.get("wire_name", field.name))
             for field in fields(cls)
@@ -59,13 +63,18 @@ class FieldCodec:
             issubclass(cls, DeclaredFamily) and cls.family_discriminator in keys
         ):
             raise TypeError("Conflicting wire field names.")
-        return [
+        return tuple(
             item
             for _, item in sorted(
                 enumerate(declared),
                 key=lambda row: (row[1][0].metadata.get("wire_order", row[0]), row[0]),
             )
-        ]
+        )
+
+    @staticmethod
+    @lru_cache(maxsize=256)
+    def _types(declaration: type) -> dict[str, Any]:
+        return get_type_hints(declaration)
 
     @overload
     @classmethod
@@ -211,7 +220,7 @@ class FieldCodec:
             unknown = set(data) - {key for _, key in declared}
             if unknown:
                 raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
-            hints = get_type_hints(target)
+            hints = cls._types(target)
             return target(
                 **{
                     field.name: cls.decode(hints[field.name], data[key])

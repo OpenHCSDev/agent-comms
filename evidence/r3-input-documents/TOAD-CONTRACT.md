@@ -1,4 +1,4 @@
-# R3 paired caller contract (source in progress)
+# R3 paired caller contract (complete source contract)
 
 Production Toad ACP `inputDisposition` / `input_dispositions` payloads remain unchanged. Current source has four core-facing test consumers in parent's `toad-export-caller-migration-20260928` tree:
 

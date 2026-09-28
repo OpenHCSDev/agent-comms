@@ -172,7 +172,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 .splitlines()
             ]
             native_inputs = [
-                row.message for row in rows if row.get("message", {}).get("role") == "user"
+                row["message"] for row in rows if row.get("message", {}).get("role") == "user"
             ]
             matched = [row for row in native_inputs if "CHANNEL_REQUEST" in json.dumps(row)]
             assert len(matched) == int(success)
@@ -183,14 +183,14 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 )
             if success:
                 assert (
-                    matched[0].inputId == agent.inputs.dispositions.read().rows.get(key).native_id
+                    matched[0]["inputId"] == agent.inputs.dispositions.read().rows.get(key).native_id
                 )
                 for origin in messages:
                     row = agent.inputs.dispositions.read().rows.get(
                         agent.inputs.dispositions.bus_key(origin, comms.registry.require("worker"))
                     )
                     assert row.declared_name == "started"
-                    assert row.native_id == matched[0].inputId
+                    assert row.native_id == matched[0]["inputId"]
                     assert origin.body in json.dumps(matched[0])
                 replayed = wire(comms.root).transcripts.thread_transcript_page("worker").events
                 incoming = [
@@ -213,7 +213,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
 
                 await agent.inputs.replay_unknown_inputs("worker", Client())
                 assert any(
-                    row._meta["agentComms"]["inputDisposition"]["sequence"] == message.seq
+                    row["_meta"]["agentComms"]["inputDisposition"]["sequence"] == message.seq
                     for row in updates
                 )
         finally:

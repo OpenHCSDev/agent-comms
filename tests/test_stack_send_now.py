@@ -294,11 +294,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 async def session_update(self, session_id, update):
                     row = update.model_dump(by_alias=True, exclude_none=True)
                     events.append(row)
-                    if isinstance(row.content, dict) and "OLD_PARTIAL" in row.content.get(
+                    if isinstance(row.get("content"), dict) and "OLD_PARTIAL" in row["content"].get(
                         "text", ""
                     ):
                         first_chunk.set()
-                    if terminal and row.sessionUpdate == "tool_call":
+                    if terminal and row.get("sessionUpdate") == "tool_call":
                         first_chunk.set()
                     if (
                         row.get("_meta", {})
@@ -483,7 +483,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     for row in owner.inputs.dispositions.read().rows.values()
                 )
                 assert not any(
-                    isinstance(row.content, dict) and "[agent error]" in row.content.get("text", "")
+                    isinstance(row.get("content"), dict) and "[agent error]" in row["content"].get("text", "")
                     for row in events
                 )
         finally:

@@ -15,6 +15,7 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 
 
@@ -266,7 +267,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert terminal[0].text == "INBOX_INSPECTED_TWICE"
             assert len([event for event in events if isinstance(event, ae.InputStarted)]) == 1
             saved_rows = agent.inputs.dispositions.read().rows
-            assert {key: saved_rows[key] for key in old_rows} == old_rows
+            assert {key: FieldCodec.encode(saved_rows[key]) for key in old_rows} == old_rows
             transcript = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in transcript.read_text().splitlines()]
             assert not any(row.get("type") == "compaction" for row in rows)

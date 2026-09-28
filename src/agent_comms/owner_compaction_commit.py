@@ -30,7 +30,6 @@ from .compaction_journal import (
 from .compaction_states import NativeOutcome
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
-from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue, InputDispositions
 from .messages import Message
 from .native_package import COMPACTION_HELPER, verify_native_package
