@@ -1,0 +1,17 @@
+{
+  "core": "78adae3654bb2da0536ea60e2320a6c840f19a86",
+  "toad": "e6c5227a19e9af68cabd65b6e780e17b07e5c2a9",
+  "textual": "16ede007c34bec893b2dbedb3999223381129678",
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-cold-native-candidate-20260928",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-905f9f6facb3070a/node_modules/@earendil-works/pi-coding-agent",
+  "restarted": [
+    "agent-comms-ux",
+    "pr95-selected-pi-summary-owner",
+    "nra-architecture",
+    "nra-domain-mapping"
+  ],
+  "processes_verified": true,
+  "saved_sessions_models_preserved": true,
+  "replayed_inputs": 0,
+  "probe_correction": "Removed private helper used by stale deployment probe; restarted owners were verified separately without restarting again."
+}
