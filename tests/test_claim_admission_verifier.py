@@ -58,7 +58,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 )
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
         initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         with MutationStore(str(root / "coordination.sqlite3")) as store:

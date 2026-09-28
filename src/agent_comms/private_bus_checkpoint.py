@@ -1,4 +1,4 @@
-"""Opt-in, append-writer-maintained private bus prefix certificate.
+"""Append-writer-maintained private bus prefix certificate.
 
 The JSONL bus remains authoritative. Only the canonical private WireLog writer may
 advance this certificate, after bus and directory fsync under the bus lock. The
@@ -18,7 +18,7 @@ import sqlite3
 import stat
 import tempfile
 from collections.abc import Mapping
-from contextlib import closing
+from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -203,7 +203,7 @@ def _index_row(
             Addressed(recipient.recipient_lookup, message.seq).insert(db)
 
 
-def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
+def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -> PrefixWitness:
     """Explicitly certify the complete current private bus without rewriting it.
 
     The canonical writer lock excludes appenders throughout the one-time scan.
@@ -216,7 +216,7 @@ def install_private_bus_checkpoint(bus: WireLog) -> PrefixWitness:
 
     if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
         raise TypeError("Canonical private WireLog required")
-    with bus.locked():
+    with nullcontext() if _bus_locked else bus.locked():
         marker = bus._private_marker_unlocked()
         if not marker.claims:
             raise RelationViolationError(

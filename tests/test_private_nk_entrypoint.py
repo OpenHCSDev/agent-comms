@@ -63,7 +63,6 @@ def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
     root.mkdir(mode=0o700)
     comms = Comms(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     selected = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
     assert selected is not None

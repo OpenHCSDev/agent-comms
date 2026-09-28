@@ -13,17 +13,12 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_source_cursor import _bounded_coverage_pages
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_private_human_ingress import _root
 
 
-@pytest.mark.parametrize("certified", [False, True])
-def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path, certified):
+def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
     comms, old_store, root_id, lookups = _root(tmp_path)
-    if certified:
-        comms.messaging.initialize_private_claim_protocol()
-        install_private_bus_checkpoint(comms.bus.log)
     old = comms.messaging.send_user_message("bob", "old pending input", worktree=str(tmp_path))
     accept_initial_cohort(comms.bus, root_id, old.seq, old_store)
     assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1

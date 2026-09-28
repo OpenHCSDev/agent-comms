@@ -79,7 +79,6 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 )
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
@@ -277,7 +276,6 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             )
         )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.messaging.initialize_private_claim_protocol()
         with MutationStore(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)

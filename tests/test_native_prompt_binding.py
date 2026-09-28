@@ -18,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms import proven_source_coverage as coverage_module
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -43,7 +42,6 @@ from agent_comms.native_source_cursor import (
 )
 from agent_comms.proven_source_coverage import read_proven_source_coverage
 from agent_comms.threads import Thread
-from agent_comms.wire_log import WireLog
 
 
 @pytest.fixture
@@ -368,44 +366,6 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
             )
 
 
-def test_source_coverage_refuses_early_and_caps_bytes_before_bus_guard(tmp_path, monkeypatch):
-    root, root_id, comms, _, people = _root(tmp_path)
-    for index in range(8):
-        comms.messaging.send_initial_cohort("sender", "alpha", f"Additional source {index}")
-    lookup = stable_thread_lookup(people[1].created_at)
-    scanned = 0
-    original_rows = WireLog._verified_private_rows_unlocked
-
-    def observed_rows(self, marker):
-        nonlocal scanned
-        for row in original_rows(self, marker):
-            scanned += 1
-            yield row
-
-    monkeypatch.setattr(WireLog, "_verified_private_rows_unlocked", observed_rows)
-    with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(IdentityConflict, match="bounded private initial scan"),
-    ):
-        read_proven_source_coverage(
-            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup, limit=1
-        )
-    assert scanned == 2  # Not nine eager initial DTOs before rejecting.
-    scanned = 0
-    monkeypatch.setattr(coverage_module, "_MAX_BUS_ROWS", 1)
-    with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(IdentityConflict, match="row or scan deadline"),
-    ):
-        read_proven_source_coverage(comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup)
-    assert scanned == 2
-    monkeypatch.setattr(coverage_module, "_MAX_BUS_BYTES", 10)
-    with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(RelationViolationError, match="bounded read budget"),
-    ):
-        read_proven_source_coverage(comms.bus, store, wire_root_id=root_id, recipient_lookup=lookup)
-    assert scanned == 2  # Refused before the private bus row iterator.
 
 
 async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):

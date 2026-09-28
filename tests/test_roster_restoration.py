@@ -38,7 +38,6 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     old.messaging.send("live", "missing", "Old pending work must not be replayed")
     current.threads.register(replace(live, title="Current live title"))
     current.messaging.initialize_private_initial_protocol()
-    current.messaging.initialize_private_claim_protocol()
     current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
     bus = current.bus.log.path.read_bytes()

@@ -176,7 +176,7 @@ async def test_actual_retained_manual_commit_and_reopen(tmp_path, monkeypatch):
 
         agent.on_connect(Client())
         await agent.sessions.bind_owned(
-            comms.registry.require("retained"), "retained", fresh=False, private=True
+            comms.registry.require("retained"), "retained"
         )
         comms.agents.set_agent_info(
             "retained", model=model, context_used=preparation.tokens_before, context_size=272000

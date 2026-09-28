@@ -23,7 +23,6 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _fake_model
 
@@ -60,8 +59,6 @@ def _fresh(tmp_path: Path, count: int = 2):
             )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
-    install_private_bus_checkpoint(comms.bus.log)  # Strictly fresh-root opt-in.
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)

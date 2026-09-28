@@ -96,11 +96,6 @@ class Messaging:
         with _store_lock(self._wire_lock_path):
             return self.bus.publisher.initialize_private_protocol()
 
-    def initialize_private_claim_protocol(self) -> str:
-        """Initialize the claim read barrier on a fresh marked private bus."""
-        with _store_lock(self._wire_lock_path):
-            return self.bus.publisher.initialize_private_claim_protocol()
-
     def send_initial_cohort(
         self,
         sender: str,

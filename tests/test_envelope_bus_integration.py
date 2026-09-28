@@ -39,7 +39,6 @@ pytestmark = pytest.mark.skipif(
 def marked(tmp_path: Path) -> Comms:
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    assert comms.messaging.initialize_private_claim_protocol() == root_id
     marker = comms.root / "bus_meta.json"  # existing private-root marker, not claim authority
     assert json.loads(marker.read_text())["claim_envelopes_version"] == 1
     assert json.loads(marker.read_text())["wire_root_id"] == root_id
@@ -53,47 +52,8 @@ def _sample_line(*, complete: bool = True) -> bytes:
     return json.dumps(row).encode() + (b"\n" if complete else b"")
 
 
-def test_marker_requires_fresh_private_root_and_claim_protocol(tmp_path: Path) -> None:
-    ordinary = Comms(tmp_path / "ordinary")
-    with pytest.raises(RelationViolationError, match="marker"):
-        ordinary.messaging.initialize_private_claim_protocol()
-    comms = marked(tmp_path)
-    assert (
-        comms.messaging.initialize_private_claim_protocol()
-        == (json.loads((comms.root / "bus_meta.json").read_text())["wire_root_id"])
-    )
-    assert comms.bus.log.full_history() == []
 
 
-def test_visible_claim_protocol_flag_after_directory_fsync_error_is_resynced(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    comms = Comms(tmp_path / "wire", private_initial_writes=True, private_claim_writes=True)
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    real_fsync = os.fsync
-    failed = False
-
-    def fsync(descriptor: int) -> None:
-        nonlocal failed
-        target = os.readlink(f"/proc/self/fd/{descriptor}")
-        marker = comms.root / "bus_meta.json"
-        if (
-            not failed
-            and target == str(comms.root)
-            and json.loads(marker.read_text()).get("claim_envelopes_version") == 1
-        ):
-            failed = True
-            raise OSError("directory fsync failed after visible protocol flag")
-        real_fsync(descriptor)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(store_files.os, "fsync", fsync)
-        with pytest.raises(OSError, match="directory fsync failed"):
-            comms.messaging.initialize_private_claim_protocol()
-    assert failed
-    assert json.loads((comms.root / "bus_meta.json").read_text())["claim_envelopes_version"] == 1
-    assert comms.bus.log.full_history() == []  # bus lock re-fsyncs marker directory
-    assert comms.messaging.initialize_private_claim_protocol() == root_id
 
 
 def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
@@ -164,7 +124,6 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     for name in ("alice", "bob", "observer"):
         comms.threads.register(Thread(name, frozenset({"team"}), str(worktree)))
     comms.messaging.initialize_private_initial_protocol()
-    comms.messaging.initialize_private_claim_protocol()
     return comms, worktree
 
 
