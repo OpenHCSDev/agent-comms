@@ -207,6 +207,124 @@ class UnknownContent(PiContent):
         return self.payload
 
 
+class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
+    """Native transport timing is display evidence, never input admission."""
+
+    @classmethod
+    def normalize_wire(cls, value):
+        if type(value) is not str:
+            raise ValueError("Native transport phase must be a string")
+        try:
+            member = cls.decode(value)
+        except ValueError:
+            return {"kind": UnrecognizedTransportStage.declared_name, "reported_phase": value}
+        return {"kind": member.declared_name}
+
+    @property
+    @abstractmethod
+    def description(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class BeforeMessageStreamStartStage(ProviderTransportStage):
+    description = "before the provider response stream started"
+
+
+@dataclass(frozen=True)
+class AfterMessageStreamStartStage(ProviderTransportStage):
+    description = "after the provider response stream started"
+
+
+@dataclass(frozen=True)
+class UnreportedTransportStage(ProviderTransportStage):
+    description = "provider stage not reported"
+
+
+@dataclass(frozen=True)
+class UnrecognizedTransportStage(ProviderTransportStage):
+    reported_phase: str
+
+    @property
+    def description(self) -> str:
+        return f"provider stage: {self.reported_phase}"
+
+
+@dataclass(frozen=True)
+class ProviderDiagnosticError(PiPayload):
+    message: str
+    name: str | None = None
+    code: int | str | None = None
+
+    @property
+    def description(self) -> str:
+        name = self.name or "Provider transport error"
+        return f"{name} (code {self.code})" if self.code is not None else name
+
+
+@dataclass(frozen=True)
+class ProviderTransportDetails(PiPayload):
+    configured_transport: str | None = wire_field("configuredTransport")
+    fallback_transport: str | None = wire_field("fallbackTransport")
+    events_emitted: bool | None = wire_field("eventsEmitted")
+    phase: ProviderTransportStage = field(default_factory=UnreportedTransportStage)
+    request_bytes: int | None = wire_field("requestBytes")
+
+    def __post_init__(self):
+        if self.request_bytes is not None and self.request_bytes < 0:
+            raise ValueError("Native request byte count must be nonnegative")
+
+    @property
+    def description(self) -> str:
+        parts = [self.phase.description]
+        if self.configured_transport is not None:
+            parts.append(f"configured transport: {self.configured_transport}")
+        if self.events_emitted is not None:
+            parts.append("provider events emitted: " + ("yes" if self.events_emitted else "no"))
+        if self.request_bytes is not None:
+            parts.append(f"request: {self.request_bytes:,} bytes")
+        if self.fallback_transport is not None:
+            parts.append(f"reported fallback transport: {self.fallback_transport}")
+        return "; ".join(parts)
+
+
+@dataclass(frozen=True)
+class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
+    wire_tag = "type"
+    opaque = False
+    provider_connection_failure: ClassVar[bool] = False
+
+    @classmethod
+    def wire_member(cls, value):
+        try:
+            return cls.decode(value.get(cls.wire_tag))
+        except ValueError:
+            return UnknownDiagnostic
+
+    @property
+    def description(self) -> str:
+        return ""
+
+
+@dataclass(frozen=True)
+class ProviderTransportFailureDiagnostic(PiDiagnostic):
+    provider_connection_failure = True
+    error: ProviderDiagnosticError
+    details: ProviderTransportDetails
+    timestamp: int | None = None
+
+    @property
+    def description(self) -> str:
+        return "; ".join(
+            part for part in (self.error.description, self.details.description) if part
+        )
+
+
+@dataclass(frozen=True)
+class UnknownDiagnostic(PiDiagnostic):
+    payload: dict[str, Any]
+    opaque = True
+
+
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @property
@@ -230,6 +348,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     input_digest: str | None = wire_field("inputDigest")
     stop_reason: str | None = wire_field("stopReason")
     error_message: str | None = wire_field("errorMessage")
+    diagnostics: tuple[PiDiagnostic, ...] = ()
 
     @classmethod
     def wire_member(cls, value):

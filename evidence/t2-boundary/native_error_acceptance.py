@@ -1,6 +1,9 @@
 """Actual ACP stdio -> owner socket -> pinned Pi -> failing local HTTP provider."""
 
 import asyncio
+import base64
+import hashlib
+import struct
 import json
 import os
 import sys
@@ -20,10 +23,53 @@ PACKAGE = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
 
 async def main():
     calls = []
+    websocket = os.environ.get("T2_PROVIDER_FAILURE") == "websocket"
 
     async def provider(reader, writer):
         try:
             header = await reader.readuntil(b"\r\n\r\n")
+            if websocket:
+                headers = {
+                    key.lower(): value.strip()
+                    for line in header.split(b"\r\n")[1:]
+                    if b":" in line
+                    for key, value in [line.split(b":", 1)]
+                }
+                accept = base64.b64encode(
+                    hashlib.sha1(
+                        headers[b"sec-websocket-key"] + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+                    ).digest()
+                )
+                writer.write(
+                    b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                    b"Connection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n"
+                )
+                await writer.drain()
+                start = await reader.readexactly(2)
+                length = start[1] & 127
+                if length == 126:
+                    length = struct.unpack("!H", await reader.readexactly(2))[0]
+                elif length == 127:
+                    length = struct.unpack("!Q", await reader.readexactly(8))[0]
+                mask = await reader.readexactly(4)
+                raw = await reader.readexactly(length)
+                calls.append(json.loads(bytes(value ^ mask[i % 4] for i, value in enumerate(raw))))
+                created = json.dumps(
+                    {
+                        "type": "response.created",
+                        "response": {
+                            "id": "local-provider-response",
+                            "status": "in_progress",
+                        },
+                    }
+                ).encode()
+                writer.write(b"\x81" + bytes([126]) + struct.pack("!H", len(created)) + created)
+                await writer.drain()
+                await asyncio.sleep(0.1)
+                writer.write(b"\x88\x02" + struct.pack("!H", 1011))
+                await writer.drain()
+                await reader.read(1024)
+                return
             length = next(
                 (
                     int(line.split(b":", 1)[1])
@@ -66,8 +112,24 @@ async def main():
                     "providers": {
                         "fixture": {
                             "baseUrl": f"http://127.0.0.1:{port}/v1",
-                            "api": "openai-completions",
-                            "apiKey": "local-only",
+                            "api": "openai-codex-responses" if websocket else "openai-completions",
+                            "apiKey": (
+                                "local."
+                                + base64.urlsafe_b64encode(
+                                    json.dumps(
+                                        {
+                                            "https://api.openai.com/auth": {
+                                                "chatgpt_account_id": "local-fixture"
+                                            }
+                                        }
+                                    ).encode()
+                                )
+                                .decode()
+                                .rstrip("=")
+                                + ".fixture"
+                                if websocket
+                                else "local-only"
+                            ),
                             "models": [
                                 {
                                     "id": "fixture",
@@ -146,7 +208,9 @@ async def main():
                     "_meta": encode_request(QueuePromptRequest("local failing provider input")),
                 },
             )
-            Path("evidence/t2-boundary/native-error-debug.json").write_text(
+            Path(
+                os.environ.get("T2_ERROR_DEBUG", "evidence/t2-boundary/native-error-debug.json")
+            ).write_text(
                 json.dumps(
                     {"response": response, "notifications": notifications, "posts": len(calls)},
                     indent=2,
@@ -163,8 +227,15 @@ async def main():
             assert len(reports) == 1, reports
             failure = reports[0]
             error = response.get("error", {"code": failure.code, "message": failure.detail})
-            assert "usage limit" in failure.detail.lower(), failure
-            assert failure.title == "Provider usage limit reached"
+            if websocket:
+                assert failure.title == "Provider connection failed", failure
+                assert "code 1011" in failure.description
+                assert "after the provider response stream started" in failure.description
+                assert "configured transport: auto" in failure.description
+                assert "provider events emitted: yes" in failure.description
+            else:
+                assert "usage limit" in failure.detail.lower(), failure
+                assert failure.title == "Provider usage limit reached"
             assert len(calls) == 1, "No model request retry permitted"
             facts = [
                 fact
@@ -174,8 +245,7 @@ async def main():
                 )
             ]
             assert any(
-                isinstance(fact, RequestFailedUpdate)
-                and "usage limit" in fact.failure.detail.lower()
+                isinstance(fact, RequestFailedUpdate) and fact.failure.title == failure.title
                 for fact in facts
             )
             from agent_comms.input_disposition import InputDispositions
@@ -190,6 +260,7 @@ async def main():
                         "error": error,
                         "title": failure.title,
                         "detail": failure.detail,
+                        "description": failure.description,
                         "action": failure.action,
                         "input_disposition": failure.input_disposition,
                         "provider_posts": len(calls),
@@ -201,7 +272,7 @@ async def main():
                 )
             )
             print(
-                "Actual ACP stdio/owner/pinned Pi/local HTTP quota failure: readable reason, one POST, no replay"
+                f"Actual ACP stdio/owner/pinned Pi/local {'WebSocket1011' if websocket else 'HTTP quota'} failure: readable reason/stage, one request, no replay"
             )
         finally:
             for thread in comms.registry.snapshot().threads.values():
