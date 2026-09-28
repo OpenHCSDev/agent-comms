@@ -1,11 +1,11 @@
 {
   "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
   "links": {
-    "toad": "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/bin/toad",
-    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/bin/agent-comms",
-    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/bin/agent-comms-acp",
-    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/bin/agent-comms-agent",
-    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-bus-compaction-20260928/bin/agent-comms-nk-foreground"
+    "toad": "/home/ts/.local/share/agent-comms/runtime-owner-restart-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-owner-restart-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-owner-restart-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-owner-restart-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-owner-restart-20260928/bin/agent-comms-nk-foreground"
   },
   "owners": {
     "agent-comms-ux": {
