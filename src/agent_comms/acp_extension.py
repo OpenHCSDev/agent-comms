@@ -14,6 +14,7 @@ from typing import ClassVar
 
 from .agent_events import CompactionEvent, CompactionProgress
 from .compaction_states import CompactionPublishedMetadata
+from .delivery_presentation import DeliveryPresentation
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
@@ -60,7 +61,7 @@ class TranscriptChangedUpdate(AgentCommsUpdate):
     cursor: TranscriptCursor | None
 
 
-class DeliveryFailure(DeclaredFamily, affix="Failure"):
+class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
     @property
     @abstractmethod
     def description(self) -> str: ...
@@ -73,6 +74,21 @@ class BackendDeliveryFailure(DeliveryFailure):
     @property
     def description(self) -> str:
         return self.message
+
+
+@dataclass(frozen=True)
+class UnknownDeliveryFailure(BackendDeliveryFailure):
+    wire_root_id: str
+    wire_seq: int
+    message_id: str
+
+    def present(self, receiver, body: str) -> None:
+        receiver.delivery_unknown(self, body)
+
+
+class AdmissionBlockedFailure(BackendDeliveryFailure):
+    def present(self, receiver, body: str) -> None:
+        receiver.delivery_blocked(self.description, body)
 
 
 @dataclass(frozen=True)
