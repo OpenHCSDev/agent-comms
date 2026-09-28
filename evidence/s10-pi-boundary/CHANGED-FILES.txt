@@ -1,0 +1,12 @@
+src/agent_comms/backend.py
+src/agent_comms/pi_events.py
+src/agent_comms/selected_claimed_write.mjs
+src/agent_comms/selected_tool_broker.py
+src/agent_comms/turn_runner.py
+tests/test_mcp_relay.py
+tests/test_native_tool_lifecycle.py
+tests/test_pf_deletion_guards.py
+tests/test_s10_boundary_guards.py
+tests/test_selected_tool_broker.py
+tests/test_selected_tool_native_fake.py
+tests/test_selected_tool_runner_hook.py
