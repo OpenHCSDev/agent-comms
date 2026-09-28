@@ -1,0 +1,16 @@
+{
+  "verified": true,
+  "transport": "installed ACP subprocess stdio",
+  "replayed_inputs": 0,
+  "path": "/usr/local/bin:/usr/bin",
+  "assistant_text": "ACP_STDIO_PATH_OK",
+  "native_assistant_verified": true,
+  "response": {
+    "stopReason": "end_turn",
+    "usage": null,
+    "_meta": null
+  },
+  "same_owner_pid": true,
+  "update_count": 17,
+  "elapsed_seconds": 10.61139239500335
+}
