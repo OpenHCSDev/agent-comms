@@ -31,10 +31,11 @@ row=db.execute('SELECT status FROM selected_summary_attempts WHERE operation_id=
                (r['operationId'],)).fetchone()
 assert row==('reserved',),row
 Path(received).write_text(json.dumps(r))
-if mode in ('progress','duplicate-progress'):
+if mode in ('progress','duplicate-progress','foreign-progress'):
     for sequence in range(1, 6):
         print(json.dumps(dict(type='agent_comms_compaction_progress',id=r['id'],
-              operationId=r['operationId'],sequence=sequence if mode=='progress' else 1)),flush=True)
+              operationId='foreign' if mode=='foreign-progress' else r['operationId'],
+              sequence=sequence if mode=='progress' else 1)),flush=True)
         time.sleep(.035)
 if mode=='hang':
     time.sleep(30)
@@ -371,3 +372,11 @@ async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(t
     async with selected(other, "decline") as (run, _, journal, file, received):
         await run()
         assert "customInstructions" not in json.loads(received.read_text())
+
+
+async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
+    async with selected(tmp_path, "foreign-progress") as (run, persistent, journal, file, _):
+        with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
+            await run(idle_timeout_seconds=.06)
+        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert persistent.proc is None
