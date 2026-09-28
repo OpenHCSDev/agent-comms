@@ -13,9 +13,11 @@ import json
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+
+from .errors import RelationViolationError
 
 
 class ClaimTransitionError(ValueError):
@@ -395,3 +397,45 @@ def parse_complete_transition_line(raw: bytes) -> ClaimTransition:
         data["generation"],
         admission,
     )
+
+
+def _claim_transition_wire(transition: ClaimTransition) -> dict[str, object]:
+    value: dict[str, object] = {
+        "owner": transition.owner,
+        "incarnation": transition.incarnation,
+        "seq": transition.seq,
+        "message_id": transition.message_id,
+        "claims": list(transition.claims),
+        "releases": [asdict(release) for release in transition.releases],
+        "generation": transition.generation,
+    }
+    if transition.admission is not None:
+        value["admission"] = asdict(transition.admission)
+    return value
+
+
+def _claim_transition_from_wire(value: object) -> ClaimTransition:
+    if type(value) is not dict:
+        raise RelationViolationError("Claim transition is not a typed object.")
+    try:
+        encoded = json.dumps(value, allow_nan=False, separators=(",", ":")).encode() + b"\n"
+        return parse_complete_transition_line(encoded)
+    except (TypeError, ValueError) as error:
+        raise RelationViolationError("Claim transition is malformed.") from error
+
+
+def _release_resource(worktree: Path, path: str | Path) -> str:
+    """Identify a prior canonical claim even if its original file was deleted."""
+    physical_root = worktree.resolve(strict=True)
+    raw = path if isinstance(path, str) else str(path)
+    supplied = Path(raw)
+    if str(supplied) != raw:
+        raise RelationViolationError("Claim release requires canonical spelling.")
+    candidate = supplied if supplied.is_absolute() else physical_root / supplied
+    if ".." in candidate.parts:
+        raise RelationViolationError("Claim release cannot traverse parent directories.")
+    try:
+        candidate.relative_to(physical_root)
+    except ValueError as error:
+        raise RelationViolationError("Claim release is outside the owner's worktree.") from error
+    return str(candidate)

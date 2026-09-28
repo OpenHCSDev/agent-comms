@@ -1,0 +1,134 @@
+"""Goals: declaration and persistence owners."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .field_codec import FieldCodec, projected
+from .goal_states import ActiveGoal, GoalState, PausedGoal
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionBinding:
+    """An exact goal token resolved once, never rebound by a later name reuse."""
+
+    token: str
+    resolution: str
+    peer_name: str | None = None
+    peer_created_at: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.token or self.resolution not in {
+            "resolved",
+            "self",
+            "unknown",
+            "alias",
+            "malformed",
+            "limit_exceeded",
+            "non_executable",
+        }:
+            raise ValueError("Invalid goal mention binding.")
+        if self.resolution == "resolved":
+            if (
+                not self.peer_name
+                or not isinstance(self.peer_created_at, (float, int))
+                or isinstance(self.peer_created_at, bool)
+                or not math.isfinite(self.peer_created_at)
+            ):
+                raise ValueError("Resolved goal mention requires a stable peer incarnation.")
+        elif self.peer_name is not None or self.peer_created_at is not None:
+            raise ValueError("Unresolved goal mention cannot name a peer incarnation.")
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionSource:
+    """Text-revision and owner-incarnation proof saved with its registry Goal."""
+
+    goal_id: str
+    text_revision: int
+    text_digest: str
+    owner_name: str
+    owner_created_at: float
+    bindings: tuple[GoalMentionBinding, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not self.goal_id
+            or type(self.text_revision) is not int
+            or not 0 <= self.text_revision < 1 << 63
+            or type(self.text_digest) is not str
+            or len(self.text_digest) != 64
+            or not self.owner_name
+            or type(self.owner_created_at) not in {float, int}
+            or not math.isfinite(self.owner_created_at)
+        ):
+            raise ValueError("Invalid goal mention source.")
+
+
+@dataclass(frozen=True)
+class Goal:
+    """A goal has one typed lifecycle; flat saved fields exist only at the wire boundary."""
+
+    text: str
+    id: str
+    progress: str = ""
+    revision: int = 0
+    reported_turn: str | None = None
+    mention_source: GoalMentionSource | None = None
+    state: GoalState = field(default_factory=ActiveGoal, metadata={"wire_exclude": True})
+
+    @projected(view="wire", name="status")
+    def wire_status(self) -> str:
+        return self.state.declared_name
+
+    @projected(view="wire", name="block_reason")
+    def wire_block_reason(self) -> str | None:
+        return self.state.reason
+
+    @projected(view="wire", name="pause_source")
+    def wire_pause_source(self) -> str | None:
+        source = self.state.pause_source
+        return source.declared_name if source is not None else None
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.project(self, "wire")
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> Goal:
+        values = dict(data)
+        if "state" in values:
+            raise ValueError("Unexpected goal wire field: state")
+        values["state"] = GoalState.decode(
+            values.pop("status", ActiveGoal.declared_name)
+        ).wire_payload(values.pop("block_reason", None), values.pop("pause_source", None))
+        return FieldCodec.decode(cls, values)
+
+    @classmethod
+    def from_registry(cls, data: Mapping, root: Path) -> Goal:
+        from .goal_pauses import GoalPauseEvents
+
+        values = dict(data)
+        if (
+            "pause_source" not in values
+            and GoalState.decode(values.get("status", ActiveGoal.declared_name)) is PausedGoal
+        ):
+            events = GoalPauseEvents(root / GoalPauseEvents.filename).read()
+            event = events.get(f"{values['id']}:{values.get('revision', 0)}")
+            if event is not None:
+                values["pause_source"] = event.source.declared_name
+        return cls.from_wire(values)
+
+    def __post_init__(self) -> None:
+        if not self.text.strip() or not self.id:
+            raise ValueError("A goal requires text and an identity.")
+        if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
+            raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
+        if self.reported_turn is not None and not isinstance(self.reported_turn, str):
+            raise ValueError("Goal reported turn must be a string or null.")
+
+    @property
+    def summary(self) -> str:
+        return f"Goal · {self.state.declared_name}: {self.text}"

@@ -12,12 +12,9 @@ import json
 from typing import Literal
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
-from .coordination import (
-    ResponseObligation,
-    WakeClaim,
-)
+from .coordination import ResponseObligation, WakeClaim
 from .coordination_store import IdentityConflict
-from .declarations import Thread
+from .threads import Thread
 from .wake import WakeDecision, derive_exact_reply_target
 
 

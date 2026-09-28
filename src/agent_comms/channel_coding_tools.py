@@ -20,6 +20,7 @@ from .claim_admission import (
     release_selected_resources,
     verify_selected_wake,
 )
+from .comms import Comms
 from .coordination_store import MutationStore
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
@@ -30,7 +31,6 @@ from .envelope_claim_transitions import (
     WritableFileClaim,
 )
 from .field_codec import FieldCodec
-from .operations import Comms
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,

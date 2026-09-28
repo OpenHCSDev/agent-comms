@@ -15,7 +15,7 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .compaction_journal import CompactionJournal
 from .compaction_publication_lease import publication_identity_fence
-from .declarations import RelationViolationError, UnregisteredThreadError
+from .errors import RelationViolationError, UnregisteredThreadError
 
 # A stalled local client must not indefinitely pin the wire's owner-identity
 # fence. wait_for joins cancellation of its transport coroutine before the

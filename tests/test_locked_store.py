@@ -12,12 +12,14 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import locked_store
-from agent_comms.declarations import Goal, GoalWaitTarget, _store_lock
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_pauses import GoalPauseEvent, GoalPauseEvents
+from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_states import OwnerPause, PausedGoal, RuntimePause
 from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.goals import Goal
 from agent_comms.locked_store import LockedStore
+from agent_comms.store_files import _store_lock
 
 
 def wait(goal_id="goal"):

@@ -22,15 +22,12 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from . import pi_events as pi
-from .declarations import RelationViolationError, _store_lock
+from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .pi_rpc import PiRpcChannel
-from .selected_tool_broker import (
-    NativeToolMode,
-    OwnerToolSocket,
-    SelectedToolDenied,
-)
+from .selected_tool_broker import NativeToolMode, OwnerToolSocket, SelectedToolDenied
+from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession

@@ -39,8 +39,8 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
     comms, agent, session, goal = await _owner(tmp_path, monkeypatch, standby=standby)
     monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
     before_goal = comms.registry.require(session).goal
-    before_wait = comms.goal_wait(session)
-    message = comms.send_message("outsider", session, "Question while goal is parked")
+    before_wait = comms.goals.goal_wait(session)
+    message = comms.messaging.send_message("outsider", session, "Question while goal is parked")
     assert await agent.inputs.drain_owned_inbox(session) == 1
     queued = agent.inputs.pending_turns.pop(session)[0]
     gate_facts = []
@@ -77,20 +77,20 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         command = kwargs["steering_queue"].get_nowait()
         assert command["_input_id"] == public_id
         if change == "goal_revision":
-            comms.update_goal(
+            comms.goals.update_goal(
                 session,
                 ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="New revision"),
             )
         elif change == "goal_replaced":
-            comms.update_goal(session, SetGoalAction(text="New goal"))
+            comms.goals.update_goal(session, SetGoalAction(text="New goal"))
         elif change == "owner_pause":
-            comms.update_goal(
+            comms.goals.update_goal(
                 session,
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,
             )
         elif change == "wait_cleared":
-            assert comms.consume_goal_wait(session, before_wait.wait_id)
+            assert comms.goals.consume_goal_wait(session, before_wait.wait_id)
         elif change == "owner_replaced":
             current = comms.registry.require(session)
             comms.registry.register(
@@ -103,7 +103,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
         elif change == "foreign_input_key":
             agent.inputs.steering_input_keys[session][public_id] = old_key
         expected_state.update(
-            goal=comms.registry.require(session).goal, wait=comms.goal_wait(session)
+            goal=comms.registry.require(session).goal, wait=comms.goals.goal_wait(session)
         )
         boundary = kwargs["send_boundary"](public_id, "b" * 32, command["message"])
         with boundary as allowed:
@@ -153,7 +153,7 @@ async def test_fresh_owner_followup_during_direct_interrupt(tmp_path, monkeypatc
             assert owner_rows[0]["native_id"] is None
         assert agent.inputs.dispositions.get(old_key) == old_row
         assert comms.registry.require(session).goal == expected_state["goal"]
-        assert comms.goal_wait(session) == expected_state["wait"]
+        assert comms.goals.goal_wait(session) == expected_state["wait"]
         assert not (comms.root / "goal-private").exists()
         assert not agent.inputs.pending_turns.get(session)
     finally:
@@ -209,8 +209,8 @@ for line in sys.stdin:
 
     monkeypatch.setattr(agent, "_emit_event", capture_started)
     goal_before = comms.registry.require(session).goal
-    wait_before = comms.goal_wait(session)
-    comms.send_message("outsider", session, "Separate DM")
+    wait_before = comms.goals.goal_wait(session)
+    comms.messaging.send_message("outsider", session, "Separate DM")
     await agent.inputs.drain_owned_inbox(session)
     queued = agent.inputs.pending_turns.pop(session)[0]
     turn = asyncio.create_task(
@@ -239,7 +239,7 @@ for line in sys.stdin:
         assert commands[1]["message"] == "User follow-up:\nFresh owner request"
         assert commands[0]["inputId"] != commands[1]["inputId"]
         assert comms.registry.require(session).goal == goal_before
-        assert comms.goal_wait(session) == wait_before
+        assert comms.goals.goal_wait(session) == wait_before
         assert not (comms.root / "goal-private").exists()
     finally:
         turn.cancel()

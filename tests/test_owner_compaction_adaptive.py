@@ -14,9 +14,10 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.backend import PersistentPiSession
-from agent_comms.declarations import AgentRuntimeInfo, Goal, RelationViolationError, Thread
+from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
+from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import wire
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_provider import (
@@ -26,6 +27,8 @@ from agent_comms.owner_compaction_provider import (
 )
 from agent_comms.owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
 from agent_comms.registration import Registration
+from agent_comms.runtime_info import AgentRuntimeInfo
+from agent_comms.threads import Thread
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -378,7 +381,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
             pid=os.getpid(),
         )
     )
-    comms.set_agent_info(
+    comms.agents.set_agent_info(
         "proj",
         model=info.model,
         context_used=info.context_used,

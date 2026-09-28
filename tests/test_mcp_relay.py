@@ -14,7 +14,7 @@ from acp.schema import PromptResponse
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.operations import wire
+from agent_comms.comms import wire
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub")

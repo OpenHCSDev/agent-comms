@@ -27,7 +27,9 @@ from .bus_publication import (
     validate_initial_record,
 )
 from .coordination import CoordinationError, PublicationReceipt
-from .declarations import Message, MessageBus, RelationViolationError
+from .errors import RelationViolationError
+from .message_bus import MessageBus
+from .messages import Message
 from .wake import NoWakeDecision, WakeDecision
 
 _SCHEMA = 2

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from enum import StrEnum
 
 from .field_codec import FieldCodec
-from .goal_states import GoalState
-
-if TYPE_CHECKING:
-    from .declarations import GoalExecution
+from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, GoalState, PausedGoal
+from .thread_presentation import ThreadPresentation
 
 
 class ExecutionPresentation(ABC):
@@ -38,3 +37,49 @@ class StandbyExecutionPresentation(ExecutionPresentation):
         idle = ", ".join(f"@{target.name}" for target in execution.inactive_wait_for)
         suffix = f"; no active turn: {idle}" if idle else ""
         return "◌", f"Standby · waiting for {names}{suffix}"
+
+
+class GoalExecutionState(StrEnum):
+    view: ExecutionPresentation
+
+    def __new__(cls, value: str, view: ExecutionPresentation | None = None) -> GoalExecutionState:
+        assert view is not None  # Enum declarations supply behavior; value lookup uses EnumMeta.
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.view = view
+        return obj
+
+    RUNNABLE = (ActiveGoal().execution_name, StateExecutionPresentation(ActiveGoal))
+    STANDBY = ("standby", StandbyExecutionPresentation())
+    PAUSED = (PausedGoal.declared_name, StateExecutionPresentation(PausedGoal))
+    BLOCKED = (BlockedGoal.declared_name, StateExecutionPresentation(BlockedGoal))
+    COMPLETED = (CompletedGoal.declared_name, StateExecutionPresentation(CompletedGoal))
+
+
+@dataclass(frozen=True, slots=True)
+class GoalWaitTarget:
+    name: str
+    created_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class GoalExecution:
+    state: GoalExecutionState
+    goal_id: str
+    wait_for: tuple[GoalWaitTarget, ...] = ()
+    inactive_wait_for: tuple[GoalWaitTarget, ...] = ()
+    block_reason: str | None = None
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        glyph, summary = self.state.view.render(self)
+        return ThreadPresentation(title, glyph, summary)
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> GoalExecution:
+        return cls(
+            GoalExecutionState(data["state"]),
+            str(data["goal_id"]),
+            tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
+            tuple(GoalWaitTarget(**target) for target in data.get("inactive_wait_for", ())),
+            data.get("block_reason"),
+        )

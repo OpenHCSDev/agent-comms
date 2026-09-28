@@ -6,15 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
-from .declarations import (
-    Goal,
-    GoalExecution,
-    GoalExecutionState,
-    GoalWaitTarget,
-    Message,
-    RegistrySnapshot,
-)
+from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
+from .goals import Goal
 from .locked_store import LockedStore
+from .messages import Message
+from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)

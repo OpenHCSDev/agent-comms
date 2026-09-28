@@ -15,17 +15,13 @@ import pytest
 
 from agent_comms import supervised_cutover
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.comms import Comms
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import (
-    Goal,
-    GoalExecutionState,
-    GoalWaitTarget,
-    RelationViolationError,
-    Thread,
-)
+from agent_comms.errors import RelationViolationError
+from agent_comms.goal_presentation import GoalExecutionState, GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import Comms
 from agent_comms.supervised_cutover import (
     LegacyInventory,
     OwnerWitness,
@@ -33,6 +29,7 @@ from agent_comms.supervised_cutover import (
     stage_private_participants,
 )
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux cutover")
 
@@ -42,8 +39,8 @@ def test_archive_refuses_live_owner_then_preserves_pending_and_unknown(tmp_path)
     process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
         for name in ("sender", "receiver"):
-            comms.register(Thread(name, frozenset(), str(tmp_path), pid=process.pid))
-        comms.send("sender", "receiver", "not yet read")
+            comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=process.pid))
+        comms.messaging.send("sender", "receiver", "not yet read")
         InputDispositions(comms.root).record(
             "test:unknown", seq=None, owner="receiver", admission=1,
             target="receiver", text="uncertain input",
@@ -94,8 +91,8 @@ def test_private_archive_keeps_nested_pi_journal_without_legacy_dispositions(tmp
     comms.registry.register(
         Thread("owner", frozenset(), str(tmp_path), pid=0), StoppedThreadStatus()
     )
-    comms.initialize_private_initial_protocol()
-    comms.send_user_message("owner", "pending", worktree=str(tmp_path))
+    comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.send_user_message("owner", "pending", worktree=str(tmp_path))
     session = root / "native-sessions" / "recipient" / "session.jsonl"
     session.parent.mkdir(parents=True, mode=0o700)
     session.write_text('{"type":"session"}\n')
@@ -117,8 +114,8 @@ def test_private_archive_keeps_nested_pi_journal_without_legacy_dispositions(tmp
 def test_archive_refuses_rival_destination_after_staging(tmp_path, monkeypatch):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "receiver"):
-        comms.register(Thread(name, frozenset(), str(tmp_path), pid=0))
-    comms.send("sender", "receiver", "pending")
+        comms.threads.register(Thread(name, frozenset(), str(tmp_path), pid=0))
+    comms.messaging.send("sender", "receiver", "pending")
     InputDispositions(comms.root).record(
         "test:unknown", seq=None, owner="receiver", admission=1,
         target="receiver", text="uncertain input",
@@ -150,26 +147,26 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
     process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     receiver_process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
-        legacy.register(
+        legacy.threads.register(
             Thread(
                 "sender", frozenset({"team"}), str(tmp_path), pid=process.pid,
                 session_file=str(saved), model="openai-codex/gpt-6-sol",
                 goal=Goal("wait for receiver", "stage-goal"),
             )
         )
-        legacy.register(Thread("receiver", frozenset(), str(tmp_path), pid=receiver_process.pid,
+        legacy.threads.register(Thread("receiver", frozenset(), str(tmp_path), pid=receiver_process.pid,
                                session_file=str(saved)))
-        legacy.send("sender", "receiver", "old pending message")
+        legacy.messaging.send("sender", "receiver", "old pending message")
         before_wait = legacy.registry.snapshot()
         GoalWaits(legacy.root / "goal_waits.json").record(
             GoalWait(
-                "stage-goal", "old-wait", 0, legacy.message_high_water(),
+                "stage-goal", "old-wait", 0, legacy.bus.latest_sequence(),
                 (GoalWaitTarget("receiver", before_wait.threads["receiver"].created_at),),
                 owner_created_at=before_wait.threads["sender"].created_at,
                 target_turn_generations=(None,),
             )
         )
-        assert legacy.goal_execution("sender").state is GoalExecutionState.STANDBY
+        assert legacy.goals.goal_execution("sender").state is GoalExecutionState.STANDBY
         InputDispositions(legacy.root).record(
             "stage:unknown", seq=None, owner="sender", admission=1,
             target="sender", text="uncertain old input",
@@ -228,7 +225,7 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
             assert db.execute("SELECT count(*) FROM cohort_schema_meta").fetchone()[0] == 1
             assert db.execute("SELECT count(*) FROM response_schema_meta").fetchone()[0] == 1
             assert db.execute("SELECT count(*) FROM native_runtime_schema_meta").fetchone()[0] == 1
-        assert private.goal_execution("sender").state is GoalExecutionState.STANDBY
+        assert private.goals.goal_execution("sender").state is GoalExecutionState.STANDBY
         migrated_wait = GoalWaits(private.root / "goal_waits.json").read()["stage-goal"]
         assert migrated_wait.after_seq == 0
         assert migrated_wait.target_turn_generations == (None,)
@@ -238,10 +235,10 @@ def test_stage_stopped_owner_into_fresh_private_root_without_old_replay(tmp_path
         private.registry.register(
             replace(private.registry.require("receiver"), pid=os.getpid()), RunningThreadStatus()
         )
-        message = private.send_initial_cohort("sender", "receiver", "new private input")
+        message = private.messaging.send_initial_cohort("sender", "receiver", "new private input")
         initial = private.bus.read_initial_cohort(root_id, message.seq)
         assert initial.audience.recipients[0].canonical_thread == "receiver"
-        assert [item.body for item in legacy.inbox("receiver")] == ["old pending message"]
+        assert [item.body for item in legacy.bus.inbox("receiver")] == ["old pending message"]
         with pytest.raises(RelationViolationError, match="fresh private root"):
             stage_private_participants(legacy, private, archive, inventory, ["sender", "receiver"])
         another = Comms(tmp_path / "another-private")

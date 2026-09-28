@@ -16,6 +16,7 @@ import pytest
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.claim_states import CompletedClaim
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordination import ExecutionOrigin
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import (
@@ -33,11 +34,12 @@ from agent_comms.coordination_store import (
     StaleRevision,
     prepare_fence_token,
 )
-from agent_comms.declarations import MessageBus, Thread, _store_lock
 from agent_comms.execution_states import CompletedExecution
+from agent_comms.message_bus import MessageBus
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
-from agent_comms.operations import Comms
 from agent_comms.registration import Registration
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from agent_comms.wake import derive_exact_reply_target
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
@@ -64,10 +66,10 @@ class Fixture:
 def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
-        comms.register(Thread(name, frozenset({"team"}), worktree=str(tmp_path)))
-    root_id = comms.initialize_private_initial_protocol()
+        comms.threads.register(Thread(name, frozenset({"team"}), worktree=str(tmp_path)))
+    root_id = comms.messaging.initialize_private_initial_protocol()
     target = "owner" if direct else "#team"
-    original = comms.send_initial_cohort("sender", target, "Need owner to consider and reply.")
+    original = comms.messaging.send_initial_cohort("sender", target, "Need owner to consider and reply.")
     original_record = comms.bus.read_initial_cohort(root_id, original.seq)
     assert len(original_record.audience.recipients) == 1
     recipient = original_record.audience.recipients[0]

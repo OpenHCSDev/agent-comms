@@ -15,9 +15,10 @@ from .bus_publication import CommittedInitial
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _assert_schema, _receipt_matches
 from .coordination_store import IdentityConflict, MutationStore
-from .declarations import MessageBus, _store_lock
 from .historical_native_inputs import read_historical_native_inputs
+from .message_bus import MessageBus
 from .private_bus_checkpoint import PrefixWitness, certified_initial_page_unlocked
+from .store_files import _store_lock
 from .wake import NoWakeDecision, WakeDecision
 
 _MAX_BUS_BYTES = 8 * 1024 * 1024

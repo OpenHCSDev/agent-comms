@@ -33,7 +33,7 @@ def publication_identity_fence(root: Path, *, nonblocking: bool = False) -> Iter
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0))
         except BlockingIOError as error:
-            from .declarations import RelationViolationError
+            from .errors import RelationViolationError
 
             raise RelationViolationError(
                 "Canonical session identity is publishing; retry the identity change"

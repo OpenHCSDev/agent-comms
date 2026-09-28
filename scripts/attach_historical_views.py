@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from agent_comms import Comms
+from agent_comms.comms import Comms
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     if args.apply:
         comms = Comms(args.destination)
         for source in args.source:
-            attached = comms.attach_history(source)
+            attached = comms.views.attach_history(source)
             print(json.dumps({"attached": attached.key, "original_root": attached.original_root}))
 
 

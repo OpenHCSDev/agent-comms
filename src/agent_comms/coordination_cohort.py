@@ -27,7 +27,7 @@ from .coordination import (
     WakeClaim,
 )
 from .coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore, _claim
-from .declarations import MessageBus
+from .message_bus import MessageBus
 from .wake import NoWakeDecision, WakeDecision
 
 _LOG = logging.getLogger(__name__)

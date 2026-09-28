@@ -11,7 +11,8 @@ import logging
 import threading
 from pathlib import Path
 
-from .declarations import MessageBus, _store_lock
+from .message_bus import MessageBus
+from .store_files import _store_lock
 from .wake_candidate_index import WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)

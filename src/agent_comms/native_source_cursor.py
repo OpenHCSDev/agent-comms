@@ -19,10 +19,12 @@ from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_response import _response_boundary
 from .coordination_store import IdentityConflict, MutationStore, StaleFence
-from .declarations import MessageBus, Thread, _store_lock
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
+from .message_bus import MessageBus
 from .private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from .proven_source_coverage import ProvenSourceCoverage, read_proven_source_coverage
+from .store_files import _store_lock
+from .threads import Thread
 
 # The old-root canonical bus read still has an 8 MiB / 1,000-row ceiling.
 # A checkpointed root pages complete addressed sources; neither its SQL

@@ -1,4 +1,4 @@
-"""Shared durable coordination errors, independent of record declarations."""
+"""Shared durable coordination errors, independent of record store_files."""
 
 
 class CoordinationError(RuntimeError):

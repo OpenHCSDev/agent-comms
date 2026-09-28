@@ -24,16 +24,18 @@ from typing import TYPE_CHECKING
 
 from .bus_publication import stable_thread_lookup
 from .cohort_schema import install_private_cohort_schema
+from .comms import Comms
 from .coordinated_runtime_schema import install_native_runtime_schema
 from .coordination_response import install_private_response_schema
 from .coordination_store import MutationStore
-from .declarations import RelationViolationError, Thread, _store_lock
+from .errors import RelationViolationError
 from .goal_waits import GoalWaits
 from .input_disposition import InputDispositions
 from .native_prompt_binding import install_prompt_binding_schema
-from .operations import Comms
 from .private_bus_checkpoint import install_private_bus_checkpoint
+from .store_files import _store_lock
 from .thread_status import StoppedThreadStatus
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .active_route import ActiveRoute
@@ -92,7 +94,7 @@ def _owner_witness(comms: Comms, thread: Thread, generation: int) -> OwnerWitnes
     start = _process_start_ticks(thread.pid)
     if start is None:
         return None
-    if not comms._is_local_participant(thread, wait=False):
+    if not comms.owners._is_local_participant(thread, wait=False):
         raise RelationViolationError(f"Live owner {thread.name!r} is not bound to this wire")
     try:
         entries = Path(f"/proc/{thread.pid}/environ").read_bytes().split(b"\0")
@@ -160,7 +162,7 @@ def inventory_legacy_root(comms: Comms) -> LegacyInventory:
     for name, thread in sorted(before.threads.items()):
         if thread.active_turn is not None:
             active_turns.append(name)
-        undelivered = len(comms.inbox(name))
+        undelivered = len(comms.bus.inbox(name))
         if undelivered:
             pending.append((name, undelivered))
         if not before.statuses[name].active or not thread.role.executable:
@@ -324,7 +326,7 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     if any(thread.active_turn is not None for thread in before.threads.values()):
         raise RelationViolationError("Cutover archive has an active owner turn")
     if any(
-        thread.pid > 0 and comms._process_alive(thread.pid) for thread in before.threads.values()
+        thread.pid > 0 and comms.owners._process_alive(thread.pid) for thread in before.threads.values()
     ):
         raise RelationViolationError("Cutover archive requires all old owners stopped")
     files = _state_files(comms.root)
@@ -332,7 +334,7 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
     if not required.issubset({path.name for path in files}):
         raise RelationViolationError("Cutover archive is missing core wire or input state")
     identities = {path: _file_identity(path.lstat()) for path in files}
-    pending = sum(len(comms.inbox(name)) for name in before.threads)
+    pending = sum(len(comms.bus.inbox(name)) for name in before.threads)
     unknown = sum(
         row["status"] == "unknown" for row in InputDispositions(comms.root)._read().values()
     )
@@ -354,7 +356,7 @@ def archive_stopped_root(comms: Comms, destination: Path) -> ArchiveReceipt:
                 _file_identity(path.lstat()) != identity for path, identity in identities.items()
             )
             or any(
-                thread.pid > 0 and comms._process_alive(thread.pid)
+                thread.pid > 0 and comms.owners._process_alive(thread.pid)
                 for thread in after.threads.values()
             )
         ):
@@ -457,7 +459,7 @@ def stage_private_participants(
     _require_unchanged_archive_source(legacy, archive)
     snapshot = legacy.registry.snapshot()
     if any(thread.active_turn is not None for thread in snapshot.threads.values()) or any(
-        thread.pid > 0 and legacy._process_alive(thread.pid) for thread in snapshot.threads.values()
+        thread.pid > 0 and legacy.owners._process_alive(thread.pid) for thread in snapshot.threads.values()
     ):
         raise RelationViolationError("Cutover participants require all old owners stopped")
     witnesses = {witness.name: witness for witness in inventory.live_owners}
@@ -538,10 +540,10 @@ def stage_private_participants(
         or private.registry.snapshot().threads
     ):
         raise RelationViolationError("Cutover participants require a fresh private root")
-    root_id = private.initialize_private_initial_protocol()
+    root_id = private.messaging.initialize_private_initial_protocol()
     # A claim read barrier can only be installed while the private bus is
     # empty. Selected owner writes on this route need it before any USER row.
-    private.initialize_private_claim_protocol()
+    private.messaging.initialize_private_claim_protocol()
     install_private_bus_checkpoint(private.bus)
     with _store_lock(private._wire_lock_path):
         new_waits = GoalWaits(private.root / "goal_waits.json")

@@ -6,16 +6,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from typing import Literal
 
-from .declarations import (
-    ChannelSort,
-    MessageType,
-    SavedView,
-    ThreadSort,
-    ViewKind,
-    ViewMatch,
-    ViewPredicate,
-    is_channel_target,
-)
+from .channel_management import TagAction
+from .channel_targets import is_channel_target
+from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
+from .comms import Comms
+from .display_order import ChannelSort, ThreadSort
 from .field_codec import FieldCodec
 from .goal_actions import (
     ActiveGoalAction,
@@ -26,7 +21,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal, PausedGoal
-from .operations import Comms, ForkSpec, TagAction
+from .messages import MessageType
+from .thread_management import ForkSpec
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -123,16 +119,16 @@ class ToolDeclaration:
 
 
 def _threads(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return {"threads": list(comms.list_threads(active_only=bool(arguments["active_only"])))}
+    return {"threads": list(comms.views.list_threads(active_only=bool(arguments["active_only"])))}
 
 
 def _rename_self(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    result = comms.rename_self(str(arguments["new_name"]))
+    result = comms.threads.rename_self(str(arguments["new_name"]))
     return {"previous": result.previous, "current": result.current, "changed": result.changed}
 
 
 def _set_project(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    result = comms.set_project_self(str(arguments["path"]))
+    result = comms.threads.set_project_self(str(arguments["path"]))
     return {
         **asdict(result),
         "instruction": (
@@ -145,7 +141,7 @@ def _set_project(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _send(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    message = comms.send_message(
+    message = comms.messaging.send_message(
         str(arguments["from"]),
         str(arguments["to"]),
         str(arguments["body"]),
@@ -162,10 +158,10 @@ def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     if bool(goal_id) != bool(wait_for):
         raise ValueError("Provide goal_id and wait_for together for standby review.")
     review = (
-        comms.goal_input_review(thread, str(goal_id), wait_for) if goal_id and wait_for else None
+        comms.goals.goal_input_review(thread, str(goal_id), wait_for) if goal_id and wait_for else None
     )
-    messages = [message.to_wire() for message in comms.inbox(thread)]
-    unresolved = comms.unresolved_inputs(thread)
+    messages = [message.to_wire() for message in comms.bus.inbox(thread)]
+    unresolved = comms.goals.unresolved_inputs(thread)
     response: JsonObject = {
         "messages": messages,
         "acknowledged": 0,
@@ -179,7 +175,7 @@ def _inbox(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     )
     if result_file is not None:
         return _bounded_inbox_response(response, str(result_file), ack=bool(arguments["ack"]))
-    response["acknowledged"] = comms.acknowledge(thread) if arguments["ack"] else 0
+    response["acknowledged"] = comms.messaging.acknowledge(thread) if arguments["ack"] else 0
     return response
 
 
@@ -240,7 +236,7 @@ def _bounded_inbox_response(response: JsonObject, result_file: str, *, ack: bool
 def _fork(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     tags = frozenset(tag.strip() for tag in str(arguments["tags"]).split(",") if tag.strip())
     prompt = arguments["prompt"]
-    child = comms.fork(
+    child = comms.threads.fork(
         ForkSpec(
             name=str(arguments["name"]),
             parent=str(arguments["parent"]),
@@ -253,12 +249,12 @@ def _fork(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _start(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return asdict(comms.start(str(arguments["name"])))
+    return asdict(comms.owners.start(str(arguments["name"])))
 
 
 def _ack(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     target = arguments["target"]
-    acknowledged = comms.acknowledge(
+    acknowledged = comms.messaging.acknowledge(
         str(arguments["thread"]), str(target) if target is not None else None
     )
     return {"acknowledged": acknowledged}
@@ -294,7 +290,7 @@ def _dismiss(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
             break
     else:
         mentioned = (name,)
-    acknowledged = comms.acknowledge(name, target)
+    acknowledged = comms.messaging.acknowledge(name, target)
     return {
         "thread": name,
         "target": target,
@@ -306,18 +302,18 @@ def _dismiss(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 def _stop(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     name = str(arguments["name"])
-    comms.stop(name)
+    comms.owners.stop(name)
     return {"stopped": name}
 
 
 def _archive(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     name = str(arguments["name"])
-    comms.archive(name)
+    comms.threads.archive(name)
     return {"archived": name}
 
 
 def _delete(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    result = comms.delete(str(arguments["name"]))
+    result = comms.threads.delete(str(arguments["name"]))
     return {
         "deleted": result.name,
         "messages_removed": result.messages_removed,
@@ -339,7 +335,7 @@ def _executing_thread() -> str:
 
 
 def _set_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    goal = comms.update_goal(_executing_thread(), SetGoalAction(text=str(arguments["text"])))
+    goal = comms.goals.update_goal(_executing_thread(), SetGoalAction(text=str(arguments["text"])))
     return {
         "goal": goal.to_wire() if goal else None,
         "instruction": (
@@ -366,8 +362,8 @@ def _goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
             expected_status=ActiveGoal.declared_name,
         ),
     )
-    comms.update_goal(name, command, actor=ModelInvocable)
-    goal, execution = comms.goal_snapshot(name)
+    comms.goals.update_goal(name, command, actor=ModelInvocable)
+    goal, execution = comms.goals.goal_snapshot(name)
     return {
         "goal": goal.to_wire() if goal else None,
         "goal_execution": asdict(execution) if execution else None,
@@ -382,7 +378,7 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
         # A blocked goal may have an unresolved paid attempt. Only the
         # authenticated human-recovery path can decide that disposition.
         raise ValueError("This goal cannot be resumed; refresh its state.")
-    pause = comms.goal_pause(name)
+    pause = comms.goals.goal_pause(name)
     if pause is None:
         raise ValueError(
             "Pause source is unavailable; the owner must resume through the goal controls."
@@ -390,7 +386,7 @@ def _resume_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     if pause.owner_instruction is not None:
         raise ValueError(pause.owner_instruction)
     progress = str(arguments["progress"])
-    goal = comms.update_goal(
+    goal = comms.goals.update_goal(
         name,
         ActiveGoalAction(
             expect=GoalPrecondition(
@@ -410,7 +406,7 @@ def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     current = comms.registry.require(name).goal
     if current is None or current.id != goal_id:
         raise ValueError("This goal was replaced or cleared; refresh its state.")
-    goal = comms.update_goal(
+    goal = comms.goals.update_goal(
         name,
         EditGoalAction(
             expect=GoalPrecondition(expected_goal=current, goal_id=goal_id),
@@ -422,7 +418,7 @@ def _edit_goal(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 def _goal_history(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     requested = str(arguments["goal_id"]).strip()
-    entries = comms.goal_history(_executing_thread(), goal_id=requested or None)
+    entries = comms.goals.goal_history(_executing_thread(), goal_id=requested or None)
     return {"history": [entry.to_wire() for entry in entries]}
 
 
@@ -460,7 +456,7 @@ def _collaborations(comms: Comms, arguments: Mapping[str, object]) -> JsonObject
 
 def _tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     tags = TagAction(str(arguments["action"])).apply(
-        comms, str(arguments["name"]), str(arguments["new_name"])
+        comms.channels, str(arguments["name"]), str(arguments["new_name"])
     )
     return {"tags": sorted(tags)}
 
@@ -470,7 +466,7 @@ def _tag_set(value: object) -> frozenset[str]:
 
 
 def _thread_tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    thread = comms.update_tags(
+    thread = comms.channels.update_tags(
         str(arguments["thread"] or _executing_thread()),
         add=_tag_set(arguments["add"]),
         remove=_tag_set(arguments["remove"]),
@@ -480,32 +476,32 @@ def _thread_tags(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 def _channels(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     return {
-        "channels": [view.to_wire() for view in comms.channel_views()],
-        "views": [FieldCodec.encode(view) for view in comms.saved_views().values()],
-        "order": comms.channel_catalog.list_order.value,
+        "channels": [view.to_wire() for view in comms.views.channel_views()],
+        "views": [FieldCodec.encode(view) for view in comms.channels.catalog.saved_views().values()],
+        "order": comms.channels.catalog.list_order.value,
     }
 
 
 def _set_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    channel = comms.set_channel(str(arguments["name"]), _tag_set(arguments["tags"]))
+    channel = comms.channels.set_channel(str(arguments["name"]), _tag_set(arguments["tags"]))
     return channel.to_wire()
 
 
 def _delete_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    comms.delete_channel(str(arguments["name"]))
+    comms.channels.delete_channel(str(arguments["name"]))
     return _channels(comms, {})
 
 
 def _set_channel_metadata(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     parent = str(arguments["parent"]).strip() or None
-    return comms.set_channel_metadata(
+    return comms.channels.set_channel_metadata(
         str(arguments["name"]), parent=parent, archived=bool(arguments["archived"])
     ).to_wire()
 
 
 def _set_view(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     return FieldCodec.encode(
-        comms.set_saved_view(
+        comms.channels.set_saved_view(
             SavedView(
                 str(arguments["name"]),
                 FieldCodec.decode(ViewKind, arguments["kind"]),
@@ -519,30 +515,30 @@ def _set_view(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
 
 
 def _delete_view(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    comms.delete_saved_view(str(arguments["name"]))
+    comms.channels.delete_saved_view(str(arguments["name"]))
     return _channels(comms, {})
 
 
 def _sort_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return comms.set_channel_sort(
+    return comms.channels.set_channel_sort(
         str(arguments["name"]), ThreadSort(str(arguments["order"]))
     ).to_wire()
 
 
 def _sort_channels(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    order = comms.set_channel_order(ChannelSort(str(arguments["order"])))
+    order = comms.channels.set_channel_order(ChannelSort(str(arguments["order"])))
     return {"order": order.value}
 
 
 def _pin_channel(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
-    return comms.set_channel_pinned(str(arguments["name"]), bool(arguments["pinned"])).to_wire()
+    return comms.channels.set_channel_pinned(str(arguments["name"]), bool(arguments["pinned"])).to_wire()
 
 
 def _pin_thread(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     channel = str(arguments["channel"])
-    comms.set_thread_pinned(channel, str(arguments["name"]), bool(arguments["pinned"]))
+    comms.channels.set_thread_pinned(channel, str(arguments["name"]), bool(arguments["pinned"]))
     canonical = channel if channel.startswith("#") else f"#{channel}"
-    return next(view.to_wire() for view in comms.channel_views() if view.channel.name == canonical)
+    return next(view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical)
 
 
 def _model(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
@@ -550,11 +546,11 @@ def _model(comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
     thread_name = str(arguments["thread"] or _executing_thread())
     model = str(arguments["model"]).strip()
     thread = (
-        comms.set_thread_model(thread_name, model) if model else comms.registry.require(thread_name)
+        comms.threads.set_thread_model(thread_name, model) if model else comms.registry.require(thread_name)
     )
     thinking_level = str(arguments.get("thinking_level") or "").strip()
     if thinking_level:
-        thread = comms.set_thread_thinking_level(thread.name, thinking_level)
+        thread = comms.threads.set_thread_thinking_level(thread.name, thinking_level)
     return {
         "thread": thread.name,
         "model": thread.model,

@@ -39,13 +39,13 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
 from . import turn_phase as phases
-from .declarations import _store_lock
 from .diagnostics import FailureReason
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
+from .store_files import _store_lock
 from .turn_inputs import InputForwarding
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount

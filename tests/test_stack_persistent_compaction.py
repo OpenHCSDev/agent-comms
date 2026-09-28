@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms import wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.manual_compaction_bridge import compact_context
 
 
@@ -241,7 +241,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         compact_task = None
         try:
             await owner.new_session(str(project))
-            comms.attach_session("worker", str(session))
+            comms.threads.attach_session("worker", str(session))
             await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "WARMUP"), 20)
             retained = owner.turns.persistent_backends["worker"].proc
             assert retained is not None and retained.returncode is None, json.dumps(

@@ -16,10 +16,12 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
+from .channel_targets import BuiltinChannel
 from .channels import ChannelCatalog
-from .declarations import BuiltinChannel, Message, RelationViolationError
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .messages import Message
 from .registration import Registration
 
 

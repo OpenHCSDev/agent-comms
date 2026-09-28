@@ -12,8 +12,13 @@ import os
 import tempfile
 from collections.abc import Callable, Mapping
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .messages import Message
+
 
 ActivityFields = tuple[str, str, float, bool, bool]
 ActivitySnapshot = tuple[dict[str, tuple[float, float]], dict[str, float]]
@@ -145,3 +150,19 @@ class BusActivityIndex:
             with suppress(OSError):
                 self._write(revision, stream, revision[1], (channels, sent))
             return channels, sent
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelActivity:
+    last_message: float = 0
+    last_user_input: float = 0
+
+    def observe(self, message: Message) -> ChannelActivity:
+        return ChannelActivity(
+            max(self.last_message, message.timestamp),
+            (
+                max(self.last_user_input, message.timestamp)
+                if not message.sender_role.executable
+                else self.last_user_input
+            ),
+        )

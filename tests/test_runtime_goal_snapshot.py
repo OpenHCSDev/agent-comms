@@ -6,8 +6,8 @@ from dataclasses import asdict, replace
 
 import pytest
 
-from agent_comms import Thread, wire
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     EditGoalAction,
@@ -18,6 +18,7 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -42,13 +43,13 @@ async def goal_owner(tmp_path, monkeypatch):
 async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(goal_owner):
     comms, owner, proxy, session, scheduled = goal_owner
     assert await proxy.request("goal_snapshot") == {"goal": None, "goalExecution": None}
-    comms.register(Thread("child", frozenset(), str(comms.root), pid=os.getpid()))
-    comms.begin_turn("child", "child-work-in-flight")
-    goal = comms.update_goal(session, SetGoalAction(text="Review child output"))
-    comms.update_goal(
+    comms.threads.register(Thread("child", frozenset(), str(comms.root), pid=os.getpid()))
+    comms.agents.begin_turn("child", "child-work-in-flight")
+    goal = comms.goals.update_goal(session, SetGoalAction(text="Review child output"))
+    comms.goals.update_goal(
         session, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",))
     )
-    expected_goal, expected_execution = comms.goal_snapshot(session)
+    expected_goal, expected_execution = comms.goals.goal_snapshot(session)
     before = {p: p.read_bytes() for p in comms.root.rglob("*") if p.is_file()}
     for _ in range(2):
         result = await proxy.request("goal_snapshot")
@@ -58,7 +59,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
         }
         assert result["goalExecution"]["state"] == "standby"
     assert {p: p.read_bytes() for p in comms.root.rglob("*") if p.is_file()} == before
-    comms.update_goal(
+    comms.goals.update_goal(
         session, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
     paused = await proxy.request("goal_snapshot")
@@ -69,7 +70,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
 
 async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
     comms, owner, proxy, session, scheduled = goal_owner
-    goal = comms.update_goal(
+    goal = comms.goals.update_goal(
         session,
         SetGoalAction(text="Review child output"),
         owner_store=owner.turns.open_goal_store(),
@@ -78,7 +79,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision
     )
     assert paused["goal"]["status"] == paused["goalExecution"]["state"] == "paused"
-    assert comms.goal_pause(session).source.declared_name == "owner"
+    assert comms.goals.goal_pause(session).source.declared_name == "owner"
     assert scheduled == []
 
     with pytest.raises(RuntimeError, match="changed"):
@@ -106,8 +107,8 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
 
 async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_owner, monkeypatch):
     comms, owner, proxy, session, scheduled = goal_owner
-    goal = comms.update_goal(session, SetGoalAction(text="Needs review"))
-    blocked = comms.update_goal(
+    goal = comms.goals.update_goal(session, SetGoalAction(text="Needs review"))
+    blocked = comms.goals.update_goal(
         session,
         BlockedGoalAction(
             expect=GoalPrecondition(goal_id=goal.id),
@@ -122,13 +123,13 @@ async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_own
         await proxy.request(
             "update_goal", status="completed", goal_id=goal.id, expected_revision=blocked.revision
         )
-    update_goal = comms.update_goal
+    update_goal = comms.goals.update_goal
 
     def change_owner_before_cas(*args, **kwargs):
         comms.registry.register(replace(comms.registry.require(session), pid=os.getpid() + 100000))
         return update_goal(*args, **kwargs)
 
-    monkeypatch.setattr(comms, "update_goal", change_owner_before_cas)
+    monkeypatch.setattr(comms.goals, 'update_goal', change_owner_before_cas)
     with pytest.raises(RuntimeError, match="owner changed"):
         await proxy.request(
             "update_goal", status="clear", goal_id=goal.id, expected_revision=blocked.revision
@@ -139,8 +140,8 @@ async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_own
 
 async def test_goal_update_rechecks_snapshot_inside_write_lock(goal_owner, monkeypatch):
     comms, owner, proxy, session, scheduled = goal_owner
-    goal = comms.update_goal(session, SetGoalAction(text="Original objective"))
-    update_goal = comms.update_goal
+    goal = comms.goals.update_goal(session, SetGoalAction(text="Original objective"))
+    update_goal = comms.goals.update_goal
     changed = None
 
     def edit_before_cas(*args, **kwargs):
@@ -150,7 +151,7 @@ async def test_goal_update_rechecks_snapshot_inside_write_lock(goal_owner, monke
         )
         return update_goal(*args, **kwargs)
 
-    monkeypatch.setattr(comms, "update_goal", edit_before_cas)
+    monkeypatch.setattr(comms.goals, 'update_goal', edit_before_cas)
     with pytest.raises(RuntimeError, match="changed"):
         await proxy.request(
             "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision

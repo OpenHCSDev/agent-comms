@@ -26,12 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .bus_publication import stable_thread_lookup
-from .coordination import (
-    OwnerFence,
-    PublicationIntent,
-    RecoverySnapshot,
-    canonical_publication_key,
-)
+from .coordination import OwnerFence, PublicationIntent, RecoverySnapshot, canonical_publication_key
 from .coordination_cohort import _assert_schema as _assert_cohort_schema
 from .coordination_store import (
     AlreadyApplied,
@@ -44,15 +39,12 @@ from .coordination_store import (
     StaleFence,
     _digest,
 )
-from .declarations import (
-    ActiveTurn,
-    Message,
-    MessageBus,
-    MessageType,
-    RegistrySnapshot,
-    ThreadRole,
-    _store_lock,
-)
+from .message_bus import MessageBus
+from .messages import Message, MessageType
+from .registry_document import RegistrySnapshot
+from .store_files import _store_lock
+from .thread_identity import ThreadRole
+from .turn_lease import ActiveTurn
 from .wake import WakeDecision, derive_exact_reply_target
 
 _RESPONSE_DDL = (

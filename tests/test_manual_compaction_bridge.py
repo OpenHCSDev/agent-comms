@@ -6,8 +6,8 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.manual_compaction_bridge import compact_context
-from agent_comms.operations import wire
 from test_manual_compaction import saved_session
 
 
@@ -25,8 +25,8 @@ async def _owner(tmp_path):
     await owner.new_session(cwd=str(project), mcp_servers=[])
     session = tmp_path / "saved.jsonl"
     saved_session(session)
-    owner._comms.attach_session("project", str(session), pid=os.getpid())
-    owner._comms.set_agent_info("project", context_used=880, context_size=1000)
+    owner._comms.threads.attach_session("project", str(session), pid=os.getpid())
+    owner._comms.agents.set_agent_info("project", context_used=880, context_size=1000)
     return owner, updates
 
 
@@ -62,7 +62,7 @@ async def test_bridge_success_unknown_usage_and_one_explicit_request(tmp_path, m
             for phase in phases
         )
         assert any(entry.get("transcriptChanged") is True for entry in metadata)
-        assert owner._comms.agent_info_of("project").context_used is None
+        assert owner._comms.agents.agent_info_of("project").context_used is None
         assert owner._comms.registry.require("project").active_turn is None
     finally:
         await owner.shutdown()
@@ -93,7 +93,7 @@ async def test_bridge_closes_idle_pi_before_saved_session_writer(tmp_path, monke
 
 async def test_bridge_uses_persisted_model_when_worker_has_no_base_args(tmp_path, monkeypatch):
     owner, _updates = await _owner(tmp_path)
-    owner._comms.set_thread_model("project", "openai-codex/gpt-5.5")
+    owner._comms.threads.set_thread_model("project", "openai-codex/gpt-5.5")
     calls = []
 
     async def compact(*args, **_kwargs):
@@ -150,7 +150,7 @@ async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
         phases = [item["compaction"] for item in _metadata(updates) if "compaction" in item]
         assert [phase["phase"] for phase in phases] == ["start", "abort"]
         assert not any(entry.get("transcriptChanged") is True for entry in _metadata(updates))
-        assert owner._comms.agent_info_of("project").context_used is None
+        assert owner._comms.agents.agent_info_of("project").context_used is None
         assert owner._comms.registry.require("project").active_turn is None
     finally:
         if not task.done():
@@ -162,7 +162,7 @@ async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
 async def test_bridge_releases_waiters_after_settlement_publication(tmp_path, monkeypatch):
     owner, updates = await _owner(tmp_path)
     released = []
-    release = owner._comms.release_waits_after_terminal_turn
+    release = owner._comms.goals.release_waits_after_terminal_turn
 
     async def compact(*_args, **_kwargs):
         return {"ok": True, "summary": "local summary"}
@@ -177,7 +177,7 @@ async def test_bridge_releases_waiters_after_settlement_publication(tmp_path, mo
         release(fence)
 
     monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
-    monkeypatch.setattr(owner._comms, "release_waits_after_terminal_turn", observed_release)
+    monkeypatch.setattr(owner._comms.goals, 'release_waits_after_terminal_turn', observed_release)
     try:
         assert (await compact_context(owner.turns, "project"))["ok"] is True
         assert len(released) == 1

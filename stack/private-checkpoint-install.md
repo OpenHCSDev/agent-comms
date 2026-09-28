@@ -5,7 +5,7 @@ The checkpoint supports bounded history-proof pages as a private bus grows. New 
 Use the installed runtime that the managed launcher will use:
 
 ```python
-from agent_comms import wire
+from agent_comms.comms import wire
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
 comms = wire()

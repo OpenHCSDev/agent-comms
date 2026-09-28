@@ -11,10 +11,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.declarations import Goal, RelationViolationError, Thread
+from agent_comms.errors import RelationViolationError
 from agent_comms.goal_states import PausedGoal
+from agent_comms.goals import Goal
 from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
 from agent_comms.registration import Registration
+from agent_comms.threads import Thread
 
 FENCE = {
     "session_file": "/tmp/pr48-fence/session.jsonl",
@@ -148,7 +150,7 @@ def test_stale_goal_expectation_fails(tmp_path) -> None:
 def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
     registry, owner, epoch = make_registry(tmp_path)
     claimed, claimed_epoch = claim(registry, owner, epoch, "turn-1")
-    monkeypatch.setattr("agent_comms.declarations.os.getpid", lambda: owner.pid + 1)
+    monkeypatch.setattr("agent_comms.store_files.os.getpid", lambda: owner.pid + 1)
     with pytest.raises(RelationViolationError):
         attest(registry, claimed, claimed_epoch)
 

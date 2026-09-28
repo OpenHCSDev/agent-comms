@@ -18,14 +18,17 @@ from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_foreground import _accept_visible_initials
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked, StaleFence
-from agent_comms.declarations import MessageBus, RelationViolationError, Thread, _store_lock
+from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
-from agent_comms.operations import Comms
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -37,12 +40,12 @@ tmp_path = private_root_fixture
 def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
     owner = Thread(
         "beta", frozenset({"team"}), str(tmp_path), pid=os.getpid(), model="openai-codex/gpt-6-sol"
     )
-    comms.register(owner)
-    root_id = comms.initialize_private_initial_protocol()
+    comms.threads.register(owner)
+    root_id = comms.messaging.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -314,8 +317,8 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     project = tmp_path / "proj"
     project.mkdir()
     comms = Comms(root)
-    comms.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
-    root_id = comms.initialize_private_initial_protocol()
+    comms.threads.register(Thread("sender", frozenset(), str(tmp_path), pid=os.getpid()))
+    root_id = comms.messaging.initialize_private_initial_protocol()
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -367,9 +370,9 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
         before = store.participant(lookup)
     assert before.owner_thread == "beta" and before.generation == 1
     renamed = (
-        comms.rename_managed_thread("beta", "gamma", owner_pid=os.getpid())
+        comms.threads.rename_managed_thread("beta", "gamma", owner_pid=os.getpid())
         if managed
-        else comms._rename_thread("beta", "gamma")
+        else comms.threads._rename_thread("beta", "gamma")
     )
     assert renamed.previous == "beta" and renamed.current == "gamma"
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
@@ -380,12 +383,12 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
 
     # The old direct alias remains unsupported; it must fail before any
     # durable initial rather than become a second unstable recipient identity.
-    before_seq = comms.message_high_water()
+    before_seq = comms.bus.latest_sequence()
     with pytest.raises(
         RelationViolationError, match="Initial direct aliases need a stable send binding"
     ):
         invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old alias"})
-    assert comms.message_high_water() == before_seq
+    assert comms.bus.latest_sequence() == before_seq
 
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -409,7 +412,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
         with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
             _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
-    comms._rename_thread("beta", "gamma")
+    comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"})
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -427,8 +430,8 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
 ):
     comms, agent, _ = _session(tmp_path)
     for index in range(101):
-        comms.send_message("sender", "beta", f"old {index}")
-    comms._rename_thread("beta", "gamma")
+        comms.messaging.send_message("sender", "beta", f"old {index}")
+    comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new canonical"})
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -445,10 +448,10 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         store.advance_owner_generation(lookup, "unexpected", expected_generation=1)
     with pytest.raises(RelationViolationError, match="Private coordinator owner differs"):
-        comms._rename_thread("beta", "gamma")
+        comms.threads._rename_thread("beta", "gamma")
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
-    assert comms.message_high_water() == 0
+    assert comms.bus.latest_sequence() == 0
 
 
 def test_private_rename_compensates_registry_failure_with_new_old_owner_generation(
@@ -463,7 +466,7 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
 
     monkeypatch.setattr(comms.registry, "rename", fail_before_registry_write)
     with pytest.raises(RelationViolationError, match="Private owner rename is uncertain"):
-        comms._rename_thread("beta", "gamma")
+        comms.threads._rename_thread("beta", "gamma")
     monkeypatch.setattr(comms.registry, "rename", original)
     assert comms.registry.require("beta").name == "beta"
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
@@ -471,14 +474,14 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
     assert person.owner_thread == "beta" and person.generation == 3
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
-        comms.send_message("sender", "beta", "not published after uncertain rename")
+        comms.messaging.send_message("sender", "beta", "not published after uncertain rename")
     bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
     with (
         MutationStore(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),
     ):
         _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
-    assert comms.message_high_water() == 0
+    assert comms.bus.latest_sequence() == 0
 
 
 async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
@@ -510,7 +513,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
 
     monkeypatch.setattr(MutationStore, "advance_owner_generation", fail_before_sql)
     with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
-        comms._rename_thread("beta", "gamma")
+        comms.threads._rename_thread("beta", "gamma")
     assert (comms.root / ".private-owner-rename.pending").is_file()
     assert comms.registry.require("beta").name == "beta"
     release.set()
@@ -717,7 +720,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
         updates.append(update.field_meta["agentComms"]["privateNativeCursor"])
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    comms.send_message("sender", "beta", "first")
+    comms.messaging.send_message("sender", "beta", "first")
     assert await agent.inputs.drain_inbox("beta") == 1
     assert updates[-1]["status"] == "proven"
     before = len(updates)
@@ -795,7 +798,7 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     alpha = Thread("alpha", frozenset({"team"}), str(tmp_path), pid=os.getpid())
-    comms.register(alpha)
+    comms.threads.register(alpha)
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
         store.register_participant(
             stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True
@@ -926,7 +929,7 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    comms.begin_turn("beta", "human-live-turn")
+    comms.agents.begin_turn("beta", "human-live-turn")
     with pytest.raises(StaleFence, match="busy"):
         await agent.inputs.drain_inbox("beta")
     with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
@@ -935,7 +938,7 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
             == 0
         )
     assert calls == []
-    comms.finish_turn(comms.registry.require("beta").turn_lease)
+    comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
     assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1
 
@@ -957,7 +960,7 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
     running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
-        goal = comms.update_goal("beta", SetGoalAction(text="Work on a separate task"))
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Work on a separate task"))
         assert goal.state.active
     finally:
         release.set()
@@ -976,7 +979,7 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
-    original = comms.update_goal("beta", SetGoalAction(text="Separate ongoing goal"))
+    original = comms.goals.update_goal("beta", SetGoalAction(text="Separate ongoing goal"))
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     assert await agent.inputs.drain_inbox("beta") == 1
     assert len(calls) == 1

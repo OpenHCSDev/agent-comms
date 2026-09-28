@@ -7,10 +7,11 @@ does not create a new historical thread; a new turn does not change its owner.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .declarations import RegistrySnapshot
+    from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,3 +65,12 @@ class GenerationCounter:
 
     def rename(self, old: str, new: str) -> None:
         self.generations[new] = self.generations.pop(old)
+
+
+class ThreadRole(StrEnum):
+    AGENT = "agent"
+    USER = "user"
+
+    @property
+    def executable(self) -> bool:
+        return self is self.AGENT

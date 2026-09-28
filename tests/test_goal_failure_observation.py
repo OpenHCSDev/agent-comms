@@ -9,7 +9,6 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.declarations import Goal, Thread, TurnLeaseFence
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -26,6 +25,7 @@ from agent_comms.goal_attempts import (
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
 from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
+from agent_comms.goals import Goal
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
@@ -33,6 +33,8 @@ from agent_comms.thread_status import (
     IdleThreadStatus,
     StoppedThreadStatus,
 )
+from agent_comms.threads import Thread
+from agent_comms.turn_lease import TurnLeaseFence
 
 
 @pytest.fixture
@@ -307,7 +309,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     agent = CommsAgent(wired, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
-    goal = wired.update_goal("project", SetGoalAction(text="private goal"))
+    goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
     GoalFixture()._authorize_test_goal(agent, wired, goal)
     store = agent.turns.goal_store
     admission = wired.registry.snapshot().admission_generations["project"]
@@ -340,7 +342,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     async def failed_events(*args, **kwargs):
         nonlocal pause_bytes
         if owner_pauses:
-            wired.update_goal(
+            wired.goals.update_goal(
                 "project",
                 PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                 actor=OwnerInvocable,
@@ -377,7 +379,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
             owner=owner,
             owner_status=wired.registry.snapshot().statuses["project"],
             admission=admission,
-            pause=wired.goal_pause("project"),
+            pause=wired.goals.goal_pause("project"),
         )
         assert projection.state == expected
         assert store.path.read_bytes() == before

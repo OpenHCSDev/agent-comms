@@ -5,7 +5,7 @@ import os
 import signal
 
 from .acp import CommsAgent
-from .operations import wire
+from .comms import wire
 from .private_nk_entrypoint import private_nk_from_environment
 
 
@@ -13,7 +13,7 @@ async def run() -> None:
     private_nk = private_nk_from_environment()  # fail before wire creation/attach
     comms = wire(private_nk.validated_root) if private_nk is not None else wire()
     if private_nk is not None:
-        comms.pin_private_nk_launch(
+        comms.owners.pin_private_nk_launch(
             private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
         )
     name = os.environ["AGENT_COMMS_THREAD"]

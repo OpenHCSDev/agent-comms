@@ -3,11 +3,28 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from .activity import Activity
+from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
-from .declarations import ChannelActivity, ChannelDisplayScope, Message, ViewUnread, file_revision
+from .channels import Channel
+from .display_order import ChannelSort
+from .goal_presentation import GoalExecution
+from .mentions import MentionCandidate
+from .messages import Message
+from .read_basis import ChannelDisplayScope, ViewUnread
 from .read_ledger import ReadLedger
+from .runtime_info import AgentRuntimeInfo
+from .store_files import file_revision
+from .thread_presentation import ThreadPresentation
+from .thread_status import ThreadStatus
+from .threads import Thread
+
+if TYPE_CHECKING:
+    from .messages import Message
 
 
 class BusPresentation:
@@ -112,3 +129,106 @@ class BusPresentation:
                 unread_key, scopes, counts, verified_display_boundary=True
             )
         return activity, counts
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelView:
+    channel: Channel
+    members: tuple[str, ...]
+    last_activity: float = 0
+    last_user_input: float = 0
+    pinned_members: frozenset[str] = frozenset()
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **self.channel.to_wire(),
+            "members": list(self.members),
+            "last_activity": self.last_activity,
+            "last_user_input": self.last_user_input,
+            "pinned_members": sorted(self.pinned_members),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadView:
+    thread: Thread
+    status: ThreadStatus
+    activity: Activity
+    runtime: AgentRuntimeInfo | None
+    last_seen: float
+    goal_execution: GoalExecution | None = None
+
+    @property
+    def presentation(self) -> ThreadPresentation:
+        """One declaration-owned interpretation for every thread view."""
+        if (
+            self.status.active
+            and not self.activity.state.busy
+            and self.goal_execution is not None
+            and self.goal_execution.state.view.waiting
+        ):
+            return self.goal_execution.presentation(self.thread.title or self.thread.name)
+        return self.status.presentation(self.thread.title or self.thread.name, self.activity)
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **self.thread.to_wire(),
+            "status": self.status.declared_name,
+            "is_fork": self.thread.is_fork,
+            "resumable": bool(self.thread.session_file),
+            "last_seen": self.last_seen,
+            "last_activity": self.activity.timestamp,
+            "activity": self.activity.state.value,
+            "activity_detail": self.activity.detail,
+            "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
+            "model": self.runtime.model if self.runtime else self.thread.model,
+            "session_name": self.runtime.session_name if self.runtime else None,
+            "context_used": self.runtime.context_used if self.runtime else None,
+            "context_size": self.runtime.context_size if self.runtime else None,
+            "context_percent": self.runtime.context_percent if self.runtime else None,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinationSnapshot:
+    threads: tuple[ThreadView, ...]
+    channels: tuple[ChannelView, ...]
+    unread: Mapping[str, int]
+    last_sent: Mapping[str, float]
+    channel_unread: Mapping[str, int] = field(default_factory=dict)
+    channel_order: ChannelSort = ChannelSort.NAME
+    thread_unread: Mapping[str, int] = field(default_factory=dict)
+    show_stopped: bool = True
+    show_archived: bool = False
+    read_marker_notice: str | None = None
+
+    def participants(self, channel: str) -> tuple[ThreadView, ...]:
+        view = next((view for view in self.channels if view.channel.name == channel), None)
+        if view is None:
+            return ()
+        people = {
+            person.thread.name: person
+            for person in self.threads
+            if person.status.active and person.thread.executing
+        }
+        return tuple(people[name] for name in view.members if name in people)
+
+    def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:
+        view = next((view for view in self.channels if view.channel.name == channel), None)
+        members = frozenset(view.members) if view else frozenset()
+        return tuple(
+            sorted(
+                (
+                    MentionCandidate(person.thread.name, person.presentation.title)
+                    for person in self.threads
+                    if person.thread.name in members
+                ),
+                key=lambda candidate: candidate.name.casefold(),
+            )
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WireRevision:
+    files: tuple[tuple[int, int, int, int] | None, ...]
+    expiry_tick: int

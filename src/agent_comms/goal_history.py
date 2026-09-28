@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .declarations import Goal
 from .field_codec import FieldCodec
+from .goals import Goal
 
 
 class GoalHistoryError(RuntimeError):

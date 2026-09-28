@@ -12,13 +12,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from .declarations import (
-    Message,
-    RelationViolationError,
-    Thread,
-    _atomic_write_text,
-    _store_lock,
-)
+from .errors import RelationViolationError
+from .messages import Message
+from .store_files import _atomic_write_text, _store_lock
+from .threads import Thread
 
 _NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 

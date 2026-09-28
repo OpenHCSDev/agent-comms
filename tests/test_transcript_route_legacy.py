@@ -9,13 +9,10 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.declarations import (
-    Message,
-    MessageType,
-    ScheduledTurn,
-    ThreadMention,
-    ThreadRole,
-)
+from agent_comms.mentions import ThreadMention
+from agent_comms.messages import Message, MessageType
+from agent_comms.routing import ScheduledTurn
+from agent_comms.thread_identity import ThreadRole
 from agent_comms.transcript_route_legacy import (
     CommittedIncomingCandidate,
     index_legacy_incoming_candidates,

@@ -6,17 +6,14 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.declarations import RelationViolationError, Thread
+from agent_comms.comms import Comms
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.operations import Comms
 from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
-from agent_comms.thread_identity import (
-    GenerationCounter,
-    ThreadIncarnation,
-    TurnIdentity,
-)
+from agent_comms.thread_identity import GenerationCounter, ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import IdleThreadStatus
+from agent_comms.threads import Thread
 
 
 def registry_with_owner(tmp_path):
@@ -93,15 +90,15 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
-    first = comms.begin_turn("owner", "reused")
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), pid=os.getpid()))
+    first = comms.agents.begin_turn("owner", "reused")
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
-    assert comms.finish_turn(first) is not None
-    second = comms.begin_turn("renamed", "reused")
+    assert comms.agents.finish_turn(first) is not None
+    second = comms.agents.begin_turn("renamed", "reused")
     assert second.identity.generation == first.identity.generation + 1
-    assert comms.finish_turn(first) is None
-    assert comms.finish_turn(second) is not None
+    assert comms.agents.finish_turn(first) is None
+    assert comms.agents.finish_turn(second) is not None
 
 
 @pytest.mark.parametrize("revocation", ["finish", "stop"])
@@ -183,17 +180,17 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = Comms(tmp_path)
-    comms.register(Thread("owner", frozenset(), str(tmp_path)))
-    viewer = comms.user_identity(str(tmp_path)).name
-    message = comms.send_message("owner", viewer, "already painted")
-    page = comms.dm_display_page("owner", worktree=str(tmp_path))
-    comms.mark_dm_view_read(
+    comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    message = comms.messaging.send_message("owner", viewer, "already painted")
+    page = comms.views.dm_display_page("owner", worktree=str(tmp_path))
+    comms.views.mark_dm_view_read(
         "owner",
         worktree=str(tmp_path),
         through=message.seq,
         expected_display_basis=page.display_basis,
     )
-    path = comms.reads.path
+    path = comms.bus.reads.path
     document = json.loads(path.read_text())
     assert all(
         isinstance(participant, list)
@@ -201,16 +198,16 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         for participant in json.loads(key)[2]["participants"]
     )
     reopened = Comms(tmp_path)
-    assert message.seq in reopened.reads.seen_sequences(viewer, reopened.registry.snapshot())
-    next_message = reopened.send_message("owner", viewer, "new paint")
-    page = reopened.dm_display_page("owner", worktree=str(tmp_path))
-    reopened.mark_dm_view_read(
+    assert message.seq in reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    next_message = reopened.messaging.send_message("owner", viewer, "new paint")
+    page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
+    reopened.views.mark_dm_view_read(
         "owner",
         worktree=str(tmp_path),
         through=next_message.seq,
         expected_display_basis=page.display_basis,
     )
-    assert {message.seq, next_message.seq} <= reopened.reads.seen_sequences(
+    assert {message.seq, next_message.seq} <= reopened.bus.reads.seen_sequences(
         viewer, reopened.registry.snapshot()
     )
 

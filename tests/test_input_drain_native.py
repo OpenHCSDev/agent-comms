@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.declarations import Thread
-from agent_comms.operations import wire
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+from agent_comms.threads import Thread
 from test_selected_owner_compaction_integration import owner_fixture
 
 pytestmark = pytest.mark.skipif(
@@ -54,7 +54,7 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
                 comms.registry.require("proj"), session_file=file, model=info.model, pid=os.getpid()
             )
         )
-        comms.set_agent_info(
+        comms.agents.set_agent_info(
             "proj", model=info.model, context_used=info.context_used, context_size=info.context_size
         )
         agent.turns.persistent_backends["proj"] = persistent
@@ -77,8 +77,8 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             assert row["native_id"] is None and row["status"] == "unknown"
             if foreign:
                 for name in ("foreign", "another"):
-                    comms.register(Thread(name, frozenset(), str(project)))
-                comms.send("foreign", "another", "unrelated ingress")
+                    comms.threads.register(Thread(name, frozenset(), str(project)))
+                comms.messaging.send("foreign", "another", "unrelated ingress")
                 agent.inputs.dispositions.record(
                     "acp:foreign",
                     seq=None,

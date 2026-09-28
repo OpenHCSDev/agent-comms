@@ -15,7 +15,7 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .declarations import Thread
+from .threads import Thread
 
 
 class TodoError(ValueError):

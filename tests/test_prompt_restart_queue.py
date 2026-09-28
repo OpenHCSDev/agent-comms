@@ -55,8 +55,10 @@ def _fixture(tmp_path, monkeypatch):
 
     comms = SimpleNamespace(
         registry=SimpleNamespace(snapshot=snapshot),
-        restart_owners=restart,
-        _is_local_participant=lambda thread, wait=False: True,
+        owners=SimpleNamespace(
+            restart_owners=restart,
+            _is_local_participant=lambda thread, wait=False: True,
+        ),
     )
     monkeypatch.setattr(queue, "wire", lambda _: comms)
     monkeypatch.setattr(
@@ -166,7 +168,7 @@ def test_uncertain_restart_never_retried(tmp_path, monkeypatch):
     def uncertain(names, **kwargs):
         raise RuntimeError("owner stop outcome unknown")
 
-    monkeypatch.setattr(queue.wire(str(tmp_path)), "restart_owners", uncertain)
+    monkeypatch.setattr(queue.wire(str(tmp_path)).owners, 'restart_owners', uncertain)
     # The wire factory is a lambda, returning the same fake comms object.
     with pytest.raises(RuntimeError, match="outcome UNKNOWN"):
         queue.step(path)

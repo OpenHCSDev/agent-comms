@@ -16,11 +16,12 @@ from agent_comms.bus_publication import (
     stable_thread_lookup,
 )
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
 from agent_comms.coordination import canonical_publication_key
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_claims
 from agent_comms.coordination_store import MutationStore
-from agent_comms.declarations import RelationViolationError, Thread
-from agent_comms.operations import Comms
+from agent_comms.errors import RelationViolationError
+from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
     ProjectionRebuildRequiredError,
     ProjectionUnavailableError,
@@ -35,7 +36,7 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     # These tests own the explicit WAL maintenance schedule and fault points;
     # the production post-commit worker has separate integration coverage.
     monkeypatch.setattr(
-        "agent_comms.operations.schedule_private_candidate_after_commit", lambda *_: None
+        "agent_comms.messaging.schedule_private_candidate_after_commit", lambda *_: None
     )
 
 
@@ -45,10 +46,10 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     comms = Comms(root, private_initial_writes=True)
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
-        comms.register(
+        comms.threads.register(
             Thread(name, frozenset({"team"}), str(tmp_path), pid=os.getpid(), created_at=identity)
         )
-    root_id = comms.initialize_private_initial_protocol()
+    root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = {name: stable_thread_lookup(identity) for name, identity in created.items()}
     return comms, root_id, lookup
 
@@ -57,7 +58,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     tmp_path: Path,
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
-    message = comms.send_initial_cohort("sender", "#team", "@Alice investigate")
+    message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
     index = WakeCandidateIndex(comms.bus)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
@@ -143,8 +144,8 @@ def test_maintenance_limits_fail_before_schema_or_checkpoint(
 
 def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
-    first = comms.send_initial_cohort("sender", "Alice", "first")
-    second = comms.send_initial_cohort("sender", "Alice", "second")
+    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
     index = WakeCandidateIndex(comms.bus)
     assert not index.maintain(rebuild=True, max_rows=1)
     with pytest.raises(ProjectionUnavailableError, match="stale"):
@@ -198,8 +199,8 @@ def test_explicit_bounded_rebuild_upgrades_v1_without_exposing_old_rows(
     tmp_path: Path,
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
-    first = comms.send_initial_cohort("sender", "Alice", "first")
-    second = comms.send_initial_cohort("sender", "Alice", "second")
+    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
     index = WakeCandidateIndex(comms.bus)
     assert index.maintain(rebuild=True)
     with sqlite3.connect(index.path) as db:
@@ -248,7 +249,7 @@ def test_explicit_bounded_rebuild_upgrades_v1_without_exposing_old_rows(
 
 def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
-    message = comms.send_initial_cohort("sender", "Alice", "a" * 4096)
+    message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
     index = WakeCandidateIndex(comms.bus)
     assert not index.maintain(rebuild=True, max_bytes=128)
     with pytest.raises(ProjectionUnavailableError, match="stale"):
@@ -281,7 +282,7 @@ def _replace_rows(comms: Comms, rows: list[dict]) -> None:
 def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
@@ -313,7 +314,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
     public = {key: value for key, value in rows[1].items() if key != PRIVATE_WIRE_FIELD}
@@ -346,7 +347,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     messages = [
-        comms.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3, 4)
+        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}") for number in (1, 2, 3, 4)
     ]
     rows = [json.loads(raw) for raw in comms.bus._path.read_text().splitlines()]
     for row in rows[1:3]:
@@ -408,7 +409,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
 
 def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
-    message = comms.send_initial_cohort("sender", "Alice", "first")
+    message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     index = WakeCandidateIndex(comms.bus)
     assert index.maintain(rebuild=True)
     source = comms.bus._path

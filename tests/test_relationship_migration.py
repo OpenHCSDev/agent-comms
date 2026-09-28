@@ -165,7 +165,7 @@ def test_missing_optional_document_is_not_created_by_migration(tmp_path):
 
 
 def test_unknown_peer_keeps_registry_error_and_does_not_create_document(tmp_path):
-    from agent_comms.declarations import UnregisteredThreadError
+    from agent_comms.errors import UnregisteredThreadError
 
     comms = setup_wire(tmp_path)
     with pytest.raises(UnregisteredThreadError):

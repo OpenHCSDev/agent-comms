@@ -22,9 +22,11 @@ from pathlib import Path
 
 from . import agent_events as events
 from . import backend
-from .declarations import GLOBAL_CHANNEL, ActivityState, Message, is_channel_target
+from .activity import ActivityState
+from .channel_targets import GLOBAL_CHANNEL, is_channel_target
+from .comms import Comms, wire
+from .messages import Message
 from .mro_dispatch import handles
-from .operations import Comms, wire
 
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
@@ -55,7 +57,7 @@ class ParticipantEventConsumer(events.AgentEventConsumer):
         return self._name
 
     def update_activity(self, state: ActivityState, detail: str) -> None:
-        self.comms.set_activity(self.thread_name, state, detail)
+        self.comms.agents.set_activity(self.thread_name, state, detail)
 
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
@@ -89,14 +91,15 @@ class Participant:
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        from .declarations import Thread, UnregisteredThreadError, current_thread
+        from .errors import UnregisteredThreadError
+        from .threads import Thread, current_thread
 
         try:
             thread = current_thread()
         except UnregisteredThreadError:
             name = os.environ.get("AGENT_COMMS_THREAD") or "participant"
             thread = Thread(name=name, tags=frozenset({"bot"}), worktree=os.getcwd())
-        self._comms.register(thread)
+        self._comms.threads.register(thread)
         self._thread_name = self._comms.registry.require(thread.name).name
         print(
             f"participant {self._thread_name!r} live on wire {self._comms.root}"
@@ -113,31 +116,31 @@ class Participant:
                 await asyncio.sleep(POLL_INTERVAL)
         finally:
             if self._thread_name:
-                self._comms.stop(self._thread_name)
+                self._comms.owners.stop(self._thread_name)
 
     # ─── One poll ─────────────────────────────────────────────────────────────
 
     async def _tick(self, name: str) -> None:
         name = self._comms.registry.require(name).name
         self._thread_name = name
-        self._comms.heartbeat(name)
-        inbox = self._comms.inbox(name)
+        self._comms.threads.heartbeat(name)
+        inbox = self._comms.bus.inbox(name)
         if not inbox:
             return
-        self._comms.acknowledge(name)
+        self._comms.messaging.acknowledge(name)
         for message in inbox:
             await self._respond(name, message)
 
     async def _respond(self, name: str, message: Message) -> None:
-        self._comms.set_activity(name, ActivityState.THINKING, message.body[:80])
+        self._comms.agents.set_activity(name, ActivityState.THINKING, message.body[:80])
         reply = await self._ask_agent(name, message)
         if reply:
             if is_channel_target(message.target) or message.target == "broadcast":
                 target = GLOBAL_CHANNEL if message.target == "broadcast" else message.target
             else:
                 target = message.sender
-            self._comms.send(name, target, reply[:MAX_REPLY_CHARS])
-        self._comms.set_activity(name, ActivityState.IDLE)
+            self._comms.messaging.send(name, target, reply[:MAX_REPLY_CHARS])
+        self._comms.agents.set_activity(name, ActivityState.IDLE)
 
     # ─── Backend ──────────────────────────────────────────────────────────────
 

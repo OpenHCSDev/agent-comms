@@ -9,10 +9,10 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import wire
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Durable POSIX compaction journal")
 
@@ -50,7 +50,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
-    comms.attach_session("project", str(session), pid=os.getpid())
+    comms.threads.attach_session("project", str(session), pid=os.getpid())
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
     commit_id = journal.begin(str(session), {"source": "pre-summary"})
     observed = []

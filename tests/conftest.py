@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread
-from agent_comms.operations import Comms
+from agent_comms.comms import Comms
+from agent_comms.threads import Thread
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +16,7 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
     This does not affect fresh subprocess processes used by integration tests.
     """
     monkeypatch.setattr(
-        "agent_comms.operations.schedule_private_candidate_after_commit", lambda *_: None
+        "agent_comms.messaging.schedule_private_candidate_after_commit", lambda *_: None
     )
 
 
@@ -33,8 +33,8 @@ def comms(root: Path) -> Comms:
 @pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
-    comms.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
-    comms.register(
+    comms.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
+    comms.threads.register(
         Thread(
             name="fixer",
             tags=frozenset({"auth"}),

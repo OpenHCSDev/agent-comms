@@ -14,10 +14,10 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from .comms import Comms
 from .coordination_store import IdentityConflict, PublicationActivationBlocked
-from .declarations import _store_lock
 from .native_pi import _private_session_dir
-from .operations import Comms
+from .store_files import _store_lock
 
 
 def publish_one(
@@ -39,7 +39,7 @@ def publish_one(
         marker = comms.bus._private_marker_unlocked()
     if marker["wire_root_id"] != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
-    message = comms.send_initial_cohort(sender, target, body)
+    message = comms.messaging.send_initial_cohort(sender, target, body)
     return message.seq, message.message_id
 
 

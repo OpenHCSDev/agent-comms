@@ -19,17 +19,9 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination import WakeClaim
 from .coordination_cohort import _assert_schema as assert_cohort_schema
 from .coordination_store import IdentityConflict, MutationStore
-from .declarations import Thread
-from .native_pi import (
-    _INPUT_ID,
-    NativePiUnavailable,
-    read_tracked_input_digest,
-)
-from .private_sidecar import (
-    create_sidecar_file,
-    native_request_digest,
-    sidecar_connection,
-)
+from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
+from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
+from .threads import Thread
 
 _DDL = (
     (

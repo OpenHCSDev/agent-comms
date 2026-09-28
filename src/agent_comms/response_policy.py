@@ -1,4 +1,4 @@
-"""Response semantics belong to policy declarations, independently of delivery."""
+"""Response semantics belong to policy store_files, independently of delivery."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .declarations import Message, Thread
+    from .messages import Message
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -93,3 +94,14 @@ class MentionedOnlyPolicy(ResponsePolicy):
 class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
         return "informational; observe and dismiss without replying"
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseEligibility:
+    policy: ResponsePolicy
+    recipients: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.recipients) != len(set(self.recipients)):
+            raise ValueError("Response eligibility recipients must be unique.")
+        self.policy.validate_recipients(self.recipients)

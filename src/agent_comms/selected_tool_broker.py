@@ -23,10 +23,10 @@ from pathlib import Path
 from typing import Any
 
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
+from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_store import MutationStore
 from .envelope_claim_transitions import WakeAdmission
-from .operations import Comms
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024

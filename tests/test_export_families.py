@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.declarations import Message, MessageType
 from agent_comms.exporting import (
     ChannelScope,
     DmScope,
@@ -24,6 +23,7 @@ from agent_comms.exporting import (
     WireTranscriptExporter,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.messages import Message, MessageType
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wire_exports"
 

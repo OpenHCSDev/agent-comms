@@ -11,8 +11,9 @@ from agent_comms.audience_manifest import (
     FrozenRecipient,
     freeze_audience,
 )
-from agent_comms.declarations import Message, MessageType, ThreadRole
 from agent_comms.mentions import ThreadMention
+from agent_comms.messages import Message, MessageType
+from agent_comms.thread_identity import ThreadRole
 
 
 def message(**changes):

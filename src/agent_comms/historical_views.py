@@ -5,10 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-from .declarations import Message, RegistrySnapshot, ResponsePolicy, Thread, file_revision
+from .messages import Message
 from .read_basis import DisplayBasis
 from .registration import Registration
-from .response_policy import InformationalPolicy
+from .registry_document import RegistrySnapshot
+from .response_policy import InformationalPolicy, ResponsePolicy
+from .store_files import file_revision
+from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Comms, Thread, ThreadSort, locked_store
-from agent_comms.declarations import _store_lock
+from agent_comms import locked_store
+from agent_comms.comms import Comms
+from agent_comms.display_order import ThreadSort
 from agent_comms.locked_store import LockedStore
 from agent_comms.passive_channel_awareness import (
     PassiveAwarenessDocument,
@@ -18,6 +19,8 @@ from agent_comms.passive_channel_awareness import (
     PassiveChannelAwareness,
 )
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
+from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 from test_locked_store import _hold_lock, event, process
 from test_relationships import setup_wire
 

@@ -1,4 +1,4 @@
-"""Slice-1 declarations, direct-SQL authority and crash/reopen shape tests."""
+"""Slice-1 store_files, direct-SQL authority and crash/reopen shape tests."""
 
 import hashlib
 import os
@@ -47,7 +47,6 @@ from agent_comms.coordination import (
     obligation_transition_allowed,
     replay_transition_allowed,
 )
-from agent_comms.declarations import Message, MessageType
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -56,6 +55,7 @@ from agent_comms.execution_states import (
     FailedExecution,
     PendingExecution,
 )
+from agent_comms.messages import Message, MessageType
 from agent_comms.obligation_states import (
     DeferredResponse,
     PendingResponse,

@@ -13,9 +13,9 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Literal
 
-from .declarations import RegistrySnapshot, _store_lock
 from .field_codec import FieldCodec
 from .registration import Registration
+from .registry_document import RegistrySnapshot
 from .registry_store import RegistryStore
 from .relationships import (
     Collaboration,
@@ -24,6 +24,7 @@ from .relationships import (
     RelationshipOrder,
     RelationshipStore,
 )
+from .store_files import _store_lock
 
 
 @dataclass(frozen=True, slots=True)

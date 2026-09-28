@@ -7,11 +7,11 @@ import pytest
 from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption, TextContentBlock, UserMessageChunk
 
-from agent_comms import backend, wire
+from agent_comms import backend
 from agent_comms.acp import CommsAgent, CommsClient
+from agent_comms.comms import wire
 from agent_comms.config_options import ConfigOption
-from agent_comms.declarations import MessageRoute
-from agent_comms.operations import TranscriptEvent
+from agent_comms.routing import MessageRoute
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from agent_comms.transcript_updates import (
     AssistantTranscriptUpdate,
@@ -20,6 +20,7 @@ from agent_comms.transcript_updates import (
     TranscriptUpdate,
     UserTranscriptUpdate,
 )
+from agent_comms.transcripts import TranscriptEvent
 
 
 @pytest.fixture

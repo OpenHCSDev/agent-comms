@@ -23,9 +23,9 @@ from .owner_compaction_prepare import NativePreparation
 
 if TYPE_CHECKING:
     from .compaction_journal import CompactionOperation
-    from .declarations import Thread
     from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
     from .selected_summary_admission import SelectedSummaryAdmission
+    from .threads import Thread
 
 _SUMMARIZE = r"""
 import {lstatSync, realpathSync} from 'node:fs';

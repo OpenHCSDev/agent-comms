@@ -8,21 +8,17 @@ from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from .compaction_publication_lease import publication_identity_fence
-from .declarations import (
-    FinishedTurnFence,
-    RegistrySnapshot,
-    RelationViolationError,
-    Thread,
-    TurnLeaseFence,
-    TurnRouting,
-    UnregisteredThreadError,
-    file_revision,
-)
+from .errors import RelationViolationError, UnregisteredThreadError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .owner_compaction_gate import OwnerCompactionAttestation
+from .registry_document import RegistrySnapshot
 from .registry_store import RegistryStore
+from .routing import TurnRouting
+from .store_files import file_revision
 from .thread_status import RunningThreadStatus, ThreadStatus
+from .threads import Thread
+from .turn_lease import FinishedTurnFence, TurnLeaseFence
 
 
 class Registration:

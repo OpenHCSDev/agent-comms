@@ -8,14 +8,14 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.channel_coding_tools import CodingCall, CodingTool, CodingToolSocket
-from agent_comms.declarations import Thread
+from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
     WritableFileClaim,
     normalize_existing_file,
 )
-from agent_comms.operations import Comms
+from agent_comms.threads import Thread
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
@@ -26,19 +26,19 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         work.mkdir()
         c = Comms(root)
         for name, created in [("a", 21.0), ("b", 22.0)]:
-            c.register(Thread(name, frozenset({"team"}), str(work), created_at=created))
-        c.initialize_private_initial_protocol()
-        c.initialize_private_claim_protocol()
+            c.threads.register(Thread(name, frozenset({"team"}), str(work), created_at=created))
+        c.messaging.initialize_private_initial_protocol()
+        c.messaging.initialize_private_claim_protocol()
         resource = WritableFileClaim("new/nested/file.py")
-        committed = c.send_message("a", "#team", "Claim before create", claims=[resource])
+        committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
         assert not (work / "new").exists()
-        projection = Comms(root).claim_projection()
+        projection = Comms(root).bus.claim_projection()
         assert projection[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
-            c.send_message("b", "#team", "Competing create", claims=[resource])
-        c.send_message("a", "#team", "Release unused creation", releases=["new/nested/file.py"])
-        c.send_message("b", "#team", "New owner", claims=[resource])
-        assert c.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
+            c.messaging.send_message("b", "#team", "Competing create", claims=[resource])
+        c.messaging.send_message("a", "#team", "Release unused creation", releases=["new/nested/file.py"])
+        c.messaging.send_message("b", "#team", "New owner", claims=[resource])
+        assert c.bus.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
 
 def test_create_claim_preserves_physical_worktree_scope(tmp_path):

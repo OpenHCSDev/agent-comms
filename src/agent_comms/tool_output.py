@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .declarations import _atomic_write_text
+from .store_files import _atomic_write_text
 
 MAX_INLINE_OUTPUT_BYTES = 32 * 1024
 

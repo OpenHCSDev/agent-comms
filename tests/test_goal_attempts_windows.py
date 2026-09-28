@@ -4,11 +4,7 @@ import os
 
 import pytest
 
-from agent_comms.goal_attempts import (
-    GoalAttemptStore,
-    ReservationConflict,
-    UnresolvedAttempt,
-)
+from agent_comms.goal_attempts import GoalAttemptStore, ReservationConflict, UnresolvedAttempt
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows durability path")

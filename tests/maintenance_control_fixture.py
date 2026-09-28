@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
-from agent_comms.declarations import RelationViolationError, _atomic_write_text, _store_lock
+from agent_comms.errors import RelationViolationError
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceReceipt
+from agent_comms.store_files import _atomic_write_text, _store_lock
 
 
 class FixtureMaintenanceControl:

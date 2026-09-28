@@ -16,6 +16,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.comms import wire
 from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -23,13 +24,12 @@ from agent_comms.compaction_journal import (
     _ReturnedTerminalAck,
 )
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.declarations import _store_lock
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.operations import wire
 from agent_comms.selected_summary_admission import (
     SelectedAdmissionIdentity,
     SelectedSummaryAdmission,
 )
+from agent_comms.store_files import _store_lock
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX journal and native input bind")
 
@@ -420,7 +420,7 @@ import hashlib,json,os,sys
 from pathlib import Path
 from agent_comms import backend
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.declarations import _store_lock
+from agent_comms.store_files import _store_lock
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
 root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
@@ -481,7 +481,7 @@ async def test_acp_final_boundary_consumes_exact_ack_at_native_id_bind(tmp_path,
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
-    comms.attach_session("project", str(session), pid=os.getpid())
+    comms.threads.attach_session("project", str(session), pid=os.getpid())
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
     observed = []
 

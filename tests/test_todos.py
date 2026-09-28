@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Thread
+from agent_comms.threads import Thread
 from agent_comms.todos import Assignment, GoalRef, TodoConflict, TodoError, TodoStore
 
 

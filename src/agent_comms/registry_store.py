@@ -10,10 +10,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
-from .declarations import RelationViolationError, file_revision, unique_wire_object
+from .bus_publication import unique_wire_object
+from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .private_registry_guard import PrivateRegistryGuard
 from .registry_document import RegistryDocument
+from .store_files import file_revision
 
 
 @dataclass(slots=True)
@@ -89,16 +91,16 @@ class RegistryStore(LockedStore[RegistryDocument]):
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer:
         # a pending guard after any failed write MUST remain fail-closed.
-        from . import declarations
+        from . import store_files
 
         self.cache.revision = None
         guard = self.private_guard_unlocked()
         if guard is None:
-            declarations._atomic_write_text(self.path, text, fsync_parent=True)
+            store_files._atomic_write_text(self.path, text, fsync_parent=True)
         else:
             digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
             sequence, slot = guard.prepare(digest)
-            declarations._atomic_write_text(self.path, text, fsync_parent=True)
+            store_files._atomic_write_text(self.path, text, fsync_parent=True)
             guard.commit(sequence, slot, digest)
 
     def private_guard_unlocked(self) -> PrivateRegistryGuard | None:

@@ -18,7 +18,9 @@ from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
-    from .declarations import Message, RegistrySnapshot, ThreadRole
+    from .messages import Message
+    from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +58,7 @@ class ReadLedger(LockedStore[ReadDocument]):
 
     @staticmethod
     def conversation(message: Message, snapshot: RegistrySnapshot) -> Conversation:
-        from .declarations import BuiltinChannel, is_channel_target
+        from .channel_targets import BuiltinChannel, is_channel_target
 
         builtin = BuiltinChannel.lookup(message.target)
         if builtin is not None or is_channel_target(message.target):

@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import ClassVar, Mapping
 
-from .declarations import Goal
 from .field_codec import FieldCodec, projected
 from .goal_states import PausedGoal, PauseSource
+from .goals import Goal
 from .locked_store import LockedStore
 
 

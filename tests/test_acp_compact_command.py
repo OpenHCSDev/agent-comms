@@ -12,7 +12,7 @@ from acp.agent.router import build_agent_router
 from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsAgent
-from agent_comms.operations import wire
+from agent_comms.comms import wire
 
 
 def block(text: str) -> TextContentBlock:

@@ -4,28 +4,22 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from .declarations import (
-    ActiveTurn,
-    FinishedTurnFence,
-    RegistrySnapshot,
-    RelationViolationError,
-    Thread,
-    TurnLeaseFence,
-    TurnRouting,
-    UnregisteredThreadError,
-)
+from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .thread_identity import GenerationCounter
+from .routing import TurnRouting
+from .thread_identity import GenerationCounter, OwnerIdentity
 from .thread_status import (
     ArchivedThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
 )
+from .threads import Thread
+from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence
 
 
 @dataclass(frozen=True, slots=True)
@@ -469,3 +463,17 @@ class RegistryDocument:
             turn_id=lease.turn_id,
             admission_generation=admission,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RegistrySnapshot:
+    threads: Mapping[str, Thread]
+    statuses: Mapping[str, ThreadStatus]
+    last_seen: Mapping[str, float]
+    aliases: Mapping[str, str]
+    owner_generations: Mapping[str, int]
+    admission_generations: Mapping[str, int]
+
+    def owner_identity(self, name: str) -> OwnerIdentity:
+        canonical = self.aliases.get(name, name)
+        return self.threads[canonical].owner_identity(self.owner_generations[canonical])

@@ -1,7 +1,7 @@
 """CLI commands own their options, boundary decoding and operation bodies.
 
 The parser is a projection of dataclass fields; DeclaredFamily is the sole
-command catalog. Existing CLI spellings belong to the declarations.
+command catalog. Existing CLI spellings belong to the store_files.
 """
 
 from __future__ import annotations
@@ -19,8 +19,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
 
+from .activity import ActivityState
 from .command import Command
-from .declarations import ActivityState, MessageType
+from .comms import Comms
 from .declared_family import DeclaredFamily
 from .exporting import (
     ChannelScope,
@@ -33,7 +34,8 @@ from .exporting import (
     WireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
-from .operations import Comms, ForkSpec
+from .messages import MessageType
+from .thread_management import ForkSpec
 
 
 def _duration_seconds(value: str) -> float:
@@ -169,7 +171,7 @@ class RepairInputRoutingCliCommand(CliCommand, declared_name="repair-input-routi
     )
 
     def apply(self, ctx: Comms) -> Any:
-        return ctx.repair_input_routing(dry_run=not self.persist)
+        return ctx.transcripts.repair_input_routing(dry_run=not self.persist)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -197,7 +199,7 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     max_message_characters: int = option("--max-message-characters", default=12000)
 
     def apply(self, ctx: Comms) -> Any:
-        receipt = ctx.import_thread(
+        receipt = ctx.threads.import_thread(
             self.source,
             self.format,
             name=self.name,
@@ -239,7 +241,7 @@ class SendCliCommand(CliCommand):
     type: MessageType = option("--type", default=MessageType.INFO)
 
     def apply(self, ctx: Comms) -> Any:
-        mid = ctx.send(self.sender, self.target, self.body, self.type)
+        mid = ctx.messaging.send(self.sender, self.target, self.body, self.type)
         return {"id": mid}
 
 
@@ -249,7 +251,7 @@ class InboxCliCommand(CliCommand):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        return {"messages": [m.to_wire() for m in ctx.inbox(self.thread)]}
+        return {"messages": [m.to_wire() for m in ctx.bus.inbox(self.thread)]}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -258,7 +260,7 @@ class AckCliCommand(CliCommand):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        return {"acknowledged": ctx.acknowledge(self.thread)}
+        return {"acknowledged": ctx.messaging.acknowledge(self.thread)}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -266,7 +268,7 @@ class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
     def apply(self, ctx: Comms) -> Any:
-        return {"who": list(ctx.who())}
+        return {"who": list(ctx.views.who())}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -282,7 +284,7 @@ class StatusCliCommand(CliCommand):
                     "detail": activity.detail,
                     "ts": activity.timestamp,
                 }
-                for thread, activity in sorted(ctx.all_activity().items())
+                for thread, activity in sorted(ctx.agents.all_activity().items())
             ]
         }
 
@@ -302,14 +304,14 @@ class HistoryCliCommand(CliCommand):
         if self.with_thread:
             if not self.me:
                 raise ValueError("history --with requires --as (your thread)")
-            return {"dm": [m.to_display_wire() for m in ctx.dm_history(self.me, self.with_thread)]}
+            return {"dm": [m.to_display_wire() for m in ctx.views.dm_history(self.me, self.with_thread)]}
         elif self.channel:
             return {
                 "channel": self.channel,
-                "messages": [m.to_display_wire() for m in ctx.channel_history(self.channel)],
+                "messages": [m.to_display_wire() for m in ctx.views.channel_history(self.channel)],
             }
         else:
-            return {"everything": [m.to_display_wire() for m in ctx.full_history()]}
+            return {"everything": [m.to_display_wire() for m in ctx.views.full_history()]}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -361,7 +363,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
             export_limit = MaxBytesLimit(self.max_bytes)
         else:
             export_limit = RecentLimit(started_at - self.last)
-        export_receipt = ctx.export_wire(
+        export_receipt = ctx.views.export_wire(
             self.output,
             format=self.format,
             scope=scope,
@@ -377,7 +379,7 @@ class ChannelsCliCommand(CliCommand):
     help = "Derived channel list"
 
     def apply(self, ctx: Comms) -> Any:
-        return {"channels": list(ctx.channels())}
+        return {"channels": list(ctx.channels.channels())}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -386,7 +388,7 @@ class ThreadsCliCommand(CliCommand):
     active_only: bool = option("--active-only", default=False)
 
     def apply(self, ctx: Comms) -> Any:
-        return {"threads": list(ctx.list_threads(active_only=self.active_only))}
+        return {"threads": list(ctx.views.list_threads(active_only=self.active_only))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -398,7 +400,7 @@ class ThreadCliCommand(CliCommand):
     )
 
     def apply(self, ctx: Comms) -> Any:
-        return ctx.thread_detail(self.name, include_pending=not self.no_pending)
+        return ctx.views.thread_detail(self.name, include_pending=not self.no_pending)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -414,7 +416,7 @@ class RegisterCliCommand(CliCommand):
     pid: int = option("--pid", default=0)
 
     def apply(self, ctx: Comms) -> Any:
-        from .declarations import Thread
+        from .threads import Thread
 
         thread = Thread(
             name=self.name,
@@ -424,7 +426,7 @@ class RegisterCliCommand(CliCommand):
             task=self.task,
             pid=self.pid,
         )
-        ctx.register(thread)
+        ctx.threads.register(thread)
         return {"registered": self.name}
 
 
@@ -434,7 +436,7 @@ class HeartbeatCliCommand(CliCommand):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> Any:
-        ctx.heartbeat(self.name)
+        ctx.threads.heartbeat(self.name)
         return {"heartbeat": self.name}
 
 
@@ -446,7 +448,7 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     pid: int | None = option("--pid", default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        attached = ctx.attach_session(self.name, self.session_file, pid=self.pid)
+        attached = ctx.threads.attach_session(self.name, self.session_file, pid=self.pid)
         return {
             "attached": attached.name,
             "session_file": attached.session_file,
@@ -462,7 +464,7 @@ class ActivityCliCommand(CliCommand):
     detail: str = option("--detail", default="")
 
     def apply(self, ctx: Comms) -> Any:
-        ctx.set_activity(self.name, self.state, self.detail)
+        ctx.agents.set_activity(self.name, self.state, self.detail)
         return {"activity": self.name, "state": self.state.value}
 
 
@@ -472,7 +474,7 @@ class StopCliCommand(CliCommand):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> Any:
-        ctx.stop(self.name)
+        ctx.owners.stop(self.name)
         return {"stopped": self.name}
 
 
@@ -500,7 +502,7 @@ class RestartCliCommand(CliCommand):
     )
 
     def apply(self, ctx: Comms) -> Any:
-        results = ctx.restart_owners(
+        results = ctx.owners.restart_owners(
             None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
         )
         return {"restarted": [asdict(result) for result in results]}
@@ -512,7 +514,7 @@ class ReleaseCliCommand(CliCommand):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> Any:
-        ctx.release(self.name)
+        ctx.owners.release(self.name)
         return {"released": self.name}
 
 
@@ -522,7 +524,7 @@ class ArchiveCliCommand(CliCommand):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> Any:
-        ctx.archive(self.name)
+        ctx.threads.archive(self.name)
         return {"archived": self.name}
 
 
@@ -532,7 +534,7 @@ class DeleteCliCommand(CliCommand):
     name: str = option("--name")
 
     def apply(self, ctx: Comms) -> Any:
-        delete_result = ctx.delete(self.name)
+        delete_result = ctx.threads.delete(self.name)
         return {
             "deleted": delete_result.name,
             "messages_removed": delete_result.messages_removed,
@@ -550,7 +552,7 @@ class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
     new_name: str = option("--to")
 
     def apply(self, ctx: Comms) -> Any:
-        rename_result = ctx.rename_self(self.new_name)
+        rename_result = ctx.threads.rename_self(self.new_name)
         return {
             "previous": rename_result.previous,
             "current": rename_result.current,
@@ -576,7 +578,7 @@ class ForkCliCommand(CliCommand):
         spec = ForkSpec(
             name=self.name, parent=self.parent, task=self.task, tags=self.tags, prompt=self.prompt
         )
-        child = ctx.fork(spec, pi_bin=self.pi_bin)
+        child = ctx.threads.fork(spec, pi_bin=self.pi_bin)
         return {"forked": child.name, "pid": child.pid}
 
 
@@ -591,10 +593,10 @@ class LedgerCliCommand(CliCommand):
             if not self.author:
                 raise ValueError("ledger merge requires --author")
             updates = json.loads(Path(self.merge_from).read_text())
-            ctx.ledger_merge(updates, self.author)
+            ctx.ledger.merge(updates, self.author)
             return {"merged": True}
         else:
-            return ctx.ledger_read()
+            return ctx.ledger.read()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -603,4 +605,4 @@ class PollCliCommand(CliCommand):
     thread: str | None = option("--thread", default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        return ctx.poll(self.thread)
+        return ctx.views.poll(self.thread)
