@@ -1,0 +1,86 @@
+.FF.                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[activated] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-input-drain-20260928/.test-artifacts/original/test_changed_goal_before_origi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc77ed70950>
+existing_goal = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent._open_goal_store()
+        if existing_goal:
+            comms.update_goal("project", "set", text="Original goal", owner_store=store)
+        original_emit = agent._emit_input_disposition
+        replacement = None
+        backend_calls = 0
+    
+        async def activate_after_admission(session_id, row):
+            nonlocal replacement
+            await original_emit(session_id, row)
+            if replacement is None:
+                replacement = comms.update_goal(
+                    "project", "set", text="New authority", owner_store=store
+                )
+    
+        async def events(*args, **kwargs):
+            nonlocal backend_calls
+            backend_calls += 1
+            yield ae.Done(ok=False, text="Must not reach backend")
+    
+        monkeypatch.setattr(agent, "_emit_input_disposition", activate_after_admission)
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        try:
+>           with pytest.raises(RequestError) as refused:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE RequestError
+
+tests/test_acp_goal_original_input.py:114: Failed
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-input-drain-20260928/.test-artifacts/original/test_changed_goal_before_origi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc77eca4270>
+existing_goal = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent._open_goal_store()
+        if existing_goal:
+            comms.update_goal("project", "set", text="Original goal", owner_store=store)
+        original_emit = agent._emit_input_disposition
+        replacement = None
+        backend_calls = 0
+    
+        async def activate_after_admission(session_id, row):
+            nonlocal replacement
+            await original_emit(session_id, row)
+            if replacement is None:
+                replacement = comms.update_goal(
+                    "project", "set", text="New authority", owner_store=store
+                )
+    
+        async def events(*args, **kwargs):
+            nonlocal backend_calls
+            backend_calls += 1
+            yield ae.Done(ok=False, text="Must not reach backend")
+    
+        monkeypatch.setattr(agent, "_emit_input_disposition", activate_after_admission)
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", events)
+        try:
+>           with pytest.raises(RequestError) as refused:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE RequestError
+
+tests/test_acp_goal_original_input.py:114: Failed
+=========================== short test summary info ============================
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[activated]
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced]
+2 failed, 2 passed in 1.20s

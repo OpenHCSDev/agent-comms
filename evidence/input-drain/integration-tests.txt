@@ -1,0 +1,205 @@
+FF...................................................................... [ 62%]
+.......................................F....                             [100%]
+=================================== FAILURES ===================================
+_____ test_channel_queued_before_revocation_remains_visible_unknown[goal] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-input-drain-20260928/.test-artifacts/integration/test_channel_queued_before_rev0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4bfd876d70>
+revocation = 'goal'
+
+    @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
+    async def test_channel_queued_before_revocation_remains_visible_unknown(
+        tmp_path, monkeypatch, revocation
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.update_tags("worker", add=frozenset({"team"}))
+        message = comms.send_user_message("#team", "Durable request", worktree=str(tmp_path))
+        observed = []
+        advance = agent._delivery_cursors.advance
+    
+        def durable_before_cursor(aliases, through):
+            if through >= message.seq:
+                rows = InputDispositions(comms.root).unknown(frozenset({"worker"}))
+                assert [row["sequence"] for row in rows] == [message.seq]
+                observed.append(through)
+            advance(aliases, through)
+    
+        monkeypatch.setattr(agent._delivery_cursors, "advance", durable_before_cursor)
+    
+        async def unexpected_backend(*args, **kwargs):
+            raise AssertionError("Revoked UNKNOWN input must not launch a backend")
+            yield {}
+    
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+        try:
+            await agent._drain_inbox("worker")
+            assert observed
+            assert len(agent._pending_turns["worker"]) == 1
+            if revocation == "goal":
+                comms.update_goal("worker", "set", text="New goal")
+            elif revocation == "stop":
+                comms.stop("worker")
+            else:
+                await agent.shutdown()
+                agent = CommsAgent(wire(comms.root), agent_bin="pi", runtime_enabled=True)
+                monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+                await agent.load_session(str(tmp_path / "worker"), "worker")
+                await agent._drain_inbox("worker")
+            if revocation != "reopen":
+                CommsAgent._schedule_wake(agent, "worker")
+>               await asyncio.wait_for(agent._wake_tasks["worker"], 2)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'worker'
+
+tests/test_acp_channel_disposition.py:58: KeyError
+_____ test_channel_queued_before_revocation_remains_visible_unknown[stop] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s7-input-drain-20260928/.test-artifacts/integration/test_channel_queued_before_rev1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4bfcb2d010>
+revocation = 'stop'
+
+    @pytest.mark.parametrize("revocation", ["goal", "stop", "reopen"])
+    async def test_channel_queued_before_revocation_remains_visible_unknown(
+        tmp_path, monkeypatch, revocation
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True)
+        monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.update_tags("worker", add=frozenset({"team"}))
+        message = comms.send_user_message("#team", "Durable request", worktree=str(tmp_path))
+        observed = []
+        advance = agent._delivery_cursors.advance
+    
+        def durable_before_cursor(aliases, through):
+            if through >= message.seq:
+                rows = InputDispositions(comms.root).unknown(frozenset({"worker"}))
+                assert [row["sequence"] for row in rows] == [message.seq]
+                observed.append(through)
+            advance(aliases, through)
+    
+        monkeypatch.setattr(agent._delivery_cursors, "advance", durable_before_cursor)
+    
+        async def unexpected_backend(*args, **kwargs):
+            raise AssertionError("Revoked UNKNOWN input must not launch a backend")
+            yield {}
+    
+        monkeypatch.setattr("agent_comms.acp.backend.stream_agent_events", unexpected_backend)
+        try:
+            await agent._drain_inbox("worker")
+            assert observed
+            assert len(agent._pending_turns["worker"]) == 1
+            if revocation == "goal":
+                comms.update_goal("worker", "set", text="New goal")
+            elif revocation == "stop":
+                comms.stop("worker")
+            else:
+                await agent.shutdown()
+                agent = CommsAgent(wire(comms.root), agent_bin="pi", runtime_enabled=True)
+                monkeypatch.setattr(agent, "_ensure_live_drain", lambda _session: None)
+                await agent.load_session(str(tmp_path / "worker"), "worker")
+                await agent._drain_inbox("worker")
+            if revocation != "reopen":
+                CommsAgent._schedule_wake(agent, "worker")
+>               await asyncio.wait_for(agent._wake_tasks["worker"], 2)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'worker'
+
+tests/test_acp_channel_disposition.py:58: KeyError
+_________ test_two_acp_instances_cannot_engage_or_send_simultaneously __________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-sg55uhtj')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f4bfd633bd0>
+
+    async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
+        comms, first, root_id = _session(tmp_path)
+        second = CommsAgent(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=tmp_path,
+            private_nk_wire_root_id=root_id,
+        )
+        second._sessions["beta"] = "beta"
+        second._session_titles["beta"] = "beta"
+        second._session_worktrees["beta"] = str(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = separate_session_fake(decision="FULL")
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def suspended(package, **kwargs):
+            result = await fake(package, **kwargs)
+            if len(calls) == 1:
+                entered.set()
+                await release.wait()
+            return result
+    
+        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+        for body in ("one", "two"):
+            invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": body})
+        running = asyncio.create_task(first._drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        try:
+            with pytest.raises(StaleFence, match="busy"):
+                await second._drain_inbox("beta")
+            assert len(calls) == 1
+            with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+                assert (
+                    store._connection.execute(
+                        "SELECT COUNT(*) FROM wake_claims WHERE disposition='engaged'"
+                    ).fetchone()[0]
+                    == 1
+                )
+                assert (
+                    store._connection.execute("SELECT COUNT(*) FROM native_runtime_inputs").fetchone()[
+                        0
+                    ]
+                    == 1
+                )
+        finally:
+            release.set()
+>           assert await asyncio.wait_for(running, timeout=5) == 1
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_private_nk_delivery.py:903: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+src/agent_comms/acp.py:1066: in _drain_inbox
+    return await self.inputs.drain_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:361: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:367: in drain_owned_inbox
+    return await self.effects._drain_private_nk(session_id, private_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:1189: in _drain_private_nk
+    result = await run_one_sealed_claim(
+src/agent_comms/coordinated_runtime.py:1497: in run_one_sealed_claim
+    fence = progress.finish()
+            ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.durable_turn.DurableTurn object at 0x7f4bfd8ecd50>
+
+    def finish(self):
+        """Native child is reaped and any explicit owner effect has completed."""
+        if not self.model_started or self.active_tools:
+>           raise IdentityConflict("native completion lacks model progress or has active tools")
+E           agent_comms.coordination_errors.IdentityConflict: native completion lacks model progress or has active tools
+
+src/agent_comms/durable_turn.py:90: IdentityConflict
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+=========================== short test summary info ============================
+FAILED tests/test_acp_channel_disposition.py::test_channel_queued_before_revocation_remains_visible_unknown[goal]
+FAILED tests/test_acp_channel_disposition.py::test_channel_queued_before_revocation_remains_visible_unknown[stop]
+FAILED tests/test_acp_private_nk_delivery.py::test_two_acp_instances_cannot_engage_or_send_simultaneously
+3 failed, 113 passed in 36.88s
