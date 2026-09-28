@@ -202,3 +202,21 @@ size-limit behavior changed. Mentions derives reply destination from existing or
 
 Focused combined result65pass/1skip24.46s: mentions, current native binding,
 proof journal and all23 real native send admission cases. Full suite remains pending.
+
+## Startup, operations, adaptive compaction and real native writer batch
+
+Remainder-six209pass12failed209.83s. Large native cursor1001/>8MiB and N150 cases
+passed on parent251. Corrected local RPC trust for startup cancellation tests;
+current ProcessIdentity fixtures for managed rename/stop and current thread detail;
+disabled writer preserves canonical initial header bytes instead of requiring no
+file. Adaptive ACP fixture now uses configured canonical root and prepared package.
+Malformed compaction ingress test first creates a canonical root, then proves
+corrupt bytes remain unchanged. Competing bus writer uses canonical Comms send,
+retaining actual cross-process bus lock contention through native commit.
+Deleted its retired Publisher.publish invocation and raw Message imports.
+
+Focused109 tests:108passed1failed159.13s; all37 actual owner native commit cases
+pass. Last failure expected fresh owner correction to block autonomous goal.
+Updated to preserve exact goal and grant, retaining UNKNOWN input/no native send
+and no compaction. Both corrected adaptive ACP cases pass8.97s. No production
+changes this batch. Complete full suite and remainder after owner commit pending.
