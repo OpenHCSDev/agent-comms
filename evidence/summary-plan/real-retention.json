@@ -1,0 +1,149 @@
+{
+  "project": "/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/pr95-real-summary-plan-20260928",
+  "root": "/var/tmp/ac-pr95-22t6hizg",
+  "started_at": 1790555400.4974272,
+  "turns": [
+    {
+      "index": 0,
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 8.100490808486938,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-channel-coding-tools-20260927-.artifacts-pr95-real-summary-plan-20260928--/2026-09-28T00-30-08-895Z_01a0e56b-49fe-738b-bcbc-be0f04c42ef2.jsonl",
+      "runtime_info": {
+        "thread": "pr95-real-summary-plan-20260928",
+        "model": "openai-codex/gpt-6-sol",
+        "session_name": null,
+        "context_used": 10536,
+        "context_size": 272000,
+        "timestamp": 1790555413.1493204
+      }
+    },
+    {
+      "index": 1,
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 7.225157976150513,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-channel-coding-tools-20260927-.artifacts-pr95-real-summary-plan-20260928--/2026-09-28T00-30-08-895Z_01a0e56b-49fe-738b-bcbc-be0f04c42ef2.jsonl",
+      "runtime_info": {
+        "thread": "pr95-real-summary-plan-20260928",
+        "model": "openai-codex/gpt-6-sol",
+        "session_name": null,
+        "context_used": 11550,
+        "context_size": 272000,
+        "timestamp": 1790555420.4296062
+      }
+    },
+    {
+      "index": 2,
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 88.43723011016846,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-channel-coding-tools-20260927-.artifacts-pr95-real-summary-plan-20260928--/2026-09-28T00-30-08-895Z_01a0e56b-49fe-738b-bcbc-be0f04c42ef2.jsonl",
+      "runtime_info": {
+        "thread": "pr95-real-summary-plan-20260928",
+        "model": "openai-codex/gpt-6-sol",
+        "session_name": null,
+        "context_used": 2240,
+        "context_size": 272000,
+        "timestamp": 1790555508.8262413
+      }
+    },
+    {
+      "index": 3,
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 5.619779348373413,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-channel-coding-tools-20260927-.artifacts-pr95-real-summary-plan-20260928--/2026-09-28T00-30-08-895Z_01a0e56b-49fe-738b-bcbc-be0f04c42ef2.jsonl",
+      "runtime_info": {
+        "thread": "pr95-real-summary-plan-20260928",
+        "model": "openai-codex/gpt-6-sol",
+        "session_name": null,
+        "context_used": 12199,
+        "context_size": 272000,
+        "timestamp": 1790555514.4144666
+      }
+    },
+    {
+      "index": 4,
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 36.74407482147217,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-channel-coding-tools-20260927-.artifacts-pr95-real-summary-plan-20260928--/2026-09-28T00-30-08-895Z_01a0e56b-49fe-738b-bcbc-be0f04c42ef2.jsonl",
+      "runtime_info": {
+        "thread": "pr95-real-summary-plan-20260928",
+        "model": "openai-codex/gpt-6-sol",
+        "session_name": null,
+        "context_used": 11928,
+        "context_size": 272000,
+        "timestamp": 1790555551.1825573
+      }
+    },
+    {
+      "index": 5,
+      "response": {
+        "stop_reason": "end_turn",
+        "usage": null,
+        "field_meta": null
+      },
+      "seconds": 55.34940028190613,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-wt-comms-channel-coding-tools-20260927-.artifacts-pr95-real-summary-plan-20260928--/2026-09-28T00-30-08-895Z_01a0e56b-49fe-738b-bcbc-be0f04c42ef2.jsonl",
+      "runtime_info": {
+        "thread": "pr95-real-summary-plan-20260928",
+        "model": "openai-codex/gpt-6-sol",
+        "session_name": null,
+        "context_used": 2293,
+        "context_size": 272000,
+        "timestamp": 1790555606.544998
+      }
+    }
+  ],
+  "session_id": "pr95-real-summary-plan-20260928",
+  "effective_settings": {
+    "enabled": true,
+    "reserve_tokens": 263808,
+    "keep_recent_tokens": 512,
+    "trigger": true
+  },
+  "compactions": [
+    {
+      "id": "4464b51b",
+      "firstKeptEntryId": "0e3c5005",
+      "summary": "## Goal\nPreserve four designated project facts across future summaries and archive routine fixture observations without creating active work.\n\n## Constraints & Preferences\n- Preserve the four project facts exactly in future compacted summaries.\n- The original request called for `comms_rename_self` with a meaningful, intent-based, 2\u20135-word hyphenated name (at most 48 characters), followed by `RECORDED` and the four facts.\n- Treat assistant-added details absent from user records as unverified.\n\n## Progress\n### Done\n- [x] Archive records 0\u2013419 were reported as routine observations with no outstanding task or required action.\n- [x] Records 418\u2013419 received a `RECORDED` acknowledgment.\n\n### In Progress\n- [ ] No current archive work. The original thread rename and four-fact acknowledgment are not shown as completed.\n\n### Blocked\n- `comms_rename_self` was reported unavailable.\n\n## Key Decisions\n- **Do not activate archive work**: The observations contain no unresolved request.\n- **Retain, but qualify, the four facts**: They were designated for preservation earlier, but a later segment identifies them as unverified assistant-added details.\n\n## Next Steps\n1. If the original request remains actionable and the tool becomes available, rename the thread and provide the requested four-fact acknowledgment.\n2. Otherwise, no archive action is needed.\n\n## Critical Context\n- Thread identity: `pr95-real-summary-plan-20260928`; parent: `None`.\n- Project directory: `/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/pr95-real-summary-plan-20260928`.\n- Four designated facts, later flagged as unverified: lighthouse code `ORCHID-7301`; delivery window Thursday 14:30; rejected option cobalt; chosen material cedar."
+    },
+    {
+      "id": "9d69ccf3",
+      "firstKeptEntryId": "08a43e84",
+      "summary": "## Goal\nPreserve and, if requested, report four project facts; acknowledge routine fixture observations without creating new work.\n\n## Constraints & Preferences\n- A fact-reporting reply should start with `RETENTION_ONE`; do not guess missing facts.\n- The latest fact-reporting request specified \u201cNo tools.\u201d An earlier request asked for `comms_rename_self` and a concise, intent-based, 2\u20135-word hyphenated title (at most 48 characters), followed by `ACK` only.\n- Observations 0\u201315 add no requirements.\n\n## Progress\n### Done\n- [x] Earlier archive observations 0\u2013419 were treated as routine; records 418\u2013419 received `RECORDED`.\n- [x] A `RETENTION_ONE` reply listed the lighthouse code and delivery window.\n- [x] The user's material decision was recorded: cobalt rejected, cedar chosen.\n\n### In Progress\n- [ ] If a complete four-fact response remains requested, provide the rejected option and chosen material alongside the two previously reported facts.\n- [ ] Thread renaming is not shown as completed.\n\n### Blocked\n- `comms_rename_self` was previously reported unavailable; current availability is unknown. The later \u201cNo tools\u201d instruction conflicts with the earlier renaming request.\n\n## Key Decisions\n- **No archive work**: The observations introduce no new requirement.\n- **Choose cedar over cobalt**: The user explicitly stated \u201crejected option cobalt\u201d and \u201cchosen material cedar\u201d.\n- **Qualify the other facts**: The lighthouse code and delivery window were designated for preservation but flagged as unverified assistant-added details.\n\n## Next Steps\n1. Preserve the four designated facts with their differing provenance.\n2. If asked to report them, follow the active reply-format and tool instructions without guessing.\n\n## Critical Context\n- Thread: `pr95-real-summary-plan-20260928`; parent: `None`.\n- Project directory: `/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/pr95-real-summary-plan-20260928`.\n- Designated facts: lighthouse code `ORCHID-7301`; delivery window Thursday 14:30; rejected option cobalt; chosen material cedar.\n- Last reported assistant reply:\n  ```\n  RETENTION_ONE\n  lighthouse code ORCHID-7301\n  delivery window Thursday 14:30\n  ```"
+    },
+    {
+      "id": "c7016b9f",
+      "firstKeptEntryId": "fcc054de",
+      "summary": "## Goal\nPreserve four project facts and record routine archive observations without creating new work. Rename the thread if the required tool is available.\n\n## Constraints & Preferences\n- Before the task, call `comms_rename_self` with a meaningful, intent-based, 2\u20135-word hyphenated title of at most 48 characters.\n- Reply `ACK` only to the latest archive records; do not echo acknowledgments.\n- If earlier fact-reporting instructions apply, begin with `RETENTION_ONE`, omit guesses, and use no tools.\n\n## Progress\n### Done\n- [x] Archive records 0\u2013419 were reported as routine observations with no changes to project facts or required actions. Records 402\u2013419 were acknowledged with `ACK`.\n- [x] A prior reply reported the lighthouse code and delivery window; cedar was recorded as chosen over cobalt.\n\n### In Progress\n- [ ] Preserve all four facts across the thread.\n- [ ] Rename the thread if `comms_rename_self` becomes available.\n\n### Blocked\n- `comms_rename_self` was previously reported unavailable; no rename or tool call is shown.\n\n## Key Decisions\n- **No archive work**: Records 0\u2013419 add no requirements or follow-up tasks.\n- **Material choice**: Cobalt was rejected; cedar was chosen.\n- **Fact provenance**: The lighthouse code and delivery window were designated for preservation but previously flagged as unverified assistant-added details.\n\n## Next Steps\n1. If available, call `comms_rename_self` with a compliant title.\n2. Preserve the four facts. For any new routine archive records requiring a reply, send `ACK` only.\n\n## Critical Context\n- Thread: `pr95-real-summary-plan-20260928`; parent: `None`.\n- Project directory: `/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/pr95-real-summary-plan-20260928`.\n- Facts: lighthouse code `ORCHID-7301`; delivery window Thursday 14:30; rejected option cobalt; chosen material cedar.\n- Coordination instructions name `comms_send` for useful replies and `comms_dismiss` to end quietly; no calls are shown."
+    }
+  ],
+  "assistant_answers": [
+    "RECORDED\n- Lighthouse code: ORCHID-7301\n- Delivery window: Thursday 14:30\n- Rejected option: cobalt\n- Chosen material: cedar\n\nI couldn\u2019t rename the thread because the comms tool isn\u2019t available.",
+    "ACK",
+    "RETENTION_ONE\nlighthouse code ORCHID-7301\ndelivery window Thursday 14:30\nrejected option cobalt\nchosen material cedar",
+    "ACK",
+    "ACK",
+    "RETENTION_TWO\n- Lighthouse code: ORCHID-7301\n- Delivery window: Thursday 14:30\n- Rejected option: cobalt\n- Chosen material: cedar"
+  ],
+  "completed": true,
+  "finished_at": 1790555607.2427835
+}
