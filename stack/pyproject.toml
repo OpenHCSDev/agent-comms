@@ -13,6 +13,6 @@ dependencies = [
 package = false
 
 [tool.uv.sources]
-agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "89314b0fe56de769cb956a63acd870e89e8dee43" }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "a4ca07a2f71a71e8483d8b19322ae16cdc2bbc97" }
+agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "ae0545dfcfb742d65d22b5125bf6436be7016c54" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "d9422d488ed4d1272665280ecf1a6d2da7001b04" }
 textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "4fa6a9c440eaaa7dfaad45a33af146fc4b7e922e" }
