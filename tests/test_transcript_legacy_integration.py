@@ -131,7 +131,7 @@ def test_existing_stored_route_wins_and_plain_pages_never_scan_bus(tmp_path, mon
     message = comms.messaging.send_message("peer", "owner", "hello")
     _session(session, _entry(message))
     comms.transcripts.routes.record(
-        str(session), ("input",), __import__("agent_comms").TurnRouting((message,), None)
+        str(session), ("input",), TurnRouting((message,), None)
     )
     monkeypatch.setattr(
         comms.bus.log,
