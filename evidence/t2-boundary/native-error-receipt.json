@@ -8,7 +8,7 @@
   "action": "Wait for the provider limit to reset or restore credits, then inspect input delivery before any explicit resend.",
   "input_disposition": "Started \u2014 input not retried",
   "provider_posts": 1,
-  "notification_count": 20,
+  "notification_count": 17,
   "notifications": [
     {
       "jsonrpc": "2.0",
@@ -27,13 +27,13 @@
                   "kind": "coordination_changed",
                   "thread": {
                     "name": "project",
-                    "created_at": 1790632034.457404
+                    "created_at": 1790633628.858687
                   },
-                  "wire_root": "/var/tmp/t2-native-xkfs65x9/wire",
-                  "owner_pid": 1684358,
-                  "worktree": "/var/tmp/t2-native-xkfs65x9/project",
+                  "wire_root": "/var/tmp/t2-native-a8xgag28/wire",
+                  "owner_pid": 1807868,
+                  "worktree": "/var/tmp/t2-native-a8xgag28/project",
                   "model": "fixture/fixture",
-                  "thinking_level": null,
+                  "thinking_level": "medium",
                   "title": "project",
                   "context_usage": null
                 },
@@ -49,13 +49,13 @@
                     "owner": {
                       "incarnation": {
                         "name": "project",
-                        "created_at": 1790632034.457404
+                        "created_at": 1790633628.858687
                       },
                       "generation": 2
                     },
-                    "owner_pid": 1684358
+                    "owner_pid": 1807868
                   },
-                  "revision": 1,
+                  "revision": 2,
                   "projection": {
                     "kind": "available",
                     "items": [],
@@ -67,113 +67,15 @@
                   "envelope": {
                     "scope": {
                       "session_id": "project",
-                      "wire_root_id": "ac9f6869dca44f42af101a695d920560",
+                      "wire_root_id": "a9cb2d7fdeb94beb8884d23f1f1ed41a",
                       "owner": {
                         "incarnation": {
                           "name": "project",
-                          "created_at": 1790632034.457404
+                          "created_at": 1790633628.858687
                         },
                         "generation": 2
                       },
-                      "owner_pid": 1684358
-                    },
-                    "revision": 1,
-                    "observation": {
-                      "kind": "unavailable"
-                    }
-                  },
-                  "selected_status": null
-                }
-              ]
-            }
-          },
-          "sessionUpdate": "agent_message_chunk"
-        }
-      }
-    },
-    {
-      "jsonrpc": "2.0",
-      "method": "session/update",
-      "params": {
-        "sessionId": "project",
-        "update": {
-          "content": {
-            "text": "",
-            "type": "text"
-          },
-          "_meta": {
-            "agentComms": {
-              "updates": [
-                {
-                  "kind": "transcript_snapshot",
-                  "page": {
-                    "events": [],
-                    "before": {
-                      "session_file": "",
-                      "offset": 0
-                    },
-                    "after": {
-                      "session_file": "",
-                      "offset": 0
-                    },
-                    "has_older": false,
-                    "has_newer": false
-                  }
-                }
-              ]
-            }
-          },
-          "sessionUpdate": "agent_message_chunk"
-        }
-      }
-    },
-    {
-      "jsonrpc": "2.0",
-      "method": "session/update",
-      "params": {
-        "sessionId": "project",
-        "update": {
-          "content": {
-            "text": "",
-            "type": "text"
-          },
-          "_meta": {
-            "agentComms": {
-              "updates": [
-                {
-                  "kind": "input_delivery_changed",
-                  "input_id": null
-                }
-              ]
-            }
-          },
-          "sessionUpdate": "agent_message_chunk"
-        }
-      }
-    },
-    {
-      "jsonrpc": "2.0",
-      "method": "session/update",
-      "params": {
-        "sessionId": "project",
-        "update": {
-          "_meta": {
-            "agentComms": {
-              "updates": [
-                {
-                  "kind": "cursor_advanced",
-                  "envelope": {
-                    "scope": {
-                      "session_id": "project",
-                      "wire_root_id": "ac9f6869dca44f42af101a695d920560",
-                      "owner": {
-                        "incarnation": {
-                          "name": "project",
-                          "created_at": 1790632034.457404
-                        },
-                        "generation": 2
-                      },
-                      "owner_pid": 1684358
+                      "owner_pid": 1807868
                     },
                     "revision": 3,
                     "observation": {
@@ -185,7 +87,7 @@
               ]
             }
           },
-          "sessionUpdate": "session_info_update"
+          "sessionUpdate": "agent_message_chunk"
         }
       }
     },
@@ -288,7 +190,7 @@
               "updates": [
                 {
                   "kind": "input_delivery_changed",
-                  "input_id": "bde21c7bd2434b18a21112316115370e"
+                  "input_id": "b931f1f1fdf0496086028854e22882ad"
                 }
               ]
             }
@@ -312,8 +214,8 @@
               "updates": [
                 {
                   "kind": "turn_started",
-                  "turn_id": "1adfebf4e2654dcab3befcdfd525cc01",
-                  "started_at": 1790632036.1901522,
+                  "turn_id": "f919cae4e4cc443c9b153337d6584ea9",
+                  "started_at": 1790633630.6765845,
                   "activity": "thinking",
                   "activity_detail": "local failing provider input"
                 }
@@ -445,7 +347,7 @@
               "updates": [
                 {
                   "kind": "input_delivery_changed",
-                  "input_id": "bde21c7bd2434b18a21112316115370e"
+                  "input_id": "b931f1f1fdf0496086028854e22882ad"
                 }
               ]
             }
@@ -501,11 +403,11 @@
                     "owner": {
                       "incarnation": {
                         "name": "project",
-                        "created_at": 1790632034.457404
+                        "created_at": 1790633628.858687
                       },
                       "generation": 2
                     },
-                    "owner_pid": 1684358
+                    "owner_pid": 1807868
                   },
                   "revision": 4,
                   "projection": {
@@ -544,10 +446,6 @@
                     "kind": "provider_quota",
                     "code": -32603,
                     "detail": "402: {\"message\":\"The usage limit has been reached\",\"type\":\"insufficient_quota\"}",
-                    "failure": {
-                      "kind": "prompt_send_failed",
-                      "text": "402: {\"message\":\"The usage limit has been reached\",\"type\":\"insufficient_quota\"}"
-                    },
                     "input_state": "started"
                   }
                 }
@@ -590,7 +488,7 @@
               "updates": [
                 {
                   "kind": "turn_settled",
-                  "turn_id": "1adfebf4e2654dcab3befcdfd525cc01"
+                  "turn_id": "f919cae4e4cc443c9b153337d6584ea9"
                 }
               ]
             }
@@ -615,7 +513,7 @@
                 {
                   "kind": "transcript_changed",
                   "cursor": {
-                    "session_file": "/var/tmp/t2-native-xkfs65x9/config/sessions/--var-tmp-t2-native-xkfs65x9-project--/2026-09-28T21-47-18-697Z_01a0e9fc-9128-77e6-8b4f-bfd44b2eee55.jsonl",
+                    "session_file": "/var/tmp/t2-native-a8xgag28/config/sessions/--var-tmp-t2-native-a8xgag28-project--/2026-09-28T22-13-53-359Z_01a0ea14-e64e-77cb-a54e-d0fce9a821ca.jsonl",
                     "offset": 2450
                   }
                 }

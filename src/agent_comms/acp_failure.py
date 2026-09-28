@@ -103,7 +103,8 @@ class ACPFailure(DeliveryFailure):
                     # when its declaration is unique; unknown cannot distinguish
                     # a reserved input from a bound uncertain input.
                     matches = [
-                        member for member in InputAttempt.members_with(InputAttempt)
+                        member
+                        for member in InputAttempt.members_with(InputAttempt)
                         if member.public_status == status
                     ]
                     if len(matches) == 1:
