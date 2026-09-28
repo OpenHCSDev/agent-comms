@@ -9,7 +9,7 @@ from __future__ import annotations
 import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
-from typing import Any, ClassVar, Union, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -59,7 +59,7 @@ class PiPayload:
         names = {f.metadata.get("wire_name", f.name) for f in declared}
         if member.strict_fields and set(value) - names - {member.wire_tag}:
             raise ValueError(f"Unexpected {member.__name__} fields")
-        hints = get_type_hints(member)
+        hints = FieldCodec._types(member)
         for f in declared:
             key = f.metadata.get("wire_name", f.name)
             if key in value:
