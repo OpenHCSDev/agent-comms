@@ -264,7 +264,7 @@ class CompactionJournal:
                     table.create(db)
             elif actual != expected:
                 raise CompactionJournalError(
-                    "Compaction journal schema differs; quiet cutover required"
+                    "Compaction journal schema differs; quiet migration required"
                 )
         parent = path.parent.resolve(strict=True)
         for directory in (parent, *parent.parents):

@@ -46,22 +46,10 @@ class MembershipChange(StrEnum):
 
 
 class MessageWireCodec(FieldCodec):
-    """Preserve legacy non-finite wire timestamps for history and export.
-
-    Message.from_wire retains these timestamps so export policy can count,
-    exclude or label them. The common document codec remains strict JSON.
-    """
-
-    @classmethod
-    def encode(cls, value: object) -> Any:
-        if type(value) is float:
-            return value
-        return super().encode(value)
+    """Use the claim transition boundary inside the standard message codec."""
 
     @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
-        if target is float and type(data) in (int, float):
-            return data  # Preserve the original numeric spelling and non-finite timestamps.
         if target is ClaimTransition:
             return _claim_transition_from_wire(data)
         return super()._decode(target, data)

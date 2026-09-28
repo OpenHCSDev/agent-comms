@@ -112,7 +112,7 @@ class GoalHistoryStore:
                 if not actual:
                     GoalHistoryEntry.create(connection)
                 elif {row.name: row.sql for row in actual} != GoalHistoryEntry.schema_objects():
-                    raise GoalHistoryError("Goal history requires the one-shot durable cutover.")
+                    raise GoalHistoryError("Goal history requires the one-shot durable migration.")
                 connection.commit()
             self._sync()
         except (OSError, sqlite3.Error) as error:

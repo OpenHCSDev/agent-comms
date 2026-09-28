@@ -85,7 +85,7 @@ class ScheduledTurn:
 
     @staticmethod
     def take_batch(pending: list[ScheduledTurn]) -> tuple[list[ScheduledTurn], list[ScheduledTurn]]:
-        """Combine compatible channel turns, keeping each direct input separate."""
+        """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
         if pending[0].origin and pending[0].origin.response_policy.separate_turn:

@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires
 def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     # Isolate explicit fault/rebuild/catch-up steps from the production daemon.
     monkeypatch.setattr(
-        "agent_comms.messaging.schedule_private_candidate_after_commit", lambda *_: None
+        "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
     )
 
 

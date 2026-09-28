@@ -37,7 +37,7 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     # These tests own the explicit WAL maintenance schedule and fault points;
     # the production post-commit worker has separate integration coverage.
     monkeypatch.setattr(
-        "agent_comms.messaging.schedule_private_candidate_after_commit", lambda *_: None
+        "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
     )
 
 

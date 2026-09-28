@@ -73,7 +73,7 @@ def _declared_schema() -> dict[str, str]:
 
 def _assert_schema(connection: sqlite3.Connection) -> None:
     if _schema(connection) != _declared_schema():
-        raise ValueError("Transcript annotations require the one-shot durable cutover")
+        raise ValueError("Transcript annotations require the one-shot durable migration")
 
 
 class _SessionRoutes:

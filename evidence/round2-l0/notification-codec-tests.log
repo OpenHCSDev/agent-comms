@@ -1,0 +1,345 @@
+............F.FFF.............F...                                       [100%]
+=================================== FAILURES ===================================
+_ test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_counts _
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/canonical-notification-tests/test_recent_cutoff_is_inclusiv0')
+
+    def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_counts(tmp_path):
+        messages = [
+            message(1, "undated", timestamp=0),
+            message(2, "invalid", timestamp=math.nan),
+            message(3, "before", timestamp=9.9),
+            message(4, "at", timestamp=10.0),
+            message(5, "after", timestamp=10.1),
+            message(6, "at export boundary", timestamp=200.0),
+            message(7, "future", timestamp=200.1),
+        ]
+        destination = tmp_path / "recent.jsonl"
+>       receipt = exporter(limit=RecentLimit(10.0), through=7).export(
+            (item for item in messages), destination
+        )
+
+tests/test_exporting.py:232: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/exporting.py:414: in export
+    for row in self.limit.select(
+src/agent_comms/exporting.py:209: in filtered
+    for row in rows:
+               ^^^^
+src/agent_comms/exporting.py:475: in _rows
+    row = self._row(envelope)
+          ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/exporting.py:485: in _row
+    stored: Mapping[str, object] = message.to_wire()
+                                   ^^^^^^^^^^^^^^^^^
+src/agent_comms/messages.py:152: in to_wire
+    result = MessageWireCodec.encode(self)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:93: in encode
+    result.update(
+src/agent_comms/field_codec.py:94: in <genexpr>
+    (key, cls.encode(getattr(value, field.name)))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.messages.MessageWireCodec'>, value = nan
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
+        if is_dataclass(value) and not isinstance(value, type):
+            result = (
+                {value.family_discriminator: value.declared_name} if isinstance(value, DeclaredFamily) else {}
+            )
+            result.update(
+                (key, cls.encode(getattr(value, field.name)))
+                for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
+                )
+            )
+            return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return cls.encode(value.value)
+        if value is None or type(value) in (str, int, bool):
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
+        if isinstance(value, (list, tuple)):
+            return [cls.encode(item) for item in value]
+        if isinstance(value, dict) and all(type(key) is str for key in value):
+            return {key: cls.encode(item) for key, item in value.items()}
+>       raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+E       TypeError: Unsupported JSON value: float
+
+src/agent_comms/field_codec.py:125: TypeError
+____ test_text_full_export_labels_invalid_timestamp_instead_of_failing[nan] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/canonical-notification-tests/test_text_full_export_labels_i0')
+timestamp = nan
+
+    @pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
+    def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path, timestamp):
+        destination = tmp_path / "invalid-time.txt"
+>       receipt = exporter(format=TextFormat(), through=1).export(
+            [message(1, "legacy", timestamp=timestamp)], destination
+        )
+
+tests/test_exporting.py:264: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/exporting.py:414: in export
+    for row in self.limit.select(
+src/agent_comms/exporting.py:209: in filtered
+    for row in rows:
+               ^^^^
+src/agent_comms/exporting.py:475: in _rows
+    row = self._row(envelope)
+          ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/exporting.py:485: in _row
+    stored: Mapping[str, object] = message.to_wire()
+                                   ^^^^^^^^^^^^^^^^^
+src/agent_comms/messages.py:152: in to_wire
+    result = MessageWireCodec.encode(self)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:93: in encode
+    result.update(
+src/agent_comms/field_codec.py:94: in <genexpr>
+    (key, cls.encode(getattr(value, field.name)))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.messages.MessageWireCodec'>, value = nan
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
+        if is_dataclass(value) and not isinstance(value, type):
+            result = (
+                {value.family_discriminator: value.declared_name} if isinstance(value, DeclaredFamily) else {}
+            )
+            result.update(
+                (key, cls.encode(getattr(value, field.name)))
+                for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
+                )
+            )
+            return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return cls.encode(value.value)
+        if value is None or type(value) in (str, int, bool):
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
+        if isinstance(value, (list, tuple)):
+            return [cls.encode(item) for item in value]
+        if isinstance(value, dict) and all(type(key) is str for key in value):
+            return {key: cls.encode(item) for key, item in value.items()}
+>       raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+E       TypeError: Unsupported JSON value: float
+
+src/agent_comms/field_codec.py:125: TypeError
+____ test_text_full_export_labels_invalid_timestamp_instead_of_failing[inf] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/canonical-notification-tests/test_text_full_export_labels_i1')
+timestamp = inf
+
+    @pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
+    def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path, timestamp):
+        destination = tmp_path / "invalid-time.txt"
+>       receipt = exporter(format=TextFormat(), through=1).export(
+            [message(1, "legacy", timestamp=timestamp)], destination
+        )
+
+tests/test_exporting.py:264: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/exporting.py:414: in export
+    for row in self.limit.select(
+src/agent_comms/exporting.py:209: in filtered
+    for row in rows:
+               ^^^^
+src/agent_comms/exporting.py:475: in _rows
+    row = self._row(envelope)
+          ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/exporting.py:485: in _row
+    stored: Mapping[str, object] = message.to_wire()
+                                   ^^^^^^^^^^^^^^^^^
+src/agent_comms/messages.py:152: in to_wire
+    result = MessageWireCodec.encode(self)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:93: in encode
+    result.update(
+src/agent_comms/field_codec.py:94: in <genexpr>
+    (key, cls.encode(getattr(value, field.name)))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.messages.MessageWireCodec'>, value = inf
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
+        if is_dataclass(value) and not isinstance(value, type):
+            result = (
+                {value.family_discriminator: value.declared_name} if isinstance(value, DeclaredFamily) else {}
+            )
+            result.update(
+                (key, cls.encode(getattr(value, field.name)))
+                for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
+                )
+            )
+            return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return cls.encode(value.value)
+        if value is None or type(value) in (str, int, bool):
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
+        if isinstance(value, (list, tuple)):
+            return [cls.encode(item) for item in value]
+        if isinstance(value, dict) and all(type(key) is str for key in value):
+            return {key: cls.encode(item) for key, item in value.items()}
+>       raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+E       TypeError: Unsupported JSON value: float
+
+src/agent_comms/field_codec.py:125: TypeError
+___ test_text_full_export_labels_invalid_timestamp_instead_of_failing[-inf] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/canonical-notification-tests/test_text_full_export_labels_i2')
+timestamp = -inf
+
+    @pytest.mark.parametrize("timestamp", [math.nan, math.inf, -math.inf])
+    def test_text_full_export_labels_invalid_timestamp_instead_of_failing(tmp_path, timestamp):
+        destination = tmp_path / "invalid-time.txt"
+>       receipt = exporter(format=TextFormat(), through=1).export(
+            [message(1, "legacy", timestamp=timestamp)], destination
+        )
+
+tests/test_exporting.py:264: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/exporting.py:414: in export
+    for row in self.limit.select(
+src/agent_comms/exporting.py:209: in filtered
+    for row in rows:
+               ^^^^
+src/agent_comms/exporting.py:475: in _rows
+    row = self._row(envelope)
+          ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/exporting.py:485: in _row
+    stored: Mapping[str, object] = message.to_wire()
+                                   ^^^^^^^^^^^^^^^^^
+src/agent_comms/messages.py:152: in to_wire
+    result = MessageWireCodec.encode(self)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:93: in encode
+    result.update(
+src/agent_comms/field_codec.py:94: in <genexpr>
+    (key, cls.encode(getattr(value, field.name)))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.messages.MessageWireCodec'>, value = -inf
+
+    @classmethod
+    def encode(cls, value: object) -> Any:
+        if is_dataclass(value) and not isinstance(value, type):
+            result = (
+                {value.family_discriminator: value.declared_name} if isinstance(value, DeclaredFamily) else {}
+            )
+            result.update(
+                (key, cls.encode(getattr(value, field.name)))
+                for field, key in cls._fields(type(value))
+                if not (
+                    field.metadata.get("wire_omit_default")
+                    and getattr(value, field.name)
+                    == (
+                        field.default
+                        if field.default is not MISSING
+                        else (
+                            field.default_factory()
+                            if field.default_factory is not MISSING
+                            else MISSING
+                        )
+                    )
+                )
+            )
+            return result
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return cls.encode(value.value)
+        if value is None or type(value) in (str, int, bool):
+            return value
+        if type(value) is float and math.isfinite(value):
+            return value
+        if isinstance(value, frozenset):
+            return [cls.encode(item) for item in sorted(value)]
+        if isinstance(value, (list, tuple)):
+            return [cls.encode(item) for item in value]
+        if isinstance(value, dict) and all(type(key) is str for key in value):
+            return {key: cls.encode(item) for key, item in value.items()}
+>       raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+E       TypeError: Unsupported JSON value: float
+
+src/agent_comms/field_codec.py:125: TypeError
+_____________ test_preappend_route_or_target_denial_has_no_bus_row _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/canonical-notification-tests/test_preappend_route_or_target0')
+
+    def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:
+        comms, _, _, _ = _root(tmp_path)
+>       with pytest.raises(RelationViolationError, match="not routable"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'not routable'
+E         Actual message: "View '#any' is a projection, not a routable target."
+
+tests/test_private_human_ingress.py:217: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_exporting.py::test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_counts
+FAILED tests/test_exporting.py::test_text_full_export_labels_invalid_timestamp_instead_of_failing[nan]
+FAILED tests/test_exporting.py::test_text_full_export_labels_invalid_timestamp_instead_of_failing[inf]
+FAILED tests/test_exporting.py::test_text_full_export_labels_invalid_timestamp_instead_of_failing[-inf]
+FAILED tests/test_private_human_ingress.py::test_preappend_route_or_target_denial_has_no_bus_row
+5 failed, 29 passed in 2.70s

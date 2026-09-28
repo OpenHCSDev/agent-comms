@@ -171,7 +171,7 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
         )
     )
     if {row.name: row.sql for row in actual} != schema:
-        raise StorageUncertainError("Unsupported goal attempt schema; one-shot cutover required.")
+        raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
     if GoalAttemptSchema.one(conn, singleton=1) != GoalAttemptSchema(1, 6):
         raise StorageUncertainError("Unsupported goal attempt schema version.")
 

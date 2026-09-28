@@ -1,3 +1,20 @@
+## Live installation checkpoint — 2026-09-28 18:23 UTC
+
+- Main249 + Toad112 + stack250 are merged and installed. Actual installed archived
+  UI exits0; actual live snapshot64ms shows pending counts explicitly. Open user
+  UI preserved; no owner restart or input submission. Activation receipt lives in
+  /home/ts/wt/comms-live-unread-pin-20260928/evidence/unread-live/activation.json.
+- Parent229 includes246 unread implementation and namespace correction6422dcb.
+  Current cache filename derives from schema version, allowing existing UI to
+  finish without collision; no alternate reader or history converter retained.
+  Parent will remove the superseded cache after that UI exits.
+- Remaining canonical checkpoint bootstrap/source-reader deletion is assigned to
+  Cicero in a new PR from229; this replaces the prior parent-only assignment.
+  Fullsuite248 remains Nietzsche; native243/244/232 remains Darwin/Pascal/Lovelace.
+- Separate watcher teardown errors from112 native pilot belong to Copernicus,
+  who also retains107 typed caller closure. Toad T7/T8 implementation now active
+  under Lovelace/Pascal while native package prerequisites finish.
+
 ## Shipping and closure update — 2026-09-28 18:15 UTC
 
 - Comms249 merged to main at5f3957c: standalone incremental unread indexing,

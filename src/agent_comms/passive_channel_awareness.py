@@ -135,7 +135,7 @@ class PassiveChannelAwareness:
         channels: frozenset[str],
         fresh: bool,
     ) -> None:
-        """Unknown legacy backlog starts at now, never retroactively asserts awareness."""
+        """Start a new admission at the current source; never invent past awareness."""
         if (
             type(admission) is not int
             or admission < 1

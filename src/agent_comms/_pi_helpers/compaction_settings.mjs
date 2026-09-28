@@ -32,7 +32,7 @@ const storage = {withLock(scope, callback) {
 }};
 const manager = SettingsManager.fromStorage(storage, {projectTrusted:true});
 if (manager.globalSettingsLoadError || manager.projectSettingsLoadError)
-  throw new Error('Pi settings cannot be loaded without fallback');
+  throw new Error('Pi settings failed to load');
 const settings = manager.getCompactionSettings();
 console.log(JSON.stringify({enabled:settings.enabled,
   reserveTokens:settings.reserveTokens, keepRecentTokens:settings.keepRecentTokens,
