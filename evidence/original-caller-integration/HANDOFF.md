@@ -1,0 +1,14 @@
+# Original caller/deletion closure — integrated candidate
+
+Combines complete S4 PR204 and R7 O1 PR205 on main203. No source reconstruction: both full branches and audit receipts are retained. The only shared TurnRunner hunks merge cleanly: declaration-owned builtin target plus assignment/lease naming.
+
+- Removes redundant GLOBAL_TARGET/GLOBAL_CHANNEL/BROADCAST_ALIASES and migrates all current core callers to BuiltinChannel; exact builtin literals remain only on their declaration. Real wire/golden spellings remain as format evidence.
+- Completes all current internal turn lease/assignment fields, parameters and callbacks, including terminal failure observation and manual compaction bridge. Resource claims and external persisted/native claim/epoch spellings retain their distinct meaning. No old-interface aliases are added.
+- Worker affected104 cases cover S4 with the two obsolete activity fixtures repaired; worker O1 batches269pass/1skip and259pass/1skip plus3 actual native/local cases cover lease/assignment/native seams. Counts are batches, not summed distinct totals.
+- Parent combined57 cases pass, including terminal failure feedback, TurnRunner, ACP target parsing, actual pinned native read/edit/write/bash, exact publication and lease/resource cleanup. Paired Toad99 has no removed production API/constant consumer. Installed current-delivery owner pilot is the paired actual runtime/queue seam.
+
+Parent rollout remains pending. R6/R7 main202+Toad99 is already live with actual configured-provider queue/history/channel proofs; this smaller closure changes current callers and constant authority, not formats or durable storage. Do not repeat paid acceptance solely for naming. Normal idle restart and installed current paths will verify activation. CI deferred.
+
+## Original plan reconciliation
+
+Concrete source omissions O1 and builtin-global O2 are closed in this combined candidate. No other missing major named original owner was established by the independent completion audit. Remaining historical package-wide module/function size caps and absolute lock-location rules are unmet literal guards; preserved wire/native/SQLite admission fences are required by the same architecture. We do not claim those guards passed or remove authority locks/split coherent transactions merely to pass text counts. Original exhaustive archived real-stream and50/100/150-thread p99/lock experiments are not established by focused current-path receipts. Current owner shipping instructions use local focused plus actual affected paths; that operational acceptance does not invent missing historical experiments. These qualifications remain explicit in the checklist/final audit. PF1–PF5 are separately documented proposals for the user's next refactoring plan; not implemented by this patch.
