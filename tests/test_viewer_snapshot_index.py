@@ -81,3 +81,41 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     team = next(view for view in snapshot.channels if view.channel.name == "#team")
     assert snapshot.channel_unread["#team"] == 2
     assert team.last_activity == raced_timestamp
+
+
+def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tmp_path):
+    import sqlite3
+    from collections import Counter
+
+    from agent_comms.bus_route_counts import BusRouteCounts
+
+    comms = wire(tmp_path)
+    comms.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.register(Thread("bob", frozenset(), str(tmp_path / "bob")))
+    viewer = comms.user_identity(str(tmp_path)).name
+    messages = [
+        comms.send_message("bob", viewer if number % 2 else "#team", f"message {number}")
+        for number in range(6)
+    ]
+    comms.send_user_message("bob", "own outgoing message", worktree=str(tmp_path))
+    comms.viewer_snapshot(str(tmp_path))
+    comms.reads.mark_displayed(
+        viewer,
+        comms.reads.capture(
+            viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus._path
+        ),
+    )
+    assert wire(tmp_path).pending_counts(viewer) == {"bob": 2}
+    comms.registry.rename("bob", "renamed-bob")
+    delivery = comms.bus._delivery_scope(viewer)
+    expected = Counter(
+        delivery.conversation(message.sender, message.target) for message in comms.inbox(viewer)
+    )
+    # The untagged human inbox excludes channel rows. Renaming invalidates
+    # its old DM conversation evidence exactly as the authoritative inbox does.
+    assert expected == {"renamed-bob": 3}
+    with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+        assert wire(tmp_path).pending_counts(viewer) == expected
+        assert decode.call_count == 0
+    with patch.object(BusRouteCounts, "sync", side_effect=sqlite3.DatabaseError("unavailable")):
+        assert wire(tmp_path).pending_counts(viewer) == expected

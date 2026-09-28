@@ -177,7 +177,7 @@ class OwnerCompactionCommit:
                     if message.seq <= previous:
                         raise ValueError("Bus sequence is not increasing")
                     previous = message.seq
-                    if delivery is None or delivery.delivers(message):
+                    if delivery is None or delivery.delivers(message.sender, message.target):
                         selected.append(line)
             except (ValueError, KeyError, TypeError, AttributeError) as error:
                 raise RelationViolationError("Invalid compaction ingress bus") from error
