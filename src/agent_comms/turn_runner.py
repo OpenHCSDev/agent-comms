@@ -27,7 +27,7 @@ from .declarations import (
     Message,
     ScheduledTurn,
     Thread,
-    TurnClaimFence,
+    TurnLeaseFence,
     _store_lock,
 )
 from .goal_actions import (
@@ -380,7 +380,7 @@ class TurnRunner:
         session_id: str,
         thread_name: str,
         turn_id: str,
-        claim: TurnClaimFence,
+        claim: TurnLeaseFence,
     ) -> FinishedTurnFence | None:
         """Clear only this turn; waiter release follows committed terminal output."""
         fence = self.comms.finish_turn(thread_name, turn_id, expected=claim)
@@ -393,7 +393,7 @@ class TurnRunner:
         session_id: str,
         thread_name: str,
         turn_id: str,
-        claim: TurnClaimFence,
+        claim: TurnLeaseFence,
         *,
         stream_settled: bool = False,
         terminal_fence: FinishedTurnFence | None = None,
