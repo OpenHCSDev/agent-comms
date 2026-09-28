@@ -1,0 +1,9 @@
+# D22 is installed live
+
+Comms1853503b, Toad df0a758 and Textual16ede007 are installed in runtime-round2-final-20260928. Active route selects complete native package689ce4b5. All five normal launchers select the new runtime; four idle owners were stopped and restarted. Fresh actual ACP initialize/load of all four owners passes with the same newly started owners and send admission true. No prompt was submitted. Mounted installed Toad opens #comms and both DMs against the converted live root, then exits cleanly.
+
+149 current and8,420 archived messages,104 threads and13 unresolved input outcomes retained. Original root directory remains at /var/tmp/agent-comms-before-d22-20260928; current converted root remains at the original path. Sessions, original read membership and compaction barriers retained. Raw journal UNKNOWN is not promoted to returned authority or replayed. Complete private stop and outcome receipts stay in ~/.local/state/agent-comms, not this repository.
+
+Actual old-runtime stop/ACP refusal -> converted atomic install -> new-runtime restart rehearsal passed before live execution. A transient root client delayed installation before exchange; it exited and the unchanged staged source passed verification. One isolated-interpreter import invocation failed before execution and was corrected. Activation found an operator iteration error (all_threads returns a mapping); corrected to .values() before any route publication. Historical failures remain recorded; no success claimed for those failed attempts.
+
+After completed live conversion, delete all one-shot tools/cutover implementations, exclusive obsolete-schema fixture/tests, and executed rehearsal scripts. Git history retains the operator at f0fde8b0 and the corrected activation iteration in the following receipt commit; no compatibility converter remains installed. Actual live output is LIVE-RESULT.json, live-acp-attachment.json and live-history-ui.log. CI deferred.
