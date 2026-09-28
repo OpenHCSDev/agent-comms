@@ -37,7 +37,6 @@ def wait(goal_id="goal"):
     )
 
 
-
 def _hold_lock(path, shared, ready, release):
     with _store_lock(path, shared=shared):
         ready.set()
@@ -173,7 +172,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
     with pytest.raises(OSError, match="injected"):
         store.record(replace(wait(), revision=999))
     if existing:
-            assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
+        assert stat.S_IMODE(store.path.stat().st_mode) == 0o640
     else:
         assert not store.path.exists()
     assert not list(tmp_path.glob("*.tmp"))

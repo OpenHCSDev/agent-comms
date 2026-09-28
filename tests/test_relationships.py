@@ -214,7 +214,9 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Old incarnation's task")
     comms.owners.stop("peer")
     comms.registry.remove("peer")
-    comms.threads.register(Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1))
+    comms.threads.register(
+        Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
+    )
 
     row = collaboration_rows(comms)[0]
     assert row.target == "peer" and row.person is None and not row.available

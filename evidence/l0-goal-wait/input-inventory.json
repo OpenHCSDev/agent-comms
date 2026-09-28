@@ -1,9 +1,9 @@
 {
   "/var/tmp/agent-comms-live-20260927-wzjtqhza": {
-    "rows": 27,
-    "unknown": 8,
+    "rows": 35,
+    "unknown": 9,
     "notice_dismissed": 8,
-    "has_native_id": 19,
+    "has_native_id": 26,
     "goal_review_rows": 0,
     "bus_rows": 0,
     "cursor_rows": 0

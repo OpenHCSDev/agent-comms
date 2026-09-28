@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from collections.abc import Sequence
@@ -122,33 +121,49 @@ class Goals:
         senders = frozenset(
             alias for target in resolved for alias in self.registry.aliases_for(target.name)
         )
-        unknown = tuple(
-            InputDispositions(self.root / InputDispositions.filename).read().unknown(owners)
-        )
-        sequences = {row.sequence for row in unknown if row.sequence is not None}
+        document = InputDispositions(self.root / InputDispositions.filename).read()
+        unknown = {row.key: row for row in document.unknown(owners)}
         eligible = set()
-        if sequences:
-            selected = self.bus._history_page(
-                lambda message: (
-                    message.seq in sequences
+        snapshot = self.registry.snapshot()
+        delivery = self.bus._delivery_scope(thread.name, snapshot)
+        from .input_attempt import UnknownInput
+
+        # The canonical delivery scope excludes previous incarnations, while
+        # viewer read ACKs deliberately have no bearing on native handling.
+        with self.bus.log.locked():
+            for item in self.bus._iter_delivery_messages_unlocked():
+                message = item.message
+                if not (
+                    delivery.current(item, snapshot)
                     and message.target in owners
                     and message.sender in senders
-                ),
-                before=None,
-                after=min(sequences) - 1,
-                limit=len(sequences),
-                max_bytes=max(
-                    256 * 1024, sum(len(json.dumps(row.public()).encode()) for row in unknown)
-                ),
-            )
-            eligible = {message.seq for message in selected.messages}
+                    and not message.notice
+                    and message.membership is None
+                ):
+                    continue
+                key = InputDispositions.bus_key(message, thread)
+                row = document.rows.get(key)
+                if row is None:
+                    # Read-only inspection of a canonical input. Only an
+                    # explicit successful review persists this observation.
+                    row = UnknownInput(
+                        key,
+                        message.seq,
+                        thread.name,
+                        snapshot.admission_generations[thread.name],
+                        message.target,
+                        message.body,
+                    )
+                if row.owner in owners and row.unresolved:
+                    unknown[key] = row
+                    eligible.add(key)
         return GoalInputReview(
             goal_id,
             targets,
             owners,
             senders,
-            unknown,
-            frozenset(row.key for row in unknown if row.sequence in eligible),
+            tuple(sorted(unknown.values(), key=lambda row: row.order)),
+            frozenset(eligible),
         )
 
     def goal_history(

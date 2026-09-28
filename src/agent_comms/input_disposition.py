@@ -171,14 +171,18 @@ class InputDispositions(LockedStore[InputDocument]):
         goal_id: str,
         goal_revision: int,
         turn_id: str,
+        observed: tuple[InputAttempt, ...] = (),
     ) -> None:
         decision = GoalInputDecision(goal_revision, turn_id)
 
         def review(document: InputDocument) -> InputDocument:
+            rows = dict(document.rows)
+            for row in observed:
+                if row.key not in keys or (row.key in rows and rows[row.key] != row):
+                    raise ValueError("Reviewed inputs changed; inspect them again.")
+                rows.setdefault(row.key, row)
             if any(
-                key not in document.rows
-                or document.rows[key].owner not in owners
-                or not document.rows[key].unresolved
+                key not in rows or rows[key].owner not in owners or not rows[key].unresolved
                 for key in keys
             ):
                 raise ValueError("Reviewed inputs changed; inspect them again.")
@@ -186,10 +190,7 @@ class InputDispositions(LockedStore[InputDocument]):
                 return document
             return replace(
                 document,
-                rows={
-                    **document.rows,
-                    **{key: document.rows[key].review(goal_id, decision) for key in keys},
-                },
+                rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
             )
 
         self.update(review)
@@ -208,7 +209,4 @@ class InputDispositions(LockedStore[InputDocument]):
             }
             return replace(document, rows={**document.rows, **changed}) if changed else document
 
-        return self.update(dismiss).delivery_overview(
-            owners, awaiting_keys=awaiting_keys
-        )
-
+        return self.update(dismiss).delivery_overview(owners, awaiting_keys=awaiting_keys)

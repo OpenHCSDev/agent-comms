@@ -1,6 +1,5 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
-import json
 import os
 import sqlite3
 from dataclasses import replace
@@ -13,7 +12,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
-    BlockedGoalAction,
     GoalPrecondition,
     OwnerInvocable,
     RetryGoalAction,
@@ -32,19 +30,29 @@ from agent_comms.threads import Thread
 
 def register(comms, name):
     comms.threads.register(
-        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(
+            name,
+            frozenset(),
+            str(comms.root),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
     )
 
 
 def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_path):
     comms = wire(tmp_path)
     register(comms, "owner")
-    goal = Goal("Retained objective", "retained", progress="Unrelated progress", state=UnrecordedBlockGoal())
+    goal = Goal(
+        "Retained objective", "retained", progress="Unrelated progress", state=UnrecordedBlockGoal()
+    )
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     history = comms.goals.goal_history("owner")
     assert history[-1].after == goal and history[-1].after.mention_source is None
     assert history[-1].after.state.reason is None
-    assert comms.goals.goal_execution("owner").presentation("owner").summary == "Blocked · reason unavailable"
+    assert (
+        comms.goals.goal_execution("owner").presentation("owner").summary
+        == "Blocked · reason unavailable"
+    )
     with sqlite3.connect(tmp_path / "goal_history.sqlite3") as database:
         before = database.execute("SELECT * FROM entries ORDER BY sequence").fetchall()
     reopened = wire(tmp_path)
@@ -58,7 +66,9 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     assert FieldCodec.decode(GoalState, {"kind": "unrecorded_block"}) == UnrecordedBlockGoal()
 
 
-@pytest.mark.parametrize("state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()])
+@pytest.mark.parametrize(
+    "state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()]
+)
 def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
     comms = wire(tmp_path / "wire")
     register(comms, "owner")
@@ -67,7 +77,9 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     private = tmp_path / "private"
     private.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(private)
-    retry = RetryGoalAction(expect=GoalPrecondition(goal_id=goal.id, expected_owner_pid=os.getpid()))
+    retry = RetryGoalAction(
+        expect=GoalPrecondition(goal_id=goal.id, expected_owner_pid=os.getpid())
+    )
     with pytest.raises(ValueError, match="Retry cannot create a grant"):
         comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
     assert store.snapshot(goal.id) is None
@@ -95,7 +107,9 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     store = InputDispositions(tmp_path / InputDispositions.filename)
     admission = comms.registry.snapshot().admission_generations["owner"]
     key = f"bus:{message.seq}"
-    store.record(key, seq=message.seq, owner="owner", admission=admission, target="owner", text=message.body)
+    store.record(
+        key, seq=message.seq, owner="owner", admission=admission, target="owner", text=message.body
+    )
     comms.messaging.acknowledge("owner")
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
@@ -109,15 +123,29 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     # A later native-started reply is already handled, regardless of display reads.
     second = comms.messaging.send_message("peer", "owner", "Native reply")
     second_key = f"bus:{second.seq}"
-    store.record(second_key, seq=second.seq, owner="owner", admission=admission, target="owner", text=second.body)
-    assert store.bind(second_key, admission=admission, turn_id="native-turn", native_id="a" * 32, text=second.body)
+    store.record(
+        second_key,
+        seq=second.seq,
+        owner="owner",
+        admission=admission,
+        target="owner",
+        text=second.body,
+    )
+    assert store.bind(
+        second_key, admission=admission, turn_id="native-turn", native_id="a" * 32, text=second.body
+    )
     assert store.started(second_key, turn_id="native-turn", native_id="a" * 32, text=second.body)
     comms.goals.update_goal("owner", action)
     wait = comms.goals.goal_wait("owner")
     assert wait.owner_created_at == comms.registry.require("owner").created_at
     assert wait.report_turn_id is None and wait.report_turn_generation is None
     saved = FieldCodec.encode(wait)
-    for missing in ("owner_created_at", "target_turn_generations", "report_turn_id", "report_turn_generation"):
+    for missing in (
+        "owner_created_at",
+        "target_turn_generations",
+        "report_turn_id",
+        "report_turn_generation",
+    ):
         data = dict(saved)
         del data[missing]
         with pytest.raises((TypeError, ValueError)):
@@ -126,7 +154,9 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
-async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(tmp_path, monkeypatch):
+async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
+    tmp_path, monkeypatch
+):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
@@ -136,8 +166,21 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(tm
         ledger = owner.inputs.dispositions
         admission = comms.registry.snapshot().admission_generations[session]
         for name in ("queued", "uncertain"):
-            ledger.record(f"acp:{name}", seq=None, owner=session, admission=admission, target=session, text=name)
-        ledger.bind("acp:uncertain", admission=admission, turn_id="finished-owner-turn", native_id="b" * 32, text="uncertain")
+            ledger.record(
+                f"acp:{name}",
+                seq=None,
+                owner=session,
+                admission=admission,
+                target=session,
+                text=name,
+            )
+        ledger.bind(
+            "acp:uncertain",
+            admission=admission,
+            turn_id="finished-owner-turn",
+            native_id="b" * 32,
+            text="uncertain",
+        )
         owner.inputs.turn_input_keys[session] = {"acp:queued"}
         before = ledger.read().rows
         current = await proxy.request("input_dispositions")
@@ -145,9 +188,13 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(tm
         assert current["historicalCount"] == 1
         cleared = await proxy.request("dismiss_historical_inputs")
         assert cleared["dismissedHistoricalCount"] == 1 and cleared["inputs"] == current["inputs"]
-        assert {key: replace(row, notice_dismissed=False) for key, row in ledger.read().rows.items()} == before
+        assert {
+            key: replace(row, notice_dismissed=False) for key, row in ledger.read().rows.items()
+        } == before
         assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
-        goal = Goal("Retained goal without private authority", "missing", state=UnrecordedBlockGoal())
+        goal = Goal(
+            "Retained goal without private authority", "missing", state=UnrecordedBlockGoal()
+        )
         comms.registry.register(replace(comms.registry.require(session), goal=goal))
         with pytest.raises(RuntimeError, match="Retry cannot create a grant"):
             await proxy.request("retry_goal", goal_id=goal.id, expected_revision=goal.revision)
@@ -162,12 +209,25 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(tm
 @pytest.mark.refactor_guard
 def test_retired_goal_input_authorities_cannot_return():
     root = Path(__file__).parents[1] / "src/agent_comms"
-    source = "\n".join((root / name).read_text() for name in (
-        "input_disposition.py", "input_attempt.py", "goal_actions.py", "goal_management.py",
-    ))
+    source = "\n".join(
+        (root / name).read_text()
+        for name in (
+            "input_disposition.py",
+            "input_attempt.py",
+            "goal_actions.py",
+            "goal_management.py",
+        )
+    )
     for retired in ("AcpDeliveryCursors", "DeliveryCursor", "DeliveryDocument", "legacy_through"):
         assert retired not in source
     import ast
+
     tree = ast.parse((root / "goal_actions.py").read_text())
-    retry = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "RetryGoalAction")
-    assert not any(isinstance(node, ast.Attribute) and node.attr == "create_goal" for node in ast.walk(retry))
+    retry = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "RetryGoalAction"
+    )
+    assert not any(
+        isinstance(node, ast.Attribute) and node.attr == "create_goal" for node in ast.walk(retry)
+    )

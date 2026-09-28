@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -17,9 +18,8 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_presentation import GoalExecution
-from agent_comms.goal_states import UnrecordedBlockGoal, BlockedGoal
+from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.tools import TOOLS
 
@@ -34,7 +34,9 @@ def _owner(tmp_path):
 
 def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, monkeypatch):
     comms, original = _owner(tmp_path)
-    progressed = comms.goals.update_goal("worker", ActiveGoalAction(progress="Verified 2 of 3 items"))
+    progressed = comms.goals.update_goal(
+        "worker", ActiveGoalAction(progress="Verified 2 of 3 items")
+    )
     assert progressed is not None
     before_history = comms.goals.goal_history("worker", goal_id=original.id)
     before_registry = (tmp_path / "registry.json").read_bytes()
@@ -103,7 +105,9 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     assert wire(tmp_path).goals.goal_execution("worker").block_reason == blocked.state.reason
 
     comms2, started2 = _owner(tmp_path / "another")
-    completed = comms2.goals.update_goal("worker", CompletedGoalAction(progress="Reported completion"))
+    completed = comms2.goals.update_goal(
+        "worker", CompletedGoalAction(progress="Reported completion")
+    )
     assert completed is not None
     revoked = comms2.goals.block_unverified_goal_completion(
         "worker",
@@ -119,7 +123,9 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
 def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_path):
     comms, goal = _owner(tmp_path)
     thread = comms.registry.require("worker")
-    recorded = Goal(goal.text, goal.id, state=UnrecordedBlockGoal(), progress="Unrelated old progress")
+    recorded = Goal(
+        goal.text, goal.id, state=UnrecordedBlockGoal(), progress="Unrelated old progress"
+    )
     comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
     observed = wire(tmp_path).goals.goal_execution("worker")
     assert observed is not None
@@ -132,7 +138,11 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     from agent_comms.goal_attempts import GoalAttemptStore
 
     comms, original = _owner(tmp_path)
-    comms.threads.register(replace(comms.registry.require("worker"), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.threads.register(
+        replace(
+            comms.registry.require("worker"), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
     progressed = comms.goals.update_goal(
         "worker", PausedGoalAction(progress="Half verified by the owner")
     )

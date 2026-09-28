@@ -221,14 +221,17 @@ class RelationshipDocument:
         if action == "remove":
             if existing is None:
                 return self, None
-            return replace(
-                self,
-                collaborations=tuple(
-                    edge
-                    for edge in self.collaborations
-                    if edge.pair_identity != existing.pair_identity
+            return (
+                replace(
+                    self,
+                    collaborations=tuple(
+                        edge
+                        for edge in self.collaborations
+                        if edge.pair_identity != existing.pair_identity
+                    ),
                 ),
-            ), None
+                None,
+            )
         if second is None:
             raise UnregisteredThreadError(f"Thread {peer!r} is not registered.")
         if not second.role.executable:

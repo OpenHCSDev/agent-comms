@@ -1,12 +1,13 @@
 # L0 goal/wait/input cutover contract
 
 Owner implementation branch: refactor/l0-goal-wait-closure-20260928, based on
-parent PR229 at 14df8d6. Parent owns the one-shot tools and quiet activation.
+parent PR229 at 14df8d6, with parent bb1892e integrated. Parent owns the one-shot tools and quiet activation.
 No live or parent source/data is modified by this branch.
 
 ## Durable goal records
 
 Inventory is in data-inventory.json, obtained read-only (SQLite mode=ro).
+Registry/history/wait counts rechecked 2026-09-28 16:24:56 UTC; unchanged.
 Live registry: 18 goals, 4 blocked, 3 blocked with absent/null reasons;
 13 goals lack mention evidence. Live history: 2 entries, no missing block reason.
 Retained root: 20 goals, 6 blocked, 3 missing reasons; 456 history entries with
@@ -52,7 +53,12 @@ unbound owners are rejected. S13 process_alive checks are retained.
 
 ## Durable inputs and cursor deletion
 
-input-inventory.json counts durable records on both roots. Preserve ALL
+input-inventory.json counts durable records on both roots at 2026-09-28
+16:24:56 UTC: live 35 rows (9 UNKNOWN, 8 dismissed, 26 with native IDs),
+retained 7,766 rows (2,577 UNKNOWN, 1,059 dismissed, 5,211 native IDs, 547
+review-bearing, 7,209 bus rows). Active live counts are changing; inventory
+again at quiet cutover and preserve every row, never require a fixed row count.
+Preserve ALL
 input_dispositions.json rows, UNKNOWN/STARTED state, exact source/sent text,
 owner/admission/native IDs, goal_reviews and notice_dismissed flags. This branch
 changes no input-record schema and requires no input-record conversion or reset.
@@ -61,8 +67,20 @@ Delivery presentation uses the current owner's explicit awaiting_keys snapshot.
 Without that snapshot the scope is unobserved; no new notices are dismissed.
 Already dismissed evidence remains historical, and UNKNOWN never grants replay.
 The old cursor cutoff is not delivery proof and is not copied into new authority.
-Standby uses canonical direct dependency messages with current InputAttempt native
-STARTED evidence or explicit goal review; a transport/UI ACK cannot substitute.
+Standby uses canonical direct dependency messages scoped by the existing
+DeliveryScope.current incarnation check. Existing InputAttempt STARTED evidence
+or an explicit goal review handles an exact input; a transport/UI ACK cannot
+substitute. A canonical message with no input record is projected read-only as
+an UNKNOWN observation using its exact source text and the current owner admission.
+Only a successful explicit reviewed_inputs action persists that observation and
+GoalInputDecision, atomically in the existing input document. Failed/partial
+reviews and inspection alone write nothing. Existing rows are compared before
+review, never overwritten by reconstructed facts. No native ID, sent text,
+STARTED state, scheduling entry, private grant or replay permission is inferred.
+Selected native SQL receipts and informational cursor coverage are not converted
+into input-attempt STARTED receipts; absent handling evidence requires explicit
+review. Old sender/recipient incarnations stay in history and are not current
+standby dependencies.
 
 ## Integration ownership
 

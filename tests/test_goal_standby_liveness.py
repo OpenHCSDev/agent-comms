@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.goal_actions import (
     EditGoalAction,
@@ -20,12 +21,16 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
+from goal_owner_fixture import activate_empty_source
 
 
 def _thread(comms, name, worktree):
-    comms.threads.register(Thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.threads.register(
+        Thread(
+            name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+    )
 
 
 def _begin(comms, name, turn_id):
@@ -398,6 +403,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     _thread(comms, "owner", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
@@ -445,6 +451,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     goal = comms.goals.update_goal(
         owner, SetGoalAction(text="Review child work"), owner_store=agent.turns.open_goal_store()
     )
@@ -474,6 +481,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, 
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     _thread(comms, "owner", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
@@ -525,6 +533,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     agent = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
+    activate_empty_source(agent)
     _thread(comms, "owner", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None

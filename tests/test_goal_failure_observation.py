@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -34,7 +35,6 @@ from agent_comms.thread_status import (
     IdleThreadStatus,
     StoppedThreadStatus,
 )
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import TurnLeaseFence
 
@@ -79,7 +79,9 @@ def rows(store, table):
 
 
 def blocked(owner):
-    return replace(owner, goal=replace(owner.goal, state=BlockedGoal("Explicit fixture refusal"), revision=3))
+    return replace(
+        owner, goal=replace(owner.goal, state=BlockedGoal("Explicit fixture refusal"), revision=3)
+    )
 
 
 def read(store, owner, **kwargs):
@@ -246,7 +248,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"name": "replacement"},
         {"created_at": 11.0},
         {"worktree": "/changed"},
-        {"pid": 0},
+        {"process_identity": None},
         {"goal": Goal("replacement", "replacement", state=BlockedGoal("Explicit fixture refusal"))},
         {"goal": Goal("active", "goal")},
         {"turn_generation": 8},
@@ -308,11 +310,13 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     wired, tmp_path, monkeypatch, outcome, owner_pauses
 ):
     from agent_comms.acp import CommsAgent
+    from goal_owner_fixture import activate_empty_source
     from test_acp import TestAgentTurn as GoalFixture
 
     agent = CommsAgent(wired, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
+    activate_empty_source(agent)
     goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
     GoalFixture()._authorize_test_goal(agent, wired, goal)
     store = agent.turns.goal_store
@@ -332,8 +336,6 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
             assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
             assert agent.inputs.dispositions.started(key, **binding)
     ledger_before = agent.inputs.dispositions.path.read_bytes()
-    cursors = wired.root / "acp_delivery_cursors.json"
-    cursor_before = cursors.read_bytes() if cursors.exists() else None
     if outcome in {"observation_error", "observation_rollback"}:
         action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
         with sqlite3.connect(store.path) as conn:
@@ -388,7 +390,6 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
         assert projection.state == expected
         assert store.path.read_bytes() == before
         assert agent.inputs.dispositions.path.read_bytes() == ledger_before
-        assert (cursors.read_bytes() if cursors.exists() else None) == cursor_before
         if owner_pauses:
             assert owner.goal.state.declared_name == "paused"
             assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes

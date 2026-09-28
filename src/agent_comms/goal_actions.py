@@ -232,37 +232,24 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
 
         aliases = review.owners
         dispositions = InputDispositions(ctx.goals.root / InputDispositions.filename)
-        handled_sequences = {
-            row.sequence
-            for row in dispositions.read().rows.values()
-            if row.owner in aliases and not row.unresolved and row.sequence is not None
-        }
         unknown = {row.key: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
         if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):
             raise ValueError("Review only this recipient's exact unresolved bus input keys.")
-        reviewed_sequences = {unknown[key].sequence for key in reviewed_keys}
-        prior_reviews = {
-            row.sequence
-            for row in unknown.values()
-            if goal is not None and row.reviewed_for_goal(goal.id)
-        }
-        senders = review.senders
         if not set(reviewed_keys) <= review.eligible_keys:
             raise ValueError("Review only direct inputs from these declared dependencies.")
-        pending = ctx.goals.bus._history_page(
-            lambda message: (
-                message.target in aliases
-                and message.sender in senders
-                and message.seq not in handled_sequences | reviewed_sequences | prior_reviews
+        pending = next(
+            (
+                row
+                for row in review.unknown
+                if row.key in review.eligible_keys
+                and row.key not in reviewed_keys
+                and not row.reviewed_for_goal(goal.id)
             ),
-            before=None,
-            after=None,
-            limit=1,
-            max_bytes=256 * 1024,
+            None,
         )
-        if pending.messages:
-            sequence = pending.messages[0].seq
+        if pending is not None:
+            sequence = pending.sequence
             raise ValueError(
                 f"Dependency reply {sequence} is already pending or UNKNOWN. "
                 f"Call comms_inbox with goal_id={goal.id!r} and "
@@ -299,6 +286,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             )
         dispositions.review_for_goal(
             reviewed_keys,
+            observed=tuple(unknown[key] for key in reviewed_keys),
             owners=aliases,
             goal_id=goal.id,
             goal_revision=goal.revision,
