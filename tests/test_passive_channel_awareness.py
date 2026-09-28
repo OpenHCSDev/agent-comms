@@ -475,7 +475,7 @@ async def test_failed_witness_publication_suppresses_frame_and_keeps_old_documen
         snapshot = comms.registry.snapshot()
         channels = comms.channel_catalog.targets_for(current.tags)
         awareness = agent.inputs.passive_awareness
-        before = awareness.path.read_bytes()
+        before = awareness.store.path.read_bytes()
         real_sync, real_replace = os.fsync, locked_store._replace_snapshot
         failed = False
 
@@ -499,7 +499,7 @@ async def test_failed_witness_publication_suppresses_frame_and_keeps_old_documen
             scoped.setattr(os, "fsync", sync)
             scoped.setattr(locked_store, "_replace_snapshot", publish)
             assert awareness.frame(current, snapshot, channels) == ""
-        assert awareness.path.read_bytes() == before
+        assert awareness.store.path.read_bytes() == before
         assert awareness.sources(current) == ()
         assert "Unpublished witness" in awareness.frame(current, snapshot, channels)
         assert awareness.sources(current)
@@ -526,8 +526,8 @@ async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
         modes = []
 
         @contextmanager
-        def observed(path, *, shared=False):
-            with _store_lock(path, shared=shared):
+        def observed(path, *, shared=False, blocking=True):
+            with _store_lock(path, shared=shared, blocking=blocking):
                 modes.append(shared)
                 yield
 
@@ -540,9 +540,9 @@ async def test_source_recheck_retains_shared_store_lock_through_exact_bus_read(
         checked = []
 
         def verify(index, stream, seq, channel):
-            with pytest.raises(BlockingIOError), _store_lock(awareness.path, blocking=False):
+            with pytest.raises(BlockingIOError), _store_lock(awareness.store.path, blocking=False):
                 pass
-            with _store_lock(awareness.path, shared=True, blocking=False):
+            with _store_lock(awareness.store.path, shared=True, blocking=False):
                 checked.append(seq)
             return exact(index, stream, seq, channel)
 
@@ -561,7 +561,7 @@ async def test_index_exit_failure_cannot_return_unpublished_frame(tmp_path, monk
         await agent.inputs.drain_inbox(owner)
         current = comms.registry.require(owner)
         awareness = agent.inputs.passive_awareness
-        before = awareness.path.read_bytes()
+        before = awareness.store.path.read_bytes()
         original_exit = BusPageIndex.__exit__
 
         def fail_exit(self, *args):
@@ -578,6 +578,6 @@ async def test_index_exit_failure_cannot_return_unpublished_frame(tmp_path, monk
                 )
                 == ""
             )
-        assert awareness.path.read_bytes() == before
+        assert awareness.store.path.read_bytes() == before
     finally:
         await agent.shutdown()

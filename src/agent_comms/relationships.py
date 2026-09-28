@@ -10,10 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import dataclass, replace
-from pathlib import Path
+from dataclasses import dataclass, field, fields, replace
 from threading import RLock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Literal
 
 from .declarations import (
     Message,
@@ -25,7 +24,6 @@ from .declarations import (
     file_revision,
     is_channel_target,
 )
-from .field_codec import FieldCodec
 from .locked_store import LockedStore
 
 if TYPE_CHECKING:
@@ -33,7 +31,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class Collaboration:
+class CollaborationRevision:
     """One mutual contact, created by either participant and visible to both.
 
     Creation timestamps identify the registered incarnations. A new thread
@@ -47,6 +45,58 @@ class Collaboration:
     note: str
     created_at: float
     updated_at: float
+
+    def incident(self, thread: Thread) -> bool:
+        return (self.owner, self.owner_created) == (thread.name, thread.created_at) or (
+            self.peer,
+            self.peer_created,
+        ) == (thread.name, thread.created_at)
+
+    def counterpart(self, thread: Thread) -> tuple[str, float]:
+        if (self.owner, self.owner_created) == (thread.name, thread.created_at):
+            return self.peer, self.peer_created
+        return self.owner, self.owner_created
+
+    def oriented(self, thread: Thread):
+        if (self.owner, self.owner_created) == (thread.name, thread.created_at):
+            return self
+        return replace(
+            self,
+            owner=self.peer,
+            peer=self.owner,
+            owner_created=self.peer_created,
+            peer_created=self.owner_created,
+        )
+
+    @property
+    def pair_identity(self) -> frozenset[tuple[str, float]]:
+        return frozenset(((self.owner, self.owner_created), (self.peer, self.peer_created)))
+
+    def resolved(self, registry: RegistrySnapshot):
+        def current_name(name: str, created: float) -> str:
+            canonical = registry.aliases.get(name, name)
+            thread = registry.threads.get(canonical)
+            return canonical if thread and thread.created_at == created else name
+
+        return replace(
+            self,
+            owner=current_name(self.owner, self.owner_created),
+            peer=current_name(self.peer, self.peer_created),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Collaboration(CollaborationRevision):
+    # Previous records are immutable provenance, never active parallel edges.
+    history: tuple[CollaborationRevision, ...] = ()
+
+    def revision(self) -> CollaborationRevision:
+        return CollaborationRevision(
+            **{field.name: getattr(self, field.name) for field in fields(CollaborationRevision)}
+        )
+
+    def updated(self, note: str, now: float) -> Collaboration:
+        return replace(self, note=note, updated_at=now, history=(*self.history, self.revision()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,24 +169,118 @@ class RelationshipOrder:
     order: ThreadSort
 
 
-class RelationshipStore(LockedStore[dict[str, Any]]):
-    """Versioned external envelope; retain unknown document and order keys."""
+@dataclass(frozen=True, slots=True)
+class RelationshipDocument:
+    collaborations: tuple[Collaboration, ...] = field(default=(), metadata={"wire_required": True})
+    orders: tuple[RelationshipOrder, ...] = field(default=(), metadata={"wire_required": True})
+    version: Literal[2] = field(default=2, metadata={"wire_required": True})
+
+    def __post_init__(self):
+        pairs = [edge.pair_identity for edge in self.collaborations]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("Duplicate collaboration pairs require explicit migration")
+        order_keys = [(row.owner, row.owner_created, row.group) for row in self.orders]
+        if len(order_keys) != len(set(order_keys)):
+            raise ValueError("Duplicate relationship sort preferences")
+
+    def resolved(self, registry: RegistrySnapshot) -> RelationshipDocument:
+        # Rename aliases are current domain data; deleted/rebound names stay historical.
+        def resolve_order(row: RelationshipOrder) -> RelationshipOrder:
+            name = registry.aliases.get(row.owner, row.owner)
+            owner = registry.threads.get(name)
+            return (
+                replace(row, owner=name) if owner and owner.created_at == row.owner_created else row
+            )
+
+        return replace(
+            self,
+            collaborations=tuple(edge.resolved(registry) for edge in self.collaborations),
+            orders=tuple(resolve_order(row) for row in self.orders),
+        )
+
+    def edit(
+        self, first: Thread, peer: str, second: Thread | None, action: str, note: str
+    ) -> tuple[RelationshipDocument, Collaboration | None]:
+        pairs = tuple(
+            edge
+            for edge in self.collaborations
+            if {edge.owner, edge.peer} == {first.name, peer} and edge.incident(first)
+        )
+        active = next(
+            (
+                edge
+                for edge in pairs
+                if second is not None
+                and edge.counterpart(first) == (second.name, second.created_at)
+            ),
+            None,
+        )
+        unavailable = next((edge for edge in pairs if edge is not active), None)
+        existing = active or unavailable
+        if action == "remove":
+            if existing is None:
+                return self, None
+            return replace(
+                self,
+                collaborations=tuple(
+                    edge
+                    for edge in self.collaborations
+                    if edge.pair_identity != existing.pair_identity
+                ),
+            ), None
+        if second is None:
+            raise ValueError(f"Unknown collaboration peer: {peer}")
+        if not second.role.executable:
+            raise ValueError("Collaborations relate agent threads")
+        if first.name == second.name:
+            raise ValueError("A thread cannot collaborate with itself")
+        if unavailable and active is None:
+            raise ValueError(
+                "Peer identity was replaced; explicitly remove the unavailable "
+                "collaboration before adding a new one"
+            )
+        if action == "update" and active is None:
+            raise ValueError("Collaboration does not exist")
+        if action == "add" and active is not None:
+            return self, active.oriented(first)
+        now = time.time()
+        changed = (
+            active.updated(note, now)
+            if active
+            else Collaboration(
+                first.name, second.name, first.created_at, second.created_at, note, now, now
+            )
+        )
+        return replace(
+            self,
+            collaborations=tuple(edge for edge in self.collaborations if edge is not active)
+            + (changed,),
+        ), changed.oriented(first)
+
+    def ordered(self, owner: Thread, group: str, order: ThreadSort) -> RelationshipDocument:
+        row = RelationshipOrder(owner.name, owner.created_at, group, order)
+        rows = tuple(
+            saved
+            for saved in self.orders
+            if (saved.owner, saved.owner_created, saved.group)
+            != (owner.name, owner.created_at, group)
+        )
+        return replace(self, orders=(*rows, row))
+
+
+class RelationshipStore(LockedStore[RelationshipDocument]):
+    """One current typed schema. Version1 conversion is an explicit offline operation."""
 
     filename = "relationships.json"
     json_indent = 2
     json_suffix = "\n"
 
     @property
-    def record_type(self) -> type[dict[str, Any]]:
-        return dict[str, Any]
+    def record_type(self) -> type[RelationshipDocument]:
+        return RelationshipDocument
 
-    def empty(self) -> dict[str, Any]:
-        return {"version": 1, "collaborations": [], "orders": []}
-
-    def _decode(self, data: Any) -> dict[str, Any]:
-        if not isinstance(data, dict) or data.get("version") != 1:
-            raise ValueError("Unsupported relationship store version")
-        return super()._decode(data)
+    def empty(self) -> RelationshipDocument:
+        return RelationshipDocument()
 
 
 class ThreadRelationships:
@@ -156,101 +300,16 @@ class ThreadRelationships:
     def revision(self) -> tuple:
         return (
             *self.comms.revision().files,
-            file_revision(self.path),
+            file_revision(self.store.path),
             self.comms.revision().expiry_tick,
         )
-
-    @property
-    def path(self) -> Path:
-        return self.store.path
-
-    def _canonical_edges(
-        self, state: dict[str, Any], registry: RegistrySnapshot
-    ) -> list[Collaboration]:
-        edges = []
-        for raw in state["collaborations"]:
-            edge = FieldCodec.decode(Collaboration, raw)
-            owner = registry.aliases.get(edge.owner, edge.owner)
-            peer = registry.aliases.get(edge.peer, edge.peer)
-            first, second = registry.threads.get(owner), registry.threads.get(peer)
-            # Normalize surviving aliases, but NEVER filter persistent records
-            # through today's registry. Missing/replaced endpoints remain
-            # copyable historical declarations, including their work notes.
-            edges.append(
-                replace(
-                    edge,
-                    owner=owner if first and first.created_at == edge.owner_created else edge.owner,
-                    peer=peer if second and second.created_at == edge.peer_created else edge.peer,
-                )
-            )
-        return edges
-
-    @staticmethod
-    def _incident(edge: Collaboration, thread: Thread) -> bool:
-        return (edge.owner, edge.owner_created) == (thread.name, thread.created_at) or (
-            edge.peer,
-            edge.peer_created,
-        ) == (thread.name, thread.created_at)
-
-    @staticmethod
-    def _counterpart(edge: Collaboration, thread: Thread) -> tuple[str, float]:
-        if (edge.owner, edge.owner_created) == (thread.name, thread.created_at):
-            return edge.peer, edge.peer_created
-        return edge.owner, edge.owner_created
-
-    @staticmethod
-    def _orient(edge: Collaboration, thread: Thread) -> Collaboration:
-        if (edge.owner, edge.owner_created) == (thread.name, thread.created_at):
-            return edge
-        return Collaboration(
-            thread.name,
-            edge.owner,
-            thread.created_at,
-            edge.owner_created,
-            edge.note,
-            edge.created_at,
-            edge.updated_at,
-        )
-
-    @staticmethod
-    def _pair_identity(edge: Collaboration) -> frozenset[tuple[str, float]]:
-        return frozenset(((edge.owner, edge.owner_created), (edge.peer, edge.peer_created)))
-
-    @staticmethod
-    def _unique_edges(edges: list[Collaboration]) -> list[Collaboration]:
-        """Project legacy opposite-direction rows as one pair without losing notes.
-
-        Deduplication is read-only; unrelated edits retain both raw records.
-        A deliberate update/remove may replace/end that pair.
-        """
-        groups: dict[frozenset[tuple[str, float]], list[Collaboration]] = {}
-        for edge in edges:
-            key = ThreadRelationships._pair_identity(edge)
-            groups.setdefault(key, []).append(edge)
-        result = []
-        for pair in groups.values():
-            newest = max(pair, key=lambda edge: (edge.updated_at, edge.owner, edge.peer))
-            if len(pair) == 1:
-                result.append(newest)
-            else:
-                notes = tuple(dict.fromkeys(edge.note for edge in pair if edge.note))
-                result.append(
-                    replace(
-                        newest,
-                        note="\n".join(notes),
-                        created_at=min(edge.created_at for edge in pair),
-                    )
-                )
-        return result
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
         with _store_lock(self.comms._wire_lock_path):
             registry = self.comms.registry.snapshot()
             thread = self.comms.registry.require(owner)
-            edges = self._unique_edges(self._canonical_edges(self.store.read(), registry))
-            return tuple(
-                self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
-            )
+            edges = self.store.read().resolved(registry).collaborations
+            return tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
 
     @staticmethod
     def _goal_contacts(
@@ -338,10 +397,8 @@ class ThreadRelationships:
         with _store_lock(self.comms._wire_lock_path):
             registry = self.comms.registry.snapshot()
             thread = self.comms.registry.require(owner)
-            edges = self._unique_edges(self._canonical_edges(self.store.read(), registry))
-            explicit = tuple(
-                self._orient(edge, thread) for edge in edges if self._incident(edge, thread)
-            )
+            edges = self.store.read().resolved(registry).collaborations
+            explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
             contacts, diagnostics = self._goal_contacts(registry)
             visible: dict[tuple[str, float], RelationshipEntry] = {}
             for edge in explicit:
@@ -394,105 +451,29 @@ class ThreadRelationships:
             if not first.role.executable:
                 raise ValueError("Collaborations relate agent threads")
             registry = self.comms.registry.snapshot()
-            canonical_peer = registry.aliases.get(peer, peer)
-            result: Collaboration | None = None
+            peer = registry.aliases.get(peer, peer)
+            result = None
 
-            def change(state: dict[str, Any]) -> dict[str, Any]:
+            def change(document: RelationshipDocument) -> RelationshipDocument:
                 nonlocal result
-                edges = self._canonical_edges(state, registry)
-                pair = [
-                    edge
-                    for edge in edges
-                    if {edge.owner, edge.peer} == {first.name, canonical_peer}
-                ]
-                second_live = registry.threads.get(canonical_peer)
-                active = [
-                    edge
-                    for edge in pair
-                    if self._incident(edge, first)
-                    and second_live is not None
-                    and self._counterpart(edge, first) == (second_live.name, second_live.created_at)
-                ]
-                unavailable = [
-                    edge for edge in pair if self._incident(edge, first) and edge not in active
-                ]
-                existing: Collaboration | None = next(iter(active or unavailable), None)
-                if action == "remove":
-                    # Either participant can end the single shared relationship.
-                    # Prefer a live incarnation, leaving historical notes intact.
-                    # A reused caller name cannot remove another incarnation's row.
-                    if existing is not None:
-                        identity = self._pair_identity(existing)
-                        return {
-                            **state,
-                            "collaborations": [
-                                FieldCodec.encode(edge)
-                                for edge in edges
-                                if self._pair_identity(edge) != identity
-                            ],
-                        }
-                    return state
-                second = self.comms.registry.require(peer)
-                if not second.role.executable:
-                    raise ValueError("Collaborations relate agent threads")
-                if first.name == second.name:
-                    raise ValueError("A thread cannot collaborate with itself")
-                if unavailable and not active:
-                    raise ValueError(
-                        "Peer identity was replaced; explicitly remove the unavailable "
-                        "collaboration before adding a new one"
-                    )
-                if action == "update" and not active:
-                    raise ValueError("Collaboration does not exist")
-                if action == "add" and active:
-                    result = self._orient(self._unique_edges(active)[0], first)
-                    return state
-                now = time.time()
-                existing = active[0] if active else None
-                result = Collaboration(
-                    existing.owner if existing else first.name,
-                    existing.peer if existing else second.name,
-                    existing.owner_created if existing else first.created_at,
-                    existing.peer_created if existing else second.created_at,
-                    note,
-                    min(edge.created_at for edge in active) if active else now,
-                    now,
+                resolved = document.resolved(registry)
+                changed, result = resolved.edit(
+                    first, peer, registry.threads.get(peer), action, note
                 )
-                edges = [edge for edge in edges if edge not in active]
-                edges.append(result)
-                result = self._orient(result, first)
-                return {**state, "collaborations": [FieldCodec.encode(edge) for edge in edges]}
+                return document if changed == document else changed
 
             self.store.update(change)
             return result
 
-    def set_order(self, owner: str, group: str, order: ThreadSort | str) -> ThreadSort:
+    def set_order(self, owner: str, group: str, order: ThreadSort) -> ThreadSort:
         if group not in {"children", "collaborating"}:
             raise ValueError("This relationship group has no selectable sort")
-        if isinstance(order, str):
-            order = ThreadSort(order)
         with _store_lock(self.comms._wire_lock_path):
             thread = self.comms.registry.require(owner)
             registry = self.comms.registry.snapshot()
-
-            def change(state: dict[str, Any]) -> dict[str, Any]:
-                rows = [
-                    row
-                    for row in state["orders"]
-                    if not (
-                        registry.aliases.get(row["owner"], row["owner"]) == thread.name
-                        and row["owner_created"] == thread.created_at
-                        and row["group"] == group
-                    )
-                ]
-                rows.append(
-                    FieldCodec.encode(
-                        RelationshipOrder(thread.name, thread.created_at, group, order)
-                    )
-                )
-                return {**state, "orders": rows}
-
-            self.store.update(change)
+            self.store.update(
+                lambda document: document.resolved(registry).ordered(thread, group, order)
+            )
         return order
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
@@ -529,8 +510,8 @@ class ThreadRelationships:
         with _store_lock(self.comms._wire_lock_path):
             thread = self.comms.registry.require(owner)
             registry = self.comms.registry.snapshot()
-            state = self.store.read()
-            edges = self._canonical_edges(state, registry)
+            state = self.store.read().resolved(registry)
+            edges = state.collaborations
             goal_contacts, goal_diagnostics = self._goal_contacts(registry)
             delivery = self.comms.bus._delivery_scope(thread.name)
         people = {
@@ -579,13 +560,13 @@ class ThreadRelationships:
                     )
 
         orders = {"children": ThreadSort.CREATED, "collaborating": ThreadSort.LAST_ACTIVITY}
-        for row in state["orders"]:
+        for row in state.orders:
             if (
-                canonical(row["owner"]) == thread.name
-                and row["owner_created"] == thread.created_at
-                and row["group"] in orders
+                canonical(row.owner) == thread.name
+                and row.owner_created == thread.created_at
+                and row.group in orders
             ):
-                orders[row["group"]] = ThreadSort(row["order"])
+                orders[row.group] = row.order
         # Existing declaration-owned timestamp sort, shared with channel members.
         sent = (
             self.comms.last_sent_timestamps() if ThreadSort.LAST_MESSAGE in orders.values() else {}
@@ -609,10 +590,10 @@ class ThreadRelationships:
             if child.parent and canonical(child.parent) == thread.name
         ]
         collaborating: dict[tuple[str, float], RelationshipEntry] = {}
-        for edge in self._unique_edges(edges):
-            if not self._incident(edge, thread):
+        for edge in edges:
+            if not edge.incident(thread):
                 continue
-            other_name, other_created = self._counterpart(edge, thread)
+            other_name, other_created = edge.counterpart(thread)
             person = people.get(other_name)
             available = person is not None and person.thread.created_at == other_created
             collaborating[(other_name, other_created)] = RelationshipEntry(
