@@ -39,7 +39,13 @@ from .message_bus import MessageBus
 from .message_page import MessagePage
 from .messages import Message
 from .messaging import Messaging
-from .presentation import ChannelView, CoordinationSnapshot, ThreadView, WireRevision
+from .presentation import (
+    ChannelView,
+    CoordinationSnapshot,
+    MessageNotification,
+    ThreadView,
+    WireRevision,
+)
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock, file_revision
@@ -79,6 +85,122 @@ class HistoryViews:
         self.transcript_reads = transcript_read_state(bus.reads.path)
         self._sent_times_signature: tuple[int, int, int] | None = None
         self._sent_times: dict[str, float] = {}
+
+    def message_notifications(
+        self, messages: Sequence[Message]
+    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        """Read one visible window's actual recipient outcomes; never schedule work.
+
+        Display uses the coordinator's existing assignment decoder and lifecycle.
+        A missing legacy store or absent row supplies no receipt. Errors remain
+        visible to the caller instead of becoming false successful delivery.
+        """
+        if len(messages) > 120:
+            raise ValueError("Notification reads require a bounded visible message window")
+        keys = {(message.seq, message.message_id) for message in messages if message.seq > 0}
+        result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
+        if not keys:
+            return {}
+        placeholders = ",".join("?" for _ in keys)
+        rows = self._notification_rows(
+            f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
+        )
+        for row, notification in self._project_notifications(rows):
+            key = (row["wire_seq"], row["message_id"])
+            if key in result:
+                result[key].append(notification)
+        return {key: tuple(rows) for key, rows in result.items()}
+
+    def recent_notifications(self, name: str, *, limit: int = 5) -> tuple[MessageNotification, ...]:
+        """Recent assigned messages, including channel work, for one agent view.
+
+        Reads the original assignments and source messages. This is not a DM
+        delivery or a read acknowledgement, and never schedules another turn.
+        """
+        from .bus_publication import stable_thread_lookup
+
+        if not 1 <= limit <= 20:
+            raise ValueError("Recent notification limit must be between 1 and 20")
+        owner = self.registry.require(name)
+        rows = self._notification_rows(
+            "w.recipient_lookup=?",
+            (stable_thread_lookup(owner.created_at),),
+            limit=limit,
+        )
+        result = []
+        for row, notification in self._project_notifications(rows):
+            message = self.bus.log.message_by_id(row["message_id"])
+            if message is not None and message.seq == row["wire_seq"]:
+                result.append(replace(notification, message=message))
+        return tuple(result)
+
+    def _notification_rows(self, predicate: str, parameters: tuple, *, limit: int = 0):
+        import sqlite3
+        from contextlib import closing
+
+        from .coordination import COORDINATION_SCHEMA_VERSION
+        from .recovery_projection import _preflight
+
+        database = self.root / "coordination.sqlite3"
+        failure = _preflight(database)
+        if failure == "missing":
+            return ()
+        if failure:
+            raise ValueError(f"Channel notification status unavailable: {failure}")
+        with closing(sqlite3.connect(
+            database.resolve().as_uri() + "?mode=ro", uri=True,
+            timeout=0.05, isolation_level=None,
+        )) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            connection.execute("BEGIN")
+            if (
+                connection.execute("PRAGMA user_version").fetchone()[0]
+                != COORDINATION_SCHEMA_VERSION
+            ):
+                raise ValueError("Channel notification status has an unsupported schema")
+            return tuple(connection.execute(
+                "SELECT w.*, EXISTS (SELECT 1 FROM native_runtime_inputs n "
+                "WHERE n.claim_id=w.claim_id AND n.stage='triage' AND n.verdict IS NULL) "
+                "AS triage_inflight, c.execution_id AS current_execution_id FROM wake_claims w "
+                "LEFT JOIN current_executions c ON c.owner_lookup=w.recipient_lookup "
+                f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
+                + (" LIMIT ?" if limit else ""),
+                (*parameters, limit) if limit else parameters,
+            ))
+
+    def _project_notifications(self, rows):
+        from .bus_publication import stable_thread_lookup
+        from .coordination_store import _assignment
+        from .owner_lifecycle import OwnerLifecycle
+
+        snapshot = self.registry.snapshot()
+        owners = {
+            stable_thread_lookup(thread.created_at): thread
+            for name, thread in snapshot.threads.items()
+            if snapshot.statuses[name].active and thread.pid > 0
+        }
+        for row in rows:
+            assignment = _assignment(row)
+            owner = owners.get(assignment.recipient_lookup)
+            current_turn = bool(
+                owner is not None
+                and owner.active_turn is not None
+                and owner.active_turn.owner_pid == owner.pid
+                and owner.active_turn.started_at * 1000 <= assignment.updated_at_ms + 1
+                and OwnerLifecycle._process_alive(owner.pid)
+            )
+            yield row, assignment.lifecycle.notification(
+                assignment.recipient,
+                owner_active=owner is not None,
+                current_turn=current_turn,
+                triage_inflight=bool(row["triage_inflight"]),
+                blocked_by_prior=bool(
+                    row["current_execution_id"] is not None
+                    and row["current_execution_id"] != assignment.lifecycle.execution_id
+                ),
+                prior_turn_active=bool(owner is not None and owner.active_turn is not None),
+            )
 
     @staticmethod
     def _complete_history(page_reader):

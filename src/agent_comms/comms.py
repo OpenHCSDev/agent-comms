@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from .agent_activity import AgentActivity
@@ -61,18 +60,9 @@ class Comms:
 
 def wire(root: Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
-    active_route = None
-    if root is None:
-        if "AGENT_COMMS_ROOT" in os.environ:
-            root = os.environ["AGENT_COMMS_ROOT"]
-        else:
-            from .active_route import read_active_route
+    from .active_route import resolve_comms_route
 
-            active_route = read_active_route()
-            root = active_route.root if active_route is not None else "~/.agent-comms"
-    comms = Comms(Path(root).expanduser())
-    if active_route is not None:
-        comms.owners.pin_private_nk_launch(
-            active_route.root, active_route.wire_root_id, active_route.native_package
-        )
+    route = resolve_comms_route(root)
+    comms = Comms(route.root)
+    route.bind_owners(comms.owners)
     return comms
