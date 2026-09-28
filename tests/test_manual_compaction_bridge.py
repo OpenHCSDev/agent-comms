@@ -46,12 +46,12 @@ async def test_bridge_success_unknown_usage_and_one_explicit_request(tmp_path, m
         requests.append((args, kwargs))
         return {"ok": True, "summary": "local summary", "estimatedTokensAfter": 100}
 
-    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", one)
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", one)
     try:
         result = await compact_context(owner.turns, "project", "Focus on facts")
         assert result["ok"] is True
         assert len(requests) == 1
-        assert requests[0][0][-1] == "Focus on facts"
+        assert requests[0][0][0].instructions == "Focus on facts"
         metadata = _metadata(updates)
         phases = [entry["compaction"] for entry in metadata if "compaction" in entry]
         assert [phase["phase"] for phase in phases] == ["start", "end"]
@@ -84,7 +84,7 @@ async def test_bridge_closes_idle_pi_before_saved_session_writer(tmp_path, monke
         assert retained.closed
         return {"ok": True, "summary": "local summary"}
 
-    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", compact)
     try:
         assert (await compact_context(owner.turns, "project"))["ok"] is True
     finally:
@@ -100,10 +100,10 @@ async def test_bridge_uses_persisted_model_when_worker_has_no_base_args(tmp_path
         calls.append(args)
         return {"ok": True, "summary": "local summary"}
 
-    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", compact)
     try:
         assert (await compact_context(owner.turns, "project"))["ok"] is True
-        assert calls[0][1] == ["--provider", "openai-codex", "--model", "gpt-5.5"]
+        assert calls[0][0].agent_args == ("--provider", "openai-codex", "--model", "gpt-5.5")
     finally:
         await owner.shutdown()
 
@@ -114,7 +114,7 @@ async def test_bridge_abort_exposes_safe_failure_reason(tmp_path, monkeypatch):
     async def failed(*_args, **_kwargs):
         return {"ok": False, "error": "Compaction provider returned HTTP 400."}
 
-    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", failed)
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", failed)
     try:
         result = await compact_context(owner.turns, "project")
         assert result == {"ok": False, "error": "Compaction provider returned HTTP 400."}
@@ -137,7 +137,7 @@ async def test_bridge_busy_then_cancel_never_replays(tmp_path, monkeypatch):
         entered.set()
         await asyncio.Event().wait()
 
-    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", uncertain)
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", uncertain)
     task = asyncio.create_task(compact_context(owner.turns, "project"))
     try:
         await asyncio.wait_for(entered.wait(), timeout=2)
@@ -176,8 +176,8 @@ async def test_bridge_releases_waiters_after_settlement_publication(tmp_path, mo
         released.append(fence)
         release(fence)
 
-    monkeypatch.setattr("agent_comms.manual_compaction.compact_session", compact)
-    monkeypatch.setattr(owner._comms.goals, 'release_waits_after_terminal_turn', observed_release)
+    monkeypatch.setattr("agent_comms.manual_compaction.ManualCompaction.run", compact)
+    monkeypatch.setattr(owner._comms.goals, "release_waits_after_terminal_turn", observed_release)
     try:
         assert (await compact_context(owner.turns, "project"))["ok"] is True
         assert len(released) == 1
