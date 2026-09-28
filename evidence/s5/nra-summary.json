@@ -1,0 +1,38 @@
+{
+  "before": {
+    "finding_count": 4,
+    "finding_payload_mode": "semantic_boundary_evidence",
+    "boundaries": [
+      "DisplayOrder semantic descent boundary",
+      "Message semantic descent boundary",
+      "ThreadStatus semantic descent boundary"
+    ]
+  },
+  "after": {
+    "finding_count": 4,
+    "finding_payload_mode": "semantic_boundary_evidence",
+    "boundaries": [
+      "DisplayOrder semantic descent boundary",
+      "Message semantic descent boundary",
+      "ThreadStatus semantic descent boundary"
+    ]
+  },
+  "final": {
+    "finding_count": 4,
+    "finding_payload_mode": "semantic_boundary_evidence",
+    "boundaries": [
+      "DisplayOrder semantic descent boundary",
+      "Message semantic descent boundary",
+      "ThreadStatus semantic descent boundary"
+    ]
+  },
+  "coexist": {
+    "finding_count": 4,
+    "finding_payload_mode": "semantic_boundary_evidence",
+    "boundaries": [
+      "DisplayOrder semantic descent boundary",
+      "Message semantic descent boundary",
+      "ThreadStatus semantic descent boundary"
+    ]
+  }
+}

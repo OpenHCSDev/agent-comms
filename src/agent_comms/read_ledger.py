@@ -13,9 +13,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .declarations import Message, RegistrySnapshot, ThreadRole
@@ -66,7 +66,9 @@ class ReadLedger(LockedStore[ReadDocument]):
         )
         return Conversation(
             participants=tuple(
-                (name, snapshot.threads[name].created_at if name in snapshot.threads else -1.0)
+                ThreadIncarnation(
+                    name, snapshot.threads[name].created_at if name in snapshot.threads else -1.0
+                )
                 for name in names
             )
         )
@@ -74,7 +76,7 @@ class ReadLedger(LockedStore[ReadDocument]):
     @staticmethod
     def _key(viewer: str, created_at: float, conversation: Conversation) -> str:
         return json.dumps(
-            [viewer, created_at, FieldCodec.encode(conversation)], separators=(",", ":")
+            [viewer, created_at, conversation.to_wire()], separators=(",", ":")
         )
 
     def capture(
@@ -132,7 +134,7 @@ class ReadLedger(LockedStore[ReadDocument]):
         for key, sequences in document.messages.items():
             name, created, raw = json.loads(key)
             if name == viewer and created == thread.created_at:
-                conversation = FieldCodec.decode(Conversation, raw)
+                conversation = Conversation.from_wire(raw)
                 if conversation.current(snapshot):
                     seen.update(sequences)
         return frozenset(seen)

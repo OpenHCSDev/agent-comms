@@ -1,0 +1,869 @@
+..............................................FFFFF...............F..... [ 46%]
+.FF.............s.........................FFF....Fssssssssssssssssssssss [ 93%]
+ssssssssss                                                               [100%]
+=================================== FAILURES ===================================
+______ test_saved_stopped_turn_cannot_regain_owner_authority[before_run] _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-bhiracsn')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e1b32d60>
+boundary = 'before_run'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            assert comms.registry.require("beta") == saved
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.begin_turn("beta", "old-authorized-turn")
+>           revoke_and_restore()
+
+tests/test_coordinated_runtime.py:1583: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def revoke_and_restore() -> None:
+        saved = comms.registry.require("beta")
+        assert saved.active_turn is not None
+        comms.registry.unregister("beta")
+        comms.registry.register(saved)
+>       assert comms.registry.require("beta") == saved
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='old-authorized-turn', owner_pid=2240887, started_at=1790556656.6239614, routing=None, admission_generation=3, turn_generation=1, owner_generation=None) != ActiveTurn(id='old-authorized-turn', owner_pid=2240887, started_at=1790556656.6239614, routing=None, admission_generation=3, turn_generation=1, owner_generation=3)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_coordinated_runtime.py:1578: AssertionError
+______ test_saved_stopped_turn_cannot_regain_owner_authority[after_model] ______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-99fhh64a')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e2645b70>
+boundary = 'after_model'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            assert comms.registry.require("beta") == saved
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(runtime, "run_native_pi_turn", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+>               await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+
+tests/test_coordinated_runtime.py:1602: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1428: in run_one_sealed_claim
+    result = await run_native_pi_turn(
+tests/test_coordinated_runtime.py:1597: in revoke_after_model
+    revoke_and_restore()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def revoke_and_restore() -> None:
+        saved = comms.registry.require("beta")
+        assert saved.active_turn is not None
+        comms.registry.unregister("beta")
+        comms.registry.register(saved)
+>       assert comms.registry.require("beta") == saved
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='46ef7e31ab5c53fb2ff0af2e3f09d58a', owner_pid=2240887, started_at=1790556656.7842627, routing=None, admission_generation=3, turn_generation=1, owner_generation=None) != ActiveTurn(id='46ef7e31ab5c53fb2ff0af2e3f09d58a', owner_pid=2240887, started_at=1790556656.7842627, routing=None, admission_generation=3, turn_generation=1, owner_generation=3)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_coordinated_runtime.py:1578: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+___ test_saved_stopped_turn_cannot_regain_owner_authority[before_tx1_forged] ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-o1mc3a9b')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0331470>
+boundary = 'before_tx1_forged'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            assert comms.registry.require("beta") == saved
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(runtime, "run_native_pi_turn", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert len(calls) == 1
+        else:
+            method = (
+                "prepare_fenced_response"
+                if boundary == "before_tx1_forged"
+                else "publish_fenced_response"
+            )
+            publish = getattr(runtime, method)
+    
+            def revoke_after_tx1(*args, **kwargs):
+                revoked_epoch = kwargs["owner_witness"].admission_generation
+                revoke_and_restore()
+                if boundary.endswith("forged"):
+                    # A same-UID caller can supply a fresh epoch in a dataclass.
+                    # The locked registry snapshot must attest that THIS turn was
+                    # created in that epoch, not merely compare caller assertions.
+                    new_epoch = comms.registry.snapshot().admission_generations["beta"]
+                    assert new_epoch != revoked_epoch
+                    kwargs["owner_witness"] = replace(
+                        kwargs["owner_witness"], admission_generation=new_epoch
+                    )
+                return publish(*args, **kwargs)
+    
+            monkeypatch.setattr(runtime, method, revoke_after_tx1)
+            with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
+>               await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+
+tests/test_coordinated_runtime.py:1634: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1510: in run_one_sealed_claim
+    prepare_fenced_response(
+tests/test_coordinated_runtime.py:1620: in revoke_after_tx1
+    revoke_and_restore()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def revoke_and_restore() -> None:
+        saved = comms.registry.require("beta")
+        assert saved.active_turn is not None
+        comms.registry.unregister("beta")
+        comms.registry.register(saved)
+>       assert comms.registry.require("beta") == saved
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='002e68fc740bd541c7f5d5c285177cc3', owner_pid=2240887, started_at=1790556657.0487146, routing=None, admission_generation=3, turn_generation=1, owner_generation=None) != ActiveTurn(id='002e68fc740bd541c7f5d5c285177cc3', owner_pid=2240887, started_at=1790556657.0487146, routing=None, admission_generation=3, turn_generation=1, owner_generation=3)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_coordinated_runtime.py:1578: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+_______ test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1] _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-c4mmr2fh')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0034440>
+boundary = 'after_tx1'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            assert comms.registry.require("beta") == saved
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(runtime, "run_native_pi_turn", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert len(calls) == 1
+        else:
+            method = (
+                "prepare_fenced_response"
+                if boundary == "before_tx1_forged"
+                else "publish_fenced_response"
+            )
+            publish = getattr(runtime, method)
+    
+            def revoke_after_tx1(*args, **kwargs):
+                revoked_epoch = kwargs["owner_witness"].admission_generation
+                revoke_and_restore()
+                if boundary.endswith("forged"):
+                    # A same-UID caller can supply a fresh epoch in a dataclass.
+                    # The locked registry snapshot must attest that THIS turn was
+                    # created in that epoch, not merely compare caller assertions.
+                    new_epoch = comms.registry.snapshot().admission_generations["beta"]
+                    assert new_epoch != revoked_epoch
+                    kwargs["owner_witness"] = replace(
+                        kwargs["owner_witness"], admission_generation=new_epoch
+                    )
+                return publish(*args, **kwargs)
+    
+            monkeypatch.setattr(runtime, method, revoke_after_tx1)
+            with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
+>               await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+
+tests/test_coordinated_runtime.py:1634: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1513: in run_one_sealed_claim
+    published = publish_fenced_response(
+tests/test_coordinated_runtime.py:1620: in revoke_after_tx1
+    revoke_and_restore()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def revoke_and_restore() -> None:
+        saved = comms.registry.require("beta")
+        assert saved.active_turn is not None
+        comms.registry.unregister("beta")
+        comms.registry.register(saved)
+>       assert comms.registry.require("beta") == saved
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='f5a12a3130565e9d6b63e4602a066c65', owner_pid=2240887, started_at=1790556657.3321958, routing=None, admission_generation=3, turn_generation=1, owner_generation=None) != ActiveTurn(id='f5a12a3130565e9d6b63e4602a066c65', owner_pid=2240887, started_at=1790556657.3321958, routing=None, admission_generation=3, turn_generation=1, owner_generation=3)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_coordinated_runtime.py:1578: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+___ test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1_forged] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-yqmiqge1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0052890>
+boundary = 'after_tx1_forged'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(runtime, "run_native_pi_turn", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            assert comms.registry.require("beta") == saved
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(runtime, "run_native_pi_turn", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+            assert len(calls) == 1
+        else:
+            method = (
+                "prepare_fenced_response"
+                if boundary == "before_tx1_forged"
+                else "publish_fenced_response"
+            )
+            publish = getattr(runtime, method)
+    
+            def revoke_after_tx1(*args, **kwargs):
+                revoked_epoch = kwargs["owner_witness"].admission_generation
+                revoke_and_restore()
+                if boundary.endswith("forged"):
+                    # A same-UID caller can supply a fresh epoch in a dataclass.
+                    # The locked registry snapshot must attest that THIS turn was
+                    # created in that epoch, not merely compare caller assertions.
+                    new_epoch = comms.registry.snapshot().admission_generations["beta"]
+                    assert new_epoch != revoked_epoch
+                    kwargs["owner_witness"] = replace(
+                        kwargs["owner_witness"], admission_generation=new_epoch
+                    )
+                return publish(*args, **kwargs)
+    
+            monkeypatch.setattr(runtime, method, revoke_after_tx1)
+            with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
+>               await run_one_sealed_claim(
+                    root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                )
+
+tests/test_coordinated_runtime.py:1634: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1513: in run_one_sealed_claim
+    published = publish_fenced_response(
+tests/test_coordinated_runtime.py:1620: in revoke_after_tx1
+    revoke_and_restore()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def revoke_and_restore() -> None:
+        saved = comms.registry.require("beta")
+        assert saved.active_turn is not None
+        comms.registry.unregister("beta")
+        comms.registry.register(saved)
+>       assert comms.registry.require("beta") == saved
+E       AssertionError: assert Thread(name='..._turn_id=None) == Thread(name='..._turn_id=None)
+E         
+E         Omitting 19 identical items, use -vv to show
+E         Differing attributes:
+E         ['active_turn']
+E         
+E         Drill down into differing attribute active_turn:
+E           active_turn: ActiveTurn(id='738fafd095fe2334943072b9887fb419', owner_pid=2240887, started_at=1790556657.6495237, routing=None, admission_generation=3, turn_generation=1, owner_generation=None) != ActiveTurn(id='738fafd095fe2334943072b9887fb419', owner_pid=2240887, started_at=1790556657.6495237, routing=None, admission_generation=3, turn_generation=1, owner_generation=3)...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests/test_coordinated_runtime.py:1578: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+___________ test_source_coverage_mismatch_cannot_skip_to_later_proof ___________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-mlr2qf7m')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e009a9e0>
+
+    async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
+        good, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(runtime, "run_native_pi_turn", bad)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+            await run_one_sealed_claim(
+                root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            )
+        second = comms.send_initial_cohort("sender", "alpha", "Second selected source.")
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            accept_initial_cohort(comms.bus, root_id, second.seq, store)
+        monkeypatch.setattr(runtime, "run_native_pi_turn", good)
+>       later = await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+
+tests/test_native_prompt_binding.py:319: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1508: in run_one_sealed_claim
+    fence = progress.finish()
+            ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.durable_turn.DurableTurn object at 0x7f48e0049f40>
+
+    def finish(self):
+        """Native child is reaped and any explicit owner effect has completed."""
+        if not self.model_started or self.active_tools:
+>           raise IdentityConflict("native completion lacks model progress or has active tools")
+E           agent_comms.coordination_errors.IdentityConflict: native completion lacks model progress or has active tools
+
+src/agent_comms/durable_turn.py:90: IdentityConflict
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+__________ test_current_cursor_alias_refusal_and_new_owner_generation __________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-6ujacu1n')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e00863c0>
+
+    async def test_current_cursor_alias_refusal_and_new_owner_generation(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+        old_turn = await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        )
+        assert old_turn is not None and old_turn.cursor_status == "proven"
+        lookup = stable_thread_lookup(people[1].created_at)
+        comms.registry.rename("alpha", "alpha-new")
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            store.advance_owner_generation(lookup, "alpha-new", expected_generation=1)
+            assert (
+                read_current_native_cursor(
+                    comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
+                )
+                is None
+            )
+        with pytest.raises(RelationViolationError, match="stable send binding"):
+            comms.send_initial_cohort("sender", "alpha", "Unbound retained alias.")
+        second = comms.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
+        with MutationStore(str(root / "coordination.sqlite3")) as store:
+            accept_initial_cohort(comms.bus, root_id, second.seq, store)
+>       fresh = await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
+        )
+
+tests/test_native_prompt_binding.py:574: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1508: in run_one_sealed_claim
+    fence = progress.finish()
+            ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.durable_turn.DurableTurn object at 0x7f48e0db2210>
+
+    def finish(self):
+        """Native child is reaped and any explicit owner effect has completed."""
+        if not self.model_started or self.active_tools:
+>           raise IdentityConflict("native completion lacks model progress or has active tools")
+E           agent_comms.coordination_errors.IdentityConflict: native completion lacks model progress or has active tools
+
+src/agent_comms/durable_turn.py:90: IdentityConflict
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+____________ test_full_stage_binding_joins_after_triage_engagement _____________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-y6f27ssf')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e00e8130>
+
+    async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch):
+        root, root_id, comms, initial, people = _root(tmp_path)
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+>       turn = await run_one_sealed_claim(
+            root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        )
+
+tests/test_native_prompt_binding.py:600: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:1508: in run_one_sealed_claim
+    fence = progress.finish()
+            ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.durable_turn.DurableTurn object at 0x7f48e0079f40>
+
+    def finish(self):
+        """Native child is reaped and any explicit owner effect has completed."""
+        if not self.model_started or self.active_tools:
+>           raise IdentityConflict("native completion lacks model progress or has active tools")
+E           agent_comms.coordination_errors.IdentityConflict: native completion lacks model progress or has active tools
+
+src/agent_comms/durable_turn.py:90: IdentityConflict
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+______ test_direct_claim_racing_final_preflight_is_not_erased_or_signaled ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/closure-runtime/test_direct_claim_racing_final0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0034210>
+
+    def test_direct_claim_racing_final_preflight_is_not_erased_or_signaled(tmp_path, monkeypatch):
+        comms, stopped = setup_owners(tmp_path, monkeypatch)
+        snapshot = comms.registry.snapshot()
+        original = snapshot.threads["one"]
+        expected = (original.pid, original.created_at, snapshot.admission_generations["one"])
+        real_fence = comms.registry.fence_idle_owner
+    
+        def racing_fence(thread, *, expected_epoch):
+            current = comms.registry.require("one")
+            comms.registry.register(replace(current, active_turn=ActiveTurn("raced", current.pid)))
+            return real_fence(thread, expected_epoch=expected_epoch)
+    
+        monkeypatch.setattr(comms.registry, "fence_idle_owner", racing_fence)
+        with pytest.raises(RelationViolationError, match="Idle owner changed before restart fence"):
+>           comms.restart_owners(["one"], expected_incarnations={"one": expected})
+
+tests/test_restart.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.operations.Comms object at 0x7f48e00750f0>, names = ['one']
+agent_bin = 'pi', agent_args = None
+expected_incarnations = {'one': (10001, 1790556672.1283355, 1)}
+
+    def restart_owners(
+        self,
+        names: Sequence[str] | None = None,
+        *,
+        agent_bin: str = "pi",
+        agent_args: Sequence[str] | None = None,
+        expected_incarnations: Mapping[str, tuple[int, float, int]] | None = None,
+    ) -> tuple[OwnerRestartResult, ...]:
+        """Preflight all owners together; release the wire lock for proof and exit.
+    
+        No owner is signaled until every selected owner has been verified again
+        under the wire lock. The OS may still fail partway through signaling;
+        that uncertainty is reported rather than claiming an atomic restart.
+        """
+        selection: tuple[tuple[str, int, float], ...] | None = None
+        original_epochs: tuple[int, ...] | None = None
+        for _ in range(3):
+            with _store_lock(self._wire_lock_path):
+                self.maintenance.assert_open_unlocked()
+                snapshot = self.registry.snapshot()
+                if names is None:
+                    threads = [
+                        thread
+                        for thread in snapshot.threads.values()
+                        if thread.role.executable
+                        and snapshot.statuses[thread.name].active
+                        and thread.pid > 0
+                        and self._process_alive(thread.pid)
+                    ]
+                else:
+                    threads = list(
+                        {
+                            snapshot.aliases.get(name, name): self.registry.require(name)
+                            for name in names
+                        }.values()
+                    )
+                identities = tuple(
+                    (thread.name, thread.pid, thread.created_at) for thread in threads
+                )
+                if selection is not None and identities != selection:
+                    raise RelationViolationError("Owner selection changed before restart.")
+                selection = identities
+                if expected_incarnations is not None and (
+                    len(threads) != 1
+                    or set(expected_incarnations) != {thread.name for thread in threads}
+                ):
+                    raise RelationViolationError(
+                        "Guarded restart requires exactly one queued owner."
+                    )
+                captured = []
+                for thread in threads:
+                    epoch = snapshot.admission_generations.get(thread.name)
+                    if expected_incarnations is not None and expected_incarnations[thread.name] != (
+                        thread.pid,
+                        thread.created_at,
+                        epoch,
+                    ):
+                        raise RelationViolationError(
+                            "Queued owner incarnation changed before restart."
+                        )
+                    if (
+                        not thread.role.executable
+                        or not snapshot.statuses[thread.name].active
+                        or thread.pid <= 0
+                        or not self._process_alive(thread.pid)
+                    ):
+                        raise ValueError(f"Thread {thread.name!r} has no running owner to restart.")
+                    if thread.pid == os.getpid():
+                        raise ValueError("An owner cannot restart itself; use the external CLI.")
+                    if thread.active_turn is not None:
+                        raise ValueError(
+                            f"Thread {thread.name!r} has an active turn; wait until idle."
+                        )
+                    if epoch is None:
+                        raise RelationViolationError(
+                            "Cannot restart an owner without an incarnation."
+                        )
+                    captured.append((thread, epoch))
+                epochs = tuple(epoch for _thread, epoch in captured)
+                if original_epochs is not None and epochs != original_epochs:
+                    raise RelationViolationError("Owner epochs changed before restart.")
+                original_epochs = epochs
+    
+            # A newly forked owner's socket may depend on this same wire lock.
+            for thread, _epoch in captured:
+                if not self._is_local_participant(thread):
+                    raise RelationViolationError(
+                        f"Refusing to restart unverifiable process {thread.pid} "
+                        f"for {thread.name!r}."
+                    )
+            with _store_lock(self._wire_lock_path):
+                self.maintenance.assert_open_unlocked()
+                fresh = self.registry.snapshot()
+                if any(
+                    (
+                        fresh.threads.get(thread.name) is None
+                        or (
+                            thread.name,
+                            fresh.threads[thread.name].pid,
+                            fresh.threads[thread.name].created_at,
+                        )
+                        != (thread.name, thread.pid, thread.created_at)
+                        or not fresh.statuses.get(thread.name, ThreadStatus.STOPPED).active
+                    )
+                    for thread, _epoch in captured
+                ):
+                    raise RelationViolationError("Owner selection changed before restart.")
+                if any(
+                    fresh.admission_generations.get(thread.name) != epoch
+                    for thread, epoch in captured
+                ):
+                    raise RelationViolationError("Owner epochs changed before restart.")
+                if any(
+                    fresh.threads[thread.name].active_turn is not None
+                    for thread, _epoch in captured
+                ):
+                    raise RelationViolationError("Owner became busy before restart.")
+                if any(
+                    not self._process_alive(thread.pid)
+                    or not self._is_local_participant(thread, wait=False)
+                    for thread, _epoch in captured
+                ):
+                    continue
+                if expected_incarnations is not None:
+                    # Persist the admission fence BEFORE signaling. An owner
+                    # receiving a wake after this lock releases cannot claim
+                    # a turn while SIGTERM is pending: claim_local_turn rejects
+                    # STOPPED. Never undo this fence on an uncertain signal.
+                    stop_epochs = {
+>                       thread.name: self.registry.fence_idle_owner(
+                            thread, expected_admission_generation=epoch
+                        )
+                        for thread, epoch in captured
+                    }
+E                   TypeError: test_direct_claim_racing_final_preflight_is_not_erased_or_signaled.<locals>.racing_fence() got an unexpected keyword argument 'expected_admission_generation'
+
+src/agent_comms/operations.py:3373: TypeError
+_________ test_explicit_start_cannot_reopen_stopped_live_restart_fence _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/closure-runtime/test_explicit_start_cannot_reo0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0333d20>
+
+    def test_explicit_start_cannot_reopen_stopped_live_restart_fence(tmp_path, monkeypatch):
+        comms, stopped = setup_owners(tmp_path, monkeypatch)
+        original = comms.registry.require("one")
+        snapshot = comms.registry.snapshot()
+>       comms.registry.fence_idle_owner(original, expected_epoch=snapshot.admission_generations["one"])
+E       TypeError: ThreadRegistry.fence_idle_owner() got an unexpected keyword argument 'expected_epoch'
+
+tests/test_restart.py:145: TypeError
+_________ test_start_racing_fence_after_proof_cannot_reopen_admission __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/closure-runtime/test_start_racing_fence_after_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0327770>
+
+    def test_start_racing_fence_after_proof_cannot_reopen_admission(tmp_path, monkeypatch):
+        comms, stopped = setup_owners(tmp_path, monkeypatch)
+        original = comms.registry.require("one")
+        snapshot = comms.registry.snapshot()
+        expected_epoch = snapshot.admission_generations["one"]
+    
+        def proof_and_fence(thread, wait=True):
+            if wait:
+                comms.registry.fence_idle_owner(original, expected_epoch=expected_epoch)
+            return True
+    
+        monkeypatch.setattr(comms, "_is_local_participant", proof_and_fence)
+        with pytest.raises(RelationViolationError):
+>           comms.start("one")
+
+tests/test_restart.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/operations.py:3215: in start
+    if not self._is_local_participant(thread):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+thread = Thread(name='one', tags=frozenset({'team'}), worktree='/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/c...ctive_turn=None, last_goal_report_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+wait = True
+
+    def proof_and_fence(thread, wait=True):
+        if wait:
+>           comms.registry.fence_idle_owner(original, expected_epoch=expected_epoch)
+E           TypeError: ThreadRegistry.fence_idle_owner() got an unexpected keyword argument 'expected_epoch'
+
+tests/test_restart.py:161: TypeError
+___________ test_real_idle_owner_is_replaced_without_losing_session ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-refactor-s5-identity-20260928/.artifacts/s5/closure-runtime/test_real_idle_owner_is_replac0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f48e0327380>
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
+    async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monkeypatch):
+        from agent_comms.runtime import socket_path
+    
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        session = tmp_path / "session.jsonl"
+        session.write_text("")
+        comms = wire(tmp_path / "wire")
+        comms.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+        owner = comms.ensure_owner("worker", agent_bin="/bin/echo")
+    
+        async def ready(pid):
+            async with asyncio.timeout(10):
+                while not socket_path(comms.root, pid).exists():
+                    assert comms._process_alive(pid)
+                    await asyncio.sleep(0.05)
+    
+        try:
+>           await ready(owner.pid)
+
+tests/test_restart.py:227: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pid = 2242607
+
+    async def ready(pid):
+        async with asyncio.timeout(10):
+            while not socket_path(comms.root, pid).exists():
+>               assert comms._process_alive(pid)
+E               assert False
+E                +  where False = <function Comms._process_alive at 0x7f48e25d1640>(2242607)
+E                +    where <function Comms._process_alive at 0x7f48e25d1640> = <agent_comms.operations.Comms object at 0x7f48e0dcd9b0>._process_alive
+
+tests/test_restart.py:223: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[before_run]
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[after_model]
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[before_tx1_forged]
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1]
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1_forged]
+FAILED tests/test_native_prompt_binding.py::test_source_coverage_mismatch_cannot_skip_to_later_proof
+FAILED tests/test_native_prompt_binding.py::test_current_cursor_alias_refusal_and_new_owner_generation
+FAILED tests/test_native_prompt_binding.py::test_full_stage_binding_joins_after_triage_engagement
+FAILED tests/test_restart.py::test_direct_claim_racing_final_preflight_is_not_erased_or_signaled
+FAILED tests/test_restart.py::test_explicit_start_cannot_reopen_stopped_live_restart_fence
+FAILED tests/test_restart.py::test_start_racing_fence_after_proof_cannot_reopen_admission
+FAILED tests/test_restart.py::test_real_idle_owner_is_replaced_without_losing_session
+12 failed, 109 passed, 33 skipped in 30.76s
