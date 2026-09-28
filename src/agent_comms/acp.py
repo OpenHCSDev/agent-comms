@@ -315,7 +315,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return PromptResponse(stop_reason="end_turn")
         text = self._prompt_text(prompt)
         if (
-            session_id in self.turns.active_turns
+            (session_id in self.turns.active_turns or session_id in self.turns.turn_tasks)
             and self.inputs.backend_inboxes.get(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
@@ -669,7 +669,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         result = None
         if runnable:
-            result = await SelectedExecution(
+            execution = SelectedExecution(
                 root=self._comms.root,
                 wire_root_id=wire_root_id,
                 owner_name=thread_name,
@@ -682,7 +682,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     if self._private_selected_tool_intent is not None
                     else {}
                 ),
-            ).run()
+            )
+            result = await self.turns.run_selected(session_id, execution)
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current epoch or an all-N prefix;
@@ -820,7 +821,12 @@ def main() -> int:
                             debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
 
             asyncio.create_task(watchdog())
-        agent = CommsClient(comms, runtime_enabled=True)
+        agent = CommsClient(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=private_nk.native_package if private_nk else None,
+            private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+        )
 
         def observe(event: Any) -> None:
             agent._debug_log(

@@ -37,6 +37,14 @@ def _model_catalog_without_a_local_pi_process(monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
 
 
+@pytest.fixture
+def native_stdio_root():
+    if not os.environ.get("AC_NATIVE_COPIED_PACKAGE"):
+        pytest.skip("Requires existing prepared native package; no provider request")
+    with tempfile.TemporaryDirectory(prefix="l0b-stdio-", dir="/var/tmp") as directory:
+        yield Path(directory)
+
+
 def _update_text(update) -> str:
     """Update text for chunk-like updates; config updates carry none."""
     content = getattr(update, "content", None)
@@ -1684,17 +1692,26 @@ class TestWireProtocol:
     @pytest.mark.skipif(
         sys.platform == "win32", reason="selectors cannot poll Windows pipe handles"
     )
-    def test_real_stdio_roundtrip(self, tmp_path):
+    def test_real_stdio_roundtrip(self, native_stdio_root):
         """initialize -> session/new -> prompt over real stdio pipes."""
         import selectors
 
+        tmp_path = native_stdio_root
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
+        comms = wire(root)
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_claim_protocol()
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),
             PYTHONPATH=str(Path(__file__).parents[1] / "src"),
-            AGENT_COMMS_AGENT_BIN="/bin/echo",
+            AGENT_COMMS_AGENT_BIN="pi",
+            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
+            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=os.environ["AC_NATIVE_COPIED_PACKAGE"],
+            AGENT_COMMS_NO_REPLY_WINDOW="0.1",
+            AGENT_COMMS_REPLY_WINDOW="0.1",
+            AGENT_COMMS_REPLY_QUIET="0.05",
             AGENT_COMMS_AGENT_ARGS="",
         )
         requests = [
@@ -1745,9 +1762,9 @@ class TestWireProtocol:
                     deadline = _time.monotonic() + 30
                     while True:
                         if b"\n" not in pending:
-                            assert selector.select(
-                                max(0, deadline - _time.monotonic())
-                            ), "ACP timeout"
+                            assert selector.select(max(0, deadline - _time.monotonic())), (
+                                "ACP timeout"
+                            )
                             chunk = os.read(proc.stdout.fileno(), 65536)
                             assert chunk, "ACP closed before response"
                             pending += chunk
@@ -1770,7 +1787,7 @@ class TestWireProtocol:
             if "proj" in comms.registry:
                 owner = comms.registry.require("proj").pid
                 assert owner != proc.pid
-                assert comms.owners._process_alive(owner)
+                assert comms.registry.require("proj").process_alive
                 comms.owners.stop("proj")
         responses = {
             m.get("id"): m for m in (json.loads(line) for line in out_lines if line.strip())
