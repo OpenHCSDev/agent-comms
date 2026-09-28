@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-
-from .input_attempt import InputAttempt
-from .input_disposition import InputDispositions, InputDocument
 import os
 import re
 import sqlite3
@@ -20,9 +17,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 from weakref import WeakKeyDictionary
+
+from .input_attempt import InputAttempt
+from .input_disposition import InputDispositions, InputDocument
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
@@ -37,6 +37,7 @@ from .compaction_states import (
     OperationState,
     PendingPublication,
     PublicationState,
+    RefusedSummary,
     ReservedSummary,
     SummaryState,
     UnknownSummary,
@@ -726,6 +727,33 @@ class CompactionJournal:
             ).fetchone() != (canonical, "unknown"):
                 raise CompactionJournalError("Exact durable private raw prewrite marker required")
             yield
+
+    def refuse_selected_summary(self, operation_id: str, reason: str) -> None:
+        """Retain the observed native prestart failure without admitting any input."""
+        target = RefusedSummary(reason)
+        with self._transaction() as db:
+            row = db.execute(
+                "SELECT status, commit_id, decline_reason FROM selected_summary_attempts "
+                "WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if row is None or not SummaryState.from_columns(*row).may_become(target):
+                raise CompactionJournalError("Selected summary refusal transition forbidden")
+            db.execute(
+                "UPDATE selected_summary_attempts SET status = ?, decline_reason = ? "
+                "WHERE operation_id = ?",
+                (target.declared_name, target.decline_reason, operation_id),
+            )
+
+    def selected_summaries(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
+        """Inspect every recorded result without exposing model or input content."""
+        canonical = str(Path(session_file).resolve(strict=True))
+        with self._transaction() as db:
+            rows = db.execute(
+                "SELECT * FROM selected_summary_attempts WHERE session_file = ? ORDER BY rowid",
+                (canonical,),
+            ).fetchall()
+        return tuple(SelectedSummaryAttempt.from_row(row) for row in rows)
 
     def mark_selected_summary_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""

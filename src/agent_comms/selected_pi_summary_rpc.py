@@ -168,6 +168,11 @@ class SelectedSummarySlot:
                 result = _summary_response(raw, request, tokens_before)
                 if proc.returncode is not None or _session_revision(session_file) != revision:
                     raise SelectedChildUnknown("Selected source changed during summary")
+                if result.summary is None and result.decline_reason not in {
+                    "split_turn",
+                    "unsupported",
+                }:
+                    journal.refuse_selected_summary(operation, result.decline_reason)
                 return result
             except BaseException as error:
                 persistent.reopen_required = session_file
