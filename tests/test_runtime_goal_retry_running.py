@@ -17,6 +17,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -127,7 +128,11 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         assert accepted[0]["goal"]["status"] == "active"
         assert accepted[0]["goal"]["revision"] == blocked.revision + 1
         generation = GoalAttemptStore(store.root).snapshot(goal.id)
-        assert (generation.number, generation.state, generation.attempt_id) == (2, "ready", None)
+        assert (generation.number, generation.lifecycle, generation.attempt_id) == (
+            2,
+            ReadyGeneration(),
+            None,
+        )
         assert store.ready_grant(goal.id, 2)
         owner.turns.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
@@ -166,7 +171,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             await owner.inputs.wake_tasks[session]
             assert len(calls) == 2
             assert comms.registry.require(session).goal.state.declared_name == "completed"
-            assert store.snapshot(goal.id).state == "completed"
+            assert store.snapshot(goal.id).lifecycle == CompletedGeneration()
         assert max_active_backends == 1
         assert owner.inputs.dispositions.get("acp:old-unknown") == old_unknown
         assert all("Uncertain old input must never replay" not in prompt for prompt in calls)

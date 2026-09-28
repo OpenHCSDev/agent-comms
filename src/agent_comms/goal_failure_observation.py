@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
+from .goal_attempt_phase import FailedAttempt
+from .goal_generation import BlockedGeneration
 from .goal_pauses import GoalPauseEvent
 from .goal_states import BlockedGoal, PausedGoal
 from .goals import Goal
@@ -135,7 +137,7 @@ def record_observation(
     """Optional observation cannot roll back the enclosing failure fence.
 
     Savepoint errors which cannot be rolled back still escape to the store's
-    normal StorageUncertain path. They never yield a successful execution.
+    normal StorageUncertainError path. They never yield a successful execution.
     """
     if observation.reservation != reservation:
         return
@@ -216,8 +218,8 @@ def read_failed_turn_projection(
                     "AND a.goal_id=g.goal_id AND a.generation=g.generation "
                     "JOIN failed_turn_observations o ON o.attempt_id=a.attempt_id "
                     "AND o.goal_id=a.goal_id AND o.generation=a.generation "
-                    "WHERE g.goal_id=? AND g.state='blocked' AND a.phase='failed'",
-                    (goal.id,),
+                    "WHERE g.goal_id=? AND g.state=? AND a.phase=?",
+                    (goal.id, BlockedGeneration.declared_name, FailedAttempt.declared_name),
                 ).fetchone()
                 if row is None:
                     return unavailable("missing_binding")

@@ -13,6 +13,7 @@ from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
+from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.input_disposition import InputDispositions
 
 
@@ -101,7 +102,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             public_id, command = await queue_followup(agent, kwargs)
         goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
-        assert agent.turns.goal_store.snapshot(goal.id).state == "reserved"
+        assert agent.turns.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()
         if not queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
         observed.update(goal=goal, public_id=public_id)
@@ -124,7 +125,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         )
         assert comms.registry.require("project").goal.state.active
         state = agent.turns.goal_store.snapshot(observed["goal"].id)
-        assert state.state == "ready" and state.number == 2
+        assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
         assert InputDispositions(comms.root).status(key) == (
             "unknown" if queued_before_activation else "started"
@@ -188,11 +189,11 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         current = comms.registry.require("project").goal
         if change is None:
             assert current.state.active and current.id == original_goal.id
-            assert store.snapshot(current.id).state == "ready"
+            assert store.snapshot(current.id).lifecycle == ReadyGeneration()
         elif change == "clear":
             assert current is None
         else:
             assert current.state.active and current.id == observed["replacement"].id
-            assert store.snapshot(current.id).state == "ready"
+            assert store.snapshot(current.id).lifecycle == ReadyGeneration()
     finally:
         await agent.shutdown()

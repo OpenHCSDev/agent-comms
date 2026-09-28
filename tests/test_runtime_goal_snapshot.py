@@ -17,6 +17,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
+from agent_comms.goal_generation import CancelledGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 
@@ -102,7 +103,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         expected_revision=resumed["goal"]["revision"],
     ) == {"goal": None, "goalExecution": None}
     assert scheduled == [session]
-    assert owner.turns.goal_store.snapshot(goal.id).state == "cancelled"
+    assert owner.turns.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()
 
 
 async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_owner, monkeypatch):
@@ -129,7 +130,7 @@ async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_own
         comms.registry.register(replace(comms.registry.require(session), pid=os.getpid() + 100000))
         return update_goal(*args, **kwargs)
 
-    monkeypatch.setattr(comms.goals, 'update_goal', change_owner_before_cas)
+    monkeypatch.setattr(comms.goals, "update_goal", change_owner_before_cas)
     with pytest.raises(RuntimeError, match="owner changed"):
         await proxy.request(
             "update_goal", status="clear", goal_id=goal.id, expected_revision=blocked.revision
@@ -151,7 +152,7 @@ async def test_goal_update_rechecks_snapshot_inside_write_lock(goal_owner, monke
         )
         return update_goal(*args, **kwargs)
 
-    monkeypatch.setattr(comms.goals, 'update_goal', edit_before_cas)
+    monkeypatch.setattr(comms.goals, "update_goal", edit_before_cas)
     with pytest.raises(RuntimeError, match="changed"):
         await proxy.request(
             "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision

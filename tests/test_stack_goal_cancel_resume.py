@@ -13,6 +13,7 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -168,7 +169,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         try:
             await asyncio.wait_for(first_chunk.wait(), 15)
             claimed = store.snapshot(goal_id)
-            assert claimed.state == "reserved"
+            assert claimed.lifecycle == ReservedGeneration()
             assert len(requests) == 1
             await asyncio.wait_for(proxy.request("cancel"), 10)
             assert (await asyncio.wait_for(turn, 10))["stopReason"] == "cancelled"
@@ -176,7 +177,9 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             paused = comms.registry.require(session).goal
             failed = GoalAttemptStore(store.root).snapshot(goal_id)
             assert paused.state.declared_name == "paused"
-            assert failed.state == "blocked" and failed.attempt_id == claimed.attempt_id
+            assert (
+                failed.lifecycle == BlockedGeneration() and failed.attempt_id == claimed.attempt_id
+            )
             # Resume cannot silently authorize replay of the cancelled attempt.
             with pytest.raises(RuntimeError, match="Retry"):
                 await proxy.request(
@@ -194,7 +197,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             )
             assert retried["goal"]["status"] == "active"
             ready = store.snapshot(goal_id)
-            assert ready.number == failed.number + 1 and ready.state == "ready"
+            assert ready.number == failed.number + 1 and ready.lifecycle == ReadyGeneration()
             assert ready.attempt_id is None
             fresh_turn = asyncio.create_task(
                 proxy.request(
@@ -204,7 +207,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             )
             await asyncio.wait_for(continued.wait(), 15)
             fresh_claim = store.snapshot(goal_id)
-            assert fresh_claim.state == "reserved"
+            assert fresh_claim.lifecycle == ReservedGeneration()
             assert fresh_claim.attempt_id != failed.attempt_id
             current = comms.registry.require(session).goal
             await proxy.request(
@@ -213,7 +216,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             finish_goal.set()
             assert (await asyncio.wait_for(fresh_turn, 10))["stopReason"] == "end_turn"
             final = GoalAttemptStore(store.root).snapshot(goal_id)
-            assert final.number == ready.number + 1 and final.state == "ready"
+            assert final.number == ready.number + 1 and final.lifecycle == ReadyGeneration()
             assert len(requests) == 2
             assert owner.inputs.dispositions.get("acp:uncertain-sentinel") == sentinel_before
             assert "UNCERTAIN_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)

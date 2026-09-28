@@ -14,10 +14,17 @@ import pytest
 
 from agent_comms.goal_attempts import (
     GoalAttemptStore,
-    ReservationConflict,
-    StaleAttempt,
-    StorageUncertain,
-    UnresolvedAttempt,
+    ReservationConflictError,
+    StaleAttemptError,
+    StorageUncertainError,
+    UnresolvedAttemptError,
+)
+from agent_comms.goal_generation import (
+    BlockedGeneration,
+    CancelledGeneration,
+    CompletedGeneration,
+    ReadyGeneration,
+    ReservedGeneration,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -31,7 +38,7 @@ def _competing_reserve(root: str, grant: str, start, results) -> None:
     try:
         reservation = store.reserve("goal", 1, ready_grant=grant)
         results.put(("reserved", reservation.attempt_id))
-    except ReservationConflict:
+    except ReservationConflictError:
         results.put(("conflict", ""))
 
 
@@ -63,7 +70,7 @@ def store() -> Iterator[GoalAttemptStore]:
 
 
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
-    with pytest.raises(StorageUncertain, match="owner-0700"):
+    with pytest.raises(StorageUncertainError, match="owner-0700"):
         GoalAttemptStore.initialize(tmp_path / "missing")
     root = tmp_path / "root"
     root.mkdir(mode=0o700)
@@ -101,20 +108,20 @@ def test_one_reservation_across_two_independent_supervisors(store):
                 child.join(timeout=5)
     assert sorted(outcomes) == ["conflict", "reserved"]
     assert all(child.exitcode == 0 for child in children)
-    assert store.snapshot("goal").state == "reserved"
+    assert store.snapshot("goal").lifecycle == ReservedGeneration()
 
 
 def test_claim_is_one_shot_and_reopened_store_cannot_replay(store):
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     reopened = GoalAttemptStore(store.root)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.claim_launch(reservation)
     permit = store.claim_launch(reservation)
     assert permit.reservation == reservation
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         store.claim_launch(reservation)
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         reopened.reserve("goal", 1)
 
 
@@ -123,11 +130,11 @@ def test_owner_can_rotate_only_unused_ready_grant_without_changing_generation(st
     old_grant = store.ready_grant("goal", 1)
     reopened = GoalAttemptStore(store.root)
     assert reopened.recover_unreserved_ready("goal", 1) == initial
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         store.reserve("goal", 1, ready_grant=old_grant)
     attempt = reopened.reserve("goal", 1)
     assert attempt.generation == 1
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         reopened.recover_unreserved_ready("goal", 1)
 
 
@@ -143,7 +150,7 @@ def test_ready_recovery_never_replays_an_existing_attempt(store, phase):
             store.record_verified_completion(permit, "verified terminal")
     before = store.snapshot("goal")
     reopened = GoalAttemptStore(store.root)
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         reopened.recover_unreserved_ready("goal", 1)
     assert reopened.snapshot("goal") == before
 
@@ -156,9 +163,9 @@ def test_failed_ready_rotation_never_exposes_a_launch_grant(store, monkeypatch):
         raise OSError("injected durability failure")
 
     monkeypatch.setattr(reopened, "_sync", fail_sync)
-    with pytest.raises(StorageUncertain):
+    with pytest.raises(StorageUncertainError):
         reopened.recover_unreserved_ready("goal", 1)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.ready_grant("goal", 1)
 
 
@@ -176,10 +183,10 @@ def test_crash_after_reservation_before_outcome_never_auto_reissues(store):
         child.join(timeout=5)
     assert child.exitcode == 0
     reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").state == "reserved"
-    with pytest.raises(ReservationConflict):
+    assert reopened.snapshot("goal").lifecycle == ReservedGeneration()
+    with pytest.raises(ReservationConflictError):
         reopened.reserve("goal", 1)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", 1)
 
 
@@ -198,11 +205,11 @@ def test_claimed_crash_requires_separate_human_abandon_and_retry(store):
     assert child.exitcode == 0
     reopened = GoalAttemptStore(store.root)
     current = reopened.snapshot("goal")
-    assert current is not None and current.state == "reserved"
+    assert current is not None and current.lifecycle == ReservedGeneration()
     assert current.attempt_id is not None
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", 1)
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         reopened.reserve("goal", 1)
     with pytest.raises(ValueError, match="explicit user"):
         reopened.authorize_abandon_attempt(
@@ -214,10 +221,10 @@ def test_claimed_crash_requires_separate_human_abandon_and_retry(store):
         attempt_id=current.attempt_id,
         user_decision_id="human-marked-uncertain-1",
     )
-    assert blocked.state == "blocked"
-    with pytest.raises(UnresolvedAttempt):
+    assert blocked.lifecycle == BlockedGeneration()
+    with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", 1)
-    with pytest.raises(StaleAttempt):
+    with pytest.raises(StaleAttemptError):
         reopened.authorize_abandon_attempt(
             "goal",
             expected_generation=1,
@@ -244,10 +251,10 @@ def test_crash_after_ready_commit_before_ack_requires_explicit_human_recovery(st
         child.join(timeout=5)
     assert child.exitcode == 0
     reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").state == "ready"
-    with pytest.raises(UnresolvedAttempt, match="acknowledged ready grant"):
+    assert reopened.snapshot("goal").lifecycle == ReadyGeneration()
+    with pytest.raises(UnresolvedAttemptError, match="acknowledged ready grant"):
         reopened.reserve("goal", 1)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", 1)
     assert (
         reopened.authorize_ready_recovery(
@@ -265,12 +272,12 @@ def test_fsync_failure_after_commit_never_returns_launch_authority(store, monkey
         raise OSError("injected directory fsync failure after committed reservation")
 
     monkeypatch.setattr(store, "_sync", failed_sync)
-    with pytest.raises(StorageUncertain, match="durability"):
+    with pytest.raises(StorageUncertainError, match="durability"):
         store.reserve("goal", 1)
     reopened = GoalAttemptStore(store.root)
     # The row is visible in the ordinary crash model; no token was returned.
-    assert reopened.snapshot("goal").state == "reserved"
-    with pytest.raises(ReservationConflict):
+    assert reopened.snapshot("goal").lifecycle == ReservedGeneration()
+    with pytest.raises(ReservationConflictError):
         reopened.reserve("goal", 1)
 
 
@@ -282,15 +289,15 @@ def test_launch_claim_sync_failure_is_unresolved_and_never_replayable(store, mon
         raise OSError("injected fsync failure after committed launch claim")
 
     monkeypatch.setattr(store, "_sync", failed_sync)
-    with pytest.raises(StorageUncertain, match="durability"):
+    with pytest.raises(StorageUncertainError, match="durability"):
         store.claim_launch(reservation)
     reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").state == "reserved"
-    with pytest.raises(ReservationConflict):
+    assert reopened.snapshot("goal").lifecycle == ReservedGeneration()
+    with pytest.raises(ReservationConflictError):
         reopened.reserve("goal", 1)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.claim_launch(reservation)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         store.claim_launch(reservation)
 
 
@@ -302,10 +309,10 @@ def test_commit_uncertainty_never_returns_launch_authority(store, monkeypatch):
         raise sqlite3.OperationalError("injected lost commit ACK")
 
     monkeypatch.setattr(store, "_commit", uncertain_commit)
-    with pytest.raises(StorageUncertain, match="durability"):
+    with pytest.raises(StorageUncertainError, match="durability"):
         store.reserve("goal", 1)
-    assert GoalAttemptStore(store.root).snapshot("goal").state == "reserved"
-    with pytest.raises(ReservationConflict):
+    assert GoalAttemptStore(store.root).snapshot("goal").lifecycle == ReservedGeneration()
+    with pytest.raises(ReservationConflictError):
         GoalAttemptStore(store.root).reserve("goal", 1)
 
 
@@ -314,10 +321,10 @@ def test_failure_blocks_resume_until_explicit_separate_retry_decision(store):
     reservation = store.reserve("goal", 1)
     store.claim_launch(reservation)
     blocked = store.record_failed(reservation, "outcome unknown; no automatic replay")
-    assert blocked.state == "blocked" and blocked.attempt_id == reservation.attempt_id
-    with pytest.raises(UnresolvedAttempt):
+    assert blocked.lifecycle == BlockedGeneration() and blocked.attempt_id == reservation.attempt_id
+    with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         store.reserve("goal", 1)
     with pytest.raises(ValueError, match="explicit user"):
         store.authorize_retry(
@@ -332,11 +339,11 @@ def test_failure_blocks_resume_until_explicit_separate_retry_decision(store):
         attempt_id=reservation.attempt_id,
         user_decision_id="visible-user-decision-1",
     )
-    assert resumed.number == 2 and resumed.state == "ready"
+    assert resumed.number == 2 and resumed.lifecycle == ReadyGeneration()
     assert store.resume("goal", 2) == resumed
     next_attempt = store.reserve("goal", 2)
     assert next_attempt.attempt_id != reservation.attempt_id
-    with pytest.raises(StaleAttempt):
+    with pytest.raises(StaleAttemptError):
         store.record_failed(reservation, "late previous turn")
     assert store.snapshot("goal").attempt_id == next_attempt.attempt_id
 
@@ -346,14 +353,14 @@ def test_stale_old_done_cannot_block_or_overwrite_new_generation(store):
     prior = store.reserve("goal", 1)
     permit = store.claim_launch(prior)
     next_generation = store.record_verified_progress(permit, "registry-progress-witness-1")
-    assert next_generation.number == 2 and next_generation.state == "ready"
+    assert next_generation.number == 2 and next_generation.lifecycle == ReadyGeneration()
     newer = store.reserve("goal", 2)
-    with pytest.raises(StaleAttempt):
+    with pytest.raises(StaleAttemptError):
         store.record_failed(prior, "late old failure")
-    with pytest.raises(StaleAttempt):
+    with pytest.raises(StaleAttemptError):
         store.record_verified_progress(permit, "late old success")
     assert store.snapshot("goal").attempt_id == newer.attempt_id
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         store.reserve("goal", 2)
 
 
@@ -362,12 +369,12 @@ def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
     reservation = store.reserve("goal", 1)
     permit = store.claim_launch(reservation)
     completed = store.record_verified_completion(permit, "registry-completed-revision-2")
-    assert completed.state == "completed"
+    assert completed.lifecycle == CompletedGeneration()
     assert completed.attempt_id == reservation.attempt_id
     assert store.snapshot("goal") == completed
-    with pytest.raises((ReservationConflict, UnresolvedAttempt)):
+    with pytest.raises((ReservationConflictError, UnresolvedAttemptError)):
         store.reserve("goal", completed.number)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         store.ready_grant("goal", completed.number + 1)
 
 
@@ -400,11 +407,11 @@ def test_clearing_goal_retires_reserved_attempt_without_replay(store, phase):
     if phase == "claimed":
         store.claim_launch(reservation)
     retired = store.retire_goal("goal", expected_generation=1, attempt_id=reservation.attempt_id)
-    assert retired.state == "cancelled"
+    assert retired.lifecycle == CancelledGeneration()
     assert store.snapshot("goal") == retired
-    with pytest.raises((StaleAttempt, UnresolvedAttempt)):
+    with pytest.raises((StaleAttemptError, UnresolvedAttemptError)):
         store.claim_launch(reservation)
-    with pytest.raises((ReservationConflict, UnresolvedAttempt)):
+    with pytest.raises((ReservationConflictError, UnresolvedAttemptError)):
         store.reserve("goal", 1)
 
 
@@ -437,7 +444,7 @@ def test_ready_writes_uncertain_after_commit_cannot_launch_after_reopen(
 
         monkeypatch.setattr(store, "_commit", lose_commit_ack)
 
-    with pytest.raises(StorageUncertain, match="durability"):
+    with pytest.raises(StorageUncertainError, match="durability"):
         if transition == "create":
             store.create_goal("goal")
         elif transition == "progress":
@@ -455,14 +462,14 @@ def test_ready_writes_uncertain_after_commit_cannot_launch_after_reopen(
     # COMMIT happened; post-COMMIT failures still leave a visible READY row.
     reopened = GoalAttemptStore(store.root)
     assert reopened.snapshot("goal").number == expected
-    assert reopened.snapshot("goal").state == "ready"
-    with pytest.raises(UnresolvedAttempt):
+    assert reopened.snapshot("goal").lifecycle == ReadyGeneration()
+    with pytest.raises(UnresolvedAttemptError):
         store.ready_grant("goal", expected)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.ready_grant("goal", expected)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.reserve("goal", expected)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", expected)
     recovered = reopened.authorize_ready_recovery(
         "goal",
@@ -478,20 +485,20 @@ def test_ready_grant_is_not_persisted_and_stale_decisions_cannot_launch(store):
     grant = store.ready_grant("goal", 1)
     assert grant.encode() not in store.path.read_bytes()
     reopened = GoalAttemptStore(store.root)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.reserve("goal", 1)
     rotated = reopened.authorize_ready_recovery(
         "goal", expected_generation=1, user_decision_id="visible-human-recovery-1"
     )
     assert rotated.number == 2
     assert reopened.ready_grant("goal", 2).encode() not in store.path.read_bytes()
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         store.reserve("goal", 1, ready_grant=grant)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.authorize_ready_recovery(
             "goal", expected_generation=2, user_decision_id="visible-human-recovery-1"
         )
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.reserve("goal", 2, ready_grant=grant)
     assert reopened.reserve("goal", 2).generation == 2
 
@@ -508,14 +515,14 @@ def test_one_human_decision_id_cannot_authorize_two_attempts(store):
     )
     second = store.reserve("goal", 2)
     store.record_failed(second, "second outcome unknown")
-    with pytest.raises(UnresolvedAttempt, match="already used"):
+    with pytest.raises(UnresolvedAttemptError, match="already used"):
         store.authorize_retry(
             "goal",
             expected_generation=2,
             attempt_id=second.attempt_id,
             user_decision_id="single-human-decision",
         )
-    assert store.snapshot("goal").state == "blocked"
+    assert store.snapshot("goal").lifecycle == BlockedGeneration()
     store.authorize_retry(
         "goal",
         expected_generation=2,
@@ -533,17 +540,17 @@ def test_recovery_postcommit_fsync_failure_revokes_old_and_new_authority(store, 
         raise OSError("injected post-COMMIT fsync failure during recovery")
 
     monkeypatch.setattr(store, "_sync", lost_sync_ack)
-    with pytest.raises(StorageUncertain, match="durability"):
+    with pytest.raises(StorageUncertainError, match="durability"):
         store.authorize_ready_recovery(
             "goal", expected_generation=1, user_decision_id="human-recovery-lost-ack"
         )
     reopened = GoalAttemptStore(store.root)
     assert reopened.snapshot("goal").number == 2
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.reserve("goal", 2)
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         store.reserve("goal", 1, ready_grant=old_grant)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.authorize_ready_recovery(
             "goal", expected_generation=2, user_decision_id="human-recovery-lost-ack"
         )
@@ -565,9 +572,9 @@ def test_legacy_v1_ready_row_is_not_upgraded_or_launched(tmp_path):
         )
         conn.execute("INSERT INTO goals VALUES('goal',1,'ready',NULL)")
     path.chmod(0o600)
-    with pytest.raises(StorageUncertain, match="Unsupported"):
+    with pytest.raises(StorageUncertainError, match="Unsupported"):
         GoalAttemptStore(root)
-    with pytest.raises(StorageUncertain, match="Unsupported"):
+    with pytest.raises(StorageUncertainError, match="Unsupported"):
         GoalAttemptStore.initialize(root)
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT * FROM goals").fetchall() == [("goal", 1, "ready", None)]
@@ -599,16 +606,16 @@ def test_v2_claimed_attempt_migrates_without_regranting(tmp_path):
     path.chmod(0o600)
 
     migrated = GoalAttemptStore(root)
-    assert migrated.snapshot("goal").state == "reserved"
+    assert migrated.snapshot("goal").lifecycle == ReservedGeneration()
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone() == (
             "5",
         )
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         migrated.reserve("goal", 1)
     retired = migrated.retire_goal("goal", expected_generation=1, attempt_id="attempt")
-    assert retired.state == "cancelled"
+    assert retired.lifecycle == CancelledGeneration()
 
 
 def test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting(store):
@@ -621,9 +628,9 @@ def test_v3_claimed_attempt_migrates_to_usage_schema_without_regranting(store):
         conn.execute("UPDATE metadata SET value='3' WHERE key='schema_version'")
 
     migrated = GoalAttemptStore(store.root)
-    assert migrated.snapshot("goal").state == "reserved"
+    assert migrated.snapshot("goal").lifecycle == ReservedGeneration()
     assert migrated.provider_usage_total("goal").responses == 0
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         migrated.reserve("goal", 1)
 
 
@@ -634,7 +641,7 @@ def test_failure_blocks_unresolved_attempt_from_any_prelaunch_phase(store, trans
     if transition == "claimed":
         store.claim_launch(reservation)
     store.record_failed(reservation, "unknown outcome")
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
-    with pytest.raises(ReservationConflict):
+    with pytest.raises(ReservationConflictError):
         store.reserve("goal", 1)

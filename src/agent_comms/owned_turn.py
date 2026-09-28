@@ -16,7 +16,9 @@ from acp import RequestError
 from . import backend
 from .channel_targets import is_channel_target
 from .errors import RelationViolationError
+from .goal_attempt_phase import ClaimedAttempt
 from .goal_attempts import Generation, GoalAttemptError, LaunchPermit
+from .goal_generation import ReservedGeneration
 from .messages import Message
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
@@ -429,11 +431,11 @@ class OwnedTurn:
                 assert self.runner.goal_store is not None
                 allowed = self.runner.goal_store._is_attempt(
                     attempt,
-                    "claimed",
+                    ClaimedAttempt(),
                     Generation(
                         attempt.goal_id,
                         attempt.generation,
-                        "reserved",
+                        ReservedGeneration(),
                         attempt.attempt_id,
                     ),
                 )

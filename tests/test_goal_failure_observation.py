@@ -18,11 +18,12 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_attempts import (
     GoalAttemptStore,
-    StaleAttempt,
-    StorageUncertain,
-    UnresolvedAttempt,
+    StaleAttemptError,
+    StorageUncertainError,
+    UnresolvedAttemptError,
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
+from agent_comms.goal_generation import BlockedGeneration, ReservedGeneration
 from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
 from agent_comms.goals import Goal
@@ -91,9 +92,9 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
     store.record_failed(observation.reservation, "private diagnostic", observation=observation)
     before = store.path.read_bytes()
     for current in (store, GoalAttemptStore(store.root)):
-        with pytest.raises(StaleAttempt):
+        with pytest.raises(StaleAttemptError):
             current.record_failed(observation.reservation, "duplicate", observation=observation)
-        with pytest.raises(UnresolvedAttempt):
+        with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
         projection = read(current, blocked(owner))
         assert projection.to_primitive() == {
@@ -134,7 +135,7 @@ def test_mismatched_turn_claim_is_not_bound(bound, mutation):
     )
     assert rejected is None
     store.record_failed(observation.reservation, "failed anyway", observation=rejected)
-    assert store.snapshot("goal").state == "blocked"
+    assert store.snapshot("goal").lifecycle == BlockedGeneration()
     assert read(store, blocked(owner)).reason == "missing_binding"
 
 
@@ -143,7 +144,7 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound):
     forged = replace(observation, reservation=replace(observation.reservation, token="wrong"))
     store.record_failed(observation.reservation, "failed", observation=forged)
     assert rows(store, "failed_turn_observations") == []
-    assert store.snapshot("goal").state == "blocked"
+    assert store.snapshot("goal").lifecycle == BlockedGeneration()
     assert read(store, blocked(owner)).state == "unavailable"
 
 
@@ -154,7 +155,7 @@ def test_unclaimed_attempt_failure_has_no_backend_incident(bound):
     store.record_failed(
         reservation, "prelaunch failure", observation=replace(observation, reservation=reservation)
     )
-    assert store.snapshot("unclaimed").state == "blocked"
+    assert store.snapshot("unclaimed").lifecycle == BlockedGeneration()
     assert rows(store, "failed_turn_observations") == []
 
 
@@ -162,7 +163,7 @@ def test_stale_attempt_cannot_record_an_incident(bound):
     store, owner, _, observation = bound
     store.retire_goal("goal", expected_generation=1, attempt_id=observation.reservation.attempt_id)
     before = store.path.read_bytes()
-    with pytest.raises(StaleAttempt):
+    with pytest.raises(StaleAttemptError):
         store.record_failed(observation.reservation, "late", observation=observation)
     assert store.path.read_bytes() == before
     assert read(store, blocked(owner)).state == "unavailable"
@@ -176,10 +177,10 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
             "BEGIN SELECT RAISE(ABORT,'injected observation failure'); END"
         )
     store.record_failed(observation.reservation, "failed", observation=observation)
-    assert store.snapshot("goal").state == "blocked"
+    assert store.snapshot("goal").lifecycle == BlockedGeneration()
     assert rows(store, "attempts")[0][4] == "failed"
     assert rows(store, "failed_turn_observations") == []
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
     assert read(store, blocked(owner)).reason == "missing_binding"
 
@@ -192,12 +193,14 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
         raise OSError("injected storage failure")
 
     monkeypatch.setattr(store, "_sync" if after_commit else "_commit", fail)
-    with pytest.raises(StorageUncertain):
+    with pytest.raises(StorageUncertainError):
         store.record_failed(observation.reservation, "failed", observation=observation)
     reopened = GoalAttemptStore(store.root)
-    assert reopened.snapshot("goal").state == ("blocked" if after_commit else "reserved")
+    assert reopened.snapshot("goal").lifecycle == (
+        BlockedGeneration() if after_commit else ReservedGeneration()
+    )
     assert len(rows(reopened, "failed_turn_observations")) == int(after_commit)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         reopened.resume("goal", 1)
     assert read(reopened, blocked(owner)).state == (
         "backend_suspended" if after_commit else "unavailable"
@@ -360,14 +363,14 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
         if outcome == "observation_rollback":
-            with pytest.raises(StorageUncertain):
+            with pytest.raises(StorageUncertainError):
                 await agent.turns.run_agent_turn(
                     "project", "project", "Continue", autonomous_goal=True
                 )
         else:
             await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
-        assert store.snapshot(goal.id).state == "blocked"
-        with pytest.raises(UnresolvedAttempt):
+        assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
+        with pytest.raises(UnresolvedAttemptError):
             store.resume(goal.id, 1)
         owner = wired.registry.require("project")
         expected = "owner_paused" if owner_pauses else "backend_suspended"
@@ -435,9 +438,11 @@ def test_process_crash_has_no_partial_incident_or_replay_right(bound, after_comm
     assert projection.state == ("backend_suspended" if after_commit else "unavailable")
     assert {p.name: p.read_bytes() for p in store.root.iterdir() if p.is_file()} == before
     recovered = GoalAttemptStore(store.root)
-    assert recovered.snapshot("goal").state == ("blocked" if after_commit else "reserved")
+    assert recovered.snapshot("goal").lifecycle == (
+        BlockedGeneration() if after_commit else ReservedGeneration()
+    )
     assert len(rows(recovered, "failed_turn_observations")) == int(after_commit)
-    with pytest.raises(UnresolvedAttempt):
+    with pytest.raises(UnresolvedAttemptError):
         recovered.resume("goal", 1)
 
 

@@ -14,6 +14,7 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_generation import CompletedGeneration
 from agent_comms.goal_presentation import GoalExecutionState
 from agent_comms.threads import Thread
 
@@ -201,7 +202,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 # message to start a turn before the goal wake under test.
                 agent.inputs.auto_wake = False
                 for index in range(5):
-                    early = comms.messaging.send_message("child", "parent", f"WAIT_INSTRUCTION_{index}")
+                    early = comms.messaging.send_message(
+                        "child", "parent", f"WAIT_INSTRUCTION_{index}"
+                    )
                     pending_keys.append(f"bus:{early.seq}")
                 await agent.inputs.drain_inbox("parent")
                 agent.inputs.auto_wake = True
@@ -237,7 +240,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 agent.turns.schedule_goal("parent")
                 assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
                 assert not agent.inputs.pending_turns.get("parent") and len(requests) == 2 + offset
-            message = comms.messaging.send_message("child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT")
+            message = comms.messaging.send_message(
+                "child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT"
+            )
             await agent.inputs.drain_inbox("parent")
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
@@ -252,7 +257,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 assert row["status"] == "unknown" and row["native_id"] is None
                 assert agent.inputs.dispositions.reviewed_for_goal(row, goal.id)
             assert comms.registry.require("parent").goal.state.declared_name == "completed"
-            assert agent.turns.goal_store.snapshot(goal.id).state == "completed"
+            assert agent.turns.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()
             session = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             users = [row["message"] for row in rows if row.get("message", {}).get("role") == "user"]

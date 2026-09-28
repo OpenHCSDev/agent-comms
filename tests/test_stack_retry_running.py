@@ -14,6 +14,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 
 
@@ -183,9 +184,9 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             )
             assert result["goal"]["status"] == "active"
             generation = GoalAttemptStore(store.root).snapshot(goal.id)
-            assert (generation.number, generation.state, generation.attempt_id) == (
+            assert (generation.number, generation.lifecycle, generation.attempt_id) == (
                 2,
-                "ready",
+                ReadyGeneration(),
                 None,
             )
             await asyncio.sleep(0.25)
@@ -208,7 +209,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             finish_goal.set()
             await asyncio.wait_for(asyncio.shield(owner.inputs.wake_tasks[session]), 10)
             final = GoalAttemptStore(store.root).snapshot(goal.id)
-            assert (final.number, final.state, final.attempt_id) == (3, "ready", None)
+            assert (final.number, final.lifecycle, final.attempt_id) == (3, ReadyGeneration(), None)
             assert len(requests) == 2, "One ordinary request and one authorized goal continuation"
             assert owner.inputs.dispositions.get("acp:old-unknown") == unknown_before
             assert "UNCERTAIN_OLD_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)

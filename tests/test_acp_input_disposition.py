@@ -14,6 +14,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
+from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_drain import InputDrain
 from agent_comms.messages import Message, MessageType
@@ -128,7 +129,10 @@ async def test_goal_origin_survives_direct_refused_before_send(tmp_path, monkeyp
         await agent.turns.run_agent_turn("project", "project", "Set a goal")
         goal = comms.registry.require("project").goal
         assert goal is not None and goal.state.declared_name == "active"
-        assert GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).state == "ready"
+        assert (
+            GoalAttemptStore(comms.root / "goal-private").snapshot(goal.id).lifecycle
+            == ReadyGeneration()
+        )
         assert InputDispositions(comms.root).status("bus:1") == "unknown"
         assert not any(
             "[agent error]" in getattr(update.content, "text", "")
@@ -361,10 +365,7 @@ async def test_started_then_ack_only_direct_survives_reopen_without_replay(tmp_p
     stub = tmp_path / "pi-direct-stub"
     session_file = tmp_path / "pi-session.jsonl"
     session_file.touch()
-    stub.write_text(
-        f"#!{sys.executable}\n"
-        + f"session_file = {str(session_file)!r}\n"
-        + """
+    stub.write_text(f"#!{sys.executable}\n" + f"session_file = {str(session_file)!r}\n" + """
 import json, sys
 from pathlib import Path
 launches = Path(session_file + '.launches')
@@ -386,8 +387,7 @@ send({"type":"agent_settled"})
 # Exit after ACK-only steering: there is deliberately no second input start.
 # A persistent owner correctly refuses to settle this pending input and does
 # not request final stats. Waiting for those requests deadlocks the fixture.
-"""
-    )
+""")
     stub.chmod(0o755)
     with tempfile.TemporaryDirectory(dir="/var/tmp") as wire_dir:
         comms = wire(Path(wire_dir))

@@ -18,7 +18,7 @@ from .channel_targets import is_channel_target
 from .comms import Comms
 from .diagnostics import record_terminal_failure, terminal_failure_reason
 from .goal_actions import BlockedGoalAction, GoalPrecondition
-from .goal_attempts import LaunchPermit, StaleAttempt
+from .goal_attempts import LaunchPermit, StaleAttemptError
 from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .messages import MessageType
@@ -400,7 +400,7 @@ class TurnProgress(events.AgentEventConsumer):
                     self.goal_attempt_resolved = True
             if not self.goal_attempt_resolved:
                 execution.terminal_snapshot = execution.runner.comms.registry.snapshot()
-                with suppress(StaleAttempt):
+                with suppress(StaleAttemptError):
                     execution.runner.goal_store.record_failed(
                         execution.goal_permit.reservation,
                         "Goal turn ended without verified terminal progress.",
@@ -534,7 +534,7 @@ class TurnProgress(events.AgentEventConsumer):
                         f"origin-completed:{execution.current.revision}",
                     )
                 else:
-                    with suppress(StaleAttempt):
+                    with suppress(StaleAttemptError):
                         execution.runner.goal_store.record_failed(
                             execution.resolved_origin_permit.reservation,
                             "Goal origin turn did not finish successfully.",
@@ -570,7 +570,7 @@ class TurnProgress(events.AgentEventConsumer):
                 execution.runner.pending_goal_origins.pop(execution.thread_name, None)
         if execution.goal_permit is not None and not self.goal_attempt_resolved:
             assert execution.runner.goal_store is not None
-            with suppress(StaleAttempt):
+            with suppress(StaleAttemptError):
                 execution.runner.goal_store.record_failed(
                     execution.goal_permit.reservation,
                     "Goal attempt ended without a verified terminal result.",

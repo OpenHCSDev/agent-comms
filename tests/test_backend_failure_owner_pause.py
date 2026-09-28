@@ -14,7 +14,8 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_attempts import UnresolvedAttempt
+from agent_comms.goal_attempts import UnresolvedAttemptError
+from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.threads import Thread
 from test_acp import TestAgentTurn as GoalFixture
 
@@ -62,7 +63,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
     if pause_timing == "during_block":
         # Race after ACP's active-goal precheck, before the wire-locked operation.
-        monkeypatch.setattr(wired.goals, 'block_goal_after_failed_turn', pause_at_block)
+        monkeypatch.setattr(wired.goals, "block_goal_after_failed_turn", pause_at_block)
 
     async def failed_events(*args, **kwargs):
         if pause_timing == "before_terminal":
@@ -86,8 +87,8 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         assert agent.inputs.dispositions.path.read_bytes() == ledger_before
         assert agent.inputs.dispositions.status("acp:earlier-uncertain") == "unknown"
         generation = agent.turns.goal_store.snapshot(goal.id)
-        assert generation.state == "blocked" and generation.attempt_id is not None
-        with pytest.raises(UnresolvedAttempt):
+        assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None
+        with pytest.raises(UnresolvedAttemptError):
             agent.turns.goal_store.resume(goal.id, generation.number)
         agent.turns.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
