@@ -40,8 +40,11 @@ def policy(request, tmp_path):
 
     def raw(call_id="one", arguments=None):
         values = args if arguments is None else arguments
-        body = {"token": token, "call_id": call_id}
-        body.update(values if selected else {"name": name, "arguments": values})
+        body = (
+            {"token": token, "request": {"call_id": call_id, "arguments": values}}
+            if selected
+            else {"token": token, "call_id": call_id, "name": name, "arguments": values}
+        )
         return (json.dumps(body) + "\n").encode()
 
     def announce(call_id="one"):

@@ -5,11 +5,14 @@ import inspect
 from pathlib import Path
 from typing import get_type_hints
 
+import pytest
+
 from agent_comms import claim_admission, coordination_response
 from agent_comms.envelope_claim_transitions import FileClaimPath
 from agent_comms.messaging import Messaging
 from agent_comms.publisher import Publisher
 
+pytestmark = pytest.mark.refactor_guard
 
 def test_replaced_pf_interfaces_cannot_return():
     retired = {
