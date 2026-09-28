@@ -9,12 +9,15 @@ from agent_comms import acp, cohort_foreground, coordinated_runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordination_store import MutationStore
 from agent_comms.store_files import file_revision
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(tmp_path, monkeypatch):
+async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
+    tmp_path, monkeypatch
+):
     comms, agent, _root_id = _session(tmp_path)
     counts = {"accept": 0, "cursor": 0}
     accept, cursor = acp._accept_visible_initials, acp.advance_current_native_cursor
@@ -99,7 +102,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, native_calls = _fake_model()
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     assert await agent.inputs.drain_inbox("beta") == 0
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
@@ -156,9 +159,12 @@ def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
     with MutationStore(root / "coordination.sqlite3") as store:
         statements = []
         store._connection.set_trace_callback(statements.append)
-        assert cohort_foreground._accept_visible_initials(
-            comms.bus, root_id, store, lookup, 0, owner_name="beta"
-        ) == original.message.seq
+        assert (
+            cohort_foreground._accept_visible_initials(
+                comms.bus, root_id, store, lookup, 0, owner_name="beta"
+            )
+            == original.message.seq
+        )
         assert not accepted
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
         message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")

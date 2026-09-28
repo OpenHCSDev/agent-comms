@@ -25,6 +25,7 @@ from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_native_prompt_binding import _fake_model
 
 
@@ -76,13 +77,11 @@ def _root(tmp_path: Path):
     return root, root_id, comms, first, lookup
 
 
-async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(
-    tmp_path, monkeypatch
-):
+async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, monkeypatch):
     root, root_id, comms, first, lookup = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first_turn = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -116,7 +115,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     root, root_id, comms, _first, lookup = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     bad, bad_calls = _fake_model(decision="IGNORE", digest_override="b" * 64)
-    monkeypatch.setattr(runtime, "run_native_pi_turn", bad)
+    monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -128,7 +127,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, later.seq, store)
     good, good_calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", good)
+    monkeypatch.setattr(TrackedTurnSession, "execute", good)
     result = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -150,7 +149,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     root, root_id, comms, first, _lookup = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()

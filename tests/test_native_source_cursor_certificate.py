@@ -24,6 +24,7 @@ from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_native_prompt_binding import _fake_model
 
 
@@ -84,7 +85,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     root, root_id, comms = _fresh(tmp_path, 10)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
     one = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -114,7 +115,7 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
     root, root_id, comms = _fresh(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
     one = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -144,7 +145,7 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     root, root_id, comms = _fresh(tmp_path, recipients)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     source = _seal(comms, root, root_id, "#team", "@alpha selected")
     frozen = comms.bus.log.read_initial_cohort(root_id, source.seq)
     assert len(frozen.audience.recipients) == recipients
@@ -172,7 +173,7 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
     root, root_id, comms = _fresh(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     _seal(comms, root, root_id, "alpha", "exact selected")
     turn = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
