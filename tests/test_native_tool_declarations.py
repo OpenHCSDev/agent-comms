@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from pathlib import Path
 
 import acp
 import pytest
@@ -17,7 +16,7 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-def test_new_tool_declaration_drives_presentation_without_coding_permission():
+async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
     class InspectFixtureTool(NativeTool):
         acp_kind = "search"
         action = "Inspect"
@@ -28,6 +27,16 @@ def test_new_tool_declaration_drives_presentation_without_coding_permission():
 
     event = NativeTool.start("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
+    owner, received = acp_tools
+    await owner._emit_event("declared-tool", event, owner.sessions.client)
+    async with asyncio.timeout(3):
+        update = await received.get()
+    assert isinstance(update, ToolCallStart)
+    assert (update.kind, update.title, update.raw_input) == (
+        "search",
+        "Inspect new declaration",
+        {"query": "new declaration"},
+    )
     with pytest.raises(ValueError):
         CodingTool.from_call("inspect_fixture", {"query": "new declaration"})
     for member in CodingTool.members_with(CodingTool):
@@ -36,12 +45,14 @@ def test_new_tool_declaration_drives_presentation_without_coding_permission():
         assert event.kind == member.acp_kind and event.args == call.arguments
     unknown = NativeTool.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
-        "External Extension", "other", {"private": "preserved"}
+        "External Extension",
+        "other",
+        {"private": "preserved"},
     )
 
 
 async def test_actual_native_read_tool_reaches_official_acp_with_declared_presentation(
-    native_backend, monkeypatch
+    native_backend, monkeypatch, acp_tools
 ):
     native = native_backend
     source = native.project / "owned.txt"
@@ -54,20 +65,46 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
             return
         try:
             header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
-            length = next(int(line.split(b":", 1)[1]) for line in header.split(b"\r\n")
-                          if line.lower().startswith(b"content-length:"))
+            length = next(
+                int(line.split(b":", 1)[1])
+                for line in header.split(b"\r\n")
+                if line.lower().startswith(b"content-length:")
+            )
             request = json.loads(await reader.readexactly(length))
             assert any(tool["function"]["name"] == "read" for tool in request["tools"])
             native.provider.posts += 1
             chunk = {
-                "id": "native-tool", "object": "chat.completion.chunk", "created": 1,
-                "model": "fixture", "choices": [{"index": 0, "finish_reason": "tool_calls",
-                "delta": {"tool_calls": [{"index": 0, "id": "read-proof", "type": "function",
-                "function": {"name": "read", "arguments": json.dumps({"path": str(source)})}}]}}],
+                "id": "native-tool",
+                "object": "chat.completion.chunk",
+                "created": 1,
+                "model": "fixture",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "tool_calls",
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "read-proof",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "read",
+                                        "arguments": json.dumps({"path": str(source)}),
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ],
             }
             body = b"data: " + json.dumps(chunk).encode() + b"\n\ndata: [DONE]\n\n"
-            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
-                         + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body)
+            writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
+                + str(len(body)).encode()
+                + b"\r\nConnection: close\r\n\r\n"
+                + body
+            )
             await writer.drain()
         finally:
             writer.close()
@@ -75,14 +112,32 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
 
     monkeypatch.setattr(native.provider, "handle", request_read)
     async with asyncio.timeout(25):
-        records = [event async for event in backend.stream_agent_events(
-            "pi", ["--provider", "response-local", "--model", "fixture", "--thinking", "off",
-                   "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-                   "--no-prompt-templates", "--tools", "read"],
-            "Read owned.txt once and answer", str(native.project),
-            session_file=str(native.session), persistent_session=native.persistent,
-            native_start=native.started,
-        )]
+        records = [
+            event
+            async for event in backend.stream_agent_events(
+                "pi",
+                [
+                    "--provider",
+                    "response-local",
+                    "--model",
+                    "fixture",
+                    "--thinking",
+                    "off",
+                    "--offline",
+                    "--no-extensions",
+                    "--no-skills",
+                    "--no-context-files",
+                    "--no-prompt-templates",
+                    "--tools",
+                    "read",
+                ],
+                "Read owned.txt once and answer",
+                str(native.project),
+                session_file=str(native.session),
+                persistent_session=native.persistent,
+                native_start=native.started,
+            )
+        ]
     assert records[-1].ok, records[-1]
     starts = [event for event in records if isinstance(event, events.ToolStart)]
     ends = [event for event in records if isinstance(event, events.ToolEnd)]
@@ -92,7 +147,21 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     assert len(native.starts) == len(native.saved_inputs()) == 1
     assert native.provider.posts == 2 and source.read_text() == "ACTUAL_READ_CONTENT\n"
 
-    owner = canonical_agent(wire(native.root), auto_wake=False)
+    owner, received = acp_tools
+    await owner._emit_event("native-tool", starts[0], owner.sessions.client)
+    async with asyncio.timeout(3):
+        update = await received.get()
+    assert isinstance(update, ToolCallStart)
+    assert (update.kind, update.title, update.raw_input) == (
+        "read",
+        f"Read {source}",
+        {"path": str(source)},
+    )
+
+
+@pytest.fixture
+async def acp_tools(tmp_path):
+    owner = canonical_agent(wire(tmp_path / "sdk-wire"), auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):
@@ -117,12 +186,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     try:
         async with asyncio.timeout(10):
             await client.initialize(protocol_version=1)
-            await owner._emit_event("native-tool", starts[0], owner.sessions.client)
-            update = await received.get()
-            assert isinstance(update, ToolCallStart)
-            assert (update.kind, update.title, update.raw_input) == (
-                "read", f"Read {source}", {"path": str(source)}
-            )
+        yield owner, received
     finally:
         writer.close()
         await writer.wait_closed()

@@ -1,0 +1,89 @@
+{
+  "process_scan_denied": [
+    {
+      "pid": 1786010,
+      "name": "systemd"
+    },
+    {
+      "pid": 1786010,
+      "name": "systemd"
+    },
+    {
+      "pid": 1786010,
+      "name": "systemd"
+    },
+    {
+      "pid": 1786010,
+      "name": "systemd"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    }
+  ],
+  "removed": [
+    {
+      "path": ".artifacts/tracked-merged-installed",
+      "bytes": 4780437
+    },
+    {
+      "path": ".artifacts/rpc-framing-installed",
+      "bytes": 4576688
+    },
+    {
+      "path": ".artifacts/native-return-installed",
+      "bytes": 5724033
+    },
+    {
+      "path": ".artifacts/private-cutover-installed-package",
+      "bytes": 5851413
+    },
+    {
+      "path": ".artifacts/private-queue-installed",
+      "bytes": 5853939
+    },
+    {
+      "path": ".artifacts/watchdog/installed",
+      "bytes": 5394767
+    },
+    {
+      "path": ".artifacts/watchdog/final-installed",
+      "bytes": 5390980
+    },
+    {
+      "path": ".artifacts/backend-response/installed",
+      "bytes": 5378207
+    },
+    {
+      "path": ".artifacts/canonical-event-time/offset-installed",
+      "bytes": 5884360
+    },
+    {
+      "path": ".artifacts/cursor-candidate/installed",
+      "bytes": 5737080
+    },
+    {
+      "path": "stack/.pi-native-5fdef596596173bd",
+      "bytes": 138338142
+    }
+  ],
+  "retained": [],
+  "removed_bytes": 192910046,
+  "permission_limit": "Only systemd user manager and sd-pam protected details unreadable; known OS service executables, no test process references."
+}
