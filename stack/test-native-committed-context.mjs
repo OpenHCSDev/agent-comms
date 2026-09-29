@@ -13,6 +13,7 @@ const {SessionManager, sessionEntryToContextMessages}=await import(join(pkg,'dis
 const {prepareCompaction, compact}=await import(join(pkg,'dist/core/compaction/compaction.js'));
 const {CompactionPolicy}=await import(join(pkg,'dist/core/compaction/agent-comms-policy.js'));
 const {SessionContext}=await import(join(pkg,'dist/core/session-context.js'));
+const {AgentSession}=await import(join(pkg,'dist/core/agent-session.js'));
 const {computeFileLists, formatFileOperations}=await import(join(pkg,'dist/core/compaction/utils.js'));
 const requests=[];
 const summary='HISTORY_FACT_727 PREFIX_FACT_431 EXACT_PATH_src/domain.py. '+ 'Condensed context. '.repeat(800);
@@ -79,7 +80,7 @@ try {
         const messages=reopened.buildContextEntries().flatMap(sessionEntryToContextMessages);
         const bytes=messages.reduce((total,message)=>total+policy.messageBytes(message),0);
         assert.ok(bytes<=policy.inputBytes(model,actualSettings.reserveTokens));
-        const session={sessionManager:reopened,model,settingsManager:{getCompactionSettings:()=>actualSettings},agent:{state:{messages:[]}}};
+        const session={getContextUsage:AgentSession.prototype.getContextUsage,sessionManager:reopened,model,settingsManager:{getCompactionSettings:()=>actualSettings},agent:{state:{messages:[]}}};
         SessionContext.restore(session);
         assert.equal(session.storedContext.requiresCompaction(),false,'actual restored context must be admitted');
         const last=reopened.entryStore.latest(reopened.getLeafId(),'compaction');

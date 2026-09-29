@@ -28,6 +28,7 @@ from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .message_bus import MessageBus
+from .native_fork import fork_native_session
 from .native_transcript import NativeTranscript
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
@@ -613,6 +614,7 @@ class ThreadManagement:
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
+            session_file=fork_native_session(parent, pi_bin).session_file,
             process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,
@@ -621,12 +623,11 @@ class ThreadManagement:
         self.registry.register(child)
         self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
-        # Non-interactive pi refuses to run without an explicit model, so pass
-        # the parent's last model choice through to the child.
+        # Use the captured child history if the parent has no explicit model.
         model = (
             tuple(parent.model.split("/", 1))
             if parent.model and "/" in parent.model
-            else _session_model(Path(parent.session_file))
+            else _session_model(Path(child.session_file))
         )
         args = ["--print", "--provider", model[0], "--model", model[1]] if model else None
         try:
