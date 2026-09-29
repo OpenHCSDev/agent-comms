@@ -20,6 +20,7 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
+from .pi_vocabulary import ThinkingLevel
 from .acp_extension import (
     ContextUsage,
     CoordinationChangedUpdate,
@@ -257,7 +258,7 @@ class SessionLifecycle:
                 os.getpid(),
                 thread.worktree,
                 thread.model,
-                thread.thinking_level,
+                ThinkingLevel.optional_name(thread.thinking_level),
                 thread.title or thread.name,
                 usage,
             ),

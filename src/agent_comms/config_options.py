@@ -17,6 +17,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
 )
 
+from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from . import backend
 from .comms import Comms
@@ -160,16 +161,16 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     category = "thought_level"
 
     def current_value(self, thread: Thread) -> str | None:
-        return thread.thinking_level
+        return ThinkingLevel.optional_name(thread.thinking_level)
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
         if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
-            levels = ["off", "minimal", "low", "medium", "high"]
+            levels = [member.declared_name for member in ThinkingLevel.members_with(ThinkingLevel) if member.ordinary_choice]
         else:
             data = await GetAvailableThinkingLevels().discover(
                 self.agent_bin, self.agent_args.with_model(thread.model).argv
             )
-            levels = data.levels or ["off"]
+            levels = [member.declared_name for member in data.levels] or ["off"]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     def selection(self, owner: ConfigOptions, thread: Thread, choices) -> str:

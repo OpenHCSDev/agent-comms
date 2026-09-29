@@ -11,6 +11,7 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .pi_vocabulary import ThinkingLevel
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
@@ -55,7 +56,7 @@ class SelectedExecution:
                 )
             if type(
                 self.selected_thinking_level
-            ) is not str or self.selected_thinking_level not in ("low", "high"):
+            ) is not str or not ThinkingLevel.supports_selected(self.selected_thinking_level):
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )

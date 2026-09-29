@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import NoReturn
 from uuid import uuid4
 
+from .pi_vocabulary import ThinkingLevel
 from .native_entries import (
     ModelChangeEntry,
     NativeEntry,
@@ -181,7 +182,7 @@ class FreshPrivateSession:
         on a zero-message session, even when explicit launch flags are supplied.
         This is a file observation, not provider/child/terminal authority.
         """
-        if self.selected_thinking_level not in {"low", "high"} or not self.bootstrap_leaf_id:
+        if not ThinkingLevel.supports_selected(self.selected_thinking_level) or not self.bootstrap_leaf_id:
             raise NativePiUnavailable("Fresh source lacks explicit selected bootstrap")
         self.verify_saved_identity()
         try:
@@ -282,7 +283,7 @@ def create_fresh_private_session(
     # Explicitly selected static model only; the level may not come from an
     # arbitrary request or be silently clamped from an unsupported 'off'.
     if selected_thinking_level is not None and (
-        type(selected_thinking_level) is not str or selected_thinking_level not in {"low", "high"}
+        type(selected_thinking_level) is not str or not ThinkingLevel.supports_selected(selected_thinking_level)
     ):
         raise ValueError("Explicit supported selected thinking level required")
     session_dir = Path(session_dir).absolute()

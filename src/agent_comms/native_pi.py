@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
+from .pi_vocabulary import ThinkingLevel
 from . import pi_events as pi
 from .native_arguments import NativeArguments
 from .native_entries import NativeEntry, SessionEntry
@@ -490,7 +491,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi requires an explicit provider and model")
         if selected_thinking_level is not None and (
             type(selected_thinking_level) is not str
-            or selected_thinking_level not in {"low", "high"}
+            or not ThinkingLevel.supports_selected(selected_thinking_level)
             or session_file is None
         ):
             raise NativePiUnavailable(

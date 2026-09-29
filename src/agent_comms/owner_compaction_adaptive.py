@@ -21,11 +21,7 @@ from .native_pi import NativePiRpcLaunch
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
-from .owner_compaction_runtime import (
-    SelectedNativeSummary,
-    SelectedSummaryDecline,
-    compact_owner_once,
-)
+from .owner_compaction_runtime import compact_owner_once
 from .owner_compaction_settings import (
     PiCompactionDecision,
     PiSettingsEvidenceError,
@@ -201,24 +197,7 @@ async def maybe_compact_owner_turn(
                 future_queue=future_queue,
                 on_event=on_event,
             )
-            if result.summary is None:
-                if result.decline_reason in {"split_turn", "unsupported"}:
-                    return SelectedSummaryDecline(
-                        bridge.journal.summaries.get(result.operation_id),
-                        identity,
-                        result.decline_reason,
-                    )
-                raise PiSettingsEvidenceError(
-                    f"Selected Pi declined summary ({result.decline_reason}); "
-                    "original remains unbound"
-                )
-            return SelectedNativeSummary(
-                result.summary.text,
-                result.summary.details,
-                result.summary.usage,
-                bridge.journal.summaries.get(result.operation_id),
-                identity,
-            )
+            return result.adaptive_summary(bridge.journal, identity)
 
         summary_strategy = selected_summary
 

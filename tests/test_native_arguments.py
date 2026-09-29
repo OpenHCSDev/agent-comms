@@ -15,6 +15,7 @@ from agent_comms.native_arguments import (
     ValueArgument,
 )
 from test_backend_native_lifecycle import native_backend as native_backend
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -131,7 +132,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             )
             sid = created.session_id
             thread = owner._comms.registry.require(sid)
-            assert thread.model == "response-local/fixture" and thread.thinking_level == "off"
+            assert thread.model == "response-local/fixture" and thread.thinking_level is OffThinkingLevel
             # Seed the representative saved-thread binding through the existing store.
             owner._comms.registry.register(replace(thread, auto_title_pending=False))
             owner._comms.threads.attach_session(sid, str(native.session))
@@ -147,7 +148,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
                 native.session.read_bytes() == history and read_proof_rows(native.session) == proof
             )
             child = owner.turns.persistent_backends[sid].custody.child
-            assert child.attestation.state.thinking_level == "off"
+            assert child.attestation.state.thinking_level is OffThinkingLevel
             response = await router(
                 "session/prompt",
                 {

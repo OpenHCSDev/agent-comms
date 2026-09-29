@@ -360,6 +360,80 @@ class TurnSession:
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
 
+    @property
+    def has_start_listener(self):
+        return self.native_start is not None
+
+    def notify_input_started(self, public_id, native_id, text):
+        return self.native_start is None or self.native_start(public_id, native_id, text)
+
+    @property
+    def started_input(self):
+        return self.admission.started and self.inputs.permits_admission
+
+    @property
+    def accepts_output(self):
+        return self.native.attestation.trustworthy
+
+    def matches_original_input(self, message):
+        return self.inputs.permits_admission and message.matches_input(
+            self.task, self.original_input_id, self.require_input_id
+        )
+
+    def committable_message(self, text):
+        return self.started_input and self.accepts_output and self.output.matches_message(text)
+
+    def ensure_input_forwarding(self):
+        if self.steering_task is None and self.inputs.can_forward(self.native.proc.stdin):
+            self.stdin = self.native.proc.stdin
+            self.steering_task = asyncio.create_task(self.inputs.forward(self))
+
+    def observe_input_during_abort(self, event):
+        if self.accepts_output:
+            matched, identity = self.inputs.mark_started(self, event)
+            if matched:
+                self.started_during_abort.append(identity)
+
+    async def admit_user_message(self, message, event):
+        """Own the original/follow-up input effect across all decoded user messages."""
+        if self.admission.awaiting_start and self.matches_original_input(message):
+            if not self.notify_input_started(None, self.original_input_id, self.task):
+                self.inputs.uncertain = True
+                self.output.record_failure(
+                    failures.InputMissing("Pi input start did not match the durable attempt.")
+                )
+                await self.abort_stalled_rpc()
+                self.finished = True
+                return
+            self.admission = self.admission.start(event)
+            if self.has_start_listener:
+                yield events.InputStarted(id=None)
+            self.ensure_input_forwarding()
+        elif self.started_input:
+            matched, input_id = self.inputs.mark_started(self, event)
+            if matched:
+                yield events.InputStarted(id=input_id)
+            else:
+                self.inputs.uncertain = True
+                self.output.final_assistant_stop = False
+                self.output.record_failure(
+                    failures.FollowupUnrecognized(
+                        "Pi RPC saw an unrecognized follow-up user message start."
+                    )
+                )
+                await self.abort_stalled_rpc()
+                self.finished = True
+                return
+        else:
+            self.inputs.uncertain = True
+            self.output.final_assistant_stop = False
+            self.output.record_failure(
+                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+            )
+            await self.abort_stalled_rpc()
+            self.finished = True
+            return
+
     def permits_live_receipt(self) -> bool:
         """Only tracked, live input may publish an informational package receipt."""
         if self.stats.requested:
@@ -620,10 +694,10 @@ class TurnSession:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.rejected_signal = asyncio.Event()
-        if self.inputs.queue is not None and self.native.proc.stdin is not None:
+        if self.inputs.can_forward(self.native.proc.stdin):
             self.stdin = self.native.proc.stdin
             if not self.require_input_id:
-                self.steering_task = asyncio.create_task(self.inputs.forward(self))
+                self.ensure_input_forwarding()
         self.model_name: str | None = None
         self.session_name: str | None = None
         self.active_session_file = self.session_file
