@@ -20,6 +20,9 @@ class InputEffects(ABC):
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int: ...
 
     @abstractmethod
+    async def _refresh_private_cursor(self, session_id: str) -> None: ...
+
+    @abstractmethod
     def _private_nk_marker(self) -> str: ...
 
     _private_nk_native_package: Path | None
