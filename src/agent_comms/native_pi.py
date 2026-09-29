@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from . import pi_events as pi
-from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_entries import NativeEntry, SessionEntry
 from .selected_tool_broker import NativeToolMode
@@ -108,17 +107,32 @@ def main() -> int:
 class NativeContextRecord:
     """Native context facts shared by the journal and located evidence."""
 
-    input_id: str = field(metadata={"wire_name": "inputId", "sql": Column(
-        primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"
-    )})
+    input_id: str = field(
+        metadata={
+            "wire_name": "inputId",
+            "sql": Column(
+                primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"
+            ),
+        }
+    )
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
-    request_generation: int = field(metadata={"wire_name": "requestGeneration", "sql": Column(
-        primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"
-    )})
-    llm_context_digest: str = field(metadata={"wire_name": "llmContextDigest", "sql": Column(
-        check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"
-    )})
+    request_generation: int = field(
+        metadata={
+            "wire_name": "requestGeneration",
+            "sql": Column(
+                primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"
+            ),
+        }
+    )
+    llm_context_digest: str = field(
+        metadata={
+            "wire_name": "llmContextDigest",
+            "sql": Column(
+                check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"
+            ),
+        }
+    )
 
     def at(self, session_file: Path) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
@@ -152,9 +166,11 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                         AND llm_context_digest != NEW.llm_context_digest)
               OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
             BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
-            **{f"{table}_{action.lower()}": f"CREATE TRIGGER {table}_{action.lower()} "
-               f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
-               for action in ("UPDATE", "DELETE")},
+            **{
+                f"{table}_{action.lower()}": f"CREATE TRIGGER {table}_{action.lower()} "
+                f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
+                for action in ("UPDATE", "DELETE")
+            },
         }
 
     @classmethod
@@ -164,13 +180,15 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         columns = cls.columns()
         return {
             "objects": cls.schema_objects(),
-            "columns": [{"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
-                        for item in fields(cls)],
+            "columns": [
+                {"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
+                for item in fields(cls)
+            ],
             "insert": f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
             "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
             "current": f"SELECT input_id,session_entry_id FROM {table} "
-                       f"WHERE request_generation=(SELECT MAX(request_generation) FROM {table})",
+            f"WHERE request_generation=(SELECT MAX(request_generation) FROM {table})",
         }
 
     def __post_init__(self) -> None:
@@ -196,16 +214,20 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 if not stat.S_ISREG(before.st_mode):
                     raise NativePiUnavailable("Native proof must be a regular file")
                 if (before.st_uid, stat.S_IMODE(before.st_mode), before.st_nlink) != (
-                    os.geteuid(), 0o600, 1
+                    os.geteuid(),
+                    0o600,
+                    1,
                 ):
                     raise NativePiUnavailable("Native proof must be private and unaliased")
                 with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
                     db.execute("BEGIN")
-                    actual = SQLiteSchemaObject.read(db.execute(
-                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"
-                    ))
+                    actual = SQLiteSchemaObject.read(
+                        db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
+                    )
                     if {item.name: item.sql for item in actual} != cls.schema_objects():
-                        raise NativePiUnavailable("Native proof requires offline durable conversion")
+                        raise NativePiUnavailable(
+                            "Native proof requires offline durable conversion"
+                        )
                     if not os.path.samestat(before, path.lstat()):
                         raise NativePiUnavailable("Native proof inode changed while opening")
                     yield db
@@ -223,10 +245,13 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         if generation is not None:
             where += " AND request_generation=?"
             parameters += (generation,)
-        rows = cls.read(db.execute(
-            f"SELECT {cls._column_list(cls.columns())} FROM {cls.declared_name} "
-            f"WHERE {where} ORDER BY request_generation DESC LIMIT 1", parameters
-        ))
+        rows = cls.read(
+            db.execute(
+                f"SELECT {cls._column_list(cls.columns())} FROM {cls.declared_name} "
+                f"WHERE {where} ORDER BY request_generation DESC LIMIT 1",
+                parameters,
+            )
+        )
         return next(iter(rows), None)
 
     def corroborate(

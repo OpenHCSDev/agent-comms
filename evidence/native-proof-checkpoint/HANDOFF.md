@@ -1,6 +1,6 @@
 # Issue107 active implementation — NOT READY
 
-Wegener sole native/proof scope, branch fix/native-proof-checkpoint-recovery-20260929 in persistent WT. Parent owns live; no live package changes.367 complete35854cba ready;368/372 merged; issue107 follows after its complete handoff.
+Wegener sole native/proof scope, branch fix/native-proof-checkpoint-recovery-20260929 in persistent WT. Parent owns live; no live package changes.367 merged10eb0ce6, awaiting parent paired installation;368/372 merged; issue107 follows after its complete handoff.
 
 Current d396 has no total proof-size cap, but AgentSession._loadNativeInputState revalidates every historical .input-proof JSONL row on each constructor. stack/test-native-proof-streaming.mjs constructs Object.create(AgentSession.prototype) and proves streaming256MiB, not actual saved-native/RPC crash recovery. NativeContextProof Python corroboration also reads all proof rows. Need actual native cold startup/accepted-ID/UNKNOWN/cross-commit proof on increasing history, not cap bump/prototype alone.
 
@@ -11,3 +11,15 @@ Immediate work: integrate new journal into base native patch, delete _nativeProo
 Design risk to keep explicit: native SessionManager DiskEntryStore currently rebuilds an ephemeral unlinked SQLite metadata index from the entire native session on open; _loadNativeInputState also iterates every tracked native input. Proof-journal bounded recovery does NOT prove total native-history startup independent of history size. Keep measurement separated; move tracked validation to existing EntryStore decode owner only with complete duplicate/format checks. Do not claim constant total startup from fixed-native-history proof-growth tests. Evaluate any persistent metadata change with existing owner and preserve mutation/lineage authority.
 
 Resource check warning /home10.8GiB /6.4GiB swap9GiB; no new agents/paid provider/big parallel runs. Removed completed q4-installed/q4-current derivatives after process refs; cleanup.json. Keep367 candidate, owner-startup candidate, source/evidence/globald396. Before large-history tests recheck headroom and bounded serial scratch.
+
+## Current checkpoint (draft, not deployment-ready)
+
+Native `_nativeProofRows` and its full-history startup validation/generation mirror are deleted. AgentSession uses NativeProofJournal at the same proof path; Python corroboration queries the existing NativeContextJournal/TypedTable primary key. Current context lineage is checked against SessionManager on reopen; historical input claims/UNKNOWN remain in native history, no recovered acceptance is emitted. Current-only SQLite, declaration-generated schema, no runtime JSONL reader. Parent main beaa8c94 merged normally.
+
+NEW immutable candidate: `stack/.pi-native-86c2f983aa2ecb0c/node_modules/@earendil-works/pi-coding-agent`; manifest matches full package. `build-first.log` failed because old preparation input pins changed; corrected all affected preparation pins. `build-second.log` completed canonical preparation steps with zero fuzz and verified tree. Global/live d396 untouched.
+
+Actual saved native growth journey `native-growth-first.log`: 1 PASS18.56s, real pinned CLI + normal TurnSession and local HTTP. Seeded one real input, then synthesized repeated valid context records against that exact saved native source to grow proof history. At 6,504,448 /39,059,456 /136,839,168 bytes, actual cold reopen+new input was3.23/3.23/3.31s; native peakRSS174,096,384 /170,672,128 /175,538,176. Exactly4new inputs/4loopback requests overall; historical generation1 still corroborates. These timings include native/package/turn overhead, not just indexed SQLite recovery. They do not establish constant cost for rebuilding the separate native JSONL entry index.
+
+One-shot quiet-runtime converter implemented in tools/cutover (NOT RUN on live): same SessionManager exclusive writer fence, exact prior proof validation and source corroboration, generated transactional schema, independent fsynced backup, atomic replacement, no native history rewrite/UNKNOWN reclassification. Delete tool after parent-reviewed cutover. Crash tests must settle the first-file schema publication boundary too; existing truncated/malformed databases must fail closed.
+
+Remaining before ready: actual killed-writer publication/recovery boundaries and UNKNOWN/replay refusal, converter tests including corruption/history preservation, current-format caller/fixture closure, installed saved native/ACP acceptance, ratchet/review and deployment/rollback instructions. No paid provider, no CI hold, no live changes. Owned merged derivative cleanup removed45MB (cleanup-merged-derivatives.json); current test root disposable after process check, source/evidence retained.
