@@ -6,6 +6,95 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ## Current urgent fixes and shipping batch
 
+- LIVE checkpoint2026-09-29: paired runtime-workspace-navigation-20260929 selects
+  core77c2, merged Toad15651fdf, Textual1738/native d396. Five launchers and the
+  default route aligned; eight idle owners restored with all settings/history
+  preserved and no input replay or store reset. The actual default live UI
+  continuous saved-data channel/participant/recent-return journey passes and
+  exits0; eight fresh actual ACP loads pass. Complete native saved-state user
+  journey157 passes fork first-open, visible status/reply and automatic author
+  observation. Final merged-byte run continues in the same existing helper.
+  Previous OpenHCS expectation was unfiltered history; correct saved scope8/8/0.
+  Gamma paint timeout was the helper cropping inactive Beta, fixed in place.
+  Full body/mount reuse and final50ms latency stay Tesla follow-up; CI deferred.
+  Original/round2/S14/T4/T9 remaining deletion scopes stay active below.
+
+- New live defect: fresh fork /open for openhcs-pr159-viewer-bind-owner fails
+  ACP attachment with missing owner socket. Registered PID is dead, Running
+  status and no native session; startup cause not yet established. Carver owns
+  the production startup/open repair; Dalton extends the existing continuous
+  journey to immediate fork /open before the first answer. No user input replay
+  or speculative owner restart. Already verified navigation checkpoint stays live.
+
+- Strategy correction2026-09-29: Tesla156 owns one coherent navigation/presentation
+  integration, Carver153 first-open implementation and shared caller coordination.
+  Exact live failure CommsScreen._load_content still calls deleted per-view
+  prepare_navigation/layout_navigation; channelbar also routes through old native
+  screen ownership. Continuous representative saved-state UI/ACP/native user
+  journey extends existing infrastructure, plus actual installed live opening
+  check before next activation. Controlled responses allowed; no microtest volume
+  or final performance/CI ceremony substitutes for working user actions.
+
+- LIVE2026-09-29: runtime-native-token-admission-20260929 now selects core9251,
+  Toad040607 (142 checkpoint), Textual1738/native4230. Eight idle owners restored;
+  identities/models/thinking/worktrees/native history preserved, no active turn
+  interrupted and no uncertain input replayed. Eight actual fresh ACP loads and
+  eight configured native GetState attestations pass. PR95 saved paint139x25 shows
+  38 matching phrases, Ready/no app or delivery error. First raw ACP proof inherited
+  an old private native pin; corrected to each actual owner's configured pin and
+  repeated successfully. Actual user wrapper clears stale inherited route pins.
+- Installed actual first-input family338 complete case/helper:2passed28.59s,
+  real ordinary63% and normalfork24% parents, actual first answers, no compaction,
+  exactly one original and no replay.338 now mergedb080b9f1. Earlier parent proof
+  copies omitted the changed loopback helper; the failures remain recorded.
+- New user channel-bar failure: thread-bar opening WORKS. Carver153 owns actual
+  channel/sidebar-click navigation to the selected logical view after142 changed
+  the native frame to WorkspaceScreen. The old gate uses sidebar.screen as
+  NavigationOwner and fallback SelectTarget no longer reaches sibling MainScreen.
+  This source trace is a cause candidate; actual click reproduction/fix pending.
+- LIVE retained-history cutover345 applied: both archived sources now read with
+  the installed canonical reader. All8420 public rows, ten original initial
+  audiences and complete original proof directories are preserved. Actual
+  historical pages for #comms/#nra/#openhcs load, no new wake authority. One-use
+  parent operator and484MB duplicate preparation removed; durable originals stay.
+  Final live channel-bar paint depends on the153/156 caller fix below.
+
+- New tab-switch bug: recently viewed full conversations visibly rerender on
+  every return; user says this predates the new installation. Tesla owns actual
+  cache/preparation/mount tracing and bounded reuse fix in follow-up156, with
+  multiple loaded native histories and exact painted reader/editor custody tests.
+- New-tab duplication: temporary @name tab closes and is replaced by a second
+  checkmark/name tab. Carver owns one logical session/tab binding in153; status
+  and title should update in place, obsolete placeholder replacement deleted.
+- Host OS upgrade is the user's confirmed process. At00:46 ada3 ->4 changed
+  libada ABI while installed Node26 still needed libada.so.3, blocking later
+  actual Pi startup. Leave the upgrade alone and retry installed acceptance once
+  Node starts. Upgrade now complete and healthy; actual native checks passed.
+  This later host failure did not explain the earlier00:41 test setup failure.
+- PR142 useful checkpoint MERGED040607c2 on2026-09-29. Persistent native frame,
+  operational source/editor/undo custody, bounded recent-source preparation,
+  original saved clocks and exact cropped return are the shipped tranche.
+  Final latency target remains unmet; Tesla owns follow-up156 including
+  full loaded/multi-page/changed-interval acceptance and remaining deletion.
+  Paired runtime9251/Toad040607/Textual1738/native4230 is now live, with the
+  channel-opening caller regression explicitly pending153/156.
+- Core339/340 MERGED9251/b39a: fork history captured at creation, startup input
+  uses normal reserved disposition/OwnedTurn, restore admission compares native
+  tokens to the effective token window instead of serialized bytes. New complete
+  native package4230 is verified. Complete installed ordinary/fork regression
+  passes2checks28.59s with actual answers, zero forced compactions and no replay.
+  Failed incomplete parent harness attempts remain recorded;338 is merged.
+- New user fresh-fork error: openhcs-pr159-viewer-bind-owner reports private bus
+  checkpoint schema unavailable. Noether345 isolated actual-source acceptance
+  passed and parent applied live as above. No reset or format fallback.
+- Paired142 typed-plan acceptance passes using current logical-view proof caller;
+  physical ACP paint/reset/resize/return/malformed updates verified. Full actual
+  channel-bar journey remains Dalton-owned alongside Carver/Tesla production.
+- Core343/344 merged:224+105 product lines deleted across obsolete selected dry-run
+  RPC and duplicate native tool presentation/dispatch. Actual native/SDK checks
+  passed. Next paired installation stages core942f/native d396, not live yet.
+  Live tool-card display belongs to the next installed saved-thread acceptance.
+
 - LIVE 2026-09-29: all five launchers and eight restored owners select
   runtime-automatic-reply-20260928, core3f06022f (331/332), Toadc2534676,
   Textual1738abd8/native5fde. Automatic channel replies are installed.
