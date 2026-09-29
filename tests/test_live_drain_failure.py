@@ -12,7 +12,7 @@ import pytest
 from agent_comms.activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_schema import CohortSchemaMeta
 from agent_comms.comms import Comms
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -39,7 +39,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
     shutil.copy2(path, saved)
     if broken == "missing":
         path.unlink()
-        with MutationStore(path):
+        with Coordination(path):
             pass
     else:
         with sqlite3.connect(path) as db:

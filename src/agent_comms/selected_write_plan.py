@@ -22,12 +22,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
 
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordinator import Coordination
 
 from .bus_publication import stable_thread_lookup
 from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
-from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import ExistingFileClaim
 from .store_files import _store_lock
 from .threads import Thread
@@ -143,7 +144,7 @@ class SelectedWritePlans:
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = stable_thread_lookup(owner.created_at)
-            with MutationStore(str(self.comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
                     assignment

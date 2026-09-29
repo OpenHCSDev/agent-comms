@@ -23,10 +23,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_comms.coordination_errors import PublicationActivationBlocked
+
 from .child_process import ProcessIdentity
 from .comms import Comms
 from .coordinated_runtime import CoordinatedTurn, SelectedExecution
-from .coordination_store import PublicationActivationBlocked
 from .errors import RelationViolationError
 from .native_pi import _private_session_dir, _trusted_package
 from .store_files import _store_lock

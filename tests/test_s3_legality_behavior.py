@@ -38,7 +38,7 @@ def members(family):
 @pytest.fixture
 def pending(tmp_path):
     with ready(tmp_path / "rules.sqlite3") as store:
-        value = store.snapshot("exec")
+        value = store.snapshots.get("exec")
         assert FieldCodec.decode(RecoverySnapshot, FieldCodec.encode(value)) == value
         yield value
 
@@ -47,7 +47,7 @@ def pending(tmp_path):
 def active(tmp_path):
     with ready(tmp_path / "active.sqlite3") as store:
         started(store)
-        value = store.snapshot("exec")
+        value = store.snapshots.get("exec")
         assert value.is_current
         yield value
 

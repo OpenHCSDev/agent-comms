@@ -15,7 +15,7 @@ from agent_comms import native_pi
 from agent_comms import selected_tool_broker as broker
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeAdmission
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionStart
@@ -130,7 +130,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         participant_generation=1,
         attempt_ordinal=1,
     )
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_native_runtime_schema(store)
         input_id = secrets.token_hex(16)
         mode = broker.selected_tool_mode_for_owner(

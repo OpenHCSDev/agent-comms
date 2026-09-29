@@ -19,9 +19,9 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import MutationStore
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requi
 
 def _root(
     tmp_path: Path, *, recipients: int = 2
-) -> tuple[Comms, MutationStore, WakeCandidateIndex, str]:
+) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
@@ -56,18 +56,18 @@ def _root(
             )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    store = MutationStore(str(root / "coordination.sqlite3"))
+    store = Coordination(str(root / "coordination.sqlite3"))
     install_private_cohort_schema(store)
     return comms, store, WakeCandidateIndex(comms.bus), root_id
 
 
 def _accepted(
-    comms: Comms, store: MutationStore, root_id: str, target: str, body: str
+    comms: Comms, store: Coordination, root_id: str, target: str, body: str
 ) -> tuple[CommittedInitial, WakeAssignment]:
     message = comms.messaging.send_initial_cohort("sender", target, body)
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     for recipient in initial.audience.recipients:
-        store.register_participant(
+        store.participants.register(
             recipient.recipient_lookup,
             recipient.canonical_thread,
             recipient.canonical_thread,
@@ -88,7 +88,7 @@ def _owner(comms: Comms, name: str) -> Thread:
 
 def _projection(
     index: WakeCandidateIndex,
-    store: MutationStore,
+    store: Coordination,
     owner: Thread,
     after_seq: int,
     through_seq: int,
@@ -102,7 +102,7 @@ def _projection(
         index,
         after_seq,
         through_seq,
-        expected_participant_generation=store.participant(
+        expected_participant_generation=store.participants.get(
             stable_thread_lookup(owner.created_at)
         ).participant_generation,
         expected_admission_generation=admission_generation,
@@ -120,7 +120,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
         )
         initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
-            store.register_participant(
+            store.participants.register(
                 recipient.recipient_lookup,
                 recipient.canonical_thread,
                 recipient.canonical_thread,
@@ -143,21 +143,21 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
         accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
         assert len(accepted.assignments) == 2
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT sealed FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
                 (root_id, message.seq),
             ).fetchone()[0]
             == 1
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM awareness_claim_generations WHERE wire_seq=?",
                 (message.seq,),
             ).fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE name='zz_optional_fault'"
             ).fetchone()
             is None
@@ -175,7 +175,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
         message = comms.messaging.send_initial_cohort("sender", "member000", "fresh")
         initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
-            store.register_participant(
+            store.participants.register(
                 recipient.recipient_lookup,
                 recipient.canonical_thread,
                 recipient.canonical_thread,
@@ -200,19 +200,19 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
         with pytest.raises(RuntimeError, match="simulated interruption"):
             accept_initial_cohort(comms.bus, root_id, message.seq, store)
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_seq=?", (message.seq,)
             ).fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM wake_claims WHERE wire_seq=?", (message.seq,)
             ).fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM awareness_claim_generations WHERE wire_seq=?",
                 (message.seq,),
             ).fetchone()[0]
@@ -236,10 +236,10 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
             install_private_response_schema(store)
             install_native_runtime_schema(store)
             if damage == "missing":
-                store._connection.execute("DROP TABLE awareness_claim_generations")
+                store.session._connection.execute("DROP TABLE awareness_claim_generations")
             else:
-                store._connection.execute("DROP TRIGGER awareness_generation_insert_guard")
-                store._connection.execute(
+                store.session._connection.execute("DROP TRIGGER awareness_generation_insert_guard")
+                store.session._connection.execute(
                     "CREATE TRIGGER awareness_generation_insert_guard BEFORE INSERT "
                     "ON awareness_claim_generations BEGIN SELECT RAISE(ABORT,'drift'); END"
                 )
@@ -266,7 +266,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         initial, assignment = _accepted(comms, store, root_id, "member000", "work")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
-        store.create_execution(
+        store.executions.create(
             "reply000",
             ExecutionOrigin.WIRE,
             assignment.recipient_lookup,
@@ -275,7 +275,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
             assignment_ids=(assignment.assignment_id,),
             exact_target="sender",
         )
-        current = store.assignment(assignment.assignment_id)
+        current = store.assignments.get(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
         assert result.mandatory_complete and result.omission_reason is None
         context = json.loads(result.text)
@@ -331,7 +331,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         newer, new_claim = _accepted(comms, store, root_id, "member000", "newer")
         owner = _owner(comms, "member000")
         for number, assignment in enumerate((old_claim, new_claim)):
-            store.create_execution(
+            store.executions.create(
                 f"reply{number}",
                 ExecutionOrigin.WIRE,
                 assignment.recipient_lookup,
@@ -341,7 +341,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
                 exact_target="sender",
             )
         index.maintain(rebuild=True)
-        current = store.assignment(new_claim.assignment_id)
+        current = store.assignments.get(new_claim.assignment_id)
         # Only the newer selected row lies after the cursor, but both exact
         # response obligations are still open and must be represented.
         assert older.message.seq == 1
@@ -361,7 +361,7 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).mandatory_complete
-        store.advance_owner_generation(
+        store.participants.advance_generation(
             assignment.recipient_lookup, owner.name, expected_generation=1
         )
         stale = builder(initial, assignment, owner)
@@ -376,7 +376,7 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "old pending")
-        store.advance_owner_generation(
+        store.participants.advance_generation(
             assignment.recipient_lookup, "member000", expected_generation=1
         )
         index.maintain(rebuild=True)
@@ -395,7 +395,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
     comms, store, index, root_id = _root(tmp_path)
     try:
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
-        store.create_execution(
+        store.executions.create(
             "old-reply",
             ExecutionOrigin.WIRE,
             old_claim.recipient_lookup,
@@ -404,7 +404,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
             assignment_ids=(old_claim.assignment_id,),
             exact_target="sender",
         )
-        store.advance_owner_generation(
+        store.participants.advance_generation(
             old_claim.recipient_lookup, "member000", expected_generation=1
         )
         current, assignment = _accepted(comms, store, root_id, "member000", "new pending")
@@ -427,8 +427,8 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
         lookup = stable_thread_lookup(comms.registry.require("member000").created_at)
-        store.register_participant(lookup, "member000", "member000", committed=True)
-        store.advance_owner_generation(lookup, "member000", expected_generation=1)
+        store.participants.register(lookup, "member000", "member000", committed=True)
+        store.participants.advance_generation(lookup, "member000", expected_generation=1)
         initial, assignment = _accepted(comms, store, root_id, "member000", "fresh")
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
@@ -455,8 +455,8 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
         original = OptionalAwarenessProjection._open_obligations
 
         def race(self, db, lookup, owner_name):
-            with MutationStore(str(index.bus.log.path.with_name("coordination.sqlite3"))) as other:
-                other.advance_owner_generation(lookup, owner.name, expected_generation=1)
+            with Coordination(str(index.bus.log.path.with_name("coordination.sqlite3"))) as other:
+                other.participants.advance_generation(lookup, owner.name, expected_generation=1)
             return original(self, db, lookup, owner_name)
 
         monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
@@ -477,7 +477,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         assert builder(initial, assignment, owner).mandatory_complete
         # Disposable legacy/disk inconsistency only: supported writes freeze
         # receipt facts. Restore the original trigger before checking schema.
-        db = store._connection
+        db = store.session._connection
         trigger = db.execute(
             "SELECT sql FROM sqlite_master WHERE name='cohort_receipt_update_guard'"
         ).fetchone()[0]

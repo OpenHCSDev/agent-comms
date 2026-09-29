@@ -134,7 +134,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.cohort_schema import install_private_cohort_schema
     from agent_comms.coordination_cohort import accept_initial_cohort
-    from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordinator import Coordination
 
     old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
     live = Thread(
@@ -153,9 +153,9 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     current.threads.register(live)
     root_id = current.messaging.initialize_private_initial_protocol()
     source = old.registry.snapshot()
-    with MutationStore(str(current.root / "coordination.sqlite3")) as store:
+    with Coordination(str(current.root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        live_before = store.register_participant(
+        live_before = store.participants.register(
             stable_thread_lookup(live.created_at), live.name, live.name, committed=True
         ).value
         if repair_existing:
@@ -173,9 +173,9 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
         assert snapshot.threads[missing.name].pid == 0
         assert snapshot.threads[live.name] == live
-        assert store.participant(stable_thread_lookup(live.created_at)) == live_before
+        assert store.participants.get(stable_thread_lookup(live.created_at)) == live_before
         assert (
-            store.participant(stable_thread_lookup(missing.created_at)).pointer.execution_id is None
+            store.participants.get(stable_thread_lookup(missing.created_at)).pointer.execution_id is None
         )
         if bus_before is not None:
             assert current.bus.log.path.read_bytes() == bus_before
@@ -185,7 +185,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             )
         accept_initial_cohort(current.bus, root_id, message.seq, store)
         assert tuple(
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT member_count, claim_count, sealed FROM claim_batch_receipts "
                 "WHERE wire_seq=?",
                 (message.seq,),
@@ -193,7 +193,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         ) == (2, 1, 1)
         assert [
             tuple(row)
-            for row in store._connection.execute(
+            for row in store.session._connection.execute(
                 "SELECT recipient, disposition FROM wake_claims WHERE wire_seq=?", (message.seq,)
             ).fetchall()
         ] == [(live.name, "full_pending")]

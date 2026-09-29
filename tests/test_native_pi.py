@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import AttachedChild, Platform
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
@@ -938,15 +939,16 @@ def test_missing_native_model_fails_before_any_session_side_effect(
 
 @pytest.fixture
 def durable_attempt(tmp_path):
-    from agent_comms.coordination_store import MutationStore, prepare_fence_token
     from agent_comms.coordination_tables.executions import ExecutionOrigin
+    from agent_comms.coordinator import Coordination
     from agent_comms.durable_turn import DurableTurn
+    from agent_comms.owner_fence import prepare_fence_token
 
-    with MutationStore(tmp_path / "attempt.sqlite3") as store:
-        store.register_participant("owner", "owner", "owner", committed=True)
-        created = store.create_execution("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
-        pending = store.mark_pending("e", expected_revision=created.execution.revision).value
-        started = store.start_attempt(
+    with Coordination(tmp_path / "attempt.sqlite3") as store:
+        store.participants.register("owner", "owner", "owner", committed=True)
+        created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
+        pending = store.executions.mark_pending("e", expected_revision=created.execution.revision).value
+        started = store.attempts.start(AttemptStart(
             "e",
             1,
             "owner",
@@ -954,8 +956,8 @@ def durable_attempt(tmp_path):
             prepare_fence_token(),
             expected_execution_revision=pending.execution.revision,
             expected_pointer_revision=pending.pointer_revision,
-        ).value
-        yield DurableTurn(store, started.fence, started.snapshot.pointer_revision, INPUT_ID)
+        )).value
+        yield DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, INPUT_ID)
 
 
 @pytest.mark.parametrize(
@@ -1155,7 +1157,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
 
         async def observe(event):
             await durable_attempt.dispatch(event)
-            attempt = durable_attempt.store.snapshot("e").attempt
+            attempt = durable_attempt.attempts.snapshots.get("e").attempt
             durable_phases.append(attempt.lifecycle.declared_name)
             assert not attempt.lifecycle.backend_done and not attempt.lifecycle.process_dead
 
@@ -1220,7 +1222,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert "prompt_accepted" in durable_phases
             assert "model_running" in durable_phases
             durable_attempt.finish()
-            assert durable_attempt.store.snapshot("e").attempt.lifecycle.backend_done
+            assert durable_attempt.attempts.snapshots.get("e").attempt.lifecycle.backend_done
             assert result.text == answer
             assert result.context.input_id == INPUT_ID
             assert result.context.request_generation == 1

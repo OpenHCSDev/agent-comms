@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms import acp, cohort_foreground, coordinated_runtime
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.store_files import file_revision
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
@@ -77,14 +77,14 @@ async def test_runtime_configuration_invalidates_idle_observation(tmp_path, monk
 
 def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path):
     path = tmp_path / "coordination.sqlite3"
-    with MutationStore(path):
+    with Coordination(path):
         pass
     revision = file_revision(path)
-    with MutationStore(path):
+    with Coordination(path):
         pass
     assert file_revision(path) == revision
     path.chmod(0o644)
-    with MutationStore(path):
+    with Coordination(path):
         assert path.stat().st_mode & 0o777 == 0o600
 
 
@@ -106,10 +106,10 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     assert await agent.inputs.drain_inbox("beta") == 0
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
-    with MutationStore(comms.root / "coordination.sqlite3") as store:
+    with Coordination(comms.root / "coordination.sqlite3") as store:
         # A coordinator-only change (e.g. recovery) has no watched file event.
         # The unchanged periodic fallback must nevertheless notice its revision.
-        store.register_participant("new", "new", "new", committed=True)
+        store.participants.register("new", "new", "new", committed=True)
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 2
     first = comms.messaging.send_initial_cohort("sender", "beta", "first new input")
@@ -156,9 +156,9 @@ def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
         return accept(bus, root_id, sequence, store)
 
     monkeypatch.setattr(cohort_foreground, "accept_initial_cohort", observed)
-    with MutationStore(root / "coordination.sqlite3") as store:
+    with Coordination(root / "coordination.sqlite3") as store:
         statements = []
-        store._connection.set_trace_callback(statements.append)
+        store.session._connection.set_trace_callback(statements.append)
         assert (
             cohort_foreground._accept_visible_initials(
                 comms.bus, root_id, store, lookup, 0, owner_name="beta"

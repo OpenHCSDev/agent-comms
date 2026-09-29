@@ -19,8 +19,8 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
-from agent_comms.coordination_store import MutationStore
 from agent_comms.coordination_tables.publications import canonical_publication_key
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
@@ -108,10 +108,10 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     )
     assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
     # Bus projection is only a candidate: coordinator has not sealed ANY wake.
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         for name in ("Alice", "Bob"):
-            store.register_participant(lookup[name], name, name, committed=True)
+            store.participants.register(lookup[name], name, name, committed=True)
         assert sealed_cohort_assignments(store, lookup["Alice"]) == ()
         accept_initial_cohort(comms.bus, root_id, message.seq, store)
         assert len(sealed_cohort_assignments(store, lookup["Alice"])) == 1

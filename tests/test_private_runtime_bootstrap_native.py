@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -119,7 +119,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         # Model the reported partial install on this disposable root only.
         for name in ("coordination.sqlite3", "native_prompt_bindings.sqlite3"):
             (comms.root / name).unlink()
-        with MutationStore(str(comms.root / "coordination.sqlite3")):
+        with Coordination(str(comms.root / "coordination.sqlite3")):
             pass
     comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
 

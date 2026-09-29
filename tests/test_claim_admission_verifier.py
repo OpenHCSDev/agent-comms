@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import claim_admission
 from agent_comms.assignment_states import FullPendingAssignment
+from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
@@ -23,10 +24,12 @@ from agent_comms.claim_admission import (
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
-from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
+from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -60,10 +63,10 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         root_id = comms.messaging.initialize_private_initial_protocol()
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
         initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             for recipient in initial.audience.recipients:
-                store.register_participant(
+                store.participants.register(
                     recipient.recipient_lookup,
                     recipient.canonical_thread,
                     recipient.canonical_thread,
@@ -79,9 +82,9 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             owner, admission_generation = comms.registry.lease_live_turn_with_admission(
                 owner, "selected-turn", expected_generation=admission_generation
             )
-            person = store.participant(alice_lookup)
+            person = store.participants.get(alice_lookup)
             execution_id = "verifier-execution"
-            store.create_execution(
+            store.executions.create(
                 execution_id,
                 ExecutionOrigin.WIRE,
                 alice_lookup,
@@ -90,11 +93,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 assignment_ids=(assignment.assignment_id,),
                 exact_target="#team",
             )
-            snapshot = store.snapshot(execution_id)
-            snapshot = store.mark_pending(
+            snapshot = store.snapshots.get(execution_id)
+            snapshot = store.executions.mark_pending(
                 execution_id, expected_revision=snapshot.execution.revision
             ).value
-            started = store.start_attempt(
+            started = store.attempts.start(AttemptStart(
                 execution_id,
                 1,
                 owner.name,
@@ -102,8 +105,8 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
-            )
-            engaged = store.assignment(assignment.assignment_id)
+            ))
+            engaged = store.assignments.get(assignment.assignment_id)
             admission = WakeAdmission(
                 wire_root_id=root_id,
                 source_seq=message.seq,
@@ -233,8 +236,8 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             assert resource.read_bytes() == b"value = 2\n"
             foreign_root = Path(dirname) / "foreign"
             foreign_root.mkdir(mode=0o700)
-            with MutationStore(str(foreign_root / "coordination.sqlite3")) as foreign:
-                store._connection.backup(foreign._connection)
+            with Coordination(str(foreign_root / "coordination.sqlite3")) as foreign:
+                store.session._connection.backup(foreign.session._connection)
                 with pytest.raises(IdentityConflict):
                     verify_selected_wake(comms, foreign, admission, owner.name)
             for candidate, name in (
@@ -247,10 +250,10 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     verify_selected_wake(comms, store, candidate, name)
             fence = started.value.fence
             for phase in (PromptAcceptedAttempt, ModelRunningAttempt):
-                fence = store.advance_attempt(
+                fence = store.attempts.advance(
                     fence, phase, expected_pointer_revision=started.value.snapshot.pointer_revision
                 ).value.fence
-            store.advance_attempt(
+            store.attempts.advance(
                 fence,
                 SettlingAttempt,
                 expected_pointer_revision=started.value.snapshot.pointer_revision,

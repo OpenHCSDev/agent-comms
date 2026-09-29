@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from agent_comms.coordination_cohort import accept_initial_cohort
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.wake_policy import BoundedTriageWake
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
@@ -23,7 +23,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
     assert [row.canonical_thread for row in initial.audience.recipients] == ["beta"]
     assert all(isinstance(decision.wake_mode, BoundedTriageWake) for decision in initial.decisions)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
     assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
     current = comms.views.message_notifications((message,))[(message.seq, message.message_id)]

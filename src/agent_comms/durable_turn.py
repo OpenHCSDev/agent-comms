@@ -15,14 +15,15 @@ from .attempt_states import (
     SettlingAttempt,
     ToolRunningAttempt,
 )
+from .attempt_store import AttemptStore
 from .coordination_errors import IdentityConflict
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
 
 
 class DurableTurn(MroDispatch):
-    def __init__(self, store, fence, pointer_revision, input_id):
-        self.store = store
+    def __init__(self, attempts: AttemptStore, fence, pointer_revision, input_id):
+        self.attempts = attempts
         self.fence = fence
         self.pointer_revision = pointer_revision
         self.input_id = input_id
@@ -34,7 +35,7 @@ class DurableTurn(MroDispatch):
     def advance(self, state):
         if state is self.current:
             return
-        result = self.store.advance_attempt(
+        result = self.attempts.advance(
             self.fence,
             state,
             expected_pointer_revision=self.pointer_revision,
@@ -88,7 +89,7 @@ class DurableTurn(MroDispatch):
         if not self.model_started or self.active_tools:
             raise IdentityConflict("native completion lacks model progress or has active tools")
         self.advance(SettlingAttempt)
-        self.fence = self.store.advance_attempt(
+        self.fence = self.attempts.advance(
             self.fence,
             SettlingAttempt,
             expected_pointer_revision=self.pointer_revision,
@@ -102,8 +103,8 @@ class DurableTurn(MroDispatch):
 
         The caller holds the live registry owner boundary. Native execution has
         returned through child/tool cleanup; possible remote effects stay UNKNOWN.
-        MutationStore owns the atomic replay/finality/slot mutation.
+        Coordination owns the atomic replay/finality/slot mutation.
         """
-        return self.store.fail_unknown_attempt(
+        return self.attempts.fail_unknown(
             self.fence, expected_pointer_revision=self.pointer_revision,
         ).value

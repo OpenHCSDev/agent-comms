@@ -175,10 +175,10 @@ class Publisher:
         if self._private_initial_writes is not True:
             raise RelationViolationError("Private initial publication is disabled.")
         self.log.require_fresh_private_root_unlocked()
-        from .coordination_store import MutationStore
+        from agent_comms.coordinator import Coordination
 
         # The public marker must never advertise a root whose runtime cannot wake.
-        with MutationStore(str(self.log.path.parent / "coordination.sqlite3")) as store:
+        with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
             store.install_private_runtime()
         root_id = uuid.uuid4().hex
         from .private_bus_checkpoint import install_private_bus_checkpoint

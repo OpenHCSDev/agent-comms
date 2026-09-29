@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.coordination_store import MutationStore, StaleFence
+from agent_comms.coordination_errors import StaleFence
+from agent_comms.coordinator import Coordination
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable
@@ -38,7 +39,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         monkeypatch.setattr(TrackedTurnSession, "execute", alpha)
         # Beta's prior reply is passive context, not another model request.
         assert await owner.inputs.drain_inbox("alpha") == 1
-        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
 
             def evidence(name, message):
                 return read_historical_native_inputs(
@@ -84,9 +85,9 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
         comms.messaging.acknowledge("alpha")
         assert await owner.inputs.drain_inbox("alpha") == 0
         assert len(calls) == 1 and not owner.inputs.pending_turns
-        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             rows = NativeRuntimeInput.read(
-                store._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
+                store.session._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
             )
             assert len(rows) == 1 and rows[0].session_id is None
             assert (
@@ -139,9 +140,9 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
             assert calls == []
             assert await owner.inputs.drain_inbox("beta") == 0
             assert calls == []
-            with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 rows = NativeRuntimeInput.read(
-                    store._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
+                    store.session._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
                 )
                 assert len(rows) == 1 and rows[0].session_id is None
             assert comms.bus.log.message_by_id(message.message_id) == message

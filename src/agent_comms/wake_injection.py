@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 from typing import Literal
 
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 
 from .bus_publication import CommittedInitial, stable_thread_lookup
-from .coordination_store import IdentityConflict
 from .threads import Thread
 from .wake import WakeDecision, derive_exact_reply_target
 

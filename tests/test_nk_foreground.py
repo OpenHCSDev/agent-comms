@@ -21,8 +21,9 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nk_foreground import reserve_foreground_owner
@@ -106,12 +107,12 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
 
 def _accept(root: Path, root_id: str, comms: Comms, message) -> None:
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
         install_native_runtime_schema(store)
         for recipient in initial.audience.recipients:
-            store.register_participant(
+            store.participants.register(
                 recipient.recipient_lookup,
                 recipient.canonical_thread,
                 recipient.canonical_thread,
@@ -166,16 +167,16 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
         for child in children:
             child.join(6)
             assert child.exitcode == 0
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute(
+                store.session._connection.execute(
                     "SELECT count(*) FROM cohort_delivery_receipts "
                     "WHERE kind='unmentioned_observer'"
                 ).fetchone()[0]
                 == 1
             )
             assert (
-                store._connection.execute(
+                store.session._connection.execute(
                     f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
                 ).fetchone()[0]
                 == 1
@@ -238,9 +239,9 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
                 native_package=root / "fake-pi",
                 opt_in=True,
             )
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute(
+                store.session._connection.execute(
                     f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
                 ).fetchone()[0]
                 == 1
@@ -340,9 +341,9 @@ def test_explicit_stop_is_not_falsely_reported_as_registry_stopped(
     assert comms.registry.require("beta").pid == os.getpid()
     # Registration now initializes the canonical store. STOP must still leave
     # it with no selected execution or attempt, rather than requiring no file.
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        assert store._connection.execute("SELECT COUNT(*) FROM executions").fetchone()[0] == 0
-        assert store._connection.execute("SELECT COUNT(*) FROM attempts").fetchone()[0] == 0
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assert store.session._connection.execute("SELECT COUNT(*) FROM executions").fetchone()[0] == 0
+        assert store.session._connection.execute("SELECT COUNT(*) FROM attempts").fetchone()[0] == 0
 
 
 def test_partial_go_frame_times_out_without_provider(monkeypatch: pytest.MonkeyPatch) -> None:

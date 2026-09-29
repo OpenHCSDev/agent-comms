@@ -7,7 +7,7 @@ import pytest
 from agent_comms.cohort_schema import CohortSchemaMeta
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 
 
@@ -21,7 +21,7 @@ def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tm
         db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
         before = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
     assert Comms(comms.root).views.full_history() == []
-    with MutationStore(str(database)):
+    with Coordination(str(database)):
         pass  # Opening a store is not explicit private-runtime installation.
     with pytest.raises(SchemaVersionError):
         comms.owners.start("owner")

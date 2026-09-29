@@ -14,7 +14,8 @@ from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExistingFileWrite
-from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
+from agent_comms.coordination_errors import IdentityConflict, StaleFence
+from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
@@ -52,8 +53,8 @@ def nominal_broker_stub(monkeypatch):
     bound = []
 
     def selected_tool_mode_for_owner(comms, store, admission, owner, session_dir, input_id):
-        with store._read_transaction():
-            row = NativeRuntimeInput.one(store._connection, input_id=input_id)
+        with store.session.read():
+            row = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
         assert row is not None
         assert row.assignment_id == admission.wake_assignment_id
         assert row.owner_thread == owner
@@ -190,8 +191,8 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         mode = kwargs.get("selected_tool_mode")
         assert type(mode) is mode_type and callable(mode.action)
         result = await fake(*args, **kwargs)
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
-            row = NativeRuntimeInput.one(store._connection, input_id=kwargs["input_id"])
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            row = NativeRuntimeInput.one(store.session._connection, input_id=kwargs["input_id"])
         assert row.sent_owner_admission_generation == bound[0][0].owner_admission_generation
         return result
 

@@ -29,18 +29,15 @@ from typing import Literal
 from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import assert_cohort_schema
-from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_store import (
-    AlreadyApplied,
-    Applied,
+from agent_comms.coordination_errors import (
     IdentityConflict,
-    MutationStore,
     PublicationActivationBlocked,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
-    _digest,
 )
+from agent_comms.coordination_results import AlreadyApplied, Applied
+from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord
@@ -50,11 +47,12 @@ from agent_comms.coordination_tables.publications import (
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
-from agent_comms.owner_fence import OwnerFence
+from agent_comms.owner_fence import OwnerFence, _digest
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _store_lock
@@ -166,11 +164,11 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
         raise PublicationActivationBlocked("private response schema has drifted")
 
 
-def install_private_response_schema(store: MutationStore) -> None:
+def install_private_response_schema(store: Coordination) -> None:
     """Install the current response tables on a fresh coordinator only."""
-    if type(store) is not MutationStore:
+    if type(store) is not Coordination:
         raise TypeError("response schema requires the actual coordinator store")
-    with store._transaction() as db:
+    with store.session.transaction() as db:
         exists = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",
@@ -245,21 +243,21 @@ class LiveResponseOwner:
             raise StaleFence("response owner turn stopped or changed before publication")
 
 
-def _require_bound_stores(bus: MessageBus, store: MutationStore) -> None:
-    if type(bus) is not MessageBus or type(store) is not MutationStore:
+def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
+    if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("response requires real, explicitly gated bus and coordinator stores")
     if bus.publisher._private_response_writes is not True:
         raise PublicationActivationBlocked("private response publication is disabled")
     if (
-        store.path.name != "coordination.sqlite3"
-        or Path(bus.log.path.parent).absolute() != Path(store.path.parent).absolute()
+        store.session.path.name != "coordination.sqlite3"
+        or Path(bus.log.path.parent).absolute() != Path(store.session.path.parent).absolute()
         or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 
 
 def _require_cohort_assignments(
-    store: MutationStore,
+    store: Coordination,
     bus: MessageBus,
     snapshot: RecoverySnapshot,
     wire_root_id: str,
@@ -271,7 +269,7 @@ def _require_cohort_assignments(
     A DM reply targets the original sender, not the DM's incoming target.
     Caller already holds the bus file lock before the SQL transaction.
     """
-    db = store._connection
+    db = store.session._connection
     _assert_response_schema(db)
     assert_cohort_schema(db)
     if not snapshot.assignments or snapshot.obligation is None:
@@ -332,13 +330,13 @@ def _require_cohort_assignments(
 
 
 def _require_final_owner(
-    store: MutationStore,
+    store: Coordination,
     bus: MessageBus,
     fence: OwnerFence,
     wire_root_id: str,
     owner_witness: LiveResponseOwner,
 ) -> RecoverySnapshot:
-    snapshot, attempt = store._assert_fence(fence)
+    snapshot, attempt = store.attempts.require_fence(fence)
     execution = snapshot.execution
     if execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("response turn belongs to a different SQL recipient")
@@ -378,7 +376,7 @@ def _intent_matches_request(
 
 
 def prepare_fenced_response(
-    store: MutationStore,
+    store: Coordination,
     bus: MessageBus,
     fence: OwnerFence,
     payload: str,
@@ -408,7 +406,7 @@ def prepare_fenced_response(
         metadata = bus.log._private_marker_unlocked()
         # A corrupt row anywhere is never accepted as an absent publication.
         tuple(bus.log._verified_private_rows_unlocked(metadata))
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
             execution = snapshot.execution
             assert execution.exact_target is not None
@@ -462,20 +460,20 @@ def prepare_fenced_response(
                 parameters=(execution.execution_id, snapshot.obligation.revision),
                 lifecycle=PublishingResponse(),
                 revision=snapshot.obligation.revision + 1,
-                updated_at_ms=store._now(snapshot.obligation.updated_at_ms),
+                updated_at_ms=store.session.now(snapshot.obligation.updated_at_ms),
             )
             return Applied(intent)
 
 
 def _terminal_replay(
-    store: MutationStore,
+    store: Coordination,
     fence: OwnerFence,
     bus: MessageBus,
     wire_root_id: str,
     owner_witness: LiveResponseOwner,
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable receipt may be re-read, never re-published."""
-    snapshot = store.snapshot(fence.execution_id)
+    snapshot = store.snapshots.get(fence.execution_id)
     if not snapshot.execution.lifecycle.completed:
         return None
     if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:
@@ -502,7 +500,7 @@ def _terminal_replay(
 
 
 def _settle_fenced_response(
-    store: MutationStore,
+    store: Coordination,
     bus: MessageBus,
     fence: OwnerFence,
     *,
@@ -523,7 +521,7 @@ def _settle_fenced_response(
             # A durable dispatch barrier BEFORE the external append distinguishes
             # a first attempt from a lost response/crash. If it commits but the
             # process dies before appending, no automatic retry is authorized.
-            with store._transaction() as db:
+            with store.session.transaction() as db:
                 _assert_response_schema(db)
                 terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness)
                 if terminal is not None:
@@ -544,12 +542,12 @@ def _settle_fenced_response(
                         wire_root_id,
                         fence.owner_generation,
                         fence.attempt_ordinal,
-                        store._now(snapshot.execution.updated_at_ms),
+                        store.session.now(snapshot.execution.updated_at_ms),
                     ).insert(db)
                     first_dispatch = True
                 elif not prior.matches(wire_root_id, fence):
                     raise IdentityConflict("response dispatch belongs to another root or owner")
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _assert_response_schema(db)
             terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness)
             if terminal is not None:
@@ -581,7 +579,7 @@ def _settle_fenced_response(
                 )
             if matched.message_id != intent.expected_message_id:
                 raise PublicationUncertain("bus receipt conflicts with immutable intent")
-            now = store._now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
+            now = store.session.now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
             PublicationReceipts(
                 execution_id=intent.execution_id,
                 seq=matched.seq,
@@ -595,7 +593,7 @@ def _settle_fenced_response(
                 parameters=(intent.execution_id, obligation.revision),
                 lifecycle=PublishedResponse(matched.message_id, matched.seq),
                 revision=obligation.revision + 1,
-                updated_at_ms=store._now(obligation.updated_at_ms),
+                updated_at_ms=store.session.now(obligation.updated_at_ms),
             )
             AttemptRecord.update(
                 db,
@@ -603,7 +601,7 @@ def _settle_fenced_response(
                 parameters=(intent.execution_id, attempt.attempt_ordinal, attempt.revision),
                 lifecycle=SucceededAttempt(),
                 revision=attempt.revision + 1,
-                updated_at_ms=store._now(attempt.updated_at_ms),
+                updated_at_ms=store.session.now(attempt.updated_at_ms),
             )
             ExecutionRecord.update(
                 db,
@@ -611,7 +609,7 @@ def _settle_fenced_response(
                 parameters=(intent.execution_id, snapshot.execution.revision),
                 lifecycle=CompletedExecution(attempt.attempt_ordinal),
                 revision=snapshot.execution.revision + 1,
-                updated_at_ms=store._now(snapshot.execution.updated_at_ms),
+                updated_at_ms=store.session.now(snapshot.execution.updated_at_ms),
             )
             for assignment in snapshot.assignments:
                 WakeAssignment.update(
@@ -624,7 +622,7 @@ def _settle_fenced_response(
                         assignment.lifecycle.exact_target,
                     ),
                     revision=assignment.revision + 1,
-                    updated_at_ms=store._now(assignment.updated_at_ms),
+                    updated_at_ms=store.session.now(assignment.updated_at_ms),
                 )
             CurrentExecutions.update(
                 db,
@@ -638,11 +636,11 @@ def _settle_fenced_response(
                 attempt_ordinal=None,
                 pointer_revision=snapshot.pointer_revision + 1,
             )
-            return Applied(store._snapshot(intent.execution_id))
+            return Applied(store.snapshots.get(intent.execution_id))
 
 
 def publish_fenced_response(
-    store: MutationStore,
+    store: Coordination,
     bus: MessageBus,
     fence: OwnerFence,
     *,
@@ -655,7 +653,7 @@ def publish_fenced_response(
 
 
 def resolve_existing_response(
-    store: MutationStore,
+    store: Coordination,
     bus: MessageBus,
     fence: OwnerFence,
     *,
