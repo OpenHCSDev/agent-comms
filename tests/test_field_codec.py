@@ -4,8 +4,7 @@ from typing import Annotated, ClassVar
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation
-from agent_comms.wire_value import WireValue
+from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation, WireValue
 
 
 @dataclass(frozen=True)
@@ -20,7 +19,7 @@ class OwnedWireText(WireValue):
         return cls(FieldCodec.decode(str, data))
 
     @classmethod
-    def wire_schema(cls):
+    def schema(cls):
         return FieldCodec.value_schema(str)
 
 

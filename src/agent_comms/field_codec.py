@@ -14,6 +14,7 @@ from typing import (
     Annotated,
     Any,
     Literal,
+    Self,
     TypeVar,
     Union,
     cast,
@@ -25,7 +26,6 @@ from typing import (
 
 from .declared_family import DeclaredFamily
 from .sealed import Sealed
-from .wire_value import WireValue
 
 T = TypeVar("T")
 
@@ -48,6 +48,28 @@ class FieldRepresentation(ABC):
     @classmethod
     def schema(cls) -> dict[str, Any]:
         raise TypeError(f"{cls.__name__} has no JSON schema")
+
+
+class WireValue(FieldRepresentation):
+    """A value supplies its representation to the single field boundary."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def to_wire(self) -> Any: ...
+
+    @classmethod
+    @abstractmethod
+    def from_wire(cls, data: Any) -> Self: ...
+
+    @classmethod
+    def encode(cls, value: WireValue) -> Any:
+        return FieldCodec.encode(value.to_wire())
+
+    @classmethod
+    def decode(cls, value: object) -> Self:
+        FieldCodec.encode(value)  # Custom forms still cross the JSON boundary.
+        return cls.from_wire(value)
 
 
 class TextRepresentation(FieldRepresentation):
@@ -118,16 +140,28 @@ class FieldCodec(Sealed):
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
-        if get_origin(annotation) is not Annotated:
-            return annotation, None
-        target, *metadata = get_args(annotation)
+        if get_origin(annotation) is Annotated:
+            target, *metadata = get_args(annotation)
+        else:
+            target, metadata = annotation, ()
         representations = [
             item for item in metadata
             if isinstance(item, type) and issubclass(item, FieldRepresentation)
         ]
         if len(representations) > 1:
             raise TypeError("A field must have one representation")
-        return target, next(iter(representations), None)
+        if representations:
+            return target, representations[0]
+        if isinstance(target, type) and issubclass(target, WireValue):
+            return target, target
+        return target, None
+
+    @classmethod
+    def _value_representation(cls, value: object, annotation: object):
+        _, representation = cls._representation(annotation)
+        if representation is None:
+            _, representation = cls._representation(type(value))
+        return representation
 
     @staticmethod
     @lru_cache(maxsize=256)
@@ -169,11 +203,9 @@ class FieldCodec(Sealed):
 
     @classmethod
     def encode(cls, value: object, annotation: object = None) -> Any:
-        _, representation = cls._representation(annotation)
+        representation = cls._value_representation(value, annotation)
         if representation is not None and value is not None:
             return representation.encode(value)
-        if isinstance(value, WireValue):
-            return cls.encode(value.to_wire())
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
             result = (
@@ -285,8 +317,6 @@ class FieldCodec(Sealed):
         }
         if annotation in primitive:
             return {"type": primitive[annotation]}
-        if isinstance(annotation, type) and issubclass(annotation, WireValue):
-            return annotation.wire_schema()
         if isinstance(annotation, type) and is_dataclass(annotation):
             return cls.record_schema(annotation)
         raise TypeError(f"No declared JSON schema for {annotation}")
@@ -298,11 +328,9 @@ class FieldCodec(Sealed):
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
-        _, representation = cls._representation(annotation)
+        representation = cls._value_representation(value, annotation)
         if representation is not None:
             return cls.encode(value, annotation)
-        if isinstance(value, WireValue):
-            return cls.encode(value)
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
             result = {
@@ -339,9 +367,6 @@ class FieldCodec(Sealed):
         if target is Any:
             cls.encode(data)  # still require valid JSON data
             return data
-        if isinstance(target, type) and issubclass(target, WireValue):
-            cls.encode(data)  # Custom wire forms must still be JSON.
-            return target.from_wire(data)
         origin, args = get_origin(target), get_args(target)
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             if type(data) is not str:
