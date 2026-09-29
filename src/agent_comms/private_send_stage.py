@@ -29,7 +29,7 @@ from .native_prompt_binding import (
     read_expected_prompt_binding,
 )
 from .native_runtime_input import NativeRuntimeInput
-from .owner_fence import OwnerFence
+from .durable_turn import DurableTurn
 from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
 from .text_digest import TextDigest
@@ -60,6 +60,10 @@ class NativeSendStage(ABC):
     @abstractmethod
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         """Fence this stage and reject any previous dispatch before inserting an ID."""
+
+    @abstractmethod
+    def fail_terminal(self) -> None:
+        """Settle only the stage's proved, reaped failure; never grant replay."""
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = secrets.token_hex(16)
@@ -191,6 +195,11 @@ class TriageNativeSend(NativeSendStage):
     execution_id: ClassVar[None] = None
     attempt_ordinal: ClassVar[None] = None
 
+    def fail_terminal(self) -> None:
+        # Reservation already deferred the triage assignment. A terminal failure
+        # has no execution attempt to settle and must not create a fresh triage.
+        return None
+
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         current = store.assignments.get(self.assignment.assignment_id)
         if current != self.assignment or not current.lifecycle.triage_pending:
@@ -262,7 +271,14 @@ class TriageNativeSend(NativeSendStage):
 
 @dataclass(frozen=True)
 class FullNativeSend(NativeSendStage):
-    fence: OwnerFence
+    progress: DurableTurn
+
+    @property
+    def fence(self):
+        # Native observations advance the existing durable attempt owner. Never
+        # capture a second fence which goes stale while tools/model events run.
+        return self.progress.fence
+
     stage: ClassVar[str] = "full"
 
     @property
@@ -272,6 +288,9 @@ class FullNativeSend(NativeSendStage):
     @property
     def attempt_ordinal(self) -> int:
         return self.fence.attempt_ordinal
+
+    def fail_terminal(self) -> None:
+        self.progress.fail_terminal()
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         snapshot, _ = store.attempts.require_fence(self.fence)
