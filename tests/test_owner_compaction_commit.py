@@ -4,7 +4,6 @@ Only PI_COMPACTION_TEST_PACKAGE selects a disposable, patched package. No
 provider calls or installed package edits. Normal unit suites skip this file.
 """
 
-import copy
 import hashlib
 import json
 import os
@@ -28,10 +27,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.owner_compaction_commit import (
-    CompactionTransportUnknownError,
-    OwnerCompactionCommit,
-)
+from agent_comms.native_compaction_writer import CompactionTransportUnknownError
+from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
@@ -97,12 +94,12 @@ def test_compaction_child_refuses_external_helper_before_execution(native, tmp_p
         "import {writeFileSync} from 'node:fs';"
         f"writeFileSync({json.dumps(str(marker))}, 'unsafe');"
     )
-    bridge.helper = helper  # A trusted test's attempted override still cannot escape the fence.
+    bridge.native.helper = helper  # A trusted test's attempted override still cannot escape the fence.
     with (
         (tmp_path / "authority").open("w") as authority,
         pytest.raises(CompactionTransportUnknownError, match="Unparseable native outcome"),
     ):
-        bridge._call(authority.fileno(), {}, 3)
+        bridge.native.exchange(authority.fileno(), {}, 3)
     assert not marker.exists()
 
 
@@ -219,7 +216,7 @@ def test_metadata_digest_preserves_unicode_paths_and_binary_costs(native):
 def test_native_metadata_digest_refuses_changed_transport_before_write(native, alter):
     bridge, owner, owner_generation, witness = native
     source = bridge.capture_source(owner, owner_generation, witness)
-    original = bridge._call
+    original = bridge.native.exchange
     before = Path(witness.session_file).read_bytes()
     usage = {
         "input": 12,
@@ -231,15 +228,14 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
     }
 
     def changed_transport(fd, request, timeout, retained_fds=()):
-        altered = copy.deepcopy(request)
         if alter == "details":
-            altered["details"]["readFiles"] = ["src/other.py"]
+            altered = replace(request, details=replace(request.details, read_files=("src/other.py",)))
         else:
-            altered["usage"]["input"] += 1
-        assert altered["commit"]["metadataDigest"] == request["commit"]["metadataDigest"]
+            altered = replace(request, usage=replace(request.usage, input=request.usage.input + 1))
+        assert altered.commit.metadata_digest == request.commit.metadata_digest
         return original(fd, altered, timeout, retained_fds)
 
-    bridge._call = changed_transport
+    bridge.native.exchange = changed_transport
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
@@ -253,7 +249,7 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
     )
     assert operation.state.declared_name == "unknown"
     assert Path(witness.session_file).read_bytes() == before
-    bridge._call = original
+    bridge.native.exchange = original
     assert (
         bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
         == "aborted-no-write"
@@ -263,19 +259,19 @@ def test_native_metadata_digest_refuses_changed_transport_before_write(native, a
 def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
     bridge, owner, owner_generation, witness = native
     source = bridge.capture_source(owner, owner_generation, witness)
-    original = bridge._call
+    original = bridge.native.exchange
 
     def changed_transport(fd, request, timeout, retained_fds=()):
-        altered = copy.deepcopy(request)
-        altered["details"]["readFiles"] = ["src/other.py"]
+        altered = replace(request, details=replace(request.details, read_files=("src/other.py",)))
         canonical = [[[b"src/other.py".hex()], []], None]
-        altered["commit"]["metadataDigest"] = hashlib.sha256(
+        digest = hashlib.sha256(
             b"agent-comms-metadata-v1\n"
             + json.dumps(canonical, separators=(",", ":")).encode("ascii")
         ).hexdigest()
+        altered = replace(altered, commit=replace(altered.commit, metadata_digest=digest))
         return original(fd, altered, timeout, retained_fds)
 
-    bridge._call = changed_transport
+    bridge.native.exchange = changed_transport
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
@@ -289,7 +285,7 @@ def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
     assert operation.state.declared_name == "unknown"
     assert entries(witness)[-1]["details"]["readFiles"] == ["src/other.py"]
     assert bridge.journal.publications.pending(witness.session_file) == ()
-    bridge._call = original
+    bridge.native.exchange = original
     assert (
         bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
         == "unknown"
@@ -300,14 +296,14 @@ def test_metadata_transport_rehash_cannot_claim_wrong_native_commit(native):
 def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter):
     bridge, owner, owner_generation, witness = native
     source = bridge.capture_source(owner, owner_generation, witness)
-    original = bridge._call
+    original = bridge.native.exchange
 
     def lost_result(fd, request, timeout, retained_fds=()):
         result = original(fd, request, timeout, retained_fds)
         assert result.state.committed
         return UnknownNativeOutcome("test-only lost receipt")
 
-    bridge._call = lost_result
+    bridge.native.exchange = lost_result
     operation = OwnerCompactionCommit.commit(
         bridge,
         owner,
@@ -330,7 +326,7 @@ def test_native_metadata_reconcile_refuses_changed_persisted_entry(native, alter
         ),
     )
     assert operation.state.declared_name == "unknown"
-    bridge._call = original
+    bridge.native.exchange = original
     rows = entries(witness)
     assert (
         rows[-1]["details"]["agentCommsCommit"]["metadataDigest"]
@@ -546,7 +542,7 @@ def test_positive_owner_validated_native_commit(native):
 @pytest.mark.parametrize("mutation", ["stop", "heartbeat", "goal", "bus", "input", "send"])
 def test_competing_writer_waits_through_real_native_commit(native, monkeypatch, mutation):
     bridge, owner, owner_generation, witness = native
-    call = bridge._call
+    call = bridge.native.exchange
     children = []
     script = """
 import fcntl, sys
@@ -607,7 +603,7 @@ print('changed', flush=True)
         assert child.stdout.readline() == b"blocked\n"
         return call(*args)
 
-    monkeypatch.setattr(bridge, "_call", with_competitor)
+    monkeypatch.setattr(bridge.native, "exchange", with_competitor)
     try:
         operation = bridge.commit(owner, owner_generation, witness, "summary", 42)
         assert operation.state.declared_name == "committed"
@@ -628,20 +624,20 @@ print('changed', flush=True)
 
 def test_lost_native_result_never_replays_and_reconciles_exact_id(native, monkeypatch):
     bridge, owner, owner_generation, witness = native
-    call = bridge._call
+    call = bridge.native.exchange
 
     def lose_result(*args):
         result = call(*args)
         assert result.state.committed, result
         raise CompactionTransportUnknownError("lost result")
 
-    monkeypatch.setattr(bridge, "_call", lose_result)
+    monkeypatch.setattr(bridge.native, "exchange", lose_result)
     operation = bridge.commit(owner, owner_generation, witness, "retained summary", 42)
     assert operation.state.declared_name == "unknown"
     before = Path(witness.session_file).read_bytes()
     with pytest.raises(CompactionJournalError, match="never replay"):
         bridge.commit(owner, owner_generation, witness, "retained summary", 42)
-    monkeypatch.setattr(bridge, "_call", call)
+    monkeypatch.setattr(bridge.native, "exchange", call)
     resolved = bridge.reconcile(owner, owner_generation, operation.commit_id)
     assert resolved.state.declared_name == "committed"
     assert Path(witness.session_file).read_bytes() == before
@@ -655,7 +651,7 @@ def test_postcommit_directory_fsync_fault_is_unknown_and_never_dispatches(native
     bridge, owner, owner_generation, witness = native
     fsync = os.fsync
     called = []
-    monkeypatch.setattr(bridge, "_call", lambda *args: called.append(args))
+    monkeypatch.setattr(bridge.native, "exchange", lambda *args: called.append(args))
 
     def denied(fd):
         raise OSError("directory fsync denied")
@@ -693,15 +689,15 @@ def test_outcome_persistence_failure_keeps_intent_and_requires_reconciliation(na
 
 def test_missing_write_reconciles_absence_only_at_unchanged_revision(native, monkeypatch):
     bridge, owner, owner_generation, witness = native
-    call = bridge._call
+    call = bridge.native.exchange
 
     def never_started(*args):
         raise CompactionTransportUnknownError("transport unavailable")
 
-    monkeypatch.setattr(bridge, "_call", never_started)
+    monkeypatch.setattr(bridge.native, "exchange", never_started)
     operation = bridge.commit(owner, owner_generation, witness, "summary", 42)
     assert operation.state.declared_name == "unknown"
-    monkeypatch.setattr(bridge, "_call", call)
+    monkeypatch.setattr(bridge.native, "exchange", call)
     assert (
         bridge.reconcile(owner, owner_generation, operation.commit_id).state.declared_name
         == "aborted-no-write"
@@ -738,7 +734,7 @@ def test_forged_receipt_without_inherited_fd_never_writes(native):
     bridge, owner, owner_generation, witness = native
     before = Path(witness.session_file).read_bytes()
     result = subprocess.run(
-        ["node", str(bridge.helper), str(bridge.package_dir), "-1"],
+        ["node", str(bridge.native.helper), str(bridge.native.package_dir), "-1"],
         input=json.dumps(
             {"attestation": {"thread": owner.name}, "witness": FieldCodec.encode(witness)}
         ).encode(),
@@ -784,13 +780,13 @@ bridge.registry.register(replace(owner,process_identity=ProcessIdentity.capture(
 owner,epoch = bridge.registry.live_owner_with_generation('owner')
 owner,epoch = bridge.registry.lease_live_turn_with_generation(
     owner,'crash-turn',expected_owner_generation=epoch)
-call = bridge._call
+call = bridge.native.exchange
 def lose_result(*args):
     result = call(*args)
     assert result.state.committed, result
     print('native-durable-before-journal-result',flush=True)
     signal.pause()
-bridge._call = lose_result
+bridge.native.exchange = lose_result
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_compaction_prepare import NativeWitness
 witness = FieldCodec.decode(NativeWitness, json.loads(sys.argv[3]))
@@ -864,7 +860,7 @@ def test_parent_sigkill_after_stdin_before_native_write_retains_authority(
     from agent_comms.native_package import TREE_PREFIX, package_tree_digest
 
     copied_package = tmp_path / "barrier-package"
-    shutil.copytree(bridge.package_dir, copied_package)
+    shutil.copytree(bridge.native.package_dir, copied_package)
     copied_helper = copied_package / "dist/agent-comms-compaction-commit-child.mjs"
     wrapper = copied_package / "dist/native-barrier.mjs"
     wrapper.write_text(
@@ -897,7 +893,7 @@ from agent_comms.child_process import ProcessIdentity
 import agent_comms.native_package as provenance
 provenance.MANIFEST = Path(sys.argv[6])  # Test-only published tree including barrier.
 bridge = OwnerCompactionCommit(Path(sys.argv[1]),Path(sys.argv[2]))
-bridge.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
+bridge.native.helper = Path(sys.argv[4])  # Test-only in-memory JS method barrier.
 owner = bridge.registry.snapshot().threads['owner']
 bridge.registry.unregister('owner')
 bridge.registry.register(replace(owner,process_identity=ProcessIdentity.capture(os.getpid()),active_turn=None))

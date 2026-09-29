@@ -189,6 +189,11 @@ class SelectedSummaries(JournalRole):
             raise CompactionJournalError("Unknown selected summary operation")
         return row
 
+    def require_current(self, attempt: SelectedSummaryAttempt, session_file: str) -> None:
+        if self.get(attempt.operation_id) != attempt:
+            raise CompactionJournalError("Selected summary reservation changed before commit")
+        attempt.require_session(session_file)
+
     def unresolved(self, session_file: str) -> tuple[SelectedSummaryAttempt, ...]:
         """Crash-orphaned reservations block every subsequent input send."""
         canonical = str(Path(session_file).resolve(strict=True))

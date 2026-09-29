@@ -16,6 +16,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
+from agent_comms.native_compaction_writer import NativeCompactionWriter
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.threads import Thread
 
@@ -53,7 +54,7 @@ async def owner(tmp_path, monkeypatch):
     )
     # Only native package verification is outside this source-boundary fixture.
     # The actual registry, wire, disposition, session locks and source CAS run.
-    monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+    monkeypatch.setattr(NativeCompactionWriter, "verify", lambda self: None)
     bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
     witness = NativeWitness(
         session_id="saved",

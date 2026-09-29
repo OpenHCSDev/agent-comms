@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -29,6 +29,7 @@ from .reservation_rules import ReservationViolationError
 from .selected_source import SelectedAdmissionSource, SessionRevision
 
 if TYPE_CHECKING:
+    from .compaction_states import CommittedNativeOutcome
     from .input_disposition import InputDispositions
 
 _MINT = object()
@@ -58,6 +59,20 @@ class SelectedAdmissionIdentity:
         if not self.matches_source(source):
             raise CompactionJournalError("Selected acknowledgment source changed")
         self.require_current_revision(session)
+
+    def require_reserved_revision(self, session: str) -> None:
+        self.require_current_revision(session)
+        if self.session_revision != self.source.reserved_revision:
+            raise CompactionJournalError("Selected decline source revision changed")
+
+    def after_native_commit(self, session: str, evidence: CommittedNativeOutcome) -> SelectedAdmissionIdentity:
+        revision = _session_revision(session)
+        if revision is None:
+            raise CompactionJournalError("Selected native result is unavailable: saved session missing")
+        evidence.require_saved_revision(revision)
+        if revision[1] != self.source.reserved_revision[1]:
+            raise CompactionJournalError("Selected native result is unavailable: input proof changed")
+        return replace(self, session_revision=revision)
 
 
 class SelectedSummaryAdmission:
