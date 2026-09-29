@@ -166,7 +166,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
         comms.goals.update_goal(
             "worker",
             ActiveGoalAction(
-                expect=GoalPrecondition(expected_owner_pid=os.getpid(), goal_id=original.id)
+                expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)
             ),
             actor=OwnerInvocable,
             owner_store=store,

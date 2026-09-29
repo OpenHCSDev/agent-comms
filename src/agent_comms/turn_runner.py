@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .acp_failure import ACPFailure
-
 import asyncio
 import os
 import shlex
@@ -18,31 +16,19 @@ from acp.schema import (
 from . import agent_events as events
 from . import backend
 from . import pi_events as pi
+from .acp_failure import ACPFailure
 from .channel_targets import BuiltinChannel
 from .comms import Comms
+from .errors import RelationViolationError
 from .goal_actions import (
-    EditGoalAction,
-    GoalAction,
     GoalPrecondition,
-    OwnerControlInvocable,
     OwnerInvocable,
     PausedGoalAction,
-    RetryGoalAction,
-    SetGoalAction,
 )
-from .goal_attempts import (
-    Generation,
-    GoalAttemptError,
-    GoalAttemptStore,
-    StaleAttemptError,
-    UnresolvedAttemptError,
-)
-from .goal_presentation import GoalExecution
-from .goals import Goal
+from .goal_scheduler import GoalScheduler
 from .input_drain import InputDrain
 from .messages import Message
 from .native_arguments import NativeArguments
-from .routing import ScheduledTurn
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
@@ -62,7 +48,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-GOAL_CONTINUE_PROMPT = "Continue working toward the active goal."
 DEFAULT_AGENT_BIN = "pi"
 DEFAULT_AGENT_ARGS = [
     "--provider",
@@ -79,7 +64,7 @@ IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 
 
 class TurnRunner:
-    """Own session turn locks/tasks, persistent S2 children and goal orchestration."""
+    """Own session turn locks/tasks and persistent S2 children."""
 
     def __init__(
         self,
@@ -109,12 +94,10 @@ class TurnRunner:
         )
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         self.persistent_backends: dict[str, backend.PersistentPiSession] = {}
-        self.goal_store: GoalAttemptStore | None = None
-        self.pending_goal_origins: dict[str, str] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
         self.active_turns: dict[str, str] = {}
         self.emitted_errors: dict[str, ACPFailure] = {}
-        self.goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
+        self.goals = GoalScheduler(comms, effects, self.session_busy)
         self.reply_window = (
             reply_window
             if reply_window is not None
@@ -134,6 +117,10 @@ class TurnRunner:
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
         self.inputs = inputs
+        self.goals.bind(sessions, inputs)
+
+    def session_busy(self, session_id: str) -> bool:
+        return session_id in self.turn_tasks or session_id in self.active_turns
 
     def native_arguments(self, thread: Thread) -> tuple[str, ...]:
         return self.agent_args.with_model(thread.model).with_thinking(thread.thinking_level).argv
@@ -439,214 +426,6 @@ class TurnRunner:
         ):
             await persistent.close_idle()
 
-    def schedule_goal(self, session_id: str) -> None:
-        """Only the existing thread owner may schedule another goal turn."""
-        if (
-            self.inputs.closing
-            or session_id in self.turn_tasks
-            or session_id in self.inputs.backend_inboxes
-            or session_id in self.active_turns
-        ):
-            return
-        if (wake := self.inputs.wake_tasks.get(session_id)) is not None and not wake.done():
-            return
-        thread = self.comms.registry.require(self.sessions.require(session_id))
-        if self.inputs.pending_turns.get(session_id):
-            return
-        if thread.pid != os.getpid() or not self.comms.registry.status(thread.name).running:
-            return
-        goal = thread.goal
-        if goal is not None and goal.state.active:
-            if self.comms.goals.goal_wait(thread.name) is not None:
-                return
-            if self.pending_goal_origins.get(thread.name) == goal.id:
-                return
-            store = self.goal_store
-            if (
-                store is None
-                and (self.comms.root / "goal-private" / "goal_attempts.sqlite3").exists()
-            ):
-                store = self.open_goal_store()
-            if store is None:
-                self.comms.goals.block_goal_after_failed_turn(
-                    thread.name,
-                    started_goal=goal,
-                    expected_worktree=thread.worktree,
-                    diagnostic="Goal launch grant unavailable; explicit Retry required.",
-                )
-                return
-            try:
-                generation = store.snapshot(goal.id)
-                if generation is None or not generation.lifecycle.ready:
-                    self.comms.goals.block_goal_after_failed_turn(
-                        thread.name,
-                        started_goal=goal,
-                        expected_worktree=thread.worktree,
-                        diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
-                    )
-                    return
-                admission = self.comms.registry.snapshot().admission_generations[thread.name]
-                with _store_lock(self.comms._wire_lock_path):
-                    self.ready_goal_grant_locked(thread, admission, store, generation)
-            except StaleAttemptError:
-                return
-            except GoalAttemptError:
-                self.comms.goals.block_goal_after_failed_turn(
-                    thread.name,
-                    started_goal=goal,
-                    expected_worktree=thread.worktree,
-                    diagnostic="Goal launch grant unavailable; explicit Retry required.",
-                )
-                return
-            self.inputs.pending_turns.setdefault(session_id, []).append(
-                ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
-            )
-            self.inputs.schedule_wake(session_id)
-
-    def open_goal_store(self) -> GoalAttemptStore:
-        if self.goal_store is None:
-            private = self.comms.root / "goal-private"
-            private.mkdir(mode=0o700, exist_ok=True)
-            self.goal_store = GoalAttemptStore.initialize(private)
-        return self.goal_store
-
-    def ready_goal_grant_locked(
-        self, owner: Thread, admission: int, store: GoalAttemptStore, generation: Generation
-    ) -> str:
-        """Caller holds the wire lock; READY recovery never authorizes an old owner."""
-        snapshot = self.comms.registry.snapshot()
-        name = snapshot.aliases.get(owner.name, owner.name)
-        current = snapshot.threads.get(name)
-        if (
-            current is None
-            or current.pid != os.getpid()
-            or current.pid != owner.pid
-            or current.created_at != owner.created_at
-            or current.worktree != owner.worktree
-            or not snapshot.statuses[name].running
-            or snapshot.admission_generations[name] != admission
-            or current.goal is None
-            or not current.goal.state.active
-            or current.goal.id != generation.goal_id
-        ):
-            raise StaleAttemptError("The executing goal owner changed before READY recovery.")
-        try:
-            return store.ready_grant(generation.goal_id, generation.number)
-        except UnresolvedAttemptError:
-            store.recover_unreserved_ready(generation.goal_id, generation.number)
-            return store.ready_grant(generation.goal_id, generation.number)
-
-    async def set_goal(self, session_id: str, text: str) -> Goal:
-        """Commit a UI goal through its executing owner and private launch ledger."""
-        if not isinstance(text, str) or not text.strip():
-            raise ValueError("A goal requires text.")
-        name = self.sessions.require(session_id)
-        goal = self.comms.goals.update_goal(
-            name,
-            SetGoalAction(text=text, expect=GoalPrecondition(expected_owner_pid=os.getpid())),
-            actor=OwnerInvocable,
-            owner_store=self.open_goal_store(),
-        )
-        assert goal is not None
-        self.schedule_goal(session_id)
-        return goal
-
-    async def edit_goal(
-        self, session_id: str, goal_id: str, expected_revision: int, text: str
-    ) -> Goal:
-        """Edit the current objective without replacing its identity or execution state."""
-        name = self.sessions.require(session_id)
-        goal = self.comms.registry.require(name).goal
-        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
-            raise ValueError("The goal changed; refresh its state before editing.")
-        # update_goal owns the wire lock and atomically rechecks both this
-        # snapshot and the executing owner. Do not acquire its lock twice.
-        edited = self.comms.goals.update_goal(
-            name,
-            EditGoalAction(
-                text=text,
-                expect=GoalPrecondition(
-                    goal_id=goal_id,
-                    expected_goal=goal,
-                    expected_owner_pid=os.getpid(),
-                ),
-            ),
-            actor=OwnerInvocable,
-        )
-        assert edited is not None
-        await self.sessions.config.sync_thread(session_id)
-        return edited
-
-    async def update_goal(
-        self, session_id: str, status: str, goal_id: str, expected_revision: int
-    ) -> Goal | None:
-        """Apply an explicit UI pause, resume, or clear through the current owner."""
-        action = GoalAction.decode(status)
-        if not issubclass(action, OwnerControlInvocable):
-            raise ValueError("Goal updates support only active, paused, or clear.")
-        name = self.sessions.require(session_id)
-        goal = self.comms.registry.require(name).goal
-        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
-            raise ValueError("The goal changed; refresh its state before updating.")
-        try:
-            updated = self.comms.goals.update_goal(
-                name,
-                action(
-                    expect=GoalPrecondition(
-                        goal_id=goal_id,
-                        expected_goal=goal,
-                        expected_owner_pid=os.getpid(),
-                    )
-                ),
-                actor=OwnerInvocable,
-                owner_store=self.open_goal_store() if action.owner_grant else None,
-            )
-        finally:
-            # Resume can discover that a paused attempt failed. Publish the
-            # reconciled BLOCKED state even when the action returns an error.
-            await self.sessions.config.sync_thread(session_id)
-        if action.schedules_goal:
-            self.schedule_goal(session_id)
-        return updated
-
-    async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
-        """Record an explicit UI retry in the executing owner's private ledger."""
-        name = self.sessions.require(session_id)
-        thread = self.comms.registry.require(name)
-        goal = thread.goal
-        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
-            raise ValueError("The blocked goal changed; refresh its state.")
-        if self.pending_goal_origins.get(name) == goal_id:
-            raise ValueError("Wait for the goal origin turn to finish.")
-        resumed = self.comms.goals.update_goal(
-            name,
-            RetryGoalAction(
-                expect=GoalPrecondition(
-                    goal_id=goal_id,
-                    expected_goal=goal,
-                    expected_owner_pid=os.getpid(),
-                )
-            ),
-            actor=OwnerInvocable,
-            owner_store=self.open_goal_store(),
-        )
-        assert resumed is not None
-        # READY records the accepted owner decision even during an unrelated
-        # turn. The scheduler's existing busy fences defer launch until that
-        # turn finishes; reserved/claimed attempts remain unretryable above.
-        self.schedule_goal(session_id)
-        await self.sync_goal_execution(session_id, name)
-        return resumed
-
-    async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
-        event = self.comms.goals.goal_changed(
-            thread_name, self.goal_execution_signatures.get(session_id)
-        )
-        if event is None:
-            return
-        await self.effects._emit_event(session_id, event)
-        self.goal_execution_signatures[session_id] = event.signature
-
     async def run_selected(self, session_id: str, execution: SelectedExecution):
         """Selected work and fresh ACP input share this session's one turn lifetime.
 
@@ -668,26 +447,18 @@ class TurnRunner:
                         continue  # No accepted prompt: clear/interrupt controls carry no input.
                     item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
                     key = self.inputs.steering_input_keys.get(session_id, {}).get(input_id)
-                    with _store_lock(self.comms._wire_lock_path):
-                        snapshot = self.comms.registry.snapshot()
-                        name = snapshot.aliases.get(execution.owner_name, execution.owner_name)
-                        owner = snapshot.threads.get(name)
-                        row = self.inputs.dispositions.read().lookup(key)
-                        valid = (
-                            item is not None
-                            and owner is not None
-                            and snapshot.statuses[name].running
-                            and owner.pid == os.getpid()
-                            and owner.active_turn is None
-                            and item.current(
-                                owner,
-                                snapshot.admission_generations[name],
-                                self.comms.goals.goal_wait(name),
+                    if item is None:
+                        await self.inputs.input_refused(session_id, input_id)
+                        continue
+                    try:
+                        with _store_lock(self.comms._wire_lock_path):
+                            snapshot = self.comms.registry.snapshot()
+                            name = snapshot.aliases.get(execution.owner_name, execution.owner_name)
+                            row = self.inputs.dispositions.read().lookup(key)
+                            item.require_handoff(
+                                snapshot, name, self.comms.goals.goal_wait(name), row, input_id,
                             )
-                            and row.queued_for(owner.incarnation, item.admission, item.text)
-                            and row.key == f"acp:{input_id}"
-                        )
-                    if not valid:
+                    except RelationViolationError:
                         await self.inputs.input_refused(session_id, input_id)
                         continue
                     await self.run_agent_turn(
@@ -698,11 +469,7 @@ class TurnRunner:
                         original_keys=(key,),
                         initial_display_text=item.text if item.echo else None,
                         original_owner_input=True,
-                        original_goal_id=(
-                            item.goal.id
-                            if item.goal is not None and item.goal.state.active
-                            else None
-                        ),
+                        original_goal_id=item.context.active_goal_id,
                         accepted_input_id=input_id,
                     )
                     break  # The existing native forwarder consumes the remaining live inbox.
