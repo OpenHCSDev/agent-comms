@@ -59,6 +59,15 @@ class TurnFence:
     admission_generation: int
 
 
+    def matches(self, other: TurnFence) -> bool:
+        """Lease and finished observations may describe the same exact turn."""
+        return (
+            self.identity == other.identity
+            and self.turn_id == other.turn_id
+            and self.admission_generation == other.admission_generation
+        )
+
+
 class TurnLeaseFence(TurnFence):
     """Exact local begin-turn lease; a reused turn ID is not this lease."""
 

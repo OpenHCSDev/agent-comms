@@ -12,7 +12,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .goals import Goal
 from .thread_identity import OwnerIdentity, ThreadIncarnation, ThreadRole, TurnIdentity
-from .turn_lease import ActiveTurn, TurnLeaseFence
+from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence
 
 
 class _GeneratedCreationTime(float):
@@ -141,6 +141,16 @@ class Thread:
             turn_id=self.active_turn.id,
             admission_generation=self.active_turn.admission_generation,
         )
+
+    def observed_turn(self, admission: int) -> TurnFence | None:
+        """Passive current/last-completed witness; never a begin-turn grant."""
+        turn_id = self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id
+        if turn_id is None:
+            return None
+        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, admission)
+
+    def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
+        return self.goal is not None and self.goal.accepts_observation(goal_id, minimum_revision)
 
     @property
     def is_fork(self) -> bool:
