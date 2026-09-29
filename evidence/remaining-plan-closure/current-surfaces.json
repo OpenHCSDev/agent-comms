@@ -1,0 +1,388 @@
+{
+  "heads": {
+    "core": "942f9824ff095775fe709563eaf3c14119b2f5ad",
+    "toad": "e2ab6ca67d755c0828842aac8ea39c6dab3d92d2"
+  },
+  "scope": "16 named plan surfaces only, existing installed archive classifier; no global census",
+  "surfaces": [
+    {
+      "project": "core",
+      "path": "src/agent_comms/registration.py",
+      "chain_terms": 76,
+      "foreign_absence_probes": 19,
+      "chains6plus": [
+        {
+          "line": 324,
+          "terms": 13,
+          "dominant": "BOUND-1",
+          "kinds": "type 6, rule 5, same_value 1, literal 1"
+        },
+        {
+          "line": 143,
+          "terms": 7,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 1, rule 1"
+        },
+        {
+          "line": 168,
+          "terms": 7,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 1, rule 1"
+        },
+        {
+          "line": 200,
+          "terms": 9,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 4"
+        },
+        {
+          "line": 255,
+          "terms": 8,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 3"
+        },
+        {
+          "line": 355,
+          "terms": 12,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 6, absence 5, rule 1"
+        },
+        {
+          "line": 407,
+          "terms": 6,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 1"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/claim_admission.py",
+      "chain_terms": 46,
+      "foreign_absence_probes": 12,
+      "chains6plus": [
+        {
+          "line": 73,
+          "terms": 6,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 5, absence 1"
+        },
+        {
+          "line": 94,
+          "terms": 22,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 13, absence 8, rule 1"
+        },
+        {
+          "line": 143,
+          "terms": 6,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 1"
+        },
+        {
+          "line": 379,
+          "terms": 7,
+          "dominant": "IDEN-3",
+          "kinds": "absence 5, same_value 2"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "chain_terms": 46,
+      "foreign_absence_probes": 6,
+      "chains6plus": [
+        {
+          "line": 122,
+          "terms": 13,
+          "dominant": "BOUND-1",
+          "kinds": "type 7, literal 3, rule 3"
+        },
+        {
+          "line": 170,
+          "terms": 10,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 6, absence 2, rule 2"
+        },
+        {
+          "line": 417,
+          "terms": 6,
+          "dominant": "IDEN-3",
+          "kinds": "absence 2, rule 2, same_value 1, literal 1"
+        },
+        {
+          "line": 378,
+          "terms": 12,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 7, literal 2, rule 2, absence 1"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/coordination_response.py",
+      "chain_terms": 55,
+      "foreign_absence_probes": 20,
+      "chains6plus": [
+        {
+          "line": 344,
+          "terms": 6,
+          "dominant": "IDEN-3",
+          "kinds": "absence 4, same_value 1, rule 1"
+        },
+        {
+          "line": 368,
+          "terms": 7,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 6, rule 1"
+        },
+        {
+          "line": 483,
+          "terms": 7,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 4, absence 3"
+        },
+        {
+          "line": 217,
+          "terms": 7,
+          "dominant": "BOUND-1",
+          "kinds": "type 3, same_value 3, literal 1"
+        },
+        {
+          "line": 231,
+          "terms": 11,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 8, absence 3"
+        },
+        {
+          "line": 310,
+          "terms": 7,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 5, rule 2"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "chain_terms": 32,
+      "foreign_absence_probes": 4,
+      "chains6plus": [
+        {
+          "line": 81,
+          "terms": 23,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 13, type 3, rule 3, absence 2, literal 2"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/turn_runner.py",
+      "chain_terms": 22,
+      "foreign_absence_probes": 9,
+      "chains6plus": [
+        {
+          "line": 563,
+          "terms": 10,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 6, absence 4"
+        },
+        {
+          "line": 719,
+          "terms": 8,
+          "dominant": "IDEN-3",
+          "kinds": "absence 4, same_value 2, rule 2"
+        }
+      ],
+      "classes": [
+        {
+          "name": "TurnRunner",
+          "lines": 723
+        }
+      ]
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/owned_turn.py",
+      "chain_terms": 0,
+      "foreign_absence_probes": 4,
+      "chains6plus": [],
+      "classes": []
+    },
+    {
+      "project": "core",
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "chain_terms": 63,
+      "foreign_absence_probes": 18,
+      "chains6plus": [
+        {
+          "line": 195,
+          "terms": 6,
+          "dominant": "BOUND-1",
+          "kinds": "type 4, absence 1, literal 1"
+        },
+        {
+          "line": 1092,
+          "terms": 11,
+          "dominant": "BOUND-1",
+          "kinds": "type 7, same_value 2, literal 2"
+        },
+        {
+          "line": 1138,
+          "terms": 10,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 6, absence 3, rule 1"
+        },
+        {
+          "line": 1211,
+          "terms": 10,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 5, absence 4, literal 1"
+        },
+        {
+          "line": 1326,
+          "terms": 10,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 6, absence 3, literal 1"
+        }
+      ],
+      "classes": [
+        {
+          "name": "SelectedExecution",
+          "lines": 1029
+        }
+      ]
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/widgets/conversation.py",
+      "chain_terms": 25,
+      "foreign_absence_probes": 31,
+      "chains6plus": [],
+      "classes": [
+        {
+          "name": "Conversation",
+          "lines": 2191
+        }
+      ]
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/app.py",
+      "chain_terms": 23,
+      "foreign_absence_probes": 20,
+      "chains6plus": [
+        {
+          "line": 793,
+          "terms": 6,
+          "dominant": "IDEN-3",
+          "kinds": "absence 2, type 1, flag 1, same_value 1, rule 1"
+        },
+        {
+          "line": 896,
+          "terms": 6,
+          "dominant": "IDEN-1",
+          "kinds": "same_value 3, absence 2, rule 1"
+        },
+        {
+          "line": 1274,
+          "terms": 7,
+          "dominant": "IMPL-14",
+          "kinds": "rule 3, absence 2, same_value 2"
+        }
+      ],
+      "classes": [
+        {
+          "name": "ToadApp",
+          "lines": 1712
+        }
+      ]
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/acp/agent.py",
+      "chain_terms": 0,
+      "foreign_absence_probes": 3,
+      "chains6plus": [],
+      "classes": [
+        {
+          "name": "Agent",
+          "lines": 1311
+        }
+      ]
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/screens/workspace.py",
+      "chain_terms": 21,
+      "foreign_absence_probes": 11,
+      "chains6plus": [
+        {
+          "line": 252,
+          "terms": 7,
+          "dominant": "IMPL-10",
+          "kinds": "flag 6, same_value 1"
+        },
+        {
+          "line": 312,
+          "terms": 6,
+          "dominant": "IMPL-10",
+          "kinds": "flag 5, same_value 1"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/widgets/tool_call.py",
+      "chain_terms": 0,
+      "foreign_absence_probes": 1,
+      "chains6plus": [],
+      "classes": []
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/screens/session_view.py",
+      "chain_terms": 0,
+      "foreign_absence_probes": 0,
+      "chains6plus": [],
+      "classes": []
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/mcp_inventory.py",
+      "chain_terms": 16,
+      "foreign_absence_probes": 1,
+      "chains6plus": [
+        {
+          "line": 77,
+          "terms": 6,
+          "dominant": "IMPL-14",
+          "kinds": "rule 3, type 2, same_value 1"
+        },
+        {
+          "line": 110,
+          "terms": 6,
+          "dominant": "BOUND-1",
+          "kinds": "type 2, literal 2, same_value 1, rule 1"
+        }
+      ],
+      "classes": []
+    },
+    {
+      "project": "toad",
+      "path": "src/toad/transcript_filter.py",
+      "chain_terms": 14,
+      "foreign_absence_probes": 4,
+      "chains6plus": [],
+      "classes": []
+    }
+  ]
+}

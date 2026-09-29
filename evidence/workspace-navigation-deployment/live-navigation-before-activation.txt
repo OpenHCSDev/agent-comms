@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-acp-saved-session-startup-20260928/evidence/workspace-navigation-deployment/live_navigation.py", line 16, in <module>
+    from toad.widgets.comms_chat import CommsChatView
+  File "/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/toad/widgets/comms_chat.py", line 30, in <module>
+    from toad.widgets.conversation import (
+    ...<6 lines>...
+    )
+  File "/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/toad/widgets/conversation.py", line 79, in <module>
+    from toad.widgets.transcript_history import TranscriptHistory
+  File "/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/toad/widgets/transcript_history.py", line 22, in <module>
+    from agent_comms.backend import tool_kind
+ImportError: cannot import name 'tool_kind' from 'agent_comms.backend' (/home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/lib/python3.14/site-packages/agent_comms/backend.py)

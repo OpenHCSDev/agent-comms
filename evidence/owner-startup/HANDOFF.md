@@ -1,0 +1,13 @@
+# Detached owner startup diagnostics
+
+Baseline core77c2ac67. Deletes the owner launch's implicit DEVNULL output by connecting its existing DetachedProcess output parameter to the existing private diagnostics owner. No new store, schema, readiness flag, retry, or input replay. Every actual launch gets a private 0600 output file with durable thread identity in its filename; worker Python traceback remains available after process exit. Parent descriptor closes after launch; child's inherited descriptor remains valid.
+
+Ownership: IMPL-13 child launch remains OwnerLifecycle/DetachedProcess; IDEN-1 diagnostic membership derives existing stable_thread_lookup; TIME-9 no alternate codec/adaptor. Current NRA and exact archive refactor-audit patterns reread. No behavior families needed for one output capture mechanism.
+
+Evidence: actual production OwnerLifecycle.start with invalid native launch fails before socket, retains PublicationActivationBlocked Python traceback, owner remains session_file=None, diagnostic mode0600. Focused actual subprocess test passed1 in1.53s. This proves capture, NOT original live failure's cause or resolution.
+
+Authentic live failure ACP02_05_43 session/load openhcs-pr159-viewer-bind-owner owner3978150 missing socket. Process dead/sessionNULL; initial stderr was discarded. Current user's ACP child executable verified runtime-workspace-navigation-20260929, not an old-runtime excuse. Original user inputs/history remain untouched. Immediate installed native fork/open acceptance running separately; production defect remains open until a concrete cause is established.
+
+Additional installed evidence: core77c2+capture/Toad1576a05/native d396, physical Fork dialog -> immediate child row open before answer -> native attachment/history paint/title -> one original and reply in same tab PASSED, exit0. Initial separate route-only acceptance also passed. Original fixture screenshot-path failure retained (test harness error after successful attach, not product startup failure).
+
+No-prompt actual declaration mirror: failed live name/worktree OpenHCS, model openai-codex/gpt-6-sol, high thinking, parent and NULL session copied into isolated root. Real installed worker launch published socket and remained alive, then only isolated owner was retired. Output retained. This excludes neither original live-root data nor original environment; exact original traceback was discarded before capture existed. Root defect is NOT claimed fixed. Need capture installed on next authoritative failing launch, or a reproducible original live-data witness. No arbitrary retry or new /open command.

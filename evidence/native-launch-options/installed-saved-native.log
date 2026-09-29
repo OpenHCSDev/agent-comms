@@ -1,0 +1,20 @@
+{
+  "commit": "57ec47763340d0214fad5b57a0f210a7d061d95c",
+  "python": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/bin/python",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "changed_helpers": {
+    "agent_comms.backend": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/lib/python3.14/site-packages/agent_comms/backend.py",
+    "agent_comms.config_options": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/lib/python3.14/site-packages/agent_comms/config_options.py",
+    "agent_comms.native_arguments": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/lib/python3.14/site-packages/agent_comms/native_arguments.py",
+    "agent_comms.native_pi": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/lib/python3.14/site-packages/agent_comms/native_pi.py",
+    "agent_comms.session_lifecycle": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py",
+    "agent_comms.turn_runner": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/installed/lib/python3.14/site-packages/agent_comms/turn_runner.py"
+  },
+  "native": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent",
+  "boundary": "noneditable wheel with actual saved-session/native/ACP loopback; no painted live UI claim"
+}
+.                                                                        [100%]
+1 passed in 9.92s

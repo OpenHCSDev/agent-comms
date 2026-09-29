@@ -28,3 +28,23 @@ polymorphic declarations, inherited shared implementation, declaration-derived
 membership, and complete removal of replaced mechanisms and callers. Correct
 new duplication during the assigned batch. Keep implementation moving without
 turning this review into repeated testing or coordination ceremony.
+
+## 2026-09-29: coherent delivery and continuous real user journeys
+
+Tristan: "i need more strategy and less local optimization, eveyrone is optmizgin for local busywork too much ,find the pi system prompt and read it. please no more fucking arouind"
+
+Tristan: "way too muhc fuckign busywork for the amount tokens going in eveyrone stop being so cauatious and start optimizing harder in your deicoins, ceremony must hve value otherise its perofmrative and i don't cre"
+
+Tristan: "tests passing isn't correct. tests passing is to test yo ursanity and help you tes real user poerly. live testing is not optiojal. we must alrady ahve infra for this . it can do basic ass tests using saved state  and mock responses and what not its not reocekt science  we need continuous coerage in tests not many small pieces thats terrible"
+
+Read project Pi prompt `.pi/APPEND_SYSTEM.md`. Tesla156 owns the coherent
+workspace/navigation/retained-presentation integration; Carver153 implements
+first-open/tab identity and coordinates the overlapping navigation callers.
+Extend existing normal App/Pilot and ACP/native fixture infrastructure into one
+continuous representative saved-state user journey. Controlled provider responses
+are allowed; UI, saved state, protocol and installed entry paths must be real.
+Exercise startup history, channel/sidebar clicks, participant/thread opening,
+A/B/A return with reader/draft retention, fork/first input and reply/status/history
+without skipping intermediate user actions. Actual live opening check before
+activation is required. Focused tests support it. Ship usable coherent tranches
+without waiting for final latency, full refactor scope or deferred CI.

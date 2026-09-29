@@ -1,0 +1,77 @@
+{
+  "process_refs": [],
+  "compressed_completed_evidence": [
+    {
+      "compressed": "native-custody/nra-published.json.gz",
+      "before": 5063406,
+      "after": 324619
+    },
+    {
+      "compressed": "native-custody/nra-final.json.gz",
+      "before": 5061955,
+      "after": 324517
+    },
+    {
+      "compressed": "native-custody/nra-after.json.gz",
+      "before": 5054372,
+      "after": 323582
+    },
+    {
+      "compressed": "native-catalog-discovery/r0-after-complete.json.gz",
+      "before": 5452022,
+      "after": 352153
+    },
+    {
+      "compressed": "native-catalog-discovery/nra-after.json.gz",
+      "before": 5064483,
+      "after": 324699
+    },
+    {
+      "compressed": "native-catalog-discovery/r0-before-complete.json.gz",
+      "before": 5935758,
+      "after": 355192
+    },
+    {
+      "compressed": "watchdog/nra-before.json.gz",
+      "before": 5239925,
+      "after": 320341
+    },
+    {
+      "compressed": "watchdog/nra-after.json.gz",
+      "before": 4992067,
+      "after": 319324
+    },
+    {
+      "compressed": "backend-response/nra-before.json.gz",
+      "before": 4968614,
+      "after": 317615
+    },
+    {
+      "compressed": "backend-response/nra-after.json.gz",
+      "before": 4971279,
+      "after": 317839
+    },
+    {
+      "compressed": "terminal-results/nra-before.json.gz",
+      "before": 5029825,
+      "after": 321864
+    },
+    {
+      "compressed": "terminal-results/nra-after.json.gz",
+      "before": 5048211,
+      "after": 323112
+    },
+    {
+      "compressed": "active-native-turn/nra-before.json.gz",
+      "before": 5602279,
+      "after": 362332
+    },
+    {
+      "compressed": "native-reusable-lifecycle/nra-after.json.gz",
+      "before": 5599254,
+      "after": 361533
+    }
+  ],
+  "saved_bytes": 68434728,
+  "preserved": "all evidence contents in gzip; source/branches/wheels/d396 unchanged"
+}
