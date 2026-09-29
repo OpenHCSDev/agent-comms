@@ -1,0 +1,21 @@
+{
+  "commit": "02c0e120b445780ef7c771a6d0a1565250428480",
+  "python": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/installed/bin/python",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "changed_helpers": {
+    "agent_comms.coordinated_runtime": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/installed/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py",
+    "agent_comms.native_pi": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/installed/lib/python3.14/site-packages/agent_comms/native_pi.py",
+    "agent_comms.native_runtime_input": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/installed/lib/python3.14/site-packages/agent_comms/native_runtime_input.py",
+    "agent_comms.private_send_stage": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-dispatch-ownership/installed/lib/python3.14/site-packages/agent_comms/private_send_stage.py"
+  },
+  "boundary": "noneditable wheel; actual pinned native triage and full dispatch, saved-session reuse, tools, reply; channel return actual owner/ACP observation; only local provider responses"
+}
+.B actual native request provider_calls 1
+B published actual reply provider_calls 1
+A automatically observed native reply provider_calls 2
+A ACP feedback proves exact reply injection provider_calls 2
+.
+2 passed in 16.38s

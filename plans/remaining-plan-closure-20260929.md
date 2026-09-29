@@ -12,6 +12,23 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
+## Current remaining mapping — parent deployment checkpoint
+
+Parent reports core350/351/352 merged at95a792, Toad158/159/161 merged at510716.
+The paired installed continuous native/MCP journeys passed; nine idle owners
+activated on identity-mcp, with nine fresh ACP loads passed. Saved UI paint was
+still being checked at this checkpoint; this census does not upgrade that claim.
+
+- Workspace156 is now160, with163 carrying proof; preserve that owner's files.
+- First-open153,154 and345 cutover are done.
+-350/351 admission/response/awareness closure is merged;353 owns passive goal
+  failure identity/lifecycle and its shared reservation callers, ready for review.
+-349/155 compaction feedback and152 process lifetime remain with their owners.
+-162 is Noether's transcript filter;354 is Wegener's selected execution scope.
+- Whole S14 registration/scheduler and whole T4 still need their remaining owners.
+
+The dated measurements and old PR status rows below are retained as history.
+
 ## S14 followthrough checkpoint — PR350 / PR351
 
 PR347 is merged. PR350 implements the admission/response identity slice with
