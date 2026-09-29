@@ -1,0 +1,35 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_actual_provider_failure_reports_started_input_once_without_retry _____
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f019e262270>, 'project', <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f019e397230>)
+
+    async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        native.provider.status = 503
+        async with asyncio.timeout(30):
+            await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+        errors = failure_facts(updates, RequestFailedUpdate)
+        assert len(errors) == 1
+        assert "loopback retryable failure" in errors[0].failure.detail
+        assert errors[0].failure.input_state.public_status == "started"
+        assert not failure_facts(updates, InputFailedUpdate)
+        assert native.provider.posts == 2  # seed + failed original, zero retry
+>       assert [message["content"] for message in native.saved_inputs()].count(
+            [{"type": "text", "text": "Actual failed input"}]
+        ) == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = <built-in method count of list object at 0x7f019c5374c0>([{'type': 'text', 'text': 'Actual failed input'}])
+E        +    where <built-in method count of list object at 0x7f019c5374c0> = [[{'type': 'text', 'text': 'Completed seed exchange'}], [{'type': 'text', 'text': 'Give this new thread a concise topi...oal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: []\n\nActual failed input'}]].count
+
+tests/test_turn_runner.py:281: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_turn_runner.py::test_actual_provider_failure_reports_started_input_once_without_retry
+1 failed in 17.74s
