@@ -5,12 +5,25 @@ local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
 Latest installed pair: core e6fa8feb (295 cursor recovery, 289 registry race,
-287 nominal tools), Toad c0d61fa5 (135 separate saved-history and bus-input
+287 nominal tools), Toad 5983adba (137 restore inherited widget CSS and actual message painting;
+135 separate saved-history and bus-input
 verification, 133 initialization failure feedback, 131 detached controller,
 130 tab/clipboard, 134 retained-history ready fix), Textual c9743801, native5fde.
-Runtime runtime-cursor-recovery-20260928 is live through all five launchers.
+Runtime runtime-history-visible-20260928 is live through all five launchers.
+Core owners still run e6fa8feb in runtime-cursor-recovery; this UI-only update
+does not restart them. Core288/294 are merged, awaiting the next integrated deployment.
 Four idle owners restarted using canonical lifecycle fencing. No store reset,
 history rewrite, or input replay. Existing Toad must reopen for new imports.
+
+Latest correction: the preceding checks proved loaded history and cleared loading,
+but missed zero-height paint. User reported the still-empty conversation. Textual
+follows the first DOM base for CSS; ConversationBlock(Widget) hid VerticalGroup
+and StreamingMarkdown CSS.137 makes ConversationBlock a nominal non-DOM mixin.
+Same actual installed NRA viewport: before history height0, painted text0; after
+height57,911 nonspace painted characters,110 five-word phrases match saved messages.
+Actual PR95 viewport: height48,679 painted characters,105 matching phrases. This
+checks compositor output cropped to the conversation, not merely a loaded widget.
+No provider prompt, history mutation, or owner restart. User must reopen Toad.
 
 Actual-path results for the latest user history failure:
 - Old installed core reproduces a stuck cursor after a contended trusted load:
