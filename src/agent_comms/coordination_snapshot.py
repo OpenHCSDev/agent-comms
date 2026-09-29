@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
-from agent_comms.coordination_errors import IntegrityViolationError, StaleFence
+from agent_comms.coordination_errors import (
+    IntegrityViolationError,
+    StaleFence,
+    RecoveryBlocked,
+    PublicationUncertain,
+)
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
@@ -220,3 +225,80 @@ class RecoverySnapshot:
             and attempt.lifecycle.lease_expires_at_ms is None
             and not self.is_current
         )
+
+    def settle(self, session, outcome, reason_code: str | None) -> None:
+        from .coordination_tables.attempts import AttemptRecord
+        from .coordination_tables.assignments import WakeAssignment
+        from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
+        from .coordination_tables.responses import ResponseObligation
+
+        db = session._connection
+        execution, attempt = self.execution, self.attempt
+        if self.publication_intent is not None:
+            raise PublicationUncertain("publication requires bus-keyed receipt resolution")
+        if (
+            attempt is None
+            or not self.is_current
+            or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
+        ):
+            raise RecoveryBlocked("settlement requires exact final done/death evidence")
+        execution_state, response = outcome.disposition(self, attempt)
+        now = session.now(max(execution.updated_at_ms, attempt.updated_at_ms))
+        AttemptRecord.update(
+            db,
+            where="execution_id=? AND attempt_ordinal=?",
+            parameters=(execution.execution_id, attempt.attempt_ordinal),
+            lifecycle=outcome,
+            revision=attempt.revision + 1,
+            updated_at_ms=now,
+            reason_code=reason_code,
+        )
+        ExecutionRecord.update(
+            db,
+            where="execution_id=?",
+            parameters=(execution.execution_id,),
+            lifecycle=execution_state,
+            revision=execution.revision + 1,
+            updated_at_ms=now,
+            reason_code=reason_code,
+        )
+        if self.obligation is not None:
+            obligation = self.obligation
+            ResponseObligation.update(
+                db,
+                where="execution_id=?",
+                parameters=(execution.execution_id,),
+                lifecycle=response,
+                revision=obligation.revision + 1,
+                updated_at_ms=session.now(obligation.updated_at_ms),
+                reason_code=reason_code,
+            )
+        for assignment in self.assignments:
+            WakeAssignment.update(
+                db,
+                where="assignment_id=?",
+                parameters=(assignment.assignment_id,),
+                lifecycle=execution_state.assignment_state().build(
+                    assignment.lifecycle.mode,
+                    assignment.lifecycle.execution_id,
+                    assignment.lifecycle.exact_target,
+                ),
+                revision=assignment.revision + 1,
+                updated_at_ms=session.now(assignment.updated_at_ms),
+            )
+        CurrentExecutions.update(
+            db,
+            where="owner_lookup=?",
+            parameters=(execution.owner_lookup,),
+            execution_id=None,
+            attempt_ordinal=None,
+            pointer_revision=self.pointer_revision + 1,
+        )
+
+    def require_nonpublication_response(self) -> None:
+        if self.obligation is not None:
+            self.obligation.lifecycle.require_nonpublication()
+
+    @property
+    def retry_authorized(self) -> bool:
+        return retry_disposition_authorized(self.execution, self.replay, self.obligation)

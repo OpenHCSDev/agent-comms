@@ -7,10 +7,10 @@ that phase. Native turn ownership remains S2's; these are durable observations.
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import ClassVar
 
-from .coordination_errors import IntegrityViolationError
+from .coordination_errors import IntegrityViolationError, IdentityConflict, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 
@@ -24,6 +24,33 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
+
+    def observed(self, phase, *, backend_done: bool, process_dead: bool, progress: bool):
+        if phase is not type(self) and phase not in self.successors():
+            raise IdentityConflict("attempt phase edge is not declared")
+        if self.process_dead or self.backend_done:
+            # Once either finality fact is recorded, the backend cannot
+            # emit another phase or progress observation.  The other fact
+            # may arrive later on the SAME phase before atomic settlement.
+            new_final_fact = (self.backend_done, self.process_dead) != (
+                self.backend_done or backend_done,
+                self.process_dead or process_dead,
+            )
+            if phase is not type(self) or progress or not new_final_fact:
+                raise RecoveryBlocked("final backend evidence forbids further phase or progress")
+        return phase.load(
+            self.lease_expires_at_ms,
+            self.backend_done or backend_done,
+            self.process_dead or process_dead,
+        )
+
+    def require_silent_completion(self) -> None:
+        raise IdentityConflict("silent completion requires settling phase")
+
+    def renewed(self, expiry: int):
+        if self.process_dead:
+            raise RecoveryBlocked("a dead Pi RPC subprocess cannot renew its live lease")
+        return replace(self, lease_expires_at_ms=max(self.lease_expires_at_ms or 0, expiry))
 
     @property
     def tool_admission_open(self) -> bool:
@@ -58,6 +85,9 @@ class LiveAttempt(AttemptState):
 
 
 class TerminalAttempt(AttemptState):
+    @abstractmethod
+    def disposition(self, snapshot, attempt): ...
+
     terminal = True
 
     @property
@@ -149,6 +179,9 @@ class CompactionAttempt(LiveAttempt):
 
 
 class SettlingAttempt(LiveAttempt):
+    def require_silent_completion(self) -> None:
+        pass
+
     settling = True
 
     @property
@@ -203,6 +236,14 @@ class ProviderUnavailableAttempt(LiveAttempt):
 
 
 class SucceededAttempt(TerminalAttempt):
+    def disposition(self, snapshot, attempt):
+        from .execution_states import CompletedExecution
+        from .obligation_states import SilentResponse
+
+        attempt.lifecycle.require_silent_completion()
+        snapshot.require_nonpublication_response()
+        return CompletedExecution(attempt.attempt_ordinal), SilentResponse()
+
     succeeded = True
 
     @classmethod
@@ -211,6 +252,14 @@ class SucceededAttempt(TerminalAttempt):
 
 
 class AttemptFailedAttempt(TerminalAttempt):
+    def disposition(self, snapshot, attempt):
+        from .execution_states import DeferredExecution, FailedExecution
+        from .obligation_states import DeferredResponse, FailedResponse
+
+        if snapshot.retry_authorized:
+            return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
+        return FailedExecution(attempt.attempt_ordinal), FailedResponse()
+
     failed = True
 
     @classmethod

@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import sqlite3
 import tempfile
+from agent_comms.goal_attempts import ProviderUsageTotal
 from collections.abc import Iterator
 from pathlib import Path
 from queue import Empty
@@ -145,9 +146,9 @@ def test_ready_recovery_never_replays_an_existing_attempt(store, phase):
     if phase != "reserved":
         permit = store.claim_launch(reservation)
         if phase == "failed":
-            store.record_failed(reservation, "Uncertain provider outcome")
+            reservation.fail(store, "Uncertain provider outcome")
         elif phase == "completed":
-            store.record_verified_completion(permit, "verified terminal")
+            permit.record_verified_completion(store, "verified terminal")
     before = store.snapshot("goal")
     reopened = GoalAttemptStore(store.root)
     with pytest.raises(ReservationConflictError):
@@ -320,7 +321,7 @@ def test_failure_blocks_resume_until_explicit_separate_retry_decision(store):
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     store.claim_launch(reservation)
-    blocked = store.record_failed(reservation, "outcome unknown; no automatic replay")
+    blocked = reservation.fail(store, "outcome unknown; no automatic replay")
     assert blocked.lifecycle == BlockedGeneration() and blocked.attempt_id == reservation.attempt_id
     with pytest.raises(UnresolvedAttemptError):
         store.resume("goal", 1)
@@ -344,7 +345,7 @@ def test_failure_blocks_resume_until_explicit_separate_retry_decision(store):
     next_attempt = store.reserve("goal", 2)
     assert next_attempt.attempt_id != reservation.attempt_id
     with pytest.raises(StaleAttemptError):
-        store.record_failed(reservation, "late previous turn")
+        reservation.fail(store, "late previous turn")
     assert store.snapshot("goal").attempt_id == next_attempt.attempt_id
 
 
@@ -352,13 +353,13 @@ def test_stale_old_done_cannot_block_or_overwrite_new_generation(store):
     store.create_goal("goal")
     prior = store.reserve("goal", 1)
     permit = store.claim_launch(prior)
-    next_generation = store.record_verified_progress(permit, "registry-progress-witness-1")
+    next_generation = permit.record_verified_progress(store, "registry-progress-witness-1")
     assert next_generation.number == 2 and next_generation.lifecycle == ReadyGeneration()
     newer = store.reserve("goal", 2)
     with pytest.raises(StaleAttemptError):
-        store.record_failed(prior, "late old failure")
+        prior.fail(store, "late old failure")
     with pytest.raises(StaleAttemptError):
-        store.record_verified_progress(permit, "late old success")
+        permit.record_verified_progress(store, "late old success")
     assert store.snapshot("goal").attempt_id == newer.attempt_id
     with pytest.raises(ReservationConflictError):
         store.reserve("goal", 2)
@@ -368,7 +369,7 @@ def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     permit = store.claim_launch(reservation)
-    completed = store.record_verified_completion(permit, "registry-completed-revision-2")
+    completed = permit.record_verified_completion(store, "registry-completed-revision-2")
     assert completed.lifecycle == CompletedGeneration()
     assert completed.attempt_id == reservation.attempt_id
     assert store.snapshot("goal") == completed
@@ -385,14 +386,14 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     first = {"input": 100, "output": 20, "totalTokens": 120, "cost": {"total": 0.1}}
     second = {"input": 40, "output": 10, "totalTokens": 50, "cost": {"total": 0.2}}
 
-    store.record_provider_usage(permit, "response-1", first)
-    store.record_provider_usage(permit, "response-1", first)
-    store.record_provider_usage(permit, "response-2", second)
+    permit.record_provider_usage(store, "response-1", first)
+    permit.record_provider_usage(store, "response-1", first)
+    permit.record_provider_usage(store, "response-2", second)
     with pytest.raises(ValueError, match="different usage"):
-        store.record_provider_usage(permit, "response-1", second)
+        permit.record_provider_usage(store, "response-1", second)
 
     reopened = GoalAttemptStore(store.root)
-    totals = reopened.provider_usage_total("goal")
+    totals = ProviderUsageTotal.for_goal(reopened, "goal")
     assert totals.responses == 2
     assert totals.input_tokens == 140
     assert totals.output_tokens == 30
@@ -428,7 +429,7 @@ def test_ready_writes_uncertain_after_commit_cannot_launch_after_reopen(
         if transition == "progress":
             permit = store.claim_launch(reservation)
         else:
-            store.record_failed(reservation, "attempt outcome unknown")
+            reservation.fail(store, "attempt outcome unknown")
 
     if failed_ack == "fsync":
 
@@ -448,7 +449,7 @@ def test_ready_writes_uncertain_after_commit_cannot_launch_after_reopen(
         if transition == "create":
             store.create_goal("goal")
         elif transition == "progress":
-            store.record_verified_progress(permit, "real-registry-progress-witness")
+            permit.record_verified_progress(store, "real-registry-progress-witness")
         else:
             assert attempt_id is not None
             store.authorize_retry(
@@ -506,7 +507,7 @@ def test_ready_grant_is_not_persisted_and_stale_decisions_cannot_launch(store):
 def test_one_human_decision_id_cannot_authorize_two_attempts(store):
     store.create_goal("goal")
     first = store.reserve("goal", 1)
-    store.record_failed(first, "outcome unknown")
+    first.fail(store, "outcome unknown")
     store.authorize_retry(
         "goal",
         expected_generation=1,
@@ -514,7 +515,7 @@ def test_one_human_decision_id_cannot_authorize_two_attempts(store):
         user_decision_id="single-human-decision",
     )
     second = store.reserve("goal", 2)
-    store.record_failed(second, "second outcome unknown")
+    second.fail(store, "second outcome unknown")
     with pytest.raises(UnresolvedAttemptError, match="already used"):
         store.authorize_retry(
             "goal",
@@ -558,7 +559,6 @@ def test_recovery_postcommit_fsync_failure_revokes_old_and_new_authority(store, 
         "goal", expected_generation=2, user_decision_id="new-human-recovery-decision"
     )
     assert reopened.reserve("goal", next_generation.number).generation == 3
-
 
 
 def test_incomplete_current_schema_is_not_repaired_or_regranted(store):

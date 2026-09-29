@@ -51,7 +51,7 @@ class VerifiedGoalSettlement(MroDispatch):
     def progress(self, state) -> None:
         # An owner pause prevents another launch, not recording verified work.
         if self.permit is not None:
-            self.store.record_verified_progress(self.permit, self.progress_witness)
+            self.permit.record_verified_progress(self.store, self.progress_witness)
         self.recorded = True
 
     @handles(CompletedGoal)
@@ -59,7 +59,7 @@ class VerifiedGoalSettlement(MroDispatch):
         if self.permit is None:
             self.recorded = True
         elif self.goal.reported_turn == self.turn.value:
-            self.store.record_verified_completion(self.permit, self.completion_witness)
+            self.permit.record_verified_completion(self.store, self.completion_witness)
             self.recorded = True
 
 
@@ -147,8 +147,8 @@ class TurnGoalAccount:
         ):
             permit = self.permit
         if permit is not None:
-            self.open_store().record_provider_usage(
-                permit, str(event.response_id), event.usage.to_wire()
+            permit.record_provider_usage(
+                self.open_store(), str(event.response_id), event.usage.to_wire()
             )
         else:
             self.unattributed_usage.append((str(event.response_id), event.usage))
@@ -170,7 +170,7 @@ class TurnGoalAccount:
         permit = store.claim_launch(store.reserve(goal.id, 1, ready_grant=grant))
         self.originated[goal.id] = permit
         for response_id, usage in self.unattributed_usage:
-            store.record_provider_usage(permit, response_id, usage.to_wire())
+            permit.record_provider_usage(store, response_id, usage.to_wire())
         self.unattributed_usage.clear()
         self.pending_origins[self.thread_name] = goal.id
 
@@ -232,8 +232,8 @@ class TurnGoalAccount:
                 reason=terminal_failure_reason(failure),
             )
         with suppress(StaleAttemptError):
-            store.record_failed(
-                self.permit.reservation,
+            self.permit.reservation.fail(
+                store,
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
@@ -253,8 +253,8 @@ class TurnGoalAccount:
             if not recorded:
                 if permit is not None:
                     with suppress(StaleAttemptError):
-                        store.record_failed(
-                            permit.reservation, "Goal origin turn did not finish successfully."
+                        permit.reservation.fail(
+                            store, "Goal origin turn did not finish successfully."
                         )
                 else:
                     generation = store.snapshot(goal_id)
@@ -272,7 +272,6 @@ class TurnGoalAccount:
                 self.pending_origins.pop(self.thread_name, None)
         if self.permit is not None and not self.resolved:
             with suppress(StaleAttemptError):
-                self.open_store().record_failed(
-                    self.permit.reservation,
-                    "Goal attempt ended without a verified terminal result.",
+                self.permit.reservation.fail(
+                    self.open_store(), "Goal attempt ended without a verified terminal result."
                 )

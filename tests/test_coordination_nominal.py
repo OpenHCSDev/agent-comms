@@ -1,6 +1,7 @@
 """Stored lifecycle names, graph/data ownership, and current codec paths."""
 
 import json
+from agent_comms.attempt_states import SucceededAttempt
 from dataclasses import fields, replace
 from pathlib import Path
 
@@ -117,20 +118,16 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
         with Coordination(tmp_path / "coordination.sqlite3") as store:
             store.participants.register("owner", "owner", "owner", committed=True)
             store.session._connection.execute(
-
-                    "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,owner_loo"
-                    "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
-                    "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
-
+                "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,owner_loo"
+                "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
+                "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
             )
             record = store.snapshots.get("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
             assert FieldCodec.decode(type(record), FieldCodec.encode(record)) == record
             store.session._connection.execute(
-
-                    "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
-                    "ion=2 WHERE execution_id='e'"
-
+                "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
+                "ion=2 WHERE execution_id='e'"
             )
             assert isinstance(store.snapshots.get("e").execution.lifecycle, PendingExecution)
             projection = ProjectedExecution(
@@ -158,17 +155,23 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
-        pending = store.executions.mark_pending("e", expected_revision=created.execution.revision).value
-        started = store.attempts.start(AttemptStart(
-            "e",
-            1,
-            "owner",
-            1,
-            prepare_fence_token(),
-            expected_execution_revision=pending.execution.revision,
-            expected_pointer_revision=pending.pointer_revision,
-        )).value
-        progress = DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, "input")
+        pending = store.executions.mark_pending(
+            "e", expected_revision=created.execution.revision
+        ).value
+        started = store.attempts.start(
+            AttemptStart(
+                "e",
+                1,
+                "owner",
+                1,
+                prepare_fence_token(),
+                expected_execution_revision=pending.execution.revision,
+                expected_pointer_revision=pending.pointer_revision,
+            )
+        ).value
+        progress = DurableTurn(
+            store.attempts, started.fence, started.snapshot.pointer_revision, "input"
+        )
         samples = [
             (
                 {"type": "response", "id": "native-prompt", "command": "prompt", "success": True},
@@ -192,7 +195,9 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
         assert store.snapshots.get("e").attempt.lifecycle.backend_done
         assert isinstance(store.snapshots.get("e").attempt.lifecycle, SettlingAttempt)
         store.attempts.settle_nonpublication(
-            final, expected_pointer_revision=started.snapshot.pointer_revision, success=True
+            final,
+            expected_pointer_revision=started.snapshot.pointer_revision,
+            outcome=SucceededAttempt(),
         )
         assert store.snapshots.get("e").execution.lifecycle.completed
 
@@ -236,28 +241,22 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             store.participants.register("p", "owner", "owner", committed=True)
             with store.session.transaction() as db:
                 db.execute(
-
-                        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                        "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                        "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
-                        "1,2,NULL,0,0)"
-
+                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
+                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
+                    "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
+                    "1,2,NULL,0,0)"
                 )
                 db.execute(
-
-                        "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
-                        "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
-                        "','reviewed'),NULL,0,0,1)"
-
+                    "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                    "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
+                    "','reviewed'),NULL,0,0,1)"
                 )
                 db.execute(
-
-                        "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
-                        "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
-                        "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
-                        "gaged','decision',json_object('kind','full','exact_target','requester','exec"
-                        "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
-
+                    "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
+                    "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
+                    "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
+                    "gaged','decision',json_object('kind','full','exact_target','requester','exec"
+                    "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
                 )
                 db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
             obligation = store.snapshots.get("e").obligation
@@ -280,10 +279,8 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             result = await _through_socket(projection)
             assert result["current"]["publication"] == "reviewed"
             store.session._connection.execute(
-
-                    "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
-                    "RE execution_id='e'"
-
+                "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
+                "RE execution_id='e'"
             )
             assert isinstance(store.snapshots.get("e").obligation.lifecycle, SilentResponse)
     finally:

@@ -411,11 +411,12 @@ class RecoveryMonitorCapability:
             )
             unresolved = snapshot.publication_intent is not None
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
-                settled = store.attempts.settle_checked(
-                    store.snapshots.get(execution_id),
-                    success=False,
-                    reason_code=evidence.reason_code,
+                from .attempt_states import AttemptFailedAttempt
+
+                store.snapshots.get(execution_id).settle(
+                    store.session, AttemptFailedAttempt(), evidence.reason_code
                 )
+                settled = store.snapshots.get(execution_id)
                 kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
                 RecoveryAudit(
                     execution_id=execution_id,
@@ -449,13 +450,10 @@ class RecoveryMonitorCapability:
             safe, possible = False, True
         else:
             return
-        self._store.attempts.record_replay(
-            snapshot,
-            ReplayAssessments(
-                snapshot.execution.execution_id,
-                observed,
-                safe,
-                possible,
-                1 if before is None else before.revision + 1,
-            ),
-        )
+        ReplayAssessments(
+            snapshot.execution.execution_id,
+            observed,
+            safe,
+            possible,
+            1 if before is None else before.revision + 1,
+        ).record(self._store.session._connection, snapshot.replay)

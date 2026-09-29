@@ -71,7 +71,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     )
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
-    store.record_failed(reservation, "Previous goal attempt failed")
+    reservation.fail(store, "Previous goal attempt failed")
     blocked = comms.goals.update_goal(
         session,
         BlockedGoalAction(
@@ -216,7 +216,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
     if fence != "reserved":
         store.claim_launch(reservation)
     if fence in {"owner", "origin"}:
-        store.record_failed(reservation, "Known failed attempt")
+        reservation.fail(store, "Known failed attempt")
     blocked = comms.goals.update_goal(
         session,
         BlockedGoalAction(

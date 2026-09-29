@@ -24,7 +24,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
     store.create_goal("goal")
     attempt = store.reserve("goal", 1)
     store.claim_launch(attempt)
-    store.record_failed(attempt, "provider outcome UNKNOWN")
+    attempt.fail(store, "provider outcome UNKNOWN")
     reopened = GoalAttemptStore(store.root)
     assert reopened.snapshot("goal").lifecycle == BlockedGeneration()
     with pytest.raises(UnresolvedAttemptError):

@@ -20,7 +20,7 @@ def test_windows_goal_attempt_can_finish_without_replay(tmp_path):
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     permit = store.claim_launch(reservation)
-    store.record_verified_completion(permit, "valid terminal")
+    permit.record_verified_completion(store, "valid terminal")
 
     reopened = GoalAttemptStore(root)
     assert reopened.snapshot("goal").lifecycle == CompletedGeneration()

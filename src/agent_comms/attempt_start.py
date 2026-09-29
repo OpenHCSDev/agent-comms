@@ -15,6 +15,13 @@ from .owner_fence import OwnerFence, _digest
 from .participant_store import ParticipantSnapshot
 
 
+from .attempt_states import PromptStartingAttempt
+from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
+from .execution_states import ActiveExecution
+
+INITIAL_LEASE_DURATION_MS = 60_000
+
+
 @dataclass(frozen=True, slots=True)
 class AttemptStart:
     execution_id: str
@@ -89,3 +96,41 @@ class AttemptStart:
             and self.owner_generation <= snapshot.attempt.owner_generation
         ):
             raise StaleFence("retry must use a strictly newer owner generation")
+
+    def activate(self, session, snapshot: RecoverySnapshot) -> None:
+        """Publish attempt, execution and current pointer in the admitted transaction."""
+        db, execution = session._connection, snapshot.execution
+        created = session.now(execution.updated_at_ms)
+        # Versioned fixed policy: no caller-selected initial lease, no semantic mirror.
+        lease = created + INITIAL_LEASE_DURATION_MS
+        AttemptRecord(
+            execution_id=self.execution_id,
+            attempt_ordinal=self.attempt_ordinal,
+            owner_lookup=execution.owner_lookup,
+            owner_thread=self.owner_thread,
+            owner_generation=self.owner_generation,
+            owner_token_digest=self.digest,
+            lifecycle=PromptStartingAttempt(lease),
+            revision=1,
+            last_progress_at_ms=None,
+            reason_code=None,
+            created_at_ms=created,
+            updated_at_ms=created,
+        ).insert(db)
+        ExecutionRecord.update(
+            db,
+            where="execution_id=?",
+            parameters=(self.execution_id,),
+            lifecycle=ActiveExecution(self.attempt_ordinal),
+            revision=execution.revision + 1,
+            reason_code=None,
+            updated_at_ms=created,
+        )
+        CurrentExecutions.update(
+            db,
+            where="owner_lookup=?",
+            parameters=(execution.owner_lookup,),
+            execution_id=self.execution_id,
+            attempt_ordinal=self.attempt_ordinal,
+            pointer_revision=snapshot.pointer_revision + 1,
+        )

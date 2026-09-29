@@ -6,12 +6,7 @@ from dataclasses import dataclass, replace
 
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import (
-    AttemptFailedAttempt,
-    AttemptState,
-    PromptStartingAttempt,
-    SucceededAttempt,
-)
+from agent_comms.attempt_states import AttemptFailedAttempt, AttemptState, TerminalAttempt
 from agent_comms.coordination_contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     _bounded_reason,
@@ -20,20 +15,15 @@ from agent_comms.coordination_errors import (
     IdentityConflict,
     IntegrityViolationError,
     PublicationUncertain,
-    RecoveryBlocked,
     StaleFence,
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import CoordinationSession
-from agent_comms.coordination_snapshot import RecoverySnapshot, retry_disposition_authorized
+from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
-from agent_comms.coordination_tables.executions import (
-    CurrentExecutions,
-    ExecutionOrigin,
-    ExecutionRecord,
-)
+from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.recovery import (
     ACPClientConnectivity,
     ConnectivityFacet,
@@ -41,18 +31,7 @@ from agent_comms.coordination_tables.recovery import (
     RecoveryAudit,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.execution_states import (
-    ActiveExecution,
-    CompletedExecution,
-    DeferredExecution,
-    FailedExecution,
-)
-from agent_comms.obligation_states import (
-    DeferredResponse,
-    FailedResponse,
-    PendingResponse,
-    SilentResponse,
-)
+from agent_comms.obligation_states import PendingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
@@ -63,9 +42,6 @@ from agent_comms.recovery_states import RecoveryCondition
 class StartResult:
     snapshot: RecoverySnapshot
     fence: OwnerFence
-
-
-INITIAL_LEASE_DURATION_MS = 60_000
 
 
 MAX_LEASE_RENEWAL_MS = 300_000
@@ -106,47 +82,9 @@ class AttemptStore:
             if AttemptRecord.one(db, owner_token_digest=digest) is not None:
                 raise IdentityConflict("prepared fence token has already been issued")
             request.validate(snapshot, self.participants.get(snapshot.execution.owner_lookup))
-            self._activate(snapshot, request)
+            request.activate(self.session, snapshot)
             self._resume_retry(snapshot, request)
             return Applied(StartResult(self.snapshots.get(request.execution_id), request.fence(1)))
-
-    def _activate(self, snapshot: RecoverySnapshot, request: AttemptStart) -> None:
-        """Publish attempt, execution and current pointer in the admitted transaction."""
-        db, execution = self.session._connection, snapshot.execution
-        created = self.session.now(execution.updated_at_ms)
-        # Versioned fixed policy: no caller-selected initial lease, no semantic mirror.
-        lease = created + INITIAL_LEASE_DURATION_MS
-        AttemptRecord(
-            execution_id=request.execution_id,
-            attempt_ordinal=request.attempt_ordinal,
-            owner_lookup=execution.owner_lookup,
-            owner_thread=request.owner_thread,
-            owner_generation=request.owner_generation,
-            owner_token_digest=request.digest,
-            lifecycle=PromptStartingAttempt(lease),
-            revision=1,
-            last_progress_at_ms=None,
-            reason_code=None,
-            created_at_ms=created,
-            updated_at_ms=created,
-        ).insert(db)
-        ExecutionRecord.update(
-            db,
-            where="execution_id=?",
-            parameters=(request.execution_id,),
-            lifecycle=ActiveExecution(request.attempt_ordinal),
-            revision=execution.revision + 1,
-            reason_code=None,
-            updated_at_ms=created,
-        )
-        CurrentExecutions.update(
-            db,
-            where="owner_lookup=?",
-            parameters=(execution.owner_lookup,),
-            execution_id=request.execution_id,
-            attempt_ordinal=request.attempt_ordinal,
-            pointer_revision=snapshot.pointer_revision + 1,
-        )
 
     def _resume_retry(self, snapshot: RecoverySnapshot, request: AttemptStart) -> None:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
@@ -210,17 +148,14 @@ class AttemptStore:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            if attempt.lifecycle.process_dead:
-                raise RecoveryBlocked("a dead Pi RPC subprocess cannot renew its live lease")
-            expiry = max(
-                attempt.lifecycle.lease_expires_at_ms or 0,
-                self.session.now(attempt.updated_at_ms) + duration_ms,
+            lifecycle = attempt.lifecycle.renewed(
+                self.session.now(attempt.updated_at_ms) + duration_ms
             )
             AttemptRecord.update(
                 db,
                 where="execution_id=? AND attempt_ordinal=?",
                 parameters=(fence.execution_id, fence.attempt_ordinal),
-                lifecycle=replace(attempt.lifecycle, lease_expires_at_ms=expiry),
+                lifecycle=lifecycle,
                 revision=attempt.revision + 1,
                 updated_at_ms=self.session.now(attempt.updated_at_ms),
             )
@@ -248,60 +183,18 @@ class AttemptStore:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
+            attempt.advance(
+                self.session,
+                phase,
+                backend_done=backend_done,
+                process_dead=process_dead,
+                progress=progress,
+                reason_code=reason_code,
+            )
+            after = self.snapshots.get(fence.execution_id)
             return Applied(
-                self.advance_checked(
-                    fence,
-                    attempt,
-                    phase,
-                    backend_done=backend_done,
-                    process_dead=process_dead,
-                    progress=progress,
-                    reason_code=reason_code,
-                )
+                StartResult(after, replace(fence, revision=after.require_attempt().revision))
             )
-
-    def advance_checked(
-        self,
-        fence: OwnerFence,
-        attempt: AttemptRecord,
-        phase: type[AttemptState],
-        *,
-        backend_done: bool,
-        process_dead: bool,
-        progress: bool,
-        reason_code: str | None,
-    ) -> StartResult:
-        """Record a checked phase inside the caller's fenced transaction."""
-        db = self.session._connection
-        if phase is not type(attempt.lifecycle) and phase not in attempt.lifecycle.successors():
-            raise IdentityConflict("attempt phase edge is not declared")
-        if attempt.lifecycle.process_dead or attempt.lifecycle.backend_done:
-            # Once either finality fact is recorded, the backend cannot
-            # emit another phase or progress observation.  The other fact
-            # may arrive later on the SAME phase before atomic settlement.
-            new_final_fact = (backend_done and not attempt.lifecycle.backend_done) or (
-                process_dead and not attempt.lifecycle.process_dead
-            )
-            if phase is not type(attempt.lifecycle) or progress or not new_final_fact:
-                raise RecoveryBlocked("final backend evidence forbids further phase or progress")
-        now = self.session.now(attempt.updated_at_ms)
-        AttemptRecord.update(
-            db,
-            where="execution_id=? AND attempt_ordinal=?",
-            parameters=(fence.execution_id, fence.attempt_ordinal),
-            lifecycle=phase.load(
-                attempt.lifecycle.lease_expires_at_ms,
-                attempt.lifecycle.backend_done or backend_done,
-                attempt.lifecycle.process_dead or process_dead,
-            ),
-            revision=attempt.revision + 1,
-            updated_at_ms=now,
-            last_progress_at_ms=now if progress else attempt.last_progress_at_ms,
-            reason_code=reason_code,
-        )
-        after = self.snapshots.get(fence.execution_id)
-        assert after.attempt is not None
-        return StartResult(after, replace(fence, revision=after.attempt.revision))
 
     def observe_replay(
         self,
@@ -330,41 +223,9 @@ class AttemptStore:
                 side_effects_possible,
                 1 if before is None else before.revision + 1,
             )
-            return self.record_replay(snapshot, after)
-
-    def record_replay(
-        self,
-        snapshot: RecoverySnapshot,
-        after: ReplayAssessments,
-    ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
-        """Persist monotonic replay evidence inside the checked transaction."""
-        db = self.session._connection
-        before = snapshot.replay
-        if before is not None:
-            if (before.facts, before.replay_safe, before.side_effects_possible) == (
-                after.facts,
-                after.replay_safe,
-                after.side_effects_possible,
-            ):
+            if not after.record(self.session._connection, snapshot.replay):
                 return AlreadyApplied(snapshot)
-            if (
-                (before.facts | after.facts) != after.facts
-                or (not before.replay_safe and after.replay_safe)
-                or (before.side_effects_possible and not after.side_effects_possible)
-            ):
-                raise IdentityConflict("replay facts cannot be erased")
-            ReplayAssessments.update(
-                db,
-                where="execution_id=?",
-                parameters=(after.execution_id,),
-                facts=after.facts,
-                replay_safe=after.replay_safe,
-                side_effects_possible=after.side_effects_possible,
-                revision=before.revision + 1,
-            )
-        else:
-            after.insert(db)
-        return Applied(self.snapshots.get(after.execution_id))
+            return Applied(self.snapshots.get(after.execution_id))
 
     def fail_unknown(
         self,
@@ -384,34 +245,27 @@ class AttemptStore:
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
             before = snapshot.replay
-            self.record_replay(
-                snapshot,
-                ReplayAssessments(
-                    fence.execution_id,
-                    (before.facts if before is not None else ReplayFact.NONE)
-                    | ReplayFact.UNKNOWN_EFFECTS,
-                    False,
-                    True,
-                    1 if before is None else before.revision + 1,
-                ),
-            )
+            ReplayAssessments(
+                fence.execution_id,
+                (before.facts if before is not None else ReplayFact.NONE)
+                | ReplayFact.UNKNOWN_EFFECTS,
+                False,
+                True,
+                1 if before is None else before.revision + 1,
+            ).record(self.session._connection, before)
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
-                self.advance_checked(
-                    fence,
-                    attempt,
+                attempt.advance(
+                    self.session,
                     type(attempt.lifecycle),
                     backend_done=True,
                     process_dead=True,
                     progress=False,
                     reason_code="native_unknown",
                 )
-            return Applied(
-                self.settle_checked(
-                    self.snapshots.get(fence.execution_id),
-                    success=False,
-                    reason_code="native_unknown",
-                )
+            self.snapshots.get(fence.execution_id).settle(
+                self.session, AttemptFailedAttempt(), "native_unknown"
             )
+            return Applied(self.snapshots.get(fence.execution_id))
 
     def observe_connectivity(
         self,
@@ -474,112 +328,20 @@ class AttemptStore:
             ).insert(db)
             return Applied(self.snapshots.get(fence.execution_id))
 
-    def settle_checked(
-        self,
-        snapshot: RecoverySnapshot,
-        *,
-        success: bool,
-        reason_code: str | None,
-    ) -> RecoverySnapshot:
-        db = self.session._connection
-        execution, attempt = snapshot.execution, snapshot.attempt
-        if snapshot.publication_intent is not None:
-            raise PublicationUncertain("publication requires bus-keyed receipt resolution")
-        if (
-            attempt is None
-            or not snapshot.is_current
-            or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
-        ):
-            raise RecoveryBlocked("settlement requires exact final done/death evidence")
-        if success:
-            if not attempt.lifecycle.settling:
-                raise IdentityConflict("silent completion requires settling phase")
-            if snapshot.obligation is not None and not snapshot.obligation.lifecycle.retryable:
-                raise IdentityConflict("wire completion requires nonpublication obligation")
-        else:
-            authorized = retry_disposition_authorized(
-                execution, snapshot.replay, snapshot.obligation
-            )
-        now = self.session.now(max(execution.updated_at_ms, attempt.updated_at_ms))
-        AttemptRecord.update(
-            db,
-            where="execution_id=? AND attempt_ordinal=?",
-            parameters=(execution.execution_id, attempt.attempt_ordinal),
-            lifecycle=SucceededAttempt() if success else AttemptFailedAttempt(),
-            revision=attempt.revision + 1,
-            updated_at_ms=now,
-            reason_code=reason_code,
-        )
-        execution_state = (
-            CompletedExecution(attempt.attempt_ordinal)
-            if success
-            else (
-                DeferredExecution(attempt.attempt_ordinal)
-                if authorized
-                else FailedExecution(attempt.attempt_ordinal)
-            )
-        )
-        ExecutionRecord.update(
-            db,
-            where="execution_id=?",
-            parameters=(execution.execution_id,),
-            lifecycle=execution_state,
-            revision=execution.revision + 1,
-            updated_at_ms=now,
-            reason_code=reason_code,
-        )
-        if snapshot.obligation is not None:
-            obligation = snapshot.obligation
-            response = (
-                SilentResponse()
-                if success
-                else (DeferredResponse() if authorized else FailedResponse())
-            )
-            ResponseObligation.update(
-                db,
-                where="execution_id=?",
-                parameters=(execution.execution_id,),
-                lifecycle=response,
-                revision=obligation.revision + 1,
-                updated_at_ms=self.session.now(obligation.updated_at_ms),
-                reason_code=reason_code,
-            )
-        for assignment in snapshot.assignments:
-            WakeAssignment.update(
-                db,
-                where="assignment_id=?",
-                parameters=(assignment.assignment_id,),
-                lifecycle=execution_state.assignment_state().build(
-                    assignment.lifecycle.mode,
-                    assignment.lifecycle.execution_id,
-                    assignment.lifecycle.exact_target,
-                ),
-                revision=assignment.revision + 1,
-                updated_at_ms=self.session.now(assignment.updated_at_ms),
-            )
-        CurrentExecutions.update(
-            db,
-            where="owner_lookup=?",
-            parameters=(execution.owner_lookup,),
-            execution_id=None,
-            attempt_ordinal=None,
-            pointer_revision=snapshot.pointer_revision + 1,
-        )
-        return self.snapshots.get(execution.execution_id)
-
     def settle_nonpublication(
         self,
         fence: OwnerFence,
         *,
         expected_pointer_revision: int,
-        success: bool,
+        outcome: TerminalAttempt,
         reason_code: str | None = None,
     ) -> Applied[RecoverySnapshot]:
-        if type(success) is not bool:
-            raise ValueError("settlement success must be a boolean")
+        if not isinstance(outcome, TerminalAttempt):
+            raise ValueError("settlement requires a terminal attempt outcome")
         _bounded_reason(reason_code)
         with self.session.transaction():
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            return Applied(self.settle_checked(snapshot, success=success, reason_code=reason_code))
+            snapshot.settle(self.session, outcome, reason_code)
+            return Applied(self.snapshots.get(fence.execution_id))

@@ -93,11 +93,11 @@ def read(store, owner, **kwargs):
 
 def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
     store, owner, _, observation = bound
-    store.record_failed(observation.reservation, "private diagnostic", observation=observation)
+    observation.reservation.fail(store, "private diagnostic", observation=observation)
     before = store.path.read_bytes()
     for current in (store, GoalAttemptStore(store.root)):
         with pytest.raises(StaleAttemptError):
-            current.record_failed(observation.reservation, "duplicate", observation=observation)
+            observation.reservation.fail(current, "duplicate", observation=observation)
         with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
         projection = read(current, blocked(owner))
@@ -138,7 +138,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
         reason=FailureReason.BACKEND_FAILED,
     )
     assert rejected is None
-    store.record_failed(observation.reservation, "failed anyway", observation=rejected)
+    observation.reservation.fail(store, "failed anyway", observation=rejected)
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
     assert read(store, blocked(owner)).reason == "missing_binding"
 
@@ -151,7 +151,7 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, bi
         if binding == "token"
         else replace(observation, evidence=replace(observation.evidence, goal_id="another"))
     )
-    store.record_failed(observation.reservation, "failed", observation=forged)
+    observation.reservation.fail(store, "failed", observation=forged)
     assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
     assert read(store, blocked(owner)).state == "unavailable"
@@ -161,8 +161,8 @@ def test_unclaimed_attempt_failure_has_no_backend_incident(bound):
     store, owner, _, observation = bound
     store.create_goal("unclaimed")
     reservation = store.reserve("unclaimed", 1)
-    store.record_failed(
-        reservation, "prelaunch failure", observation=replace(observation, reservation=reservation)
+    reservation.fail(
+        store, "prelaunch failure", observation=replace(observation, reservation=reservation)
     )
     assert store.snapshot("unclaimed").lifecycle == BlockedGeneration()
     assert rows(store, "failed_turn_evidence") == []
@@ -173,7 +173,7 @@ def test_stale_attempt_cannot_record_an_incident(bound):
     store.retire_goal("goal", expected_generation=1, attempt_id=observation.reservation.attempt_id)
     before = store.path.read_bytes()
     with pytest.raises(StaleAttemptError):
-        store.record_failed(observation.reservation, "late", observation=observation)
+        observation.reservation.fail(store, "late", observation=observation)
     assert store.path.read_bytes() == before
     assert read(store, blocked(owner)).state == "unavailable"
 
@@ -185,7 +185,7 @@ def test_observation_insert_error_does_not_rollback_failure_fence(bound):
             "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_evidence "
             "BEGIN SELECT RAISE(ABORT,'injected observation failure'); END"
         )
-    store.record_failed(observation.reservation, "failed", observation=observation)
+    observation.reservation.fail(store, "failed", observation=observation)
     assert store.snapshot("goal").lifecycle == BlockedGeneration()
     with sqlite3.connect(store.path) as conn:
         assert (
@@ -209,7 +209,7 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
 
     monkeypatch.setattr(store, "_sync" if after_commit else "_commit", fail)
     with pytest.raises(StorageUncertainError):
-        store.record_failed(observation.reservation, "failed", observation=observation)
+        observation.reservation.fail(store, "failed", observation=observation)
     reopened = GoalAttemptStore(store.root)
     assert reopened.snapshot("goal").lifecycle == (
         BlockedGeneration() if after_commit else ReservedGeneration()
@@ -225,7 +225,7 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
 @pytest.mark.parametrize("source", [None, "stale", OwnerPause(), ModelPause()])
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
-    store.record_failed(observation.reservation, "failed", observation=observation)
+    observation.reservation.fail(store, "failed", observation=observation)
     owner = replace(
         owner,
         goal=replace(
@@ -269,14 +269,14 @@ def test_pause_projection_never_becomes_runnable(bound, source):
 )
 def test_replaced_stopped_or_active_owner_has_no_projection(bound, mutation):
     store, owner, _, observation = bound
-    store.record_failed(observation.reservation, "failed", observation=observation)
+    observation.reservation.fail(store, "failed", observation=observation)
     assert read(store, replace(blocked(owner), **mutation)).state == "unavailable"
 
 
 @pytest.mark.parametrize("mode", ["missing", "invalid", "invalid_schema", "wal"])
 def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     store, owner, _, observation = bound
-    store.record_failed(observation.reservation, "failed", observation=observation)
+    observation.reservation.fail(store, "failed", observation=observation)
     if mode == "missing":
         path = tmp_path / "absent" / "goal_attempts.sqlite3"
     else:
@@ -421,7 +421,7 @@ def _crash_recording(root, observation, after_commit):
         os._exit(17)
 
     setattr(store, "_sync" if after_commit else "_commit", crash)
-    store.record_failed(observation.reservation, "crashed failure", observation=observation)
+    observation.reservation.fail(store, "crashed failure", observation=observation)
 
 
 @pytest.mark.parametrize("after_commit", [False, True])
@@ -456,7 +456,7 @@ def test_process_crash_has_no_partial_incident_or_replay_right(bound, after_comm
 )
 def test_stopped_status_is_unavailable_even_with_retained_pid(bound, status):
     store, owner, _, observation = bound
-    store.record_failed(observation.reservation, "failed", observation=observation)
+    observation.reservation.fail(store, "failed", observation=observation)
     assert (
         read_failed_turn_projection(
             store.path, owner=blocked(owner), owner_status=status, admission=3, pause=None
