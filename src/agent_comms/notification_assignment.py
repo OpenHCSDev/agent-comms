@@ -34,7 +34,7 @@ class NotificationAssignment:
     activity: AssignmentActivity
 
     @classmethod
-    def select(cls, root: Path, predicate: str, parameters: tuple, *, limit: int = 0):
+    def select(cls, root: Path, predicate: str, parameters: tuple, *, limit: int = 0, ascending: bool = False):
         import sqlite3
         from contextlib import closing
 
@@ -74,7 +74,7 @@ class NotificationAssignment:
                     f"FROM {WakeAssignment.declared_name} w "
                     f"LEFT JOIN {CurrentExecutions.declared_name} c "
                     "ON c.owner_lookup=w.recipient_lookup "
-                    f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
+                    f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
                     + (" LIMIT ?" if limit else ""),
                     (*parameters, limit) if limit else parameters,
                 ), AssignmentActivity,
