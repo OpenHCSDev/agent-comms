@@ -11,7 +11,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
@@ -62,10 +62,10 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     selected = comms.messaging.send_initial_cohort(
         "sender", "#team", "@alpha answer this exact source"
     )
-    frozen = comms.bus.log.read_initial_cohort(root_id, selected.seq)
+    frozen = comms.bus.log.read_delivery_cohort(root_id, selected.seq)
     assert len(frozen.audience.recipients) == recipients
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        receipt = accept_initial_cohort(comms.bus, root_id, selected.seq, store).value
+        receipt = accept_delivery_cohort(comms.bus, root_id, selected.seq, store).value
         assert len(receipt.assignments) == 1
         coverage = SourceCoverage(
             comms.bus,
@@ -116,7 +116,7 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     for number in range(101):
         message = comms.messaging.send_initial_cohort("sender", "#team", f"@other note-{number}")
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            accept_initial_cohort(comms.bus, root_id, message.seq, store)
+            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
     # The dedicated cursor scan cannot cross the second bounded page. The
     # already committed original still produces its one fake native input.
     monkeypatch.setattr(SourceCoverage, "page_budget", 1)
@@ -152,7 +152,7 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
     later = comms.messaging.send_initial_cohort("sender", "alpha", "new exact selected work")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, later.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, later.seq, store)
     good, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     result = await runtime.SelectedExecution(
@@ -190,7 +190,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
         store.participants.advance_generation(lookup, "alpha-new", expected_generation=1)
     second_message = comms.messaging.send_initial_cohort("sender", "alpha-new", "new selected")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, second_message.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, second_message.seq, store)
     second = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()

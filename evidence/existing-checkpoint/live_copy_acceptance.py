@@ -12,7 +12,7 @@ from pathlib import Path
 from agent_comms import wire
 from agent_comms.declarations import MessageBus, _store_lock
 from agent_comms.private_bus_checkpoint import (
-    certified_initial_page_unlocked,
+    certified_delivery_page_unlocked,
     install_private_bus_checkpoint,
     verify_private_bus_checkpoint_unlocked,
 )
@@ -49,7 +49,7 @@ def main():
             current = bus._private_marker_unlocked()
             assert verify_private_bus_checkpoint_unlocked(bus, current) == witness
             for lookup in recipients:
-                _, page, more = certified_initial_page_unlocked(bus, current, lookup)
+                _, page, more = certified_delivery_page_unlocked(bus, current, lookup)
                 expected = [i.message.seq for i in initials if any(r.recipient_lookup == lookup for r in i.audience.recipients)]
                 assert [i.message.seq for i in page] == expected and not more
         receipt = dict(installed=True, bus_bytes_unchanged=True, bus_inode_unchanged=True,

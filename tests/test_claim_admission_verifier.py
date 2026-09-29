@@ -23,7 +23,7 @@ from agent_comms.claim_admission import (
 )
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
@@ -62,7 +62,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
-        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             for recipient in initial.audience.recipients:
@@ -72,7 +72,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     recipient.canonical_thread,
                     committed=True,
                 )
-            accept_initial_cohort(comms.bus, root_id, message.seq, store)
+            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
             alice_lookup = stable_thread_lookup(comms.registry.require("Alice").created_at)
             bob_lookup = stable_thread_lookup(comms.registry.require("Bob").created_at)
             assert sealed_cohort_assignments(store, bob_lookup) == ()

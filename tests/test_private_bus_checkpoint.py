@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sqlite3
@@ -14,16 +13,11 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_tables.publications import (
-    PublicationIntents,
-    canonical_publication_key,
-)
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
-from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.private_bus_checkpoint import (
-    certified_initial_page_unlocked,
+    certified_delivery_page_unlocked,
     install_private_bus_checkpoint,
 )
 from agent_comms.store_files import _store_lock
@@ -55,7 +49,7 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
 
 def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     with _store_lock(comms.bus.log.path):
-        return certified_initial_page_unlocked(
+        return certified_delivery_page_unlocked(
             comms.bus.log,
             comms.bus.log._private_marker_unlocked(),
             lookup,
@@ -84,7 +78,7 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     assert [r.message.seq for r in _page(comms, bob)[1]] == [one.seq, three.seq]
     assert _page(comms, stable_thread_lookup(17004.0))[1][0].message.seq == two.seq
     assert witness.offset == comms.bus.log.path.stat().st_size
-    assert witness.latest_initial_seq == three.seq
+    assert witness.latest_source_seq == three.seq
     assert witness.offset > 0
     reopened = Comms(comms.root)
     assert [item.message.seq for item in _page(reopened, alice)[1]] == [one.seq, three.seq]
@@ -116,49 +110,43 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
 
 def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
+    from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
+    from test_coordination_response import _ready
 
-    comms, _ = _root(tmp_path)
-    resource = tmp_path / "owned.py"
-    resource.write_text("owned\n")
-    initial = comms.messaging.send_initial_cohort("sender", "Alice", "task")
-    claim = comms.messaging.send_message(
-        "sender",
-        "Alice",
-        "claim",
-        MessageType.HANDOFF,
-        claims=[ExistingFileClaim(Path("owned.py"))],
-    )
-    assert claim.claim_transition is not None
-    assert comms.bus.log.claim_projection()[str(resource)].owner == "sender"
-    response_bus = MessageBus(comms.bus.log.path, comms.registry, private_response_writes=True)
-    expected = Message("Alice", "sender", "done", MessageType.INFO)
-    key = canonical_publication_key("execution-1", expected.target)
-    response = response_bus.publisher.publish_keyed_response(
-        PublicationIntents(
-            execution_id="execution-1",
-            sender=expected.sender,
-            exact_target=expected.target,
-            message_type=expected.type,
-            notice=expected.notice,
-            timestamp=expected.timestamp,
-            payload=expected.body,
-            payload_digest=hashlib.sha256(expected.body.encode()).hexdigest(),
-            publication_key=key,
-            expected_message_id=expected.message_id,
+    case = _ready(tmp_path, direct=True)
+    try:
+        comms = case.comms
+        resource = tmp_path / "owned.py"
+        resource.write_text("owned\n")
+        claim = comms.messaging.send_message(
+            "sender",
+            "owner",
+            "claim",
+            MessageType.HANDOFF,
+            claims=[ExistingFileClaim(Path("owned.py"))],
         )
-    )
-    assert response.seq == claim.seq + 1
-    with _store_lock(comms.bus.log.path):
-        marker = comms.bus.log._private_marker_unlocked()
-        witness = checkpoint.verify_private_bus_checkpoint_unlocked(comms.bus.log, marker)
-        assert witness.through_seq == response.seq
-    with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
-        assert db.execute("SELECT key FROM response_keys").fetchone()[0] == key
-        assert db.execute("SELECT COUNT(*) FROM initials").fetchone()[0] == 1
-    page_witness, page_rows, _ = _page(comms, stable_thread_lookup(17002.0))
-    assert page_rows[0].message.seq == initial.seq
-    assert page_witness.through_seq == response.seq
-    assert page_witness.latest_initial_seq == initial.seq
+        assert claim.claim_transition is not None
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, "done", owner_witness=case.witness
+        ).value
+        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        response = case.bus.log.read_keyed_response(intent)
+        assert response.seq == claim.seq + 1
+        with comms.bus.log.locked():
+            marker = comms.bus.log._private_marker_unlocked()
+            witness = checkpoint.verify_private_bus_checkpoint_unlocked(comms.bus.log, marker)
+            assert witness.through_seq == response.seq
+        with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
+            assert (
+                db.execute("SELECT key FROM response_keys").fetchone()[0] == intent.publication_key
+            )
+            assert db.execute("SELECT COUNT(*) FROM delivery_sources").fetchone()[0] == 2
+        page_witness, page_rows, _ = _page(comms, case.owner_lookup)
+        assert page_rows[0].message.seq == case.origin_seq
+        assert page_witness.latest_source_seq == response.seq
+        assert page_witness.through_seq == response.seq
+    finally:
+        case.close()
 
 
 def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, monkeypatch) -> None:
@@ -358,8 +346,6 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
         _page(comms, stable_thread_lookup(17002.0))
 
 
-
-
 def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
 
@@ -428,8 +414,6 @@ def test_reopened_root_preserves_certified_source_and_supports_append(
         one.seq,
         three.seq,
     ]
-
-
 
 
 def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: Path) -> None:

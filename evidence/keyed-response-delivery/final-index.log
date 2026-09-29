@@ -1,0 +1,698 @@
+F....................FF...                                               [100%]
+=================================== FAILURES ===================================
+_______ test_native_channel_reply_automatically_reaches_original_sender ________
+
+predicate = <function test_native_channel_reply_automatically_reaches_original_sender.<locals>.<lambda> at 0x7f24ab3bbd70>
+description = 'A delivery feedback confirms proven observation'
+
+    async def until(predicate, description):
+        async with asyncio.timeout(25):
+            while not predicate():
+                assert not failures, failures
+>               await asyncio.sleep(0.05)
+
+.scratch/test_native_verified_return.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.05, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-v1kgwxrn')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f24abfafe10>
+
+    async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch):
+        pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+        if not pin:
+            pytest.skip("Actual immutable native bundle required")
+        package = Path(pin).resolve(strict=True)
+        requests = []
+        failures = []
+    
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                try:
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    assert self.headers["Authorization"] == "Bearer local-only"
+                    requests.append(request)
+                    assert len(requests) <= 2, "Reply observation caused replay or ping-pong"
+                    text = (
+                        '{"decision":"IGNORE"}'
+                        if "bounded triage" in json.dumps(request)
+                        else "ROUNDTRIP_NATIVE_REPLY"
+                    )
+                    chunk = {
+                        "id": f"roundtrip-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "fixture",
+                        "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    body = f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except Exception as error:
+                    failures.append(repr(error))
+                    self.send_error(400, "Local fixture assertion failed")
+    
+            def log_message(self, *_args):
+                pass
+    
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        serving = threading.Thread(target=server.serve_forever, daemon=True)
+        serving.start()
+        config = tmp_path / "config"
+        config.mkdir(mode=0o700)
+        (config / "models.json").write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "roundtrip-local": {
+                            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                            "api": "openai-completions",
+                            "models": [
+                                {
+                                    "id": "fixture",
+                                    "name": "Local roundtrip",
+                                    "contextWindow": 32768,
+                                    "maxTokens": 2048,
+                                }
+                            ],
+                        }
+                    }
+                }
+            )
+        )
+        (config / "auth.json").write_text(
+            json.dumps(
+                {
+                    "roundtrip-local": {
+                        "type": "api_key",
+                        "key": "local-only",
+                    }
+                }
+            )
+        )
+        (config / "settings.json").write_text(
+            json.dumps(
+                {
+                    "compaction": {"enabled": False},
+                    "retry": {"enabled": False, "maxRetries": 0},
+                }
+            )
+        )
+        for key, value in {
+            "PI_CODING_AGENT_DIR": str(config),
+            "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
+            "AGENT_COMMS_AGENT_MODELS": "roundtrip-local/fixture",
+            "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
+        }.items():
+            monkeypatch.setenv(key, value)
+        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_AGENT_ID", "AGENT_COMMS_THREAD"):
+            monkeypatch.delenv(key, raising=False)
+        comms = Comms(tmp_path / "wire")
+        projects = {}
+        for name in ("questioner", "answerer"):
+            project = tmp_path / name
+            project.mkdir()
+            projects[name] = project
+            comms.threads.register(
+                Thread(
+                    name,
+                    frozenset({"team"}),
+                    str(project),
+                    model="roundtrip-local/fixture",
+                    thinking_level="off",
+                )
+            )
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+        attachment = CommsClient(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=package,
+            private_nk_wire_root_id=root_id,
+        )
+        facts = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                facts.extend(decode_updates(kwargs["update"].get("_meta")))
+    
+        attachment.on_connect(Client())
+    
+        async def until(predicate, description):
+            async with asyncio.timeout(25):
+                while not predicate():
+                    assert not failures, failures
+                    await asyncio.sleep(0.05)
+            print(description, "provider_calls", len(requests), flush=True)
+    
+        try:
+            for name in projects:
+                await asyncio.to_thread(comms.owners.start, name)
+            await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
+            facts.clear()
+            question = comms.messaging.send_message(
+                "questioner", "#team", "@answerer ROUNDTRIP_QUESTION"
+            )
+            await until(lambda: len(requests) >= 1, "B actual native request")
+            await until(
+                lambda: len(comms.views.channel_history("#team")) >= 2, "B published actual reply"
+            )
+            reply = comms.views.channel_history("#team")[-1]
+            assert reply.sender == "answerer" and reply.body == "ROUNDTRIP_NATIVE_REPLY"
+            # No user prompt, explicit inbox drain, participant insertion, or selected claim seeding.
+            try:
+                await until(lambda: len(requests) == 2, "A automatically observed native reply")
+            except TimeoutError:
+                print(
+                    "RED: native reply published but sender never automatically received it",
+                    "question",
+                    question.seq,
+                    "reply",
+                    reply.seq,
+                    "facts",
+                    repr(facts),
+                    flush=True,
+                )
+                raise
+            users = [item for item in requests[1]["messages"] if item["role"] == "user"]
+            assert reply.body in json.dumps(users[-1]["content"])
+            # The same response remains available through canonical natural-turn awareness.
+            # Reading this projection proves neither model delivery nor ACK; native delivery
+            # above must have happened automatically before inspecting pointers.
+            owner = comms.registry.require("questioner")
+            with comms.bus.log.locked():
+                marker = comms.bus.log._private_marker_unlocked()
+                pointers = addressed_source_pointers_unlocked(
+                    comms.bus.log, marker, stable_thread_lookup(owner.created_at)
+                )
+            assert reply.message_id in [pointer.message_id for pointer in pointers]
+    
+>           await until(
+                lambda: any(
+                    isinstance(fact, CursorAdvancedUpdate)
+                    and isinstance(fact.envelope.observation, VerifiedCursorObservation)
+                    and fact.envelope.observation.cursor.injected_seq == reply.seq
+                    for fact in facts
+                ),
+                "A delivery feedback confirms proven observation",
+            )
+
+.scratch/test_native_verified_return.py:198: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/test_native_verified_return.py:150: in until
+    async with asyncio.timeout(25):
+               ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f24ac0e3580>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+----------------------------- Captured stdout call -----------------------------
+B actual native request provider_calls 1
+B published actual reply provider_calls 1
+A automatically observed native reply provider_calls 2
+_ test_pending_marker_recovers_only_after_canonical_cold_parse[before_db_commit] _
+
+bus = <agent_comms.wire_log.WireLog object at 0x7f24a95c5a90>
+marker = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='3b61...c724c881c34bd7370a44fcc93d298c6979e2062b56', tail='2eb75244c4747d45d9b3dcb44a46308a2826cec711bc1cdbab995f9d10b68bf3')))
+
+    def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
+        """Check an exact revision or cold-validate every old byte on a changed revision.
+    
+        Caller holds the bus lock and has fsynced the bus inode and directory.
+        """
+        path = _path(bus.path)
+        try:
+            with closing(_connect(path)) as db, bus.path.open("rb") as stream:
+                saved = _saved(db)
+                info = os.fstat(stream.fileno())
+                if (
+                    saved.root_id != marker.root_id
+                    or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
+                    or info.st_size < saved.offset
+                ):
+                    raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+>               recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py:376: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/checkpoint_seals.py:123: in recover
+    return _recover_pending_unlocked(bus, marker, db, path, info, self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+bus = <agent_comms.wire_log.WireLog object at 0x7f24a95c5a90>
+marker = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='3b61...c724c881c34bd7370a44fcc93d298c6979e2062b56', tail='2eb75244c4747d45d9b3dcb44a46308a2826cec711bc1cdbab995f9d10b68bf3')))
+db = <sqlite3.Connection object at 0x7f24a957f6a0>
+db_path = PosixPath('/home/ts/wt/comms-keyed-response-delivery-20260928/.test-final-index/test_pending_marker_recovers_o0/wire/private_bus_checkpoint.sqlite3')
+info = os.stat_result(st_mode=33152, st_ino=8173381, st_dev=2084, st_nlink=1, st_uid=1000, st_gid=1000, st_size=2238, st_atime=1790652359, st_mtime=1790652359, st_ctime=1790652359)
+seal = PendingSeal(version=1, db_revision=(2084, 8173383, 28672, 1790652359116607731, 1790652359116607731), prior=PrefixSeal(...3c724c881c34bd7370a44fcc93d298c6979e2062b56', tail='2eb75244c4747d45d9b3dcb44a46308a2826cec711bc1cdbab995f9d10b68bf3'))
+
+    def _recover_pending_unlocked(
+        bus: WireLog,
+        marker: WireMetadata,
+        db: sqlite3.Connection,
+        db_path: Path,
+        info: os.stat_result,
+        seal: PendingSeal,
+    ) -> PrefixWitness:
+        """Repair only a durable writer intent after a COMPLETE canonical bus scan."""
+        prior = seal.prior
+        digest = _SEED
+        prior_seen = prior.revision[2] == 0
+        prior_seq = 0
+        last_seq = 0
+        count = 0
+        size = 0
+    
+        with db:
+            db.execute("DELETE FROM addressed")
+>           db.execute("DELETE FROM initials")
+E           sqlite3.OperationalError: no such table: initials
+
+.venv/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py:313: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-keyed-response-delivery-20260928/.test-final-index/test_pending_marker_recovers_o0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f24a9713b60>
+phase = 'before_db_commit'
+
+    @pytest.mark.parametrize("phase", ["before_db_commit", "after_db_commit"])
+    def test_pending_marker_recovers_only_after_canonical_cold_parse(
+        tmp_path: Path, monkeypatch, phase: str
+    ) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        comms.messaging.send_initial_cohort("sender", "Alice", "first")
+        if phase == "before_db_commit":
+            monkeypatch.setattr(
+                checkpoint,
+                "_index_row",
+                lambda *_: (_ for _ in ()).throw(OSError("before SQLite COMMIT")),
+            )
+        else:
+            monkeypatch.setattr(
+                checkpoint.FinalSeal,
+                "capture",
+                lambda *_: (_ for _ in ()).throw(OSError("after SQLite COMMIT")),
+            )
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            comms.messaging.send_initial_cohort("sender", "Alice", "second")
+        monkeypatch.undo()
+>       witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:325: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_private_bus_checkpoint.py:51: in _page
+    with _store_lock(comms.bus.log.path):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+.venv/lib/python3.14/site-packages/agent_comms/wire_log.py:605: in verify_before_read_unlocked
+    verify_private_bus_checkpoint_unlocked(self, private_marker)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+bus = <agent_comms.wire_log.WireLog object at 0x7f24a95c5a90>
+marker = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='3b61...c724c881c34bd7370a44fcc93d298c6979e2062b56', tail='2eb75244c4747d45d9b3dcb44a46308a2826cec711bc1cdbab995f9d10b68bf3')))
+
+    def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
+        """Check an exact revision or cold-validate every old byte on a changed revision.
+    
+        Caller holds the bus lock and has fsynced the bus inode and directory.
+        """
+        path = _path(bus.path)
+        try:
+            with closing(_connect(path)) as db, bus.path.open("rb") as stream:
+                saved = _saved(db)
+                info = os.fstat(stream.fileno())
+                if (
+                    saved.root_id != marker.root_id
+                    or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
+                    or info.st_size < saved.offset
+                ):
+                    raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+                recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+                if recovered is not None:
+                    return recovered
+                if _tail(stream, saved.offset) != saved.tail:
+                    raise RelationViolationError("Private bus checkpoint prefix tail changed.")
+                if saved.through_seq > marker.last_seq:
+                    raise RelationViolationError(
+                        "Private bus checkpoint exceeds the durable sequence marker."
+                    )
+                if file_revision(info) == saved.revision:
+                    return saved
+                # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
+                # Validate complete canonical history, compare digest at the saved offset,
+                # and collect only newly appended rows for one atomic index transaction.
+                digest = _SEED
+                observed_prefix = saved.offset == 0
+                prefix_seq = 0
+                additions: list[
+                    tuple[int, bytes, Message, Mapping[str, object] | None, CommittedDelivery | None]
+                ] = []
+                suffix_bytes = 0
+    
+                def collect(
+                    offset: int,
+                    raw: bytes,
+                    message: Message,
+                    receipt: Mapping[str, object] | None,
+                    initial: CommittedDelivery | None,
+                ) -> None:
+                    nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
+                    digest = _chain(digest, raw)
+                    end = offset + len(raw)
+                    if end == saved.offset:
+                        observed_prefix = True
+                        prefix_seq = message.seq
+                        if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
+                            raise RelationViolationError(
+                                "Private bus checkpoint certified prefix changed."
+                            )
+                    elif end > saved.offset:
+                        if not observed_prefix or offset < saved.offset:
+                            raise RelationViolationError(
+                                "Private bus checkpoint offset is not a row boundary."
+                            )
+                        suffix_bytes += len(raw)
+                        if suffix_bytes > 16 * 1024 * 1024 or len(additions) >= 10_000:
+                            raise RelationViolationError(
+                                "Private bus checkpoint crash suffix exceeds recovery bound."
+                            )
+                        additions.append((offset, raw, message, receipt, initial))
+    
+                for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+                    pass
+                if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
+                    raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
+                if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
+                    bus.path.stat()
+                ) != file_revision(info):
+                    raise RelationViolationError("Private bus changed during checkpoint validation.")
+                # Full parser above checked all cross-prefix response key duplicates.
+                last_seq = additions[-1][2].seq if additions else saved.through_seq
+                expected = PrefixWitness(
+                    saved.root_id,
+                    file_revision(info),
+                    last_seq,
+                    digest.hex(),
+                    _tail(stream, info.st_size),
+                )
+                marker.seal_with(PendingSeal.capture(saved, expected, path))
+                bus.write_metadata_unlocked(marker)
+                with db:
+                    for offset, raw, message, receipt, initial in additions:
+                        _index_row(db, offset, raw, message, receipt, initial)
+                    PrefixCertificate.capture(
+                        saved.root_id, info, last_seq, digest, expected.tail
+                    ).upsert(db)
+                _directory_sync(path)
+                marker.seal_with(FinalSeal.capture(expected, path))
+                bus.write_metadata_unlocked(marker)
+                return _saved(db)
+        except (sqlite3.Error, OSError) as error:
+>           raise RelationViolationError(
+                "Private bus checkpoint verification is unavailable."
+            ) from error
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint verification is unavailable.
+
+.venv/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py:457: RelationViolationError
+_ test_pending_marker_recovers_only_after_canonical_cold_parse[after_db_commit] _
+
+bus = <agent_comms.wire_log.WireLog object at 0x7f24a919e210>
+marker = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='f6f6...6bea53155e6c8d303d0a99eb96f6cef007b1e6e6c0', tail='dbd44cc00ffe6ace4ef11ac143fc8cf66f927d8686fa66dbd6549de103877af7')))
+
+    def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
+        """Check an exact revision or cold-validate every old byte on a changed revision.
+    
+        Caller holds the bus lock and has fsynced the bus inode and directory.
+        """
+        path = _path(bus.path)
+        try:
+            with closing(_connect(path)) as db, bus.path.open("rb") as stream:
+                saved = _saved(db)
+                info = os.fstat(stream.fileno())
+                if (
+                    saved.root_id != marker.root_id
+                    or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
+                    or info.st_size < saved.offset
+                ):
+                    raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+>               recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py:376: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/checkpoint_seals.py:123: in recover
+    return _recover_pending_unlocked(bus, marker, db, path, info, self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+bus = <agent_comms.wire_log.WireLog object at 0x7f24a919e210>
+marker = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='f6f6...6bea53155e6c8d303d0a99eb96f6cef007b1e6e6c0', tail='dbd44cc00ffe6ace4ef11ac143fc8cf66f927d8686fa66dbd6549de103877af7')))
+db = <sqlite3.Connection object at 0x7f24a945a5c0>
+db_path = PosixPath('/home/ts/wt/comms-keyed-response-delivery-20260928/.test-final-index/test_pending_marker_recovers_o1/wire/private_bus_checkpoint.sqlite3')
+info = os.stat_result(st_mode=33152, st_ino=8173396, st_dev=2084, st_nlink=1, st_uid=1000, st_gid=1000, st_size=2239, st_atime=1790652359, st_mtime=1790652359, st_ctime=1790652359)
+seal = PendingSeal(version=1, db_revision=(2084, 8173398, 28672, 1790652359369612761, 1790652359369612761), prior=PrefixSeal(...26bea53155e6c8d303d0a99eb96f6cef007b1e6e6c0', tail='dbd44cc00ffe6ace4ef11ac143fc8cf66f927d8686fa66dbd6549de103877af7'))
+
+    def _recover_pending_unlocked(
+        bus: WireLog,
+        marker: WireMetadata,
+        db: sqlite3.Connection,
+        db_path: Path,
+        info: os.stat_result,
+        seal: PendingSeal,
+    ) -> PrefixWitness:
+        """Repair only a durable writer intent after a COMPLETE canonical bus scan."""
+        prior = seal.prior
+        digest = _SEED
+        prior_seen = prior.revision[2] == 0
+        prior_seq = 0
+        last_seq = 0
+        count = 0
+        size = 0
+    
+        with db:
+            db.execute("DELETE FROM addressed")
+>           db.execute("DELETE FROM initials")
+E           sqlite3.OperationalError: no such table: initials
+
+.venv/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py:313: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-keyed-response-delivery-20260928/.test-final-index/test_pending_marker_recovers_o1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f24a9463e00>
+phase = 'after_db_commit'
+
+    @pytest.mark.parametrize("phase", ["before_db_commit", "after_db_commit"])
+    def test_pending_marker_recovers_only_after_canonical_cold_parse(
+        tmp_path: Path, monkeypatch, phase: str
+    ) -> None:
+        import agent_comms.private_bus_checkpoint as checkpoint
+    
+        comms, _ = _root(tmp_path)
+        comms.messaging.send_initial_cohort("sender", "Alice", "first")
+        if phase == "before_db_commit":
+            monkeypatch.setattr(
+                checkpoint,
+                "_index_row",
+                lambda *_: (_ for _ in ()).throw(OSError("before SQLite COMMIT")),
+            )
+        else:
+            monkeypatch.setattr(
+                checkpoint.FinalSeal,
+                "capture",
+                lambda *_: (_ for _ in ()).throw(OSError("after SQLite COMMIT")),
+            )
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            comms.messaging.send_initial_cohort("sender", "Alice", "second")
+        monkeypatch.undo()
+>       witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_bus_checkpoint.py:325: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_private_bus_checkpoint.py:51: in _page
+    with _store_lock(comms.bus.log.path):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/store_files.py:69: in _store_lock
+    WireLog(store_path).verify_before_read_unlocked()
+.venv/lib/python3.14/site-packages/agent_comms/wire_log.py:605: in verify_before_read_unlocked
+    verify_private_bus_checkpoint_unlocked(self, private_marker)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+bus = <agent_comms.wire_log.WireLog object at 0x7f24a919e210>
+marker = WireMetadata(last_seq=2, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=1, wire_root_id='f6f6...6bea53155e6c8d303d0a99eb96f6cef007b1e6e6c0', tail='dbd44cc00ffe6ace4ef11ac143fc8cf66f927d8686fa66dbd6549de103877af7')))
+
+    def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
+        """Check an exact revision or cold-validate every old byte on a changed revision.
+    
+        Caller holds the bus lock and has fsynced the bus inode and directory.
+        """
+        path = _path(bus.path)
+        try:
+            with closing(_connect(path)) as db, bus.path.open("rb") as stream:
+                saved = _saved(db)
+                info = os.fstat(stream.fileno())
+                if (
+                    saved.root_id != marker.root_id
+                    or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
+                    or info.st_size < saved.offset
+                ):
+                    raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+                recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+                if recovered is not None:
+                    return recovered
+                if _tail(stream, saved.offset) != saved.tail:
+                    raise RelationViolationError("Private bus checkpoint prefix tail changed.")
+                if saved.through_seq > marker.last_seq:
+                    raise RelationViolationError(
+                        "Private bus checkpoint exceeds the durable sequence marker."
+                    )
+                if file_revision(info) == saved.revision:
+                    return saved
+                # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
+                # Validate complete canonical history, compare digest at the saved offset,
+                # and collect only newly appended rows for one atomic index transaction.
+                digest = _SEED
+                observed_prefix = saved.offset == 0
+                prefix_seq = 0
+                additions: list[
+                    tuple[int, bytes, Message, Mapping[str, object] | None, CommittedDelivery | None]
+                ] = []
+                suffix_bytes = 0
+    
+                def collect(
+                    offset: int,
+                    raw: bytes,
+                    message: Message,
+                    receipt: Mapping[str, object] | None,
+                    initial: CommittedDelivery | None,
+                ) -> None:
+                    nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
+                    digest = _chain(digest, raw)
+                    end = offset + len(raw)
+                    if end == saved.offset:
+                        observed_prefix = True
+                        prefix_seq = message.seq
+                        if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
+                            raise RelationViolationError(
+                                "Private bus checkpoint certified prefix changed."
+                            )
+                    elif end > saved.offset:
+                        if not observed_prefix or offset < saved.offset:
+                            raise RelationViolationError(
+                                "Private bus checkpoint offset is not a row boundary."
+                            )
+                        suffix_bytes += len(raw)
+                        if suffix_bytes > 16 * 1024 * 1024 or len(additions) >= 10_000:
+                            raise RelationViolationError(
+                                "Private bus checkpoint crash suffix exceeds recovery bound."
+                            )
+                        additions.append((offset, raw, message, receipt, initial))
+    
+                for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+                    pass
+                if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
+                    raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
+                if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
+                    bus.path.stat()
+                ) != file_revision(info):
+                    raise RelationViolationError("Private bus changed during checkpoint validation.")
+                # Full parser above checked all cross-prefix response key duplicates.
+                last_seq = additions[-1][2].seq if additions else saved.through_seq
+                expected = PrefixWitness(
+                    saved.root_id,
+                    file_revision(info),
+                    last_seq,
+                    digest.hex(),
+                    _tail(stream, info.st_size),
+                )
+                marker.seal_with(PendingSeal.capture(saved, expected, path))
+                bus.write_metadata_unlocked(marker)
+                with db:
+                    for offset, raw, message, receipt, initial in additions:
+                        _index_row(db, offset, raw, message, receipt, initial)
+                    PrefixCertificate.capture(
+                        saved.root_id, info, last_seq, digest, expected.tail
+                    ).upsert(db)
+                _directory_sync(path)
+                marker.seal_with(FinalSeal.capture(expected, path))
+                bus.write_metadata_unlocked(marker)
+                return _saved(db)
+        except (sqlite3.Error, OSError) as error:
+>           raise RelationViolationError(
+                "Private bus checkpoint verification is unavailable."
+            ) from error
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint verification is unavailable.
+
+.venv/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py:457: RelationViolationError
+=========================== short test summary info ============================
+FAILED .scratch/test_native_verified_return.py::test_native_channel_reply_automatically_reaches_original_sender
+FAILED tests/test_private_bus_checkpoint.py::test_pending_marker_recovers_only_after_canonical_cold_parse[before_db_commit]
+FAILED tests/test_private_bus_checkpoint.py::test_pending_marker_recovers_only_after_canonical_cold_parse[after_db_commit]
+3 failed, 23 passed, 1 deselected in 41.77s

@@ -18,17 +18,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from agent_comms.coordination_errors import CoordinationError
-from agent_comms.coordination_tables.publications import PublicationReceipt
-
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     _canonical,
     has_private_wire_fields,
     public_envelope_digest,
     unique_wire_object,
-    validate_initial_record,
+    validate_delivery_record,
 )
+from .delivery_policy import KeyedResponseReceipt
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .messages import Message
@@ -109,19 +107,10 @@ class CandidateCatchUp:
 
 
 @dataclass(frozen=True, slots=True)
-class _IndexedResponse:
-    """The existing typed receipt plus its two private-bus-only fields."""
-
-    receipt: PublicationReceipt
-    wire_root_id: str
-    envelope_digest: str
-
-
-@dataclass(frozen=True, slots=True)
 class _ParsedRow:
     seq: int
     recipients: tuple[Candidate, ...]
-    response: _IndexedResponse | None
+    response: KeyedResponseReceipt | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,33 +119,6 @@ class _ReplayBatch:
     last_seq: int
     recipients: tuple[Candidate, ...]
     response_keys: tuple[CandidateResponseKey, ...]
-
-
-def _parse_response(message: Message, private: dict[str, Any]) -> _IndexedResponse:
-    raw = private["response"]
-    if not isinstance(raw, dict) or set(raw) != {
-        "wire_root_id",
-        "execution_id",
-        "publication_key",
-        "envelope_digest",
-    }:
-        raise ProjectionUnavailableError("malformed candidate response")
-    try:
-        receipt = PublicationReceipt(
-            raw["execution_id"],
-            raw["publication_key"],
-            message.seq,
-            message.message_id,
-            message.sender,
-            message.target,
-            message.type,
-            message.notice,
-            message.timestamp,
-            hashlib.sha256(message.body.encode("utf-8")).hexdigest(),
-        )
-    except (CoordinationError, TypeError, ValueError, UnicodeError) as error:
-        raise ProjectionUnavailableError("malformed candidate response receipt") from error
-    return _IndexedResponse(receipt, raw["wire_root_id"], raw["envelope_digest"])
 
 
 class WakeCandidateIndex:
@@ -264,21 +226,9 @@ class WakeCandidateIndex:
             or _canonical(public) != _canonical(message.to_wire())
         ):
             raise ProjectionUnavailableError("candidate bus envelope is not canonical")
-        envelope_digest = public_envelope_digest(public)
-        private = record.get(PRIVATE_WIRE_FIELD)
+        public_envelope_digest(public)
         if has_private_wire_fields(record):
-            if set(key for key in record if key.startswith("_agent_comms_private")) != {
-                PRIVATE_WIRE_FIELD
-            }:
-                raise ProjectionUnavailableError("unknown candidate private namespace")
-            if (
-                not isinstance(private, dict)
-                or type(private.get("version")) is not int
-                or private["version"] != 1
-            ):
-                raise ProjectionUnavailableError("unknown candidate private row")
-        if isinstance(private, dict) and set(private) == {"version", "initial"}:
-            initial = validate_initial_record(record, root_id)
+            initial = validate_delivery_record(record, root_id)
             rows: list[Candidate] = []
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
@@ -297,16 +247,7 @@ class WakeCandidateIndex:
                         else None,
                     )
                 )
-            return _ParsedRow(message.seq, tuple(rows), None)
-        if private is not None:
-            if set(private) != {"version", "response"}:
-                raise ProjectionUnavailableError("unknown candidate private row")
-            response = _parse_response(message, private)
-            if response.wire_root_id != root_id:
-                raise ProjectionUnavailableError("foreign private response root")
-            if response.envelope_digest != envelope_digest:
-                raise ProjectionUnavailableError("private response envelope mismatch")
-            return _ParsedRow(message.seq, (), response)
+            return _ParsedRow(message.seq, tuple(rows), initial.receipt)
         return _ParsedRow(message.seq, (), None)
 
     @classmethod
@@ -346,7 +287,7 @@ class WakeCandidateIndex:
             last_seq = parsed.seq
             rows.extend(parsed.recipients)
             if parsed.response is not None:
-                response_keys.append(CandidateResponseKey(parsed.response.receipt.publication_key))
+                response_keys.append(CandidateResponseKey(parsed.response.publication_key))
         return _ReplayBatch(stream.tell(), last_seq, tuple(rows), tuple(response_keys))
 
     def _source_end(self, stream: Any, next_offset: int) -> tuple[os.stat_result, str]:
