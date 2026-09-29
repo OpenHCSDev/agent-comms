@@ -105,3 +105,12 @@ obsolete fixture lines**, rather than adapting its old pair codec to this refact
 Current RelationshipStore rejects old formats directly; all9 current strict store
 acceptance cases remain. No user file conversion, deletion or schema mutation.
 Historical receipts of the old migration are preserved, not rewritten.
+
+Final total: **286 production lines deleted /221 added**, including120 retired
+converter lines;173 retired conversion fixture lines removed in addition to
+caller migration. ThreadManagement462 lines and Registration368 lines, both
+below500; no file/class carve. deletion-ratchet.json confirms no debt measure
+increase. Final rebuilt wheel has no converter module (deletion-imports.json);
+current strict installed store9cases pass1.21s. No repeated native matrix for
+this dead-module/doc-only delta; runtime behavior already exercised above.
+Paired installed Toad real App context-action proof passes, recorded in178.
