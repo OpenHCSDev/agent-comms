@@ -12,6 +12,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
+from agent_comms.coordination_tables.publications import (
+    PublicationIntents,
+    canonical_publication_key,
+)
+
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedInitial,
@@ -39,7 +44,6 @@ from .store_files import (
 from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
-    from agent_comms.coordination_tables.publications import PublicationIntents
 
     from .routing import DeliveryScope
 
@@ -175,7 +179,6 @@ class WireLog:
         A later corrupt row cannot be skipped to attest an earlier row. No
         incomplete tail or quarantine is silently discarded on the private path.
         """
-        from agent_comms.coordination_tables.publications import canonical_publication_key
 
         from .audience_manifest import MAX_WIRE_SEQ
         from .bus_publication import _canonical
@@ -374,7 +377,6 @@ class WireLog:
 
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
-        from agent_comms.coordination_tables.publications import PublicationIntents
 
         if type(intent) is not PublicationIntents:
             raise TypeError("Keyed response requires a validated PublicationIntents.")

@@ -206,16 +206,8 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-            ),
-            ForeignKey(
-                ("owner_lookup",),
-                Participants,
-                ("participant_lookup",),
-            ),
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
+            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
                 ExecutionRecord,
@@ -342,12 +334,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                on_delete="RESTRICT",
-            ),
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
         )
 
     @classmethod

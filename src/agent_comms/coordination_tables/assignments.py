@@ -189,16 +189,8 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(
-                ("recipient_lookup",),
-                Participants,
-                ("participant_lookup",),
-            ),
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-            ),
+            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
             ForeignKey(
                 ("execution_id", "assignment_id"),
                 ExecutionAssignmentLink,
@@ -284,16 +276,9 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                on_delete="RESTRICT",
-            ),
-            ForeignKey(
-                ("assignment_id", "execution_id"),
-                WakeAssignment,
-                ("assignment_id", "execution_id"),
+                ("assignment_id", "execution_id"), WakeAssignment, ("assignment_id", "execution_id")
             ),
         )
 

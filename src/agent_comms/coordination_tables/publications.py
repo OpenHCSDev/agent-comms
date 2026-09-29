@@ -188,12 +188,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                on_delete="RESTRICT",
-            ),
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
                 ("execution_id", "obligation_intent_required"),
                 ResponseObligation,
@@ -329,11 +324,7 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(
-                ("execution_id",),
-                PublicationIntents,
-                ("execution_id",),
-            ),
+            ForeignKey(("execution_id",), PublicationIntents, ("execution_id",)),
             ForeignKey(
                 ("execution_id", "obligation_receipt_required"),
                 ResponseObligation,

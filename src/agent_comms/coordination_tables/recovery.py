@@ -56,12 +56,7 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                on_delete="RESTRICT",
-            ),
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
         )
 
     @classmethod
@@ -119,16 +114,9 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                on_delete="RESTRICT",
-            ),
-            ForeignKey(
-                ("execution_id", "attempt"),
-                AttemptRecord,
-                ("execution_id", "attempt_ordinal"),
+                ("execution_id", "attempt"), AttemptRecord, ("execution_id", "attempt_ordinal")
             ),
         )
 

@@ -66,13 +66,7 @@ class ParticipantAliases(CoordinatorTable, TypedTable):
 
     @classmethod
     def references(cls):
-        return (
-            ForeignKey(
-                ("participant_lookup",),
-                Participants,
-                ("participant_lookup",),
-            ),
-        )
+        return (ForeignKey(("participant_lookup",), Participants, ("participant_lookup",)),)
 
     @classmethod
     def triggers(cls):
@@ -104,13 +98,7 @@ class OwnerGenerations(CoordinatorTable, TypedTable):
 
     @classmethod
     def references(cls):
-        return (
-            ForeignKey(
-                ("owner_lookup",),
-                Participants,
-                ("participant_lookup",),
-            ),
-        )
+        return (ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),)
 
     @classmethod
     def triggers(cls):

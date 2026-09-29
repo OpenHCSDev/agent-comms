@@ -178,12 +178,7 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
-            ForeignKey(
-                ("execution_id",),
-                ExecutionRecord,
-                ("execution_id",),
-                on_delete="RESTRICT",
-            ),
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
         )
 
     @classmethod

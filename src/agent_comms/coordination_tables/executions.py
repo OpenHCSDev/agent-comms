@@ -69,11 +69,7 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(
-                ("owner_lookup",),
-                Participants,
-                ("participant_lookup",),
-            ),
+            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
                 ExecutionRecord,
@@ -398,11 +394,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(
-                ("owner_lookup",),
-                Participants,
-                ("participant_lookup",),
-            ),
+            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
                 (
                     "execution_id",
@@ -427,10 +419,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                 deferred=True,
             ),
             ForeignKey(
-                ("wire_execution_id",),
-                ResponseObligation,
-                ("execution_id",),
-                deferred=True,
+                ("wire_execution_id",), ResponseObligation, ("execution_id",), deferred=True
             ),
             ForeignKey(
                 ("completed_wire_id", "required_obligation_terminal"),
