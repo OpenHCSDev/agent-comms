@@ -8,6 +8,15 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ### Latest verified checkpoint, 2026-09-29
 
+- LIVE preflight-feedback checkpoint: core356 merged and immutable installed
+  coreab0262c1/Toad16cfcb18/Textual1738/native d396, nine owners READYgeneration12.
+  Actual native startup failure through physical Enter paints useful cause and
+  durable Not sent, zero provider requests, exit0. Bound/uncertain inputs remain
+  unchanged; post-dispatch diagnostic cannot assert not-sent. Local painted-text
+  matcher failures retained and corrected for actual border/reader wrapping.
+  Fresh nine ACP loads and actual saved-wire navigation pass. No replay or reset.
+  Startup intermittency itself remains Wegener's active scope; this is feedback.
+
 - NOW LIVE runtime-refactor-checkpoint-20260929: core1dbb318d (353/354/355),
   Toad16cfcb18 (162/165), unchanged Textual1738/native d396. All five launchers
   and nine idle workers activated; full native user journey, actual checkbox
