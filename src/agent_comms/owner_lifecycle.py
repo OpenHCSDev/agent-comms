@@ -179,6 +179,25 @@ class OwnerLifecycle:
             )
             return OwnerStartResult(owner.name, owner.pid, True)
 
+    def restart_entrypoint(self, source_binary: str) -> str:
+        """Choose this runtime's reviewed native entrypoint for a private handoff."""
+        if self._private_nk_launch is None:
+            return source_binary
+        self._private_nk_launch.validate()
+        return self.native_entrypoint()
+
+    @staticmethod
+    def native_entrypoint() -> str:
+        return str(Path(sys.executable).with_name("pi-comms-native"))
+
+    def restart_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        """Project the retained launch authority into the target runtime policy."""
+        result = dict(environment)
+        if self._private_nk_launch is not None:
+            self._private_nk_launch.validate()
+            self._private_nk_launch.apply_environment(result)
+        return result
+
     def restart_owners(
         self,
         names: Sequence[str] | None = None,
@@ -324,7 +343,7 @@ class OwnerLifecycle:
             if agent_bin == "pi":
                 # The default stock binary cannot attest native input IDs.
                 # Keep the owner on this installation's pinned Pi entrypoint.
-                agent_bin = str(Path(sys.executable).with_name("pi-comms-native"))
+                agent_bin = self.native_entrypoint()
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
             from .bus_publication import stable_thread_lookup
