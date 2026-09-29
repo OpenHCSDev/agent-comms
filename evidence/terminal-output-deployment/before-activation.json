@@ -1,0 +1,15 @@
+{
+  "links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-workspace-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-workspace-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-workspace-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-workspace-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-workspace-20260928/bin/agent-comms-nk-foreground"
+  },
+  "owners": {
+    "agent-comms-ux": 2694252,
+    "pr95-selected-pi-summary-owner": 2694253,
+    "nra-architecture": 2694267,
+    "nra-domain-mapping": 2694274
+  }
+}
