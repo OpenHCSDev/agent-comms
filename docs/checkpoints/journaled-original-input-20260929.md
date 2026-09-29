@@ -1,6 +1,8 @@
 # Original input admission and native compaction
 
-Owner: parent Codex thread. Status: implementation and installed-path verification.
+Owner: parent Codex thread. Status: merged, matched installation activated;
+native/ACP/UI acceptance completed. Fresh all-owner runtime/participation audit
+remains with the parent.
 
 ## Reproducer
 
@@ -52,12 +54,47 @@ nullable row fields/status assumptions and synthetic native history rejected by
 current preparation. Mendel owns replacing that fixture with the existing real
 native fixture; those failures are recorded, not a claim of a green full suite.
 
-Toad204/205/201 are merged: same-open-view inbound replay, cancellation feedback,
-and reusable video/profile custody checks. The staged pair uses Core2f9f0f08,
-Toad8616aee5, Textual412b and unchanged native776. Arendt owns actual autonomous
-compaction/summary painting acceptance in this exact staged installation.
+Core411/412/413 and Toad204/205/201 are installed: post-cancel native custody and
+typed failure receipts, journaled original goal admission, explicit private launch
+authority, same-open-view inbound reprojection, cancellation/Not sent feedback,
+and reusable video/profile custody checks. The activated pair is Core
+`c1d2849b90023acf5206c35b7da4664407d6dce5`, Toad
+`8616aee5f91f8e200c982e02f0ee56d0f49d6c48`, Textual
+`412b5a2b5da8875dc2f3dc5be2365abddce0537b` and unchanged native776.
+
+Toad206 fixture/receipt merged as `7e1133a2`. Arendt's exact installed runtime
+journey exited 0: real cold saved history, physical `/goal`, painted compaction,
+committed summary and answer, one journaled compaction before exactly one native
+goal input. Saved bytes remained an unchanged prefix. Physical Pause after native
+input start bounded continuation. Seventeen local provider calls included two
+history responses, fourteen summary calls and one goal response; no paid calls.
+The completed command and receipt are retained in Toad
+`docs/validation/cold-goal-compaction-ui-20260929.md` and
+`evidence/cold-goal-compaction-staged/`. Core413's production source93f is included
+in the exact activated Core pin; the existing acceptance is reused here.
+
+The parent activated `runtime-journaled-original-20260929` and verified the actual
+default `toad-comms` PTY: saved history and Ready, exit 0. Ten running owners were
+restarted under idle fences in the new Python, with sessions/models/thinking/tags/
+goals identical. The parent is verifying fresh all-owner runtime/participation;
+this receipt does not predeclare that audit complete. Warm Toad202 remains deferred
+under current user priority. Mendel's Core414 owns the eight obsolete fixture
+failures above; the suite is not declared green.
 
 Owned disposable scratch: `/home/ts/.cache/agent-scratch/comms-journaled-goal-input-20260929`;
 staged install: `/home/ts/.local/share/agent-comms/runtime-journaled-original-20260929`.
-The active bus, original failed goal/input, native sessions and running owners
-have not been reset, resumed, replayed or restarted for this candidate.
+The active bus, original failed goal/input and native sessions were preserved.
+No original failed/uncertain input was replayed and no blocked goal was resumed.
+Only the parent performed the explicitly authorized idle owner restart/activation;
+this metadata checkpoint changes docs and paired pins without reinstalling.
+
+## Paired pin verification
+
+`stack/pyproject.toml` and `stack/uv.lock` pin the exact activated Core c1d2849b,
+retaining the accepted Toad8616/Textual412 pins. In the metadata owner's isolated
+worktree, `uv lock --project stack --check` and `uv sync --project stack --locked
+--dry-run --python /home/ts/.local/share/agent-comms/runtime-journaled-original-20260929/bin/python`
+both exit 0. `UV_PROJECT_ENVIRONMENT` points to that worktree's nonexistent
+`.venv-activation-lock-check`; the dry run creates no environment and installs
+nothing. Only the Core revision changes in the lockfile. No full test run,
+installation, owner restart or shared-checkout edit is performed by this receipt.
