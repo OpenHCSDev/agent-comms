@@ -1,0 +1,8 @@
+{
+  "source_harness_python": "/home/ts/.local/share/agent-comms/runtime-cursor-recovery-20260928/bin/python",
+  "relative_pythonpath": "src",
+  "child_cwd": "/var/tmp",
+  "returncode": 0,
+  "stdout": "/home/ts/.local/share/agent-comms/runtime-cursor-recovery-20260928/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py\n",
+  "stderr": ""
+}

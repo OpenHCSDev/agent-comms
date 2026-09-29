@@ -1,0 +1,11 @@
+E501 Line too long (102 > 100)
+   --> tests/test_native_prompt_binding.py:711:101
+    |
+710 |     monkeypatch.setattr(TrackedTurnSession, "execute", mutate_after_admitted_send)
+711 |     with pytest.raises(IdentityConflict, match="native send differs from its durable prompt binding"):
+    |                                                                                                     ^^
+712 |         await SelectedExecution(
+713 |             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+    |
+
+Found 2 errors (1 fixed, 1 remaining).

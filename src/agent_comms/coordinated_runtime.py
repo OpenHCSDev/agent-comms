@@ -40,9 +40,7 @@ from .activity import ActivityState
 from .assignment_states import (
     AssignmentState,
     CompletedAssignment,
-    DeferredAssignment,
     IgnoredAssignment,
-    TriagePendingAssignment,
 )
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
@@ -67,7 +65,6 @@ from .message_bus import MessageBus
 from .messages import MessageType
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import (
-    NativeContextProof,
     NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
@@ -76,10 +73,7 @@ from .native_pi import (
 )
 from .native_prompt_binding import (
     bind_expected_prompt,
-    expected_prompt_matches_journal,
-    read_expected_prompt_binding,
 )
-from .native_runtime_input import NativeRuntimeInput
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_admission import PrivateSendAdmission
@@ -510,7 +504,8 @@ class SelectedExecution:
             f"Preparing {self.initial.message.target} message"[:200],
         )
         self.owner_witness = LiveResponseOwner(
-            thread=self.owner, admission_generation=self.owner_admission_generation,
+            thread=self.owner,
+            admission_generation=self.owner_admission_generation,
         )
 
     def _session(self):
@@ -579,9 +574,12 @@ class SelectedExecution:
             self.prompt = _triage_prompt(self.initial, self.assignment, self.owner)
             if len(self.prompt.encode("utf-8")) > _MAX_PROMPT_BYTES:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
-            self.input_id, self.token = self._reserve_triage_input()
+            self.token = prepare_fence_token()
+            stage = TriageNativeSend(self.assignment)
+            participant = ParticipantOwner(self.owner, self.participant.participant_generation)
+            self.input_id = stage.reserve(self.store, participant, _token_digest(self.token))
             # Prelaunch binding: exact expected prompt bytes before Pi starts.
-            self.prompt_digest = bind_expected_prompt(
+            bind_expected_prompt(
                 self.store,
                 input_id=self.input_id,
                 stage=TriageNativeSend(self.assignment),
@@ -603,14 +601,28 @@ class SelectedExecution:
                 fresh_selected=self.first_selected,
                 prompt_send_boundary=self._prepare_send(TriageNativeSend(self.assignment)),
             )
-            self._verify_native(
-                result, expected_digest=self.prompt_digest, stage="triage", fence=None
+            stage.verify(
+                self.store,
+                participant,
+                self.input_id,
+                _token_digest(self.token),
+                result.context,
+                session_dir=self.session_dir,
+                wire_root_id=self.wire_root_id,
+                prompt=self.prompt,
             )
             RegistryOwner(
                 thread=self.owner, admission_generation=self.owner_admission_generation
             ).require_registry(self.comms.registry)
             decision = _parse_triage(result.text)
-            self._record_triage_result(result, decision)
+            stage.commit(
+                self.store,
+                participant,
+                self.input_id,
+                _token_digest(self.token),
+                result.context,
+                decision,
+            )
             if decision == "IGNORE":
                 cursor_status = self._cursor_status()
                 return CoordinatedTurn(
@@ -754,8 +766,12 @@ class SelectedExecution:
         self.prompt = frame + optional_awareness + original_suffix
 
     def _reserve(self):
-        self.input_id = self._reserve_full_input(self.fence)
-        self.prompt_digest = bind_expected_prompt(
+        self.input_id = FullNativeSend(self.assignment, self.fence).reserve(
+            self.store,
+            ParticipantOwner(self.owner, self.participant.participant_generation),
+            _token_digest(self.token),
+        )
+        bind_expected_prompt(
             self.store,
             input_id=self.input_id,
             stage=FullNativeSend(self.assignment, self.fence),
@@ -840,8 +856,15 @@ class SelectedExecution:
         )
 
     def _verify(self, result: NativeTurnResult):
-        self._verify_native(
-            result, expected_digest=self.prompt_digest, stage="full", fence=self.fence
+        FullNativeSend(self.assignment, self.fence).verify(
+            self.store,
+            ParticipantOwner(self.owner, self.participant.participant_generation),
+            self.input_id,
+            _token_digest(self.token),
+            result.context,
+            session_dir=self.session_dir,
+            wire_root_id=self.wire_root_id,
+            prompt=self.prompt,
         )
         RegistryOwner(
             thread=self.owner, admission_generation=self.owner_admission_generation
@@ -885,7 +908,13 @@ class SelectedExecution:
                 )
 
     def _publish(self, result: NativeTurnResult):
-        self._record_full_result(self.fence, result)
+        FullNativeSend(self.assignment, self.fence).commit(
+            self.store,
+            ParticipantOwner(self.owner, self.participant.participant_generation),
+            self.input_id,
+            _token_digest(self.token),
+            result.context,
+        )
         self.progress.finish()
         RegistryOwner(
             thread=self.owner, admission_generation=self.owner_admission_generation
@@ -923,11 +952,20 @@ class SelectedExecution:
         RegistryOwner(
             thread=self.owner, admission_generation=self.owner_admission_generation
         ).require_registry(self.comms.registry)
-        self._verify_native(
-            NativeTurnResult("", error.context),
-            expected_digest=self.prompt_digest,
-            stage="full" if self.fence is not None else "triage",
-            fence=self.fence,
+        stage = (
+            TriageNativeSend(self.assignment)
+            if self.fence is None
+            else FullNativeSend(self.assignment, self.fence)
+        )
+        stage.verify(
+            self.store,
+            ParticipantOwner(self.owner, self.participant.participant_generation),
+            self.input_id,
+            _token_digest(self.token),
+            error.context,
+            session_dir=self.session_dir,
+            wire_root_id=self.wire_root_id,
+            prompt=self.prompt,
         )
         if self.fence is not None:
             snapshot = self.store.snapshots.get(self.fence.execution_id)
@@ -1031,137 +1069,6 @@ class SelectedExecution:
             )
         return initial
 
-    def _reserve_triage_input(self) -> tuple[str, str]:
-        input_id, token = secrets.token_hex(16), secrets.token_hex(32)
-        with self.store.session.transaction() as db:
-            assert_native_runtime_schema(db)
-            ParticipantOwner(self.owner, self.participant.participant_generation).require(
-                self.store, self.assignment.recipient_lookup
-            )
-            current = self.store.assignments.get(self.assignment.assignment_id)
-            if (
-                current != self.assignment
-                or not current.lifecycle.mode.triage
-                or not current.lifecycle.triage_pending
-            ):
-                raise IdentityConflict("triage claim changed before native input reservation")
-            if NativeRuntimeInput.select(
-                db, where="assignment_id=?", parameters=(self.assignment.assignment_id,)
-            ):
-                raise IdentityConflict("triage input was previously dispatched; no retry")
-            now = self.store.session.now(current.updated_at_ms)
-            # This CAS and the ID reservation commit together BEFORE the Pi launch.
-            update = WakeAssignment.update(
-                db,
-                where="assignment_id=? AND revision=? AND disposition='triage_pending'",
-                parameters=(self.assignment.assignment_id, self.assignment.revision),
-                lifecycle=DeferredAssignment.build(current.lifecycle.mode, None, None),
-                revision=current.revision + 1,
-                updated_at_ms=now,
-            )
-            if update.rowcount != 1:
-                raise IdentityConflict("triage reservation lost its claim CAS")
-            NativeRuntimeInput(
-                input_id=input_id,
-                stage="triage",
-                assignment_id=self.assignment.assignment_id,
-                execution_id=None,
-                attempt_ordinal=None,
-                owner_lookup=self.assignment.recipient_lookup,
-                owner_thread=self.owner.name,
-                owner_generation=self.participant.participant_generation,
-                owner_token_digest=_token_digest(token),
-            ).insert(db)
-        return input_id, token
-
-    def _verify_native(
-        self,
-        result: NativeTurnResult,
-        *,
-        expected_digest: str,
-        stage: str,
-        fence: OwnerFence | None,
-    ) -> None:
-        if (
-            type(result) is not NativeTurnResult
-            or type(result.text) is not str
-            or type(result.context) is not NativeContextProof
-            or type(result.context.input_id) is not str
-            or result.context.input_id != self.input_id
-            or not isinstance(result.context.session_file, Path)
-            or result.context.session_file.parent != self.session_dir
-            or type(result.context.request_generation) is not int
-            or result.context.request_generation <= 0
-            or type(result.context.llm_context_digest) is not str
-            or len(result.context.llm_context_digest) != 64
-        ):
-            raise IdentityConflict("Pi live assembled context does not bind the reserved input")
-        # The pinned native executor validated exact live events BEFORE returning;
-        # the on-disk read is only corroboration and is NOT recovery authority.
-        if (
-            NativeContextProof.read_evidence(result.context.session_file, self.input_id)
-            != result.context
-        ):
-            raise IdentityConflict("native Pi event differs from its private session evidence")
-        # A context event and journal row alone cannot assert the source's prompt
-        # bytes. Check the committed prelaunch binding against this exact native
-        # request digest before recording any live proof or settling the claim.
-        # Failure after launch is UNKNOWN: the reserved input is never replayed.
-        with self.store.session.read():
-            assert_native_runtime_schema(self.store.session._connection)
-            ParticipantOwner(self.owner, self.participant.participant_generation).require(
-                self.store, self.assignment.recipient_lookup
-            )
-            reserved = NativeRuntimeInput.one(
-                self.store.session._connection, input_id=self.input_id
-            )
-            binding = read_expected_prompt_binding(self.store, self.input_id)
-            execution_id = None if fence is None else fence.execution_id
-            ordinal = None if fence is None else fence.attempt_ordinal
-            expected_identity = (
-                self.input_id,
-                stage,
-                self.assignment.assignment_id,
-                execution_id,
-                ordinal,
-                self.assignment.recipient_lookup,
-                self.owner.name,
-                self.participant.participant_generation,
-            )
-            if (
-                reserved is None
-                or (
-                    reserved.input_id,
-                    reserved.stage,
-                    reserved.assignment_id,
-                    reserved.execution_id,
-                    reserved.attempt_ordinal,
-                    reserved.owner_lookup,
-                    reserved.owner_thread,
-                    reserved.owner_generation,
-                )
-                != expected_identity
-                or reserved.session_id is not None
-                or binding is None
-                or (
-                    binding.input_id,
-                    binding.stage,
-                    binding.assignment_id,
-                    binding.execution_id,
-                    binding.attempt_ordinal,
-                    binding.owner_lookup,
-                    binding.owner_thread,
-                    binding.owner_generation,
-                )
-                != expected_identity
-                or binding.expected_prompt_digest != expected_digest
-                or binding.wire_root_id != self.wire_root_id
-                or binding.source_seq != self.assignment.wire_seq
-                or binding.message_id != self.assignment.message_id
-                or not expected_prompt_matches_journal(result.context.session_file, binding)
-            ):
-                raise IdentityConflict("live native input lacks exact bound source prompt equality")
-
     def _cursor_status(self) -> str:
         """Cursor failure cannot undo a terminal claim or replay a model input.
 
@@ -1193,61 +1100,6 @@ class SelectedExecution:
             "proven" if cursor is not None and cursor.input_id == self.input_id else "blocked_gap"
         )
 
-    def _record_triage_result(self, result: NativeTurnResult, decision: str) -> None:
-        with self.store.session.transaction() as db:
-            assert_native_runtime_schema(db)
-            ParticipantOwner(self.owner, self.participant.participant_generation).require(
-                self.store, self.assignment.recipient_lookup
-            )
-            current = self.store.assignments.get(self.assignment.assignment_id)
-            row = NativeRuntimeInput.one(db, input_id=self.input_id)
-            if (
-                current.revision != self.assignment.revision + 1
-                or not current.lifecycle.deferred
-                or current.lifecycle.execution_id is not None
-                or row is None
-                or row.stage != "triage"
-                or row.assignment_id != self.assignment.assignment_id
-                or row.owner_thread != self.owner.name
-                or row.owner_generation != self.participant.participant_generation
-                or row.owner_token_digest != _token_digest(self.token)
-                or row.session_id is not None
-            ):
-                raise StaleFence("triage proof belongs to a different or already settled dispatch")
-            updated = NativeRuntimeInput.update(
-                db,
-                where="input_id=? AND session_id IS NULL",
-                parameters=(self.input_id,),
-                session_id=result.context.session_id,
-                session_file=str(result.context.session_file),
-                session_entry_id=result.context.session_entry_id,
-                request_generation=result.context.request_generation,
-                llm_context_digest=result.context.llm_context_digest,
-                verdict=decision.lower(),
-            )
-            if updated.rowcount != 1:
-                raise StaleFence("triage proof was previously committed")
-            if decision == "IGNORE":
-                # Both declared SQL edges occur within this ONE transaction. A
-                # crash cannot expose TRIAGE_PENDING and trigger model replay.
-                now = self.store.session.now(current.updated_at_ms)
-                WakeAssignment.update(
-                    db,
-                    where="assignment_id=?",
-                    parameters=(self.assignment.assignment_id,),
-                    lifecycle=TriagePendingAssignment(),
-                    revision=current.revision + 1,
-                    updated_at_ms=now,
-                )
-                WakeAssignment.update(
-                    db,
-                    where="assignment_id=?",
-                    parameters=(self.assignment.assignment_id,),
-                    lifecycle=IgnoredAssignment(),
-                    revision=current.revision + 2,
-                    updated_at_ms=self.store.session.now(now),
-                )
-
     def _engage_assignment(self) -> str:
         target = derive_exact_reply_target(self.initial.message)
         if target is None:
@@ -1274,73 +1126,6 @@ class SelectedExecution:
                 self.store, self.assignment.recipient_lookup
             )
         return execution_id
-
-    def _reserve_full_input(self, fence: OwnerFence) -> str:
-        input_id = secrets.token_hex(16)
-        with self.store.session.transaction() as db:
-            assert_native_runtime_schema(db)
-            ParticipantOwner(self.owner, self.participant.participant_generation).require(
-                self.store, self.assignment.recipient_lookup
-            )
-            snapshot, attempt = self.store.attempts.require_fence(fence)
-            if (
-                snapshot.execution.execution_id != self.execution_id
-                or snapshot.pointer_revision < 1
-                or not attempt.lifecycle.starting
-                or self.assignment.assignment_id
-                not in {row.assignment_id for row in snapshot.assignments}
-            ):
-                raise StaleFence("full input cannot bind to the current attempt")
-            if NativeRuntimeInput.select(
-                db, where="execution_id=?", parameters=(self.execution_id,)
-            ):
-                raise IdentityConflict("a full-turn input already exists; no automatic replay")
-            NativeRuntimeInput(
-                input_id=input_id,
-                stage="full",
-                assignment_id=self.assignment.assignment_id,
-                execution_id=self.execution_id,
-                attempt_ordinal=fence.attempt_ordinal,
-                owner_lookup=self.assignment.recipient_lookup,
-                owner_thread=self.owner.name,
-                owner_generation=self.participant.participant_generation,
-                owner_token_digest=_token_digest(fence.token),
-            ).insert(db)
-        return input_id
-
-    def _record_full_result(self, fence: OwnerFence, result: NativeTurnResult) -> None:
-        with self.store.session.transaction() as db:
-            assert_native_runtime_schema(db)
-            ParticipantOwner(self.owner, self.participant.participant_generation).require(
-                self.store, self.assignment.recipient_lookup
-            )
-            snapshot, _ = self.store.attempts.require_fence(fence)
-            row = NativeRuntimeInput.one(db, input_id=self.input_id)
-            if (
-                row is None
-                or row.stage != "full"
-                or row.assignment_id != self.assignment.assignment_id
-                or row.execution_id != fence.execution_id
-                or row.attempt_ordinal != fence.attempt_ordinal
-                or row.owner_thread != self.owner.name
-                or row.owner_generation != self.participant.participant_generation
-                or row.owner_token_digest != _token_digest(fence.token)
-                or row.session_id is not None
-                or snapshot.execution.exact_target is None
-            ):
-                raise StaleFence("full-turn proof does not bind to the exact current attempt")
-            update = NativeRuntimeInput.update(
-                db,
-                where="input_id=? AND session_id IS NULL",
-                parameters=(self.input_id,),
-                session_id=result.context.session_id,
-                session_file=str(result.context.session_file),
-                session_entry_id=result.context.session_entry_id,
-                request_generation=result.context.request_generation,
-                llm_context_digest=result.context.llm_context_digest,
-            )
-            if update.rowcount != 1:
-                raise StaleFence("full-turn proof was previously committed")
 
 
 def _publish_native_failure(
