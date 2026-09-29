@@ -43,3 +43,25 @@ selector used the wrong class name. Neither is represented as acceptance. No liv
 route, launcher, native discovery or ordinary-send implementation was edited. CI deferred.
 
 S7 scale evidence is parent-corrected using existing 285/304 receipts; no benchmark rerun.
+
+## Final current-main checkpoint
+
+Merged main a1d24d3a (including 312/315/317) without owned product-file overlap, then
+reinstalled the complete working version noneditable.
+
+- current-main-installed.log: 42 passed in 19.16s (13 result checks + 24 codec checks +
+  four actual native manual cases + actual selected original admission exactly once).
+- routing-final.log: 17 passed in 42.84s (ACP SDK/direct/attached, actual runtime socket).
+- retained-native-selected.log: 1 passed in 25.24s. Actual installed launcher/native:
+  warmup and reuse in retained owner; summary while that owner remains alive; file
+  unchanged until commit; owner reaped after one compaction; fresh resumed owner
+  receives committed summary and new input, not discarded history; exactly four
+  provider calls; cleanup reaps all children. Deleted obsolete standalone-writer
+  PID probe, migrated explicit canonical root/package fixture setup.
+- ownership.log: 15 passed. Lint and git diff --check pass.
+
+Retained-native intermediate receipts preserve the old fixture missing explicit root,
+missing configured package, and obsolete pre-summary kill assertion. These were fixture
+migrations; product native/ordinary-send logic was not changed. Final current installed
+acceptance is passing. No remaining blocker for this scoped result/caller closure.
+Parent owns review/integration/deployment; broader plan acceptance claims remain scoped.
