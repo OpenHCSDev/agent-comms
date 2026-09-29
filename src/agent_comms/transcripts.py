@@ -20,6 +20,7 @@ from .routing import TurnRouting
 from .threads import Thread
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
+from .transcript_receipts import AssignedSourceCursor
 from .store_files import file_revision
 from .coordination_errors import StaleRevision
 
@@ -30,6 +31,30 @@ _LOG = logging.getLogger(__name__)
 class TranscriptCursor:
     session_file: str
     offset: int
+    receipts: AssignedSourceCursor | None = None
+
+    @property
+    def wire_seq(self) -> int:
+        return self.receipts.sequence if self.receipts is not None else 0
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        from dataclasses import replace
+        return replace(self, offset=offset)
+
+    def at_sequence(self, sequence: int) -> TranscriptCursor:
+        from dataclasses import replace
+        if self.receipts is None:
+            raise ValueError("Receipt cursor requires its declared source")
+        return replace(self, receipts=self.receipts.at(sequence))
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return (self.session_file == other.session_file and self.offset >= other.offset
+                and (other.receipts is None or (self.receipts is not None
+                     and self.receipts.contains(other.receipts))))
+
+    def covers_incoming(self, sequence: int) -> bool:
+        # Callers hold a canonical recipient assignment, never an arbitrary seq.
+        return self.receipts is not None and self.receipts.covers(sequence)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +84,7 @@ class TranscriptReadIdentity:
     native_revision: tuple[int, int, int, int] | None
     route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None
+    receipt_frontier: AssignedSourceCursor
     before: TranscriptCursor | None
     after: TranscriptCursor | None
     through: TranscriptCursor | None
@@ -113,58 +139,24 @@ class Transcripts:
         thread, session_file, _ = self._thread_transcript_source(
             name, through.session_file if through is not None else None,
         )
+        from .transcript_receipts import AssignedTranscriptSource
+        receipt_frontier = AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier
         return TranscriptRead(self, TranscriptReadIdentity(
             str(self.root), name, thread, session_file,
             file_revision(Path(session_file)) if session_file else None,
             self.routes.revision(), file_revision(self.bus.log.path),
+            receipt_frontier,
             before, after, through,
         ))
 
-    def thread_transcript(
-        self,
-        name: str,
-        *,
-        max_messages: int = 20,
-        max_bytes: int = 64 * 1024,
-    ) -> Sequence[TranscriptEvent]:
-        """Return a bounded normalized tail of one thread's Pi session transcript."""
-        thread, session_file, inherited = self._thread_transcript_source(name)
+    def thread_transcript(self, name: str, *, max_messages: int = 20,
+                          max_bytes: int = 64 * 1024) -> Sequence[TranscriptEvent]:
+        """The same canonical source supplies bounded preview and paged history."""
         if max_messages <= 0 or max_bytes <= 0:
             return ()
-        path = Path(session_file)
-        try:
-            size = path.stat().st_size if session_file else 0
-        except OSError:
-            size = 0
-
-        records: list[list[TranscriptEvent]] = []
-        with self.routes.for_session(session_file) as routes:
-            for entry in NativeTranscript(path).tail(max_bytes=max_bytes) if session_file else ():
-                events = entry.events(
-                    TranscriptProjection(
-                        routes.get(entry.id),
-                        routes.input_display(entry.input_id),
-                        self.messaging.sent_tool_message,
-                    )
-                )
-                if events:
-                    records.append(events)
-                    if len(records) > max_messages:
-                        break
-
-        truncated = size > max_bytes or len(records) > max_messages
-        records = list(reversed(records[:max_messages]))
-        events = [event for record in records for event in record]
-        if truncated:
-            events.insert(
-                0,
-                NoticeTranscript(
-                    "Earlier transcript content was omitted from this bounded view.",
-                ),
-            )
-        if inherited:
-            events.extend(self._fork_start_events(thread))
-        return tuple(events)
+        page = self.thread_transcript_page(name, max_messages=max_messages, max_bytes=max_bytes)
+        return ((NoticeTranscript("Earlier transcript content was omitted from this bounded view."),)
+                if page.has_older else ()) + page.events
 
     def _thread_transcript_source(
         self, name: str, source_file: str | None = None
@@ -244,71 +236,75 @@ class Transcripts:
             size = through.offset
             if cursor and cursor.offset > size:
                 raise ValueError("Cursor is outside the transcript window.")
-        start = end = cursor.offset if cursor else size
-        records: list[tuple[TranscriptEvent, ...]] = []
-        routes = routes_owner.for_session(session_file)
-        used = 0
+        from contextlib import closing
+        from .transcript_receipts import AssignedTranscriptSource, EarlierTranscript, LaterTranscript
 
-        with routes:
-            if size:
-                reader = NativeTranscript(path)
-                iterator = reader.forward(start, size) if after else reader.reverse(start)
-                try:
-                    for record in iterator:
-                        if (
-                            after
-                            and record.end == size
-                            and not record.complete
-                            and record.entry is None
-                        ):
-                            break  # Retry an incomplete writer tail after its next append.
-                        entry = record.entry
-                        events = (
-                            tuple(
-                                entry.events(
-                                    TranscriptProjection(
-                                        routes.get(entry.id),
-                                        routes.input_display(entry.input_id),
-                                        self.messaging.sent_tool_message,
-                                    )
-                                )
-                            )
-                            if entry is not None
-                            else ()
-                        )
-                        if (
-                            events
-                            and records
-                            and (len(records) >= max_messages or used + record.size > max_bytes)
-                        ):
+        receipt_root = Path(source.root) if historical_source is not None else self.root
+        from .wire_log import WireLog
+        receipt_log = WireLog(receipt_root / "bus.jsonl") if historical_source is not None else self.bus.log
+        receipts = AssignedTranscriptSource.for_thread(receipt_root, thread, receipt_log)
+        frontier = through or TranscriptCursor(session_file, size, receipts.frontier)
+        if (frontier.receipts is not None and
+                (frontier.receipts.root != str(receipt_root) or frontier.receipts.recipient != thread.incarnation)):
+            raise ValueError("Receipt cursor belongs to a different transcript source")
+        if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
+            raise ValueError("Cursor is outside the combined transcript source")
+        traversal = LaterTranscript() if after is not None else EarlierTranscript()
+        initial = cursor or frontier
+        consumed = initial
+        records: list[tuple[TranscriptEvent, ...]] = []
+        used = 0
+        native = traversal.native(NativeTranscript(path), initial, frontier) if size else (record for record in ())
+        with routes_owner.for_session(session_file) as routes:
+            try:
+                record = next(native, None)
+                message = receipts.next(traversal, consumed.wire_seq, frontier)
+                while record is not None or message is not None:
+                    events = receipts.native_events(record.entry, routes, self.messaging) \
+                        if record is not None and record.entry is not None else ()
+                    if record is not None and not events:
+                        if after and record.end == size and not record.complete and record.entry is None:
                             break
-                        if after:
-                            end = record.end
-                        else:
-                            start = record.start
-                        if events:
-                            records.append(events)
-                            used += record.size
-                finally:
-                    iterator.close()
-        if not after:
-            records.reverse()
-        events = tuple(event for record in records for event in record)
-        if inherited and not after and (cursor is None or cursor.offset == size):
+                        consumed = consumed.at_offset(traversal.native_position(record))
+                        record = next(native, None)
+                        continue
+                    native_time = next((event.timestamp for event in events
+                                        if event.timestamp is not None), None)
+                    choose_native = (record is not None and (message is None
+                                     or traversal.chooses_native(native_time, message.timestamp)))
+                    batch = events if choose_native else receipts.events(message)
+                    cost = record.size if choose_native else sum(event.text_size for event in batch)
+                    if records and (len(records) >= max_messages or used + cost > max_bytes):
+                        break
+                    records.append(batch)
+                    used += cost
+                    if choose_native:
+                        consumed = consumed.at_offset(traversal.native_position(record))
+                        record = next(native, None)
+                    else:
+                        consumed = consumed.at_sequence(traversal.receipt_position(message))
+                        message = receipts.next(traversal, consumed.wire_seq, frontier)
+                if record is None:
+                    consumed = consumed.at_offset(frontier.offset if after else 0)
+                if message is None:
+                    consumed = consumed.at_sequence(frontier.wire_seq if after else 0) if consumed.receipts is not None else consumed
+            finally:
+                native.close()
+        start, end = traversal.bounds(initial, consumed)
+        events = traversal.finish(records)
+        if inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))
-        return TranscriptPage(
-            events,
-            TranscriptCursor(session_file, start),
-            TranscriptCursor(session_file, end),
-            start > 0,
-            end < size,
-        )
+        return TranscriptPage(events, start, end, start.offset > 0 or start.wire_seq > 0,
+                              end != frontier)
 
     def transcript_checkpoint(self, name: str) -> TranscriptCursor:
-        session_file = self.registry.require(name).session_file or ""
+        from .transcript_receipts import AssignedTranscriptSource
+        thread = self.registry.require(name)
+        session_file = thread.session_file or ""
         path = Path(session_file)
         return TranscriptCursor(
-            session_file, path.stat().st_size if session_file and path.is_file() else 0
+            session_file, path.stat().st_size if session_file and path.is_file() else 0,
+            AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,
         )
 
     def record_turn_routing(
