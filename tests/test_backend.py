@@ -13,6 +13,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.image_inputs import ImageInput
+from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
 
 pytestmark = [
@@ -33,7 +34,7 @@ def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
 _NATIVE_PROMPT_START = f"""\
 state = json.loads(sys.stdin.readline())
 emit({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {{"nativeInputProofCapability": {json.dumps(backend.NATIVE_INPUT_CAPABILITY)}}}}})
+      "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}}}})
 prompt = json.loads(sys.stdin.readline())
 emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 emit({{"type": "message_start", "message": {{"role": "user",
@@ -2389,7 +2390,7 @@ assert state["type"] == "get_state"
 time.sleep(0.12)
 print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
                   "success":True, "data":{{"nativeInputProofCapability":
-                  {backend.NATIVE_INPUT_CAPABILITY!r}}}}}), flush=True)
+                  {CAPABILITY!r}}}}}), flush=True)
 if select.select([sys.stdin], [], [], 0.15)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
@@ -2421,7 +2422,7 @@ state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
 print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
                   "success":True, "data":{{"nativeInputProofCapability":
-                  {backend.NATIVE_INPUT_CAPABILITY!r}}}}}), flush=True)
+                  {CAPABILITY!r}}}}}), flush=True)
 if select.select([sys.stdin], [], [], 0.15)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)

@@ -62,7 +62,7 @@ class InputForwarding:
                 session.output.record_failure(
                     failures.PromptSendFailed(f"Invalid queued Pi command: {error}")
                 )
-                await session.proc.stop()
+                await session.native.proc.stop()
                 return
             if not await command.steer(session, forwarded):
                 return
@@ -86,7 +86,7 @@ class InputForwarding:
         with boundary as authorized:
             if authorized:
                 session.stdin.write(
-                    session.reader.encode(
+                    session.native.reader.encode(
                         commands.InterruptSteering(input_ids=[item[3] for item in candidates])
                     )
                 )
@@ -96,7 +96,7 @@ class InputForwarding:
             session.output.record_failure(
                 failures.AuthorityChanged("Input authority changed before immediate steering.")
             )
-            await session.proc.stop()
+            await session.native.proc.stop()
             return False
         await session.stdin.drain()
         return True
@@ -129,7 +129,7 @@ class InputForwarding:
                 if command.images:
                     session.output.sensitive = True
                 self.generation += 1
-                session.stdin.write(session.reader.encode(command))
+                session.stdin.write(session.native.reader.encode(command))
         if authorized:
             await session.stdin.drain()
             return True
@@ -139,7 +139,7 @@ class InputForwarding:
             session.output.record_failure(
                 failures.AuthorityChanged("Input authority changed before Pi prompt send.")
             )
-            await session.proc.stop()
+            await session.native.proc.stop()
             return False
         # None means never sent; preserve the owner's UNKNOWN, not a replay.
         self.pending[:] = [item for item in self.pending if item[3] != native_id]

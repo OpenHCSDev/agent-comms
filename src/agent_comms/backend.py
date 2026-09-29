@@ -37,8 +37,9 @@ from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
-from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
+from .native_attestation import AttestationError, NativeAttestation, SavedSessionReopenError
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
@@ -140,7 +141,7 @@ def _session_revision(
 
 
 class PersistentPiSession:
-    """One idle Pi RPC child, owned by one ACP session in one owner process.
+    """One Pi RPC child through launch, attested turn use, and idle retention.
 
     A turn borrows the child only under the saved-session writer fence. The
     revision check detects a separate writer between turns, so its in-memory
@@ -162,6 +163,75 @@ class PersistentPiSession:
         # A cancellation cannot lose the sole handle to a child still being
         # reaped. Every later borrower waits for this task before launching.
         self._close_task: asyncio.Task[None] | None = None
+
+    async def open(
+        self,
+        launch: NativePiRpcLaunch,
+        session_file: str | None,
+        *,
+        reuse: bool,
+        require_input_id: bool,
+        startup: NativeStartupAdmission | None,
+        finish_event: asyncio.Event | None,
+        watchdog: ProgressWatchdog,
+    ) -> None:
+        key = (launch, auth_revision())
+        reused = reuse and self.reusable(key, session_file)
+        if not reused:
+            await self.close()
+        expected = NativeSessionIdentity(self.session_id, self.session_file) if reused else None
+        if self.reopen_required is not None:
+            if session_file != self.reopen_required or not require_input_id:
+                raise SavedSessionReopenError(
+                    "Saved native session requires explicit validated reopen."
+                )
+            from .native_session_reopen import validate_native_reopen
+
+            try:
+                validated_session_id = await asyncio.to_thread(
+                    validate_native_reopen,
+                    launch.package,
+                    session_file,
+                    expected_session_id=self.reopen_session_id,
+                )
+            except ValueError as error:
+                raise SavedSessionReopenError(
+                    "Saved native session failed strict reopen validation."
+                ) from error
+            expected = NativeSessionIdentity(validated_session_id, session_file)
+        self.attestation = NativeAttestation(expected)
+        if not reused and require_input_id and startup is not None:
+            await startup.acquire(finish_event)
+        watchdog.launching(asyncio.get_running_loop().time, session_file)
+        if not reused:
+            self.proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
+            assert self.proc.stdout is not None and self.proc.stderr is not None
+            self.reader = PiRpcChannel(self.proc.stdout)
+            self.stderr_task = asyncio.create_task(self.stderr_tail(self.proc.stderr))
+        self.launch_key = key
+        watchdog.spawned(reused)
+
+    @staticmethod
+    async def stderr_tail(stream: asyncio.StreamReader) -> str:
+        tail = b""
+        while chunk := await stream.read(4096):
+            tail = (tail + chunk)[-16000:]
+        return tail.decode(errors="replace").strip()
+
+    def retain(
+        self,
+        session_file: str,
+        session_id: str,
+        revision: tuple[_FileRevision, _FileRevision | None],
+        *,
+        sensitive: bool,
+    ) -> None:
+        self.session_file = session_file
+        self.session_id = session_id
+        self.revision = revision
+        self.sensitive_diagnostics = sensitive
+        self.reopen_required = None
+        self.reopen_session_id = None
 
     def reusable(
         self, launch_key: tuple[NativePiRpcLaunch, tuple[int, int]], session_file: str | None
@@ -619,7 +689,6 @@ class TurnSession:
     ):
         self.launch = launch
         self.task = task
-        self.cwd = str(launch.cwd)
         self.session_file = session_file
         self.steering_queue = steering_queue
         self.finish_event = finish_event
@@ -634,6 +703,9 @@ class TurnSession:
         self.interrupt_boundary = interrupt_boundary
         self.native_start = native_start
         self.persistent_session = persistent_session
+        self.native = (
+            persistent_session if persistent_session is not None else PersistentPiSession()
+        )
         self.ui_request = ui_request
         self.startup = startup
         self.inputs = InputForwarding()
@@ -641,25 +713,22 @@ class TurnSession:
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
 
-    async def stderr_tail(self) -> str:
-        tail = b""
-        assert self.proc.stderr is not None
-        while chunk := (await self.proc.stderr.read(4096)):
-            tail = (tail + chunk)[-16000:]
-        return tail.decode(errors="replace").strip()
-
     async def abort_stalled_rpc(self) -> None:
         if self.steering_task is not None:
             self.steering_task.cancel()
             await asyncio.gather(self.steering_task, return_exceptions=True)
-        if self.proc.stdin is not None and self.proc.returncode is None:
+        if self.native.proc.stdin is not None and self.native.proc.returncode is None:
             abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
             try:
-                self.proc.stdin.write(self.reader.encode(commands.Abort(id="agent-comms-watchdog")))
+                self.native.proc.stdin.write(
+                    self.native.reader.encode(commands.Abort(id="agent-comms-watchdog"))
+                )
                 remaining = max(0.0, abort_deadline - self.loop.time())
-                await asyncio.wait_for(self.proc.stdin.drain(), timeout=remaining)
+                await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=remaining)
                 while remaining := max(0.0, abort_deadline - self.loop.time()):
-                    response = await asyncio.wait_for(self.reader.readline(), timeout=remaining)
+                    response = await asyncio.wait_for(
+                        self.native.reader.readline(), timeout=remaining
+                    )
                     if not response:
                         break
                     try:
@@ -674,8 +743,8 @@ class TurnSession:
                         break
             except (TimeoutError, OSError):
                 pass
-        if self.proc.returncode is None:
-            await self.proc.stop()
+        if self.native.proc.returncode is None:
+            await self.native.proc.stop()
 
     def context_info(self) -> events.AgentInfo:
         return events.AgentInfo(
@@ -687,62 +756,82 @@ class TurnSession:
         )
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
-        self.finished = self.skip = False
-        self.prepare_launch()
-        if self.finished:
-            return
-        async for event in self.validate_reopen():
-            yield event
-        if self.finished:
-            return
-        async for event in self.spawn_child():
-            yield event
-        if self.finished:
-            return
-        if self.reused and self.persistent_session is not None:
-            self.output.sensitive |= self.persistent_session.sensitive_diagnostics
-        async for event in self.initialize_rpc():
-            yield event
-        if self.finished:
-            return
-        while True:
-            self.skip = False
-            async for event in self.receive_record():
+        self.finished = self.skip = self.retained = False
+        self.loop = asyncio.get_running_loop()
+        self.owner = asyncio.current_task()
+        try:
+            try:
+                await self.native.open(
+                    self.launch,
+                    self.session_file,
+                    reuse=self.persistent_session is not None and not self.fork_session,
+                    require_input_id=self.require_input_id,
+                    startup=self.startup,
+                    finish_event=self.finish_event,
+                    watchdog=self.watchdog,
+                )
+            except SavedSessionReopenError as error:
+                yield events.Done(
+                    text=str(error), ok=False, reason_code="compaction_reopen_invalid"
+                )
+                return
+            except OSError as error:
+                yield events.Done(text=f"agent launch failed: {error}", ok=False)
+                return
+            if self.owner is not None:
+                _ACTIVE_PROCESSES[self.owner] = self.native.proc
+                _ACTIVE_STDERR_TASKS[self.owner] = self.native.stderr_task
+            self.prepare_launch()
+            self.output.sensitive |= self.native.sensitive_diagnostics
+            self.prompt_dispatched = False
+            if self.native.proc.stdin is not None:
+                try:
+                    self.prompt_dispatched = not self.require_input_id
+                    self.native.proc.stdin.write(self.stdin_payload)
+                    await self.native.proc.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            async for event in self.initialize_rpc():
                 yield event
-            if self.finished:
-                break
-            if self.skip:
-                continue
-            await self.attest_input()
-            if self.finished:
-                break
-            if self.skip:
-                continue
-            async for event in self.payload.consume(self):
+            while True:
+                self.skip = False
+                async for event in self.receive_record():
+                    yield event
+                if self.finished:
+                    break
+                if self.skip:
+                    continue
+                if self.require_input_id and self.native.attestation.state is None:
+                    try:
+                        self.native.attestation.accept(self.payload)
+                    except AttestationError as error:
+                        await error.refuse(self)
+                        break
+                    if self.startup is not None:
+                        self.startup.release()
+                    await self.input_ready()
+                    if self.finished:
+                        break
+                async for event in self.payload.consume(self):
+                    yield event
+                if self.finished:
+                    break
+                if self.skip:
+                    continue
+                async for event in self.stats.settle(self):
+                    yield event
+                if self.finished:
+                    break
+            self.finished = False
+            async for event in self.retain_or_close():
                 yield event
-            if self.finished:
-                break
-            if self.skip:
-                continue
-            async for event in self.stats.settle(self):
+            async for event in self.finish_diagnostics():
                 yield event
-            if self.finished:
-                break
-            if self.skip:
-                continue
-        self.finished = False
-        async for event in self.retain_or_close():
-            yield event
-        if self.finished:
-            return
-        async for event in self.finish_diagnostics():
-            yield event
-        if self.finished:
-            return
-        async for event in self.finish_result():
-            yield event
-        if self.finished:
-            return
+            async for event in self.finish_result():
+                yield event
+        finally:
+            if not self.retained:
+                await self.native.close()
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
         while self.rejected_commands:
@@ -755,7 +844,7 @@ class TurnSession:
                 yield event
             return
         if not self.line:
-            if self.require_input_id and (not self.native_capability_confirmed):
+            if self.require_input_id and (self.native.attestation.state is None):
                 self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
                     "elapsed_ms": round(
@@ -782,72 +871,20 @@ class TurnSession:
             self.skip = True
             return
         except (ValueError, TypeError) as error:
-            if self.require_input_id and not self.native_capability_confirmed:
+            if self.require_input_id and self.native.attestation.state is None:
                 self.output.record_failure(
                     failures.InputIdUnavailable(
                         f"Invalid Pi capability preflight response: {error}"
                     )
                 )
-                await self.proc.stop()
+                await self.native.proc.stop()
                 self.finished = True
                 return
             raise
 
-    async def attest_input(self) -> None:
-        if self.require_input_id and (not self.native_capability_confirmed):
-            if (
-                not isinstance(self.payload, pi.Response)
-                or self.payload.command is not commands.GetState
-            ):
-                self.output.record_failure(
-                    failures.InputIdUnavailable(
-                        "Pi native input-ID capability preflight returned another event."
-                    )
-                )
-                await self.proc.stop()
-                self.finished = True
-                return
-            self.state = self.payload.data
-            if (
-                self.payload.id != self.preflight_id
-                or self.payload.success is not True
-                or (self.state is None)
-                or (self.state.native_input_proof_capability != NATIVE_INPUT_CAPABILITY)
-            ):
-                self.output.record_failure(
-                    failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
-                )
-                await self.proc.stop()
-                self.finished = True
-                return
-            if (
-                self.reused
-                and self.persistent_session is not None
-                and (
-                    self.state.session_id != self.persistent_session.session_id
-                    or self.state.session_file != self.persistent_session.session_file
-                )
-                or (
-                    self.validated_session_id is not None
-                    and (
-                        self.state.session_id != self.validated_session_id
-                        or self.state.session_file != self.session_file
-                    )
-                )
-            ):
-                self.session_identity_uncertain = True
-                self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
-                await self.proc.stop()
-                self.finished = True
-                return
-            self.native_capability_confirmed = True
-            if self.startup is not None:
-                self.startup.release()
-            await self.input_ready()
-
     async def input_ready(self) -> None:
         self.watchdog.await_input()
-        assert self.proc.stdin is not None
+        assert self.native.proc.stdin is not None
         try:
             self.boundary_context = _maintenance_send_boundary(
                 Path(
@@ -863,22 +900,22 @@ class TurnSession:
             with self.boundary_context as self.authorized:
                 if self.authorized:
                     self.prompt_dispatched = True
-                    self.proc.stdin.write(self.prompt_payload)
+                    self.native.proc.stdin.write(self.prompt_payload)
             if not self.authorized:
                 self.output.record_failure(
                     failures.InputMissing("Input authority changed before Pi prompt send.")
                 )
-                await self.proc.stop()
+                await self.native.proc.stop()
                 self.finished = True
                 return
-            await self.proc.stdin.drain()
+            await self.native.proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             self.output.record_failure(
                 failures.InputIdUnavailable(
                     "Pi RPC prompt could not be sent after capability preflight."
                 )
             )
-            await self.proc.stop()
+            await self.native.proc.stop()
             self.finished = True
             return
 
@@ -906,7 +943,6 @@ class TurnSession:
             if self.persistent_session is not None
             else "agent-comms-prompt"
         )
-        self.preflight_id = f"agent-comms-preflight-{secrets.token_hex(16)}"
         self.original_input_id = secrets.token_hex(16)
         self.prompt_payload = b""
         self.prompt_payload = PiRpcChannel.command_bytes(
@@ -917,94 +953,9 @@ class TurnSession:
                 images=self.images or None,
             )
         )
-        self.stdin_payload = PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
+        self.stdin_payload = PiRpcChannel.command_bytes(self.native.attestation.request)
         if not self.require_input_id:
             self.stdin_payload += self.prompt_payload
-        self.launch_key = (self.launch, auth_revision())
-
-    async def validate_reopen(self) -> AsyncIterator[events.AgentEvent]:
-        self.reused = False
-        if self.persistent_session is not None:
-            self.reused = (not self.fork_session) and self.persistent_session.reusable(
-                self.launch_key, self.session_file
-            )
-            if not self.reused:
-                await self.persistent_session.close()
-        self.loop = asyncio.get_running_loop()
-        self.validated_session_id: str | None = None
-        if (
-            self.persistent_session is not None
-            and self.persistent_session.reopen_required is not None
-        ):
-            if (
-                self.session_file != self.persistent_session.reopen_required
-                or not self.require_input_id
-            ):
-                yield events.Done(
-                    text="Saved native session requires explicit validated reopen.",
-                    ok=False,
-                    reason_code="compaction_reopen_invalid",
-                )
-                self.finished = True
-                return
-            try:
-                from .native_session_reopen import validate_native_reopen
-
-                self.validated_session_id = await asyncio.to_thread(
-                    validate_native_reopen,
-                    self.launch.package,
-                    self.session_file,
-                    expected_session_id=self.persistent_session.reopen_session_id,
-                )
-            except ValueError:
-                yield events.Done(
-                    text="Saved native session failed strict reopen validation.",
-                    ok=False,
-                    reason_code="compaction_reopen_invalid",
-                )
-                self.finished = True
-                return
-        if not self.reused and self.require_input_id and (self.startup is not None):
-            await self.startup.acquire(self.finish_event)
-
-    async def spawn_child(self) -> AsyncIterator[events.AgentEvent]:
-        self.watchdog.launching(self.loop.time, self.session_file)
-        if self.reused:
-            assert self.persistent_session is not None and self.persistent_session.proc is not None
-            self.proc = self.persistent_session.proc
-        else:
-            try:
-                self.proc = await AttachedChild.start(
-                    self.launch.argv,
-                    cwd=self.cwd,
-                    env=self.launch.env,
-                )
-            except OSError as exc:
-                yield events.Done(text=f"agent launch failed: {exc}", ok=False)
-                self.finished = True
-                return
-        self.watchdog.spawned(self.reused)
-        self.owner = asyncio.current_task()
-        if self.owner is not None:
-            _ACTIVE_PROCESSES[self.owner] = self.proc
-        assert self.proc.stdout is not None
-        assert self.proc.stderr is not None
-        self.stderr_task = (
-            self.persistent_session.stderr_task
-            if self.reused and self.persistent_session is not None
-            else asyncio.create_task(self.stderr_tail())
-        )
-        assert self.stderr_task is not None
-        if self.owner is not None:
-            _ACTIVE_STDERR_TASKS[self.owner] = self.stderr_task
-        self.prompt_dispatched = False
-        if self.stdin_payload is not None and self.proc.stdin is not None:
-            try:
-                self.prompt_dispatched = not self.require_input_id
-                self.proc.stdin.write(self.stdin_payload)
-                await self.proc.stdin.drain()
-            except (BrokenPipeError, ConnectionResetError):
-                pass
 
     async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
         self.steering_task: asyncio.Task[None] | None = None
@@ -1012,8 +963,8 @@ class TurnSession:
         self.rejected_commands: list[events.AgentEvent] = []
         self.rejected_signal = asyncio.Event()
         self.session_identity_uncertain = False
-        if self.steering_queue is not None and self.proc.stdin is not None:
-            self.stdin = self.proc.stdin
+        if self.steering_queue is not None and self.native.proc.stdin is not None:
+            self.stdin = self.native.proc.stdin
             if not self.require_input_id:
                 self.steering_task = asyncio.create_task(self.inputs.forward(self))
                 if self.owner is not None:
@@ -1025,22 +976,17 @@ class TurnSession:
         self.initial_session_file: str | None = None
         self.initial_session_observed = False
         self.initial_prompt_acknowledged = False
-        self.native_capability_confirmed = not self.require_input_id
         self.initial_input_started = False
         self.live_status_seen = False
         self.settlement_count = 0
         self.agent_settled_seen = False
-        self.reader = (
-            self.persistent_session.reader
-            if self.reused and self.persistent_session is not None
-            else PiRpcChannel(self.proc.stdout)
+        self.native.reader.pending.cancel_all()
+        self.native.reader.pending.add(
+            commands.GetState,
+            self.native.attestation.request.id,
+            request=self.native.attestation.request,
         )
-        assert self.reader is not None
-        self.reader.pending.cancel_all()
-        self.reader.pending.add(
-            commands.GetState, self.preflight_id, request=commands.GetState(id=self.preflight_id)
-        )
-        self.reader.pending.add(
+        self.native.reader.pending.add(
             commands.Prompt,
             self.prompt_id,
             request=commands.Prompt(
@@ -1064,26 +1010,20 @@ class TurnSession:
             self.steering_queue is not None and (not self.steering_queue.empty())
         )
         self.inputs.restore(self)
-        self.reader.pending.cancel_all()
+        self.native.reader.pending.cancel_all()
         if self.owner is not None:
             _ACTIVE_INPUT_RESTORERS.pop(self.owner, None)
         self.revision = _session_revision(self.active_session_file)
         self.retained = self.can_retain()
         if self.retained:
-            assert self.persistent_session is not None
-            self.persistent_session.proc = self.proc
-            self.persistent_session.reader = self.reader
-            self.persistent_session.stderr_task = self.stderr_task
-            self.persistent_session.launch_key = self.launch_key
-            self.persistent_session.session_file = self.active_session_file
-            self.persistent_session.session_id = self.initial_session_id
-            self.persistent_session.revision = self.revision
-            self.persistent_session.sensitive_diagnostics = self.output.sensitive
-            if self.validated_session_id is not None:
-                self.persistent_session.reopen_required = None
-                self.persistent_session.reopen_session_id = None
+            self.native.retain(
+                self.active_session_file,
+                self.initial_session_id,
+                self.revision,
+                sensitive=self.output.sensitive,
+            )
         else:
-            outcome = await self.proc.finish()
+            outcome = await self.native.proc.finish()
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
         if False:
@@ -1093,7 +1033,7 @@ class TurnSession:
         return bool(
             self.persistent_session is not None
             and self.require_input_id
-            and (self.proc.returncode is None)
+            and (self.native.proc.returncode is None)
             and self.output.clean
             and (not self.session_identity_uncertain)
             and (not self.inputs.uncertain)
@@ -1113,12 +1053,10 @@ class TurnSession:
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         if self.owner is not None:
             _ACTIVE_PROCESSES.pop(self.owner, None)
-        self.error_text = "" if self.retained else await self.stderr_task
+        self.error_text = "" if self.retained else await self.native.stderr_task
         self.output.startup_error(self.error_text)
         if self.owner is not None:
             _ACTIVE_STDERR_TASKS.pop(self.owner, None)
-        if not self.retained and self.reused and (self.persistent_session is not None):
-            await self.persistent_session.close()
         if False:
             yield
 

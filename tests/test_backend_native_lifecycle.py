@@ -26,6 +26,10 @@ class NativeBackendFixture:
     def started(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
         child = backend._ACTIVE_PROCESSES[asyncio.current_task()]
+        # Custody is already with the saved-session owner at native input start;
+        # there is no later copy from transient TurnSession process fields.
+        assert self.persistent.proc is child
+        assert self.persistent.reader is not None and self.persistent.stderr_task is not None
         if child not in self.children:
             self.children.append(child)
         return True

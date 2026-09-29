@@ -87,7 +87,7 @@ class PiCommand(DeclaredFamily):
         return False
 
     async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-        session.stdin.write(session.reader.encode(self))
+        session.stdin.write(session.native.reader.encode(self))
         await session.stdin.drain()
         return True
 

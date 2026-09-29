@@ -52,7 +52,7 @@ class StatsRequest:
         )
 
     async def request(self, session: TurnSession) -> None:
-        if session.proc.stdin is None or self.requested:
+        if session.native.proc.stdin is None or self.requested:
             return
         self.generation = session.inputs.generation
         self.settlement_count = session.settlement_count
@@ -72,11 +72,11 @@ class StatsRequest:
                 )
             ),
         )
-        self._pending = tuple(session.reader.track(command) for command in requests)
+        self._pending = tuple(session.native.reader.track(command) for command in requests)
         try:
             for command in requests:
-                session.proc.stdin.write(session.reader.command_bytes(command))
-            await session.proc.stdin.drain()
+                session.native.proc.stdin.write(session.native.reader.command_bytes(command))
+            await session.native.proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
