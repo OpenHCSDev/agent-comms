@@ -14,12 +14,18 @@ from dataclasses import dataclass, field
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
+from .audience_manifest import FrozenRecipient
+from .bus_publication import CommittedInitial
 from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import _receipt_matches
-from .historical_native_inputs import read_historical_native_inputs
+from .coordination_cohort import AcceptedCohort, _receipt_matches
+from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
-from .private_bus_checkpoint import PrefixWitness, certified_initial_page_unlocked
+from .private_bus_checkpoint import (
+    PrefixWitness,
+    certified_initial_page_unlocked,
+    verify_private_bus_checkpoint_unlocked,
+)
 from .wake import NoWakeDecision, WakeDecision
 
 _MAX_SCAN_SECONDS = 0.25
@@ -37,160 +43,212 @@ class ProvenSourceCoverage:
     source_witness: PrefixWitness = field(kw_only=True)
 
 
-def read_proven_source_coverage(
-    bus: MessageBus,
-    store: Coordination,
-    *,
-    wire_root_id: str,
-    recipient_lookup: str,
-    limit: int = 100,
-    after_seq: int = 0,
-    partial: bool = False,
-) -> ProvenSourceCoverage:
-    """Conservatively walk a bounded, *canonical* private initial snapshot.
+class SourceCoverage:
+    """Canonical source snapshot reader bound to one wire and stable recipient.
 
-    ``covered_seq`` means every initial in the snapshot through that sequence
-    was either not addressed to this stable lookup, explicitly no-wake with a
-    sealed N receipt, or has corroborated live-recorded native evidence for
-    the necessary selected stage(s). It is not an injected-message cursor:
-    no-wake and absent-audience rows are not injections. A selected unproven
-    source stops the walk even if a later source is independently proven.
-    The canonical certificate bounds each addressed-source page. A partial
-    page follows a previously verified prefix; more_initials never attests
-    coverage of later sources. An exhausted page uses the sealed latest initial
-    sequence, never the global bus high-water (which includes replies).
-    Filesystem fsync/locks are not a hard wall-clock deadline.
+    Owns bounded paging and historical corroboration, never native admission.
+    No claim, input or schema is created by this read path.
     """
-    if (
-        type(bus) is not MessageBus
-        or type(store) is not Coordination
-        or type(wire_root_id) is not str
-        or len(wire_root_id) != 32
-        or any(ch not in "0123456789abcdef" for ch in wire_root_id)
-        or type(recipient_lookup) is not str
-        or len(recipient_lookup) != 32
-        or any(ch not in "0123456789abcdef" for ch in recipient_lookup)
-        or type(limit) is not int
-        or not 0 < limit <= 100
-        or type(after_seq) is not int
-        or after_seq < 0
-        or type(partial) is not bool
-        or (after_seq != 0 and not partial)
+
+    page_budget = 32  # Existing bounded pass: 3,200 addressed initials.
+
+    def __init__(
+        self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str
     ):
-        raise ValueError("source coverage needs exact private identities and bounded scan")
-    if store.session._connection.in_transaction:
-        raise IdentityConflict("source coverage requires a committed coordinator snapshot")
-    deadline = time.monotonic() + _MAX_SCAN_SECONDS
-    # This source certificate is not a selected claim, native proof or ACK.
-    with bus.log.locked(blocking=False):
-        if time.monotonic() > deadline:
-            raise IdentityConflict("source coverage exceeded its scan deadline")
-        marker = bus.log._private_marker_unlocked()
-        if marker.root_id != wire_root_id:
-            raise IdentityConflict("source coverage private wire root changed")
-        source_witness, initials, more_initials = certified_initial_page_unlocked(
-            bus.log, marker, recipient_lookup, after=after_seq, limit=limit
+        if (
+            type(bus) is not MessageBus
+            or type(store) is not Coordination
+            or any(
+                type(value) is not str
+                or len(value) != 32
+                or any(ch not in "0123456789abcdef" for ch in value)
+                for value in (wire_root_id, recipient_lookup)
+            )
+        ):
+            raise ValueError("source coverage needs exact private identities and bounded scan")
+        self.bus, self.store = bus, store
+        self.wire_root_id, self.recipient_lookup = wire_root_id, recipient_lookup
+
+    def witness_unlocked(self) -> PrefixWitness:
+        return verify_private_bus_checkpoint_unlocked(
+            self.bus.log, self.bus.log._private_marker_unlocked()
         )
-        if after_seq > max(source_witness.latest_initial_seq, marker.admission_after_seq):
-            raise IdentityConflict("source coverage prefix exceeds certified initials")
-        if more_initials and not partial:
-            raise IdentityConflict("source coverage exceeded its bounded private initial scan")
-        horizon = initials[-1].message.seq if more_initials else source_witness.latest_initial_seq
-    covered = after_seq if partial else 0
-    injected: list[int] = []
-    no_wake: list[int] = []
-    blocked: int | None = None
-    for initial in initials:
-        seq = initial.message.seq
-        matches = [
-            (recipient, decision)
-            for recipient, decision in zip(
-                initial.audience.recipients, initial.decisions, strict=True
-            )
-            if recipient.recipient_lookup == recipient_lookup
-        ]
-        if len(matches) > 1:
-            raise IdentityConflict("duplicate stable lookup in frozen audience")
-        if not matches:
-            covered = seq  # Canonical bus proves this source did not address us.
-            continue
-        recipient, decision = matches[0]
-        with store.session.read():
-            assert_cohort_schema(store.session._connection)
-            assert_native_runtime_schema(store.session._connection)
-            sealed = ClaimBatchReceipts.one(
-                store.session._connection,
-                wire_root_id=wire_root_id,
-                wire_seq=seq,
-            )
-            receipt = (
-                _receipt_matches(store.session._connection, initial) if sealed and sealed.sealed else None
-            )
-        if receipt is None:
-            blocked = seq
-            break
-        if type(decision) is NoWakeDecision:
-            no_wake.append(seq)
+
+    def witness(self) -> PrefixWitness:
+        with self.bus.log.locked(blocking=False):
+            return self.witness_unlocked()
+
+    def read(
+        self, *, limit: int = 100, after_seq: int = 0, partial: bool = False
+    ) -> ProvenSourceCoverage:
+        """Inspect a certified page; selected UNKNOWN or absent proof stops coverage.
+
+        No-wake and absent-audience initials are coverage, never injection. An
+        exhausted page uses certified latest initial, not global bus high-water.
+        Filesystem fsync/locks are not a hard wall-clock deadline.
+        """
+        if (
+            type(limit) is not int
+            or not 0 < limit <= 100
+            or type(after_seq) is not int
+            or after_seq < 0
+            or type(partial) is not bool
+            or (after_seq != 0 and not partial)
+        ):
+            raise ValueError("source coverage needs exact private identities and bounded scan")
+        if self.store.session._connection.in_transaction:
+            raise IdentityConflict("source coverage requires a committed coordinator snapshot")
+        witness, initials, more = self._page(limit, after_seq, partial)
+        horizon = initials[-1].message.seq if more else witness.latest_initial_seq
+        covered, injected, no_wake, blocked = after_seq if partial else 0, [], [], None
+        for initial in initials:
+            seq = initial.message.seq
+            matches = [
+                (recipient, decision)
+                for recipient, decision in zip(
+                    initial.audience.recipients, initial.decisions, strict=True
+                )
+                if recipient.recipient_lookup == self.recipient_lookup
+            ]
+            if len(matches) > 1:
+                raise IdentityConflict("duplicate stable lookup in frozen audience")
+            if not matches:
+                covered = seq
+                continue
+            recipient, decision = matches[0]
+            receipt = self._receipt(initial)
+            if receipt is None:
+                blocked = seq
+                break
+            if type(decision) is NoWakeDecision:
+                no_wake.append(seq)
+            elif type(decision) is WakeDecision:
+                if not self._selected_proven(seq, recipient, decision, receipt):
+                    blocked = seq
+                    break
+                injected.append(seq)
+            else:
+                raise IdentityConflict("unsupported frozen wake decision")
             covered = seq
-            continue
-        if type(decision) is not WakeDecision:
-            raise IdentityConflict("unsupported frozen wake decision")
+        if blocked is None:
+            covered = max(covered, horizon)
+        return ProvenSourceCoverage(
+            self.wire_root_id,
+            self.recipient_lookup,
+            covered,
+            tuple(injected),
+            tuple(no_wake),
+            blocked,
+            more,
+            source_witness=witness,
+        )
+
+    def _page(
+        self, limit: int, after_seq: int, partial: bool
+    ) -> tuple[PrefixWitness, tuple[CommittedInitial, ...], bool]:
+        deadline = time.monotonic() + _MAX_SCAN_SECONDS
+        with self.bus.log.locked(blocking=False):
+            if time.monotonic() > deadline:
+                raise IdentityConflict("source coverage exceeded its scan deadline")
+            marker = self.bus.log._private_marker_unlocked()
+            if marker.root_id != self.wire_root_id:
+                raise IdentityConflict("source coverage private wire root changed")
+            witness, initials, more = certified_initial_page_unlocked(
+                self.bus.log, marker, self.recipient_lookup, after=after_seq, limit=limit
+            )
+            if after_seq > max(witness.latest_initial_seq, marker.admission_after_seq):
+                raise IdentityConflict("source coverage prefix exceeds certified initials")
+            if more and not partial:
+                raise IdentityConflict("source coverage exceeded its bounded private initial scan")
+            return witness, initials, more
+
+    def _receipt(self, initial: CommittedInitial) -> AcceptedCohort | None:
+        with self.store.session.read():
+            db = self.store.session._connection
+            assert_cohort_schema(db)
+            assert_native_runtime_schema(db)
+            sealed = ClaimBatchReceipts.one(
+                db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
+            )
+            return _receipt_matches(db, initial) if sealed and sealed.sealed else None
+
+    def _selected_proven(
+        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort
+    ) -> bool:
         assignments = [
-            assignment
-            for assignment in receipt.assignments
-            if assignment.recipient_lookup == recipient_lookup
-            and assignment.recipient == recipient.canonical_thread
+            a
+            for a in receipt.assignments
+            if a.recipient_lookup == self.recipient_lookup
+            and a.recipient == recipient.canonical_thread
         ]
         if len(assignments) != 1 or assignments[0].lifecycle.mode != decision.wake_mode:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
         if not decision.wake_mode.active:
-            blocked = seq  # PASSIVE has no native injection semantics.
-            break
-        evidence = read_historical_native_inputs(
-            store,
-            wire_root_id=wire_root_id,
-            recipient_lookup=recipient_lookup,
-            source_seq=seq,
+            return False  # PASSIVE is not native injection.
+        evidence = self.native_inputs(seq)
+        return decision.wake_mode.proves_source(evidence) and all(
+            p.assignment_id == assignments[0].assignment_id for p in evidence
         )
-        stages = {proof.stage: proof for proof in evidence}
-        needed = (
-            ("full",)
-            if decision.wake_mode.active and not decision.wake_mode.triage
-            else (
-                ("triage", "full")
-                if stages.get("triage") and stages["triage"].triage_result == "full"
-                else ("triage",)
-            )
+
+    def native_inputs(self, source_seq: int) -> tuple[HistoricalNativeInput, ...]:
+        return read_historical_native_inputs(
+            self.store,
+            wire_root_id=self.wire_root_id,
+            recipient_lookup=self.recipient_lookup,
+            source_seq=source_seq,
         )
-        if (
-            any(
-                stage not in stages or not stages[stage].expected_prompt_equality_established
-                for stage in needed
-            )
-            or (
-                decision.wake_mode.triage
-                and (
-                    "triage" not in stages
-                    or stages["triage"].triage_result not in {"ignore", "full"}
+
+    def evidence(self, coverage: ProvenSourceCoverage, *, through_seq: int | None = None):
+        """Every selected source in the prefix, not only the maximum input."""
+        return tuple(
+            proof
+            for seq in coverage.injected_source_seqs
+            if through_seq is None or seq <= through_seq
+            for proof in self.native_inputs(seq)
+        )
+
+    def last_proof(self, source_seq: int) -> HistoricalNativeInput | None:
+        if source_seq == 0:
+            return None
+        matching = [
+            p for p in self.native_inputs(source_seq) if p.expected_prompt_equality_established
+        ]
+        if not matching:
+            raise IdentityConflict("current cursor source lacks live-bound native proof")
+        return matching[-1]
+
+    def prefix(self, *, through_seq: int | None = None) -> ProvenSourceCoverage:
+        """Rescan the whole activation prefix; no persisted high-water is trusted."""
+        with self.bus.log.locked(blocking=False):
+            marker = self.bus.log._private_marker_unlocked()
+            if marker.root_id != self.wire_root_id:
+                raise IdentityConflict("current source admission root changed")
+            floor = marker.admission_after_seq
+        if through_seq is not None and 0 < through_seq <= floor:
+            raise IdentityConflict("current source proof precedes this activation")
+        covered, injected, no_wake, witness = floor, [], [], None
+        for _ in range(self.page_budget):
+            page = self.read(after_seq=covered, partial=True)
+            if page.covered_seq < covered:
+                raise IdentityConflict("canonical source coverage regressed between pages")
+            if witness is not None and page.source_witness != witness:
+                raise IdentityConflict("certified source changed between coverage pages")
+            witness, covered = page.source_witness, page.covered_seq
+            injected.extend(page.injected_source_seqs)
+            no_wake.extend(page.no_wake_seqs)
+            if (
+                (through_seq is not None and covered >= through_seq)
+                or page.blocked_seq is not None
+                or not page.more_initials
+            ):
+                return ProvenSourceCoverage(
+                    self.wire_root_id,
+                    self.recipient_lookup,
+                    covered if covered > floor else 0,
+                    tuple(injected),
+                    tuple(no_wake),
+                    page.blocked_seq,
+                    page.more_initials,
+                    source_witness=witness,
                 )
-            )
-            or any(proof.assignment_id != assignments[0].assignment_id for proof in evidence)
-        ):
-            blocked = seq
-            break
-        injected.append(seq)
-        covered = seq
-    if blocked is None:
-        # The certified addressed page is exhaustive to this source bound.
-        # Absent recipients are covered, but they are NEVER native injections.
-        covered = max(covered, horizon)
-    return ProvenSourceCoverage(
-        wire_root_id,
-        recipient_lookup,
-        covered,
-        tuple(injected),
-        tuple(no_wake),
-        blocked,
-        more_initials,
-        source_witness=source_witness,
-    )
+        raise IdentityConflict("source coverage exceeded bounded canonical page budget")

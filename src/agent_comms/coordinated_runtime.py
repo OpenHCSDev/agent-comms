@@ -33,6 +33,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
+from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.tracked_turn import TrackedTurnSession
 
@@ -81,7 +82,6 @@ from .native_prompt_binding import (
 )
 from .native_prompt_send import PromptAdmissionBusy
 from .native_runtime_input import NativeRuntimeInput
-from .native_source_cursor import advance_current_native_cursor
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_sidecar import SidecarCommitUnknown, native_request_digest
@@ -1443,10 +1443,9 @@ class SelectedExecution:
         selected response into a retryable model result because its cursor failed.
         """
         try:
-            cursor = advance_current_native_cursor(
-                self.bus,
-                self.store,
-                wire_root_id=self.wire_root_id,
+            cursor = NativeSourceCursor(
+                self.bus, self.store, wire_root_id=self.wire_root_id
+            ).advance(
                 owner=self.owner,
                 owner_admission_generation=self.owner_admission_generation,
                 owner_generation=self.participant.participant_generation,

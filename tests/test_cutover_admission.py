@@ -13,7 +13,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_source_cursor import _bounded_coverage_pages
+from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_private_human_ingress import _root
 
@@ -40,13 +40,18 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
         for _ in range(2):
             reopened = Comms(comms.root)
             WakeCandidateIndex(reopened.bus).maintain(rebuild=True)
-            assert _accept_visible_initials(
-                reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
-            ) == old.seq
+            assert (
+                _accept_visible_initials(
+                    reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
+                )
+                == old.seq
+            )
             assert sealed_cohort_assignments(store, lookups["bob"]) == ()
             with pytest.raises(IdentityConflict, match="admission floor"):
                 accept_initial_cohort(reopened.bus, root_id, old.seq, store)
-            coverage = _bounded_coverage_pages(reopened.bus, store, root_id, lookups["bob"])
+            coverage = SourceCoverage(
+                reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
+            ).prefix()
             assert coverage.covered_seq == 0
             assert coverage.injected_source_seqs == ()
 
@@ -60,7 +65,9 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
             )
         assignments = sealed_cohort_assignments(store, lookups["bob"])
         assert [assignment.wire_seq for assignment in assignments] == [fresh.seq]
-        coverage = _bounded_coverage_pages(reopened.bus, store, root_id, lookups["bob"])
+        coverage = SourceCoverage(
+            reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
+        ).prefix()
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == fresh.seq  # Selection is not native proof.
