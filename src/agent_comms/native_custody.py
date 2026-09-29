@@ -89,6 +89,14 @@ class EmptyNative(NativeCustody):
     available = False
 
 
+class NativeCleanupFailed(RuntimeError):
+    """The exact child is gone; its failed cleanup cannot own future inputs."""
+
+    def __init__(self, successor, error):
+        self.successor = successor
+        super().__init__(f"Native process retired, but cleanup failed: {type(error).__name__}: {error}")
+
+
 @dataclass
 class ReopenNative(NativeCustody):
     available = False
@@ -124,6 +132,7 @@ class RetiringNative(NativeCustody):
     available = False
     task: asyncio.Task[None]
     successor: NativeCustody
+    child: PiSessionChild
 
     def retire(self, successor=None):
         if successor is not None:
@@ -131,7 +140,12 @@ class RetiringNative(NativeCustody):
         return self
 
     async def closed(self):
-        await asyncio.shield(self.task)
+        try:
+            await asyncio.shield(self.task)
+        except Exception as error:
+            if self.child.proc.retired:
+                raise NativeCleanupFailed(self.successor, error) from error
+            raise
         return self.successor
 
     def reopen(self, session_file):
@@ -148,6 +162,7 @@ class BorrowedNative(NativeCustody):
         return RetiringNative(
             asyncio.create_task(self.child.close()),
             self.successor if successor is None else successor,
+            self.child,
         )
 
     def reopen(self, session_file):
@@ -195,6 +210,7 @@ class RetainedNative(NativeCustody):
         return RetiringNative(
             asyncio.create_task(self.child.close()),
             EmptyNative() if successor is None else successor,
+            self.child,
         )
 
     def reopen(self, session_file):

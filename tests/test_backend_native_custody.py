@@ -124,3 +124,33 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
     finally:
         release.set()
         await asyncio.gather(retire, return_exceptions=True)
+
+
+async def test_retired_native_cleanup_failure_is_reported_once_without_poisoning_new_input(
+    native_backend, monkeypatch
+):
+    """Inject a cleanup IO fault after the real pinned child has actually exited."""
+    from agent_comms.native_custody import PiSessionChild
+
+    owner = native_backend
+    assert (await owner.run("Before retirement IO failure"))[-1].ok
+    previous = owner.persistent.custody.child.proc
+    close = PiSessionChild.close
+
+    async def failed_pipe_join(child):
+        await close(child)
+        if child.proc is previous:
+            assert not child.proc.alive()
+            raise TimeoutError
+
+    monkeypatch.setattr(PiSessionChild, "close", failed_pipe_join)
+    with pytest.raises(Exception):
+        await owner.persistent.close_idle()
+    assert not previous.alive()
+    # This is the same operation the model control performs. It must not join
+    # a failed task which still claims custody over an already retired child.
+    await owner.persistent.close_idle()
+    result = await owner.run("Distinct new input after retirement IO failure")
+    assert result[-1].ok, result[-1]
+    assert owner.provider.posts == len(owner.saved_inputs()) == 2
+    assert owner.persistent.custody.child.proc is not previous

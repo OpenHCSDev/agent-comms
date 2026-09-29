@@ -1,0 +1,11 @@
+# Post-cancel session and delivery checkpoint
+
+Owner: PR199 stream completion worker. Persistent isolated source: /home/ts/wt/comms-post-cancel-session-custody-20260929. Toad follow-up: fix/post-cancel-delivery-feedback-20260929. Parent owns global stack pins and activation.
+
+Real user log parse (client ast.literal_eval, server JSON): prompt20 cancelled successfully, then model controls21/22 and later prompts23/24 returned empty Internal errors. The exact agent-comms-ux owner diagnostic showed TimeoutError while joining native retirement; subsequent operations joined the failed retained task. No original request was replayed.
+
+Fix: exact child/group retirement proof permits releasing failed cleanup custody while surfacing its error once; still-live children remain fenced. Request errors carry the existing published typed failure receipt, preventing a second contradictory failure card. Cancellation publishes the existing durable input state's disposition without changing uncertain attempts or granting replay. Before delivery is Not sent; native started is stated explicitly; unknown stays unconfirmed.
+
+Verified through isolated noneditable Core/Toad wheels and the approved native776 package: actual Toad/ACP/Pi/localhost-provider three-stage cancellation (before native send, provider pending, partial reply painted), successful ACP model controls after each, distinct final message, no replay. Actual refused ACP attachment before any prompt paints Not sent. Focused real native cleanup IO-fault injection passes (1 test): error surfaces, child is actually dead, subsequent model-style close and distinct input work. This injection is focused lifecycle proof, not reproduction of the original timing.
+
+Disposable owned output: /home/ts/.cache/agent-scratch/pr199-stream-worker, this worktree's .worker-stages, and transferred Toad worktree's .stream-worker-stages. Retain source, wheel environment and bounded evidence; remove owned run scratch. Resource headroom warnings require serial bounded runs. Draft checkpoint; paired pin, ratchets and final failure journey follow before merge.
