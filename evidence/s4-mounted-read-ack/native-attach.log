@@ -1,0 +1,240 @@
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/s │
+│ ite-packages/textual/worker.py:385 in _run                                   │
+│                                                                              │
+│   382 │   │   │   self.state = WorkerState.RUNNING                           │
+│   383 │   │   │   app.log.worker(self)                                       │
+│   384 │   │   │   try:                                                       │
+│ ❱ 385 │   │   │   │   self._result = await self.run()                        │
+│   386 │   │   │   except asyncio.CancelledError as error:                    │
+│   387 │   │   │   │   self.state = WorkerState.CANCELLED                     │
+│   388 │   │   │   │   self._error = error                                    │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │           app = ToadApp(                                                 │ │
+│ │                 │   title='ToadApp',                                     │ │
+│ │                 │   classes={                                            │ │
+│ │                 │   │   '-dark-mode',                                    │ │
+│ │                 │   │   '-show-sessions-bar',                            │ │
+│ │                 │   │   '-theme-ansi-dark'                               │ │
+│ │                 │   },                                                   │ │
+│ │                 │   pseudo_classes={                                     │ │
+│ │                 │   │   'ansi',                                          │ │
+│ │                 │   │   'nocolor',                                       │ │
+│ │                 │   │   'dark',                                          │ │
+│ │                 │   │   'focus'                                          │ │
+│ │                 │   }                                                    │ │
+│ │                 )                                                        │ │
+│ │         error = NoMatches("No nodes match '#sidebar-left' on             │ │
+│ │                 Vertical(id='sidebar-controls')")                        │ │
+│ │          self = <Worker                                                  │ │
+│ │                 │   ERROR                                                │ │
+│ │                 │   name='_hydrate_panels'                               │ │
+│ │                 │   group='sidebar-panels'                               │ │
+│ │                 │   description='<coroutine object                       │ │
+│ │                 SideBar._hydrate_panels at 0x7ffa5ee3cf20>'              │ │
+│ │                 >                                                        │ │
+│ │ worker_failed = WorkerFailed('Worker raised exception: NoMatches("No     │ │
+│ │                 nodes match \'#sidebar-left\' on                         │ │
+│ │                 Vertical(id=\'sidebar-controls\')")')                    │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/s │
+│ ite-packages/textual/worker.py:371 in run                                    │
+│                                                                              │
+│   368 │   │   Returns:                                                       │
+│   369 │   │   │   Return value of the work.                                  │
+│   370 │   │   """                                                            │
+│ ❱ 371 │   │   return await (                                                 │
+│   372 │   │   │   self._run_threaded() if self._thread_worker else self._run │
+│   373 │   │   )                                                              │
+│   374                                                                        │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ self = <Worker                                                           │ │
+│ │        │   ERROR                                                         │ │
+│ │        │   name='_hydrate_panels'                                        │ │
+│ │        │   group='sidebar-panels'                                        │ │
+│ │        │   description='<coroutine object SideBar._hydrate_panels at     │ │
+│ │        0x7ffa5ee3cf20>'                                                  │ │
+│ │        >                                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/s │
+│ ite-packages/textual/worker.py:358 in _run_async                             │
+│                                                                              │
+│   355 │   │   ):                                                             │
+│   356 │   │   │   return await self._work()                                  │
+│   357 │   │   elif inspect.isawaitable(self._work):                          │
+│ ❱ 358 │   │   │   return await self._work                                    │
+│   359 │   │   elif callable(self._work):                                     │
+│   360 │   │   │   raise WorkerError("Request to run a non-async function as  │
+│   361 │   │   raise WorkerError("Unsupported attempt to run an async worker" │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ self = <Worker                                                           │ │
+│ │        │   ERROR                                                         │ │
+│ │        │   name='_hydrate_panels'                                        │ │
+│ │        │   group='sidebar-panels'                                        │ │
+│ │        │   description='<coroutine object SideBar._hydrate_panels at     │ │
+│ │        0x7ffa5ee3cf20>'                                                  │ │
+│ │        >                                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/s │
+│ ite-packages/toad/widgets/side_bar.py:713 in _hydrate_panels                 │
+│                                                                              │
+│    710 │   │   │   if self.is_attached and not self._closing:                │
+│    711 │   │   │   │   self._panels_loaded = True                            │
+│    712 │   │   │   │   self._presented_layout = None                         │
+│ ❱  713 │   │   │   │   self.restore_navigation()                             │
+│    714 │   │   finally:                                                      │
+│    715 │   │   │   self._panels_ready.set()                                  │
+│    716                                                                       │
+│                                                                              │
+│ ╭──────────────────────────── locals ─────────────────────────────╮          │
+│ │ controls = Vertical(id='sidebar-controls')                      │          │
+│ │     self = ThreadSidebar(id='thread-sidebar', classes='-right') │          │
+│ ╰─────────────────────────────────────────────────────────────────╯          │
+│                                                                              │
+│ /home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/s │
+│ ite-packages/toad/widgets/side_bar.py:859 in restore_navigation              │
+│                                                                              │
+│    856 │   │   changed = self._presented_collapsed != self.collapsed         │
+│    857 │   │   if changed:                                                   │
+│    858 │   │   │   self.watch_collapsed(self.collapsed)                      │
+│ ❱  859 │   │   changed |= self._apply_layout()                               │
+│    860 │   │   navigation = self.navigation                                  │
+│    861 │   │   for panel in self.query(SideBarCollapsible):                  │
+│    862 │   │   │   if str(panel.title) in navigation.panels_collapsed:       │
+│                                                                              │
+│ ╭──────────────────────────── locals ────────────────────────────╮           │
+│ │ changed = False                                                │           │
+│ │    self = ThreadSidebar(id='thread-sidebar', classes='-right') │           │
+│ ╰────────────────────────────────────────────────────────────────╯           │
+│                                                                              │
+│ /home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/s │
+│ ite-packages/toad/widgets/side_bar.py:803 in _apply_layout                   │
+│                                                                              │
+│    800 │   │   │   slider.set_range(15, 50, placement.width_percent)         │
+│    801 │   │   │   directions = app.sidebar_layout.directions(self.id)       │
+│    802 │   │   │   for direction, action in directions.items():              │
+│ ❱  803 │   │   │   │   button = controls.query_one(f"#sidebar-{direction}",  │
+│    804 │   │   │   │   button.display = action is not None                   │
+│    805 │   │   │   │   button.tooltip = (f"Swap with the sidebar to the {dir │
+│    806 │   │   │   │   │   │   │   │     else f"Move sidebar to the {directi │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │     action = 'move'                                                      │ │
+│ │        app = ToadApp(                                                    │ │
+│ │              │   title='ToadApp',                                        │ │
+│ │              │   classes={                                               │ │
+│ │              │   │   '-dark-mode',                                       │ │
+│ │              │   │   '-show-sessions-bar',                               │ │
+│ │              │   │   '-theme-ansi-dark'                                  │ │
+│ │              │   },                                                      │ │
+│ │              │   pseudo_classes={'ansi', 'nocolor', 'dark', 'focus'}     │ │
+│ │              )                                                           │ │
+│ │   controls = Vertical(id='sidebar-controls')                             │ │
+│ │  direction = 'left'                                                      │ │
+│ │ directions = {'left': 'move', 'right': None}                             │ │
+│ │   geometry = SidebarGeometry(x=117, width=3)                             │ │
+│ │     handle = SidebarResizeHandle(id='sidebar-resize-handle')             │ │
+│ │        key = (                                                           │ │
+│ │              │   SidebarPlacement(                                       │ │
+│ │              │   │   side='right',                                       │ │
+│ │              │   │   order=0,                                            │ │
+│ │              │   │   width_percent=34,                                   │ │
+│ │              │   │   floating=False                                      │ │
+│ │              │   ),                                                      │ │
+│ │              │   SidebarPlacement(                                       │ │
+│ │              │   │   side='left',                                        │ │
+│ │              │   │   order=0,                                            │ │
+│ │              │   │   width_percent=40,                                   │ │
+│ │              │   │   floating=False                                      │ │
+│ │              │   ),                                                      │ │
+│ │              │   SidebarGeometry(x=117, width=3),                        │ │
+│ │              │   48,                                                     │ │
+│ │              │   3,                                                      │ │
+│ │              │   True                                                    │ │
+│ │              )                                                           │ │
+│ │      other = ChannelsSidebar(id='channels-sidebar')                      │ │
+│ │     parent = Center()                                                    │ │
+│ │       peer = SidebarPlacement(                                           │ │
+│ │              │   side='left',                                            │ │
+│ │              │   order=0,                                                │ │
+│ │              │   width_percent=40,                                       │ │
+│ │              │   floating=False                                          │ │
+│ │              )                                                           │ │
+│ │  placement = SidebarPlacement(                                           │ │
+│ │              │   side='right',                                           │ │
+│ │              │   order=0,                                                │ │
+│ │              │   width_percent=34,                                       │ │
+│ │              │   floating=False                                          │ │
+│ │              )                                                           │ │
+│ │   resolved = ResolvedSidebarLayout(                                      │ │
+│ │              │   bars={                                                  │ │
+│ │              │   │   'channels-sidebar': SidebarGeometry(                │ │
+│ │              │   │   │   x=0,                                            │ │
+│ │              │   │   │   width=48                                        │ │
+│ │              │   │   ),                                                  │ │
+│ │              │   │   'thread-sidebar': SidebarGeometry(                  │ │
+│ │              │   │   │   x=117,                                          │ │
+│ │              │   │   │   width=3                                         │ │
+│ │              │   │   )                                                   │ │
+│ │              │   },                                                      │ │
+│ │              │   left_gutter=48,                                         │ │
+│ │              │   right_gutter=3                                          │ │
+│ │              )                                                           │ │
+│ │       self = ThreadSidebar(id='thread-sidebar', classes='-right')        │ │
+│ │   siblings = {                                                           │ │
+│ │              │   'channels-sidebar': ChannelsSidebar(                    │ │
+│ │              │   │   id='channels-sidebar'                               │ │
+│ │              │   ),                                                      │ │
+│ │              │   'thread-sidebar': ThreadSidebar(                        │ │
+│ │              │   │   id='thread-sidebar',                                │ │
+│ │              │   │   classes='-right'                                    │ │
+│ │              │   )                                                       │ │
+│ │              }                                                           │ │
+│ │     slider = SidebarSlider(id='sidebar-width-slider')                    │ │
+│ │     toggle = SideBarToggle()                                             │ │
+│ │   viewport = 120                                                         │ │
+│ │      width = 3                                                           │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+NoMatches: No nodes match '#sidebar-left' on Vertical(id='sidebar-controls')
+Traceback (most recent call last):
+  File "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/textual/app.py", line 2210, in run_test
+    yield pilot
+  File "/home/ts/wt/comms-t2-boundary-sol-20260928/evidence/s4-mounted-read-ack/native_attach.py", line 49, in main
+    while not (app.screen.conversation.agent_ready and
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/textual/getters.py", line 149, in __get__
+    query_node = obj.query_one(self.selector, self.expect_type)
+  File "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/textual/dom.py", line 1595, in query_one
+    raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
+textual.css.query.NoMatches: No nodes match 'Conversation' on MainScreen(id='session-1', classes='-wide')
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-t2-boundary-sol-20260928/evidence/s4-mounted-read-ack/native_attach.py", line 81, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-t2-boundary-sol-20260928/evidence/s4-mounted-read-ack/native_attach.py", line 47, in main
+    async with app.run_test(size=(120, 42)) as pilot:
+               ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 235, in __aexit__
+    await self.gen.athrow(value)
+  File "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/textual/app.py", line 2218, in run_test
+    raise self._exception
+textual.worker.WorkerFailed: Worker raised exception: NoMatches("No nodes match '#sidebar-left' on Vertical(id='sidebar-controls')")
