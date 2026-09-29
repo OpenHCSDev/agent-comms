@@ -21,8 +21,39 @@ WakeScheduleCheck.schedule. Existing tests using the old entrypoint migrate.
 No startup, proof, SelectedExecution or process custody edits. Boyle386 notified
 in comment5889382288 before edits.
 
-Evidence in progress: first focused run26passed/6failed; four lacked explicit
-native package env, two obsolete watcher fixtures had no registered/bound owner.
-Failures retained in source-first.log. Fix fixtures and run bounded corrected
-checks; installed saved-native/ACP goal-failure/explicit-Retry wake journey still
-required. This draft is not live-ready. Parent active native/UI gate unchanged.
+## Verification
+
+- Source first:26passed/6failed (source-first.log). Four failures lacked the
+  explicit native package env; two watcher fixtures lacked the current registered
+  owner/session binding. Corrected setup then exposed two old flat worktree
+  metadata assertions; migrated them to CoordinationChangedUpdate without
+  restoring the deleted envelope.
+- Corrected lifetime/project/goal-standby:37passed8.33s (lifetime.log).
+- Installed affected callers:103passed/1optional native-stack skip/2failed29.15s
+  (installed-callers.log). Selector included more ACP cases than intended; no
+  broader repeat. Two pre383 tests expected late RequestError instead of the
+  actual early InputHandoffRefused; migrated the exact typed refusal and retained
+  all no-backend/no-grant-consumption/durable-unresolved assertions.
+- Corrected installed refusal plus guards:8passed1.22s (installed-refusal.log).
+- Noneditable installed saved-native history -> ACP prompt -> real native503 goal
+  failure -> passive projection -> explicit socketRetry -> one fresh native
+  continuation:1passed13.33s (installed-native.log). Loopback provider only.
+  Installed site-packages and canonical9213 manifest verified. Production source
+  cf0ebb82; subsequent changes only tests/receipt/plan.
+- Separate urgent current LIVE fork investigation: installed19e5 controls runtime
+  with canonical9213, actual41333152-byte saved OpenHCS source -> canonical fork ->
+  immediate owner ACP attachment -> exactly one StartedInput and reply. One local
+  HTTP post; fork-to-reply10.93s/test11.94s. Source unchanged, child stopped, no
+  input retry or replay. Controlled provider proof, not configuredSol or painted
+  UI proof. Parent owns the separate stale GUI manifest mismatch and fresh UI gate.
+- Ratchet: InputDrain547->454lines, god-class excess47->0; no increased measure;
+  foreign absence probes reduced5, no new chains/codec subclasses.
+
+Production:152lines deleted/200added. Net growth is the explicit shared watcher
+lifecycle and its concrete notification/poll cases, replacing absent-state
+branching and two captured task closures; no parallel runtime authority.
+
+Cleanup: seven owned disposable run directories removed after process-reference
+checks; source, wheel/runtime candidate, branch and receipts retained. No live
+process changes, original history writes or native package changes. Parent owns
+paired painted/live activation; this receipt does not claim PR390 installed live.

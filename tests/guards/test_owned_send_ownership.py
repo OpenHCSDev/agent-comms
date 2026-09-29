@@ -82,3 +82,27 @@ def test_input_drain_does_not_restore_parallel_admission_maps():
         assert not any(
             isinstance(node, ast.Attribute) and node.attr in removed for node in ast.walk(tree)
         ), owner
+
+
+def test_wake_dispatch_and_watch_modes_do_not_return_to_input_drain():
+    from agent_comms.input_drain import InputDrain
+
+    tree = ast.parse(inspect.getsource(InputDrain))
+    methods = [
+        node
+        for node in tree.body[0].body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    assert "schedule_wake" not in {node.name for node in methods}
+    for method in methods:
+        if method.name in {"ensure_live_drain", "observe"}:
+            assert not any(
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                for child in method.body
+                for node in ast.walk(child)
+            )
+    assert not any(
+        isinstance(node, ast.Name)
+        and node.id in {"open_wire_watcher", "PollingWireWatch", "WireChangeWatch"}
+        for node in ast.walk(tree)
+    )

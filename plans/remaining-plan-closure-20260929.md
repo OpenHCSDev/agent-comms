@@ -53,6 +53,17 @@ this document does not promote an activation-in-progress claim to completed.
   InputDrain wake admission; no long condition remains in either scheduler file.
   No scheduler/source receipt claims exhaustive full-plan completion.
 
+### PR390: wake dispatch and observation lifetime
+
+Parent assigned Wegener the remaining InputDrain wake/pump closure after383 and
+accepted387 for review. Based on main40b66442, PR390 deletes the nested dispatcher
+and nullable notification loop. WakeScheduleCheck owns admission through dispatch;
+RuntimeServer owns controller isolation; WireWatch owns notification/polling and
+resource release. The existing private revision observation and durable input
+ledger remain sole authorities. Boyle386 process interfaces are disjoint and
+coordinated; startup/proof/SelectedExecution are excluded. [Receipt](../evidence/input-wake-lifetime/README.md).
+Installed native acceptance is pending; parent owns paired UI/live integration.
+
 The dated measurements and old PR status rows below are retained as history.
 
 ## Compaction journal followthrough — PR371
