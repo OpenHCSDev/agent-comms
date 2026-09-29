@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict, replace
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from acp.schema import (
@@ -24,16 +25,18 @@ from .transcript_updates import AgentTextTranscriptUpdate
 from .turn_lease import FinishedTurnFence
 
 if TYPE_CHECKING:
+    from .session_lifecycle import SessionLifecycle
+    from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
 
 
+@dataclass(kw_only=True)
 class TurnEventPublication(MroDispatch):
-    def __init__(self, *, comms, sessions, effects, sync_goals, session_id):
-        self.comms = comms
-        self.sessions = sessions
-        self.effects = effects
-        self.sync_goal_execution = sync_goals
-        self.session_id = session_id
+    comms: Comms
+    sessions: SessionLifecycle
+    effects: TurnEffects
+    sync_goal_execution: Callable[[str, str], Awaitable[None]]
+    session_id: str
 
     @handles(events.InputStarted, events.Done, events.StreamSettled)
     async def sync_goals(self, event: events.InputStarted) -> None:
@@ -103,7 +106,7 @@ class TurnProgress(events.AgentEventConsumer):
             comms=comms,
             sessions=sessions,
             effects=effects,
-            sync_goals=sync_goals,
+            sync_goal_execution=sync_goals,
             session_id=session_id,
         )
 

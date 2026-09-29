@@ -5,7 +5,7 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptError, GoalAttemptStore
-from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration, ReservedGeneration
+from agent_comms.goal_generation import CancelledGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import TurnId
@@ -17,6 +17,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
     class SpecializedPausedGoal(PausedGoal):
         pass
 
+    (tmp_path / "attempts").mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(tmp_path / "attempts")
     turn = TurnId("turn")
     for settlement in (VerifiedGoalSettlement, OriginGoalSettlement):
@@ -40,7 +41,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_failed_origin_claim_retains_unresolved_reservation_and_blocks_goal(
+async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
     owner_turn, monkeypatch
 ):
     execution, progress = owner_turn
@@ -55,7 +56,7 @@ async def test_failed_origin_claim_retains_unresolved_reservation_and_blocks_goa
     with pytest.raises(GoalAttemptError, match="claim outcome unavailable"):
         progress.goals.tool_ended(events.ToolEnd("goal", "comms_set_goal", True, "created"))
     progress.goals.finish(None)
-    assert store.snapshot(goal.id).lifecycle == ReservedGeneration()
+    assert store.snapshot(goal.id).lifecycle == CancelledGeneration()
     assert (
         runner.comms.registry.require(execution.thread_name).goal.state.reason
         == "Goal origin turn did not finish successfully."
