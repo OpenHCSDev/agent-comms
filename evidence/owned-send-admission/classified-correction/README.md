@@ -17,7 +17,7 @@ Installed wheel of corrected318 in owned .venv. Native package5fde; loopback pro
 - native.log: actual ordinary summary handoff passed; new dependency fixture failed because its Message omitted required type. Retained red:1failed/1passed18.40s. Product source unchanged after this run.
 - dependency.log: corrected fixture1passed0.66s; exact dependency passes, ordinary active-goal input refuses, missing/replaced waits refuse, pre-wait message refuses with exact existing rule reasons.
 - guard.log:4 passed; newly added source/binding long-chain guard plus existing owner/deletion guards.
-- census.json: against original PR318 basea1d24d3a, no touched file increases boolean_chain_terms. New input source/binding files both0; OwnedTurn decreases61 terms. Other new modules0.
+- census.json: against original PR318 basea1d24d3a, no touched file increases boolean_chain_terms. New input source/binding files both0; OwnedTurn decreases48 terms. Other new modules0.
 - ratchet.json: no positive existing measure delta againsta1d24d3a.
 
 Same native True/None/False callback and lock-through-write unchanged. Parent merge/install remains;323 orchestration work is separate.
