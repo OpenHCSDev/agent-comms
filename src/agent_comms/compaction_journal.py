@@ -21,6 +21,13 @@ from uuid import uuid4
 from weakref import WeakKeyDictionary
 
 from .child_process import ProcessIdentity
+from .compaction_identity import (
+    FreshCoverageIdentity,
+    ReturnedFreshEnrollment,
+    ReturnedSummaryTerminal,
+    SelectedCommitReference,
+    SummaryOperationIdentity,
+)
 from .field_codec import FieldCodec
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions, InputDocument
@@ -28,8 +35,7 @@ from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SelectedModel
 from .selected_source import SelectedSource
 from .store_files import _store_lock
-from .text_digest import TextDigest
-from .thread_identity import ThreadIncarnation
+from .thread_identity import GenerationCounter, ThreadIncarnation
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -58,13 +64,13 @@ class _ReturnedTerminalAck:
     __slots__ = ("__weakref__",)
 
 
-_issued_selected_acks: WeakKeyDictionary[_ReturnedTerminalAck, tuple] = WeakKeyDictionary()
+_issued_selected_acks: WeakKeyDictionary[_ReturnedTerminalAck, ReturnedSummaryTerminal] = WeakKeyDictionary()
 # A visible enrollment SQL row after lost parent fsync is NOT coverage authority.
 # Only its exact returned registration can allow a same-process private attempt.
-_returned_fresh_enrollments: WeakKeyDictionary[FreshPrivateSession, tuple] = WeakKeyDictionary()
+_returned_fresh_enrollments: WeakKeyDictionary[FreshPrivateSession, ReturnedFreshEnrollment] = WeakKeyDictionary()
 
 
-def _consume_selected_ack(receipt: object, expected: tuple) -> bool:
+def _consume_selected_ack(receipt: object, expected: ReturnedSummaryTerminal) -> bool:
     """Consume exact one-use post-fsync receipt, never derive one from a row."""
     if type(receipt) is not _ReturnedTerminalAck:
         return False
@@ -118,6 +124,28 @@ class CompactionOperation(JournalTable, TypedTable, declared_name="operations"):
     )
 
 
+    def require_summary_link(self, attempt: SelectedSummaryAttempt, *, admit_original: bool) -> None:
+        self.state.require_committed(self.commit_id)
+        try:
+            reference = SelectedCommitReference.from_intent(json.loads(self.intent_json))
+        except (ValueError, TypeError) as error:
+            raise CompactionJournalError("Exact committed native result required to link") from error
+        if reference.identity(self.session_file) != attempt.identity:
+            raise CompactionJournalError("Exact committed native result required to link")
+        if admit_original:
+            reference.require_source(attempt.source_json)
+
+    def publication(self) -> CompactionPublication:
+        self.state.require_committed(self.commit_id)
+        try:
+            committed = FieldCodec.decode(CommittedNativeOutcome, json.loads(self.evidence_json))
+        except (ValueError, TypeError) as error:
+            raise CompactionJournalError("Exact committed native metadata required") from error
+        return CompactionPublication(
+            self.commit_id, self.session_file, committed.publication_json(self.commit_id), PendingPublication(),
+        )
+
+
 @dataclass(frozen=True)
 class SelectedSummaryAttempt(JournalTable, TypedTable, declared_name="selected_summary_attempts"):
     """Provider attempt reservation, not a summary or native commit receipt."""
@@ -134,6 +162,14 @@ class SelectedSummaryAttempt(JournalTable, TypedTable, declared_name="selected_s
             where=f"json_extract(state, '$.kind') IN {sql_names(SummaryState, unresolved=True)}",
         ),
     )
+
+    @property
+    def identity(self) -> SummaryOperationIdentity:
+        return SummaryOperationIdentity(self.session_file, self.operation_id)
+
+    def require_transition(self, target: SummaryState) -> None:
+        if not self.state.may_become(target):
+            raise CompactionJournalError("Selected summary transition forbidden")
 
     def original_has_started(self, inputs: dict[str, InputAttempt]) -> bool:
         """Completed input evidence retires this barrier, never recreates a send token.
@@ -163,6 +199,17 @@ class CompactionPublication(JournalTable, TypedTable, declared_name="publication
     state: PublicationState
 
 
+    def require_operation(self, operation: CompactionOperation) -> None:
+        if len(self.metadata_json.encode()) > 4096:
+            raise CompactionJournalError("Compaction publication metadata changed")
+        if self != operation.publication():
+            raise CompactionJournalError("Compaction publication metadata changed")
+
+    def require_metadata(self, metadata_json: str) -> None:
+        if self.metadata_json != metadata_json:
+            raise CompactionJournalError("Unknown or changed publication metadata")
+
+
 @dataclass(frozen=True)
 class PrivateRawInput(JournalTable, TypedTable, declared_name="private_raw_inputs"):
     input_id: str = field(metadata={"sql": Column(primary_key=True)})
@@ -184,6 +231,24 @@ class EnrolledPrivateSession(JournalTable, TypedTable, declared_name="enrolled_p
     creator: ProcessIdentity
 
 
+    @property
+    def coverage_identity(self) -> FreshCoverageIdentity:
+        return FreshCoverageIdentity(self.incarnation, self.creator, self.owner_lookup)
+
+    def require_coverage(
+        self, journal_path: Path, fresh: FreshPrivateSession, witness: SelectedSource,
+        admission_generation: int | None,
+    ) -> None:
+        if _returned_fresh_enrollments.get(fresh) != ReturnedFreshEnrollment(journal_path, self):
+            raise CompactionJournalError("Fresh private owner coverage differs: no returned enrollment")
+        observed = FreshCoverageIdentity(witness.incarnation, witness.owner, fresh.path.parent.name)
+        if observed != self.coverage_identity:
+            raise CompactionJournalError("Fresh private owner coverage differs: owner identity")
+        if admission_generation is not None and admission_generation != self.admission_generation:
+            raise CompactionJournalError("Fresh private owner coverage differs: admission")
+        fresh.verify_saved_identity()
+
+
 @dataclass(frozen=True)
 class JournalSchemaObject(TypedRow):
     name: str
@@ -200,17 +265,6 @@ class SyncMode(TypedRow):
     synchronous: int
 
 
-def _publication_metadata(commit_id: str, evidence: dict) -> str:
-    try:
-        committed = FieldCodec.decode(CommittedNativeOutcome, evidence)
-    except (ValueError, TypeError) as error:
-        raise CompactionJournalError("Exact committed native metadata required") from error
-    return json.dumps(
-        FieldCodec.encode(committed.publication(commit_id)),
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
 
 
 class CompactionJournal:
@@ -324,15 +378,15 @@ class CompactionJournal:
         try:
             with self._transaction() as db:
                 selected = self._blocking_selected_summary(db, canonical, inputs)
-                if selected and (
-                    len(selected) != 1
-                    or type(intent) is not dict
-                    or intent.get("selectedSummaryOperationId") != selected[0].operation_id
-                ):
-                    raise CompactionJournalError(
-                        "Blocked selected summary; unrelated native commit forbidden"
-                    )
                 if selected:
+                    if len(selected) != 1:
+                        raise CompactionJournalError("Blocked selected summary; unrelated native commit forbidden")
+                    try:
+                        reference = SelectedCommitReference.from_intent(intent)
+                    except (TypeError, ValueError) as error:
+                        raise CompactionJournalError("Blocked selected summary; unrelated native commit forbidden") from error
+                    if reference.identity(canonical) != selected[0].identity:
+                        raise CompactionJournalError("Blocked selected summary; unrelated native commit forbidden")
                     selected[0].state.require_commit_reservation()
                 CompactionOperation(commit_id, canonical, payload, IntentOperation(), None).insert(
                     db
@@ -386,16 +440,16 @@ class CompactionJournal:
         if type(fresh) is not FreshPrivateSession:
             raise CompactionJournalError("Returned fresh-session creation required")
         fresh.verify_prewrite()
-        if type(owner_lookup) is not str or not owner_lookup or "/" in owner_lookup:
+        try:
+            owner_lookup = FieldCodec.decode(str, owner_lookup)
+            GenerationCounter.require_positive(owner_generation)
+            GenerationCounter.require_positive(admission_generation)
+        except (ValueError, TypeError) as error:
+            raise CompactionJournalError("Fresh-session owner or private location differs") from error
+        if not owner_lookup or "/" in owner_lookup:
             raise CompactionJournalError("Exact private owner lookup required")
         private_root = (self.path.parent / "native-sessions").resolve(strict=False)
-        if (
-            fresh.path.resolve(strict=True).parent != private_root / owner_lookup
-            or type(owner_generation) is not int
-            or owner_generation <= 0
-            or type(admission_generation) is not int
-            or admission_generation <= 0
-        ):
+        if fresh.path.resolve(strict=True).parent != private_root / owner_lookup:
             raise CompactionJournalError("Fresh-session owner or private location differs")
         try:
             with self._transaction() as db:
@@ -420,7 +474,7 @@ class CompactionJournal:
                 enrollment.insert(db)
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError("Fresh-session coverage already enrolled") from error
-        _returned_fresh_enrollments[fresh] = (str(self.path), enrollment)
+        _returned_fresh_enrollments[fresh] = ReturnedFreshEnrollment(self.path, enrollment)
 
     def reserve_selected_summary(
         self,
@@ -500,21 +554,9 @@ class CompactionJournal:
                     if private and fresh_session is not None:
                         assert fresh_session is not None
                         coverage = EnrolledPrivateSession.one(db, session_file=canonical)
-                        witness = envelope.source
-                        if (
-                            coverage is None
-                            or _returned_fresh_enrollments.get(fresh_session)
-                            != (str(self.path), coverage)
-                            or witness.incarnation != coverage.incarnation
-                            or Path(canonical).parent.name != coverage.owner_lookup
-                            or witness.owner != coverage.creator
-                            or (
-                                admission_generation is not None
-                                and admission_generation != coverage.admission_generation
-                            )
-                        ):
-                            raise CompactionJournalError("Fresh private owner coverage differs")
-                        fresh_session.verify_saved_identity()
+                        if coverage is None:
+                            raise CompactionJournalError("Fresh private owner coverage differs: not enrolled")
+                        coverage.require_coverage(self.path, fresh_session, envelope.source, admission_generation)
                     raw_ids = frozenset(
                         row.input_id
                         for row in PrivateRawInput.select(
@@ -794,17 +836,11 @@ class CompactionJournal:
 
             # This method's verified clean-decline SQL is the only issuer.
             # _transaction() has already returned COMMIT + parent-fsync ACK.
-            scope = (str(self.path), row.session_file, operation_id, target, row.source_json)
+            scope = ReturnedSummaryTerminal(self.path, replace(row, state=target))
             receipt = _ReturnedTerminalAck()
             _issued_selected_acks[receipt] = scope
             return SelectedSummaryAdmission._from_returned_ack(
-                receipt,
-                self.path,
-                row.session_file,
-                operation_id,
-                target,
-                row.source_json,
-                admission,
+                receipt, scope, admission,
             )
         return None
 
@@ -826,32 +862,15 @@ class CompactionJournal:
         An UNKNOWN provider attempt cannot be automatically linked or retried.
         """
         target = state_type(commit_id)
-        if admission is not None and not target.original_eligible:
-            raise CompactionJournalError("Manual compaction cannot admit an original input")
+        if admission is not None:
+            target.require_original_admission()
         with self._transaction() as db:
             row = SelectedSummaryAttempt.one(db, operation_id=operation_id)
             commit = CompactionOperation.one(db, commit_id=commit_id)
-            try:
-                bound = commit is not None and (
-                    json.loads(commit.intent_json).get("selectedSummaryOperationId") == operation_id
-                )
-            except (TypeError, ValueError, AttributeError):
-                bound = False
-            if (
-                row is None
-                or not row.state.may_become(target)
-                or commit is None
-                or commit.session_file != row.session_file
-                or not commit.state.committed
-                or not bound
-            ):
+            if row is None or commit is None:
                 raise CompactionJournalError("Exact committed native result required to link")
-            if (
-                admission is not None
-                and json.loads(commit.intent_json).get("selectedSummarySourceDigest")
-                != TextDigest.of(row.source_json).value
-            ):
-                raise CompactionJournalError("Selected native intent source digest required")
+            row.require_transition(target)
+            commit.require_summary_link(row, admit_original=admission is not None)
             before = db.total_changes
             SelectedSummaryAttempt.update(
                 db,
@@ -866,19 +885,23 @@ class CompactionJournal:
             from .selected_summary_admission import SelectedSummaryAdmission
 
             # Only this method's verified native-link SQL can mint on returned fsync.
-            scope = (str(self.path), row.session_file, operation_id, target, row.source_json)
+            scope = ReturnedSummaryTerminal(self.path, replace(row, state=target))
             receipt = _ReturnedTerminalAck()
             _issued_selected_acks[receipt] = scope
             return SelectedSummaryAdmission._from_returned_ack(
-                receipt,
-                self.path,
-                row.session_file,
-                operation_id,
-                target,
-                row.source_json,
-                admission,
+                receipt, scope, admission,
             )
         return None
+
+    def require_original_admission(self, expected: SelectedSummaryAttempt) -> None:
+        if self.selected_summary(expected.operation_id) != expected:
+            raise CompactionJournalError("Selected terminal record changed")
+        if len(self.blocking_selected_summary(expected.session_file)) != 1:
+            raise CompactionJournalError("Selected original has competing reservations")
+        if self.unresolved(expected.session_file):
+            raise CompactionJournalError("Unresolved native commit excludes selected input")
+        if not expected.state.verifies_original(self, expected):
+            raise CompactionJournalError("Selected terminal does not admit original input")
 
     def pending_publications(self, session_file: str) -> tuple[CompactionPublication, ...]:
         """Read exact-ID metadata; an unknown commit cannot be projected."""
@@ -891,20 +914,9 @@ class CompactionJournal:
             )
             for row in rows:
                 operation = CompactionOperation.one(db, commit_id=row.commit_id)
-                try:
-                    if (
-                        operation is None
-                        or not operation.state.committed
-                        or row.session_file != operation.session_file
-                        or len(row.metadata_json.encode()) > 4096
-                        or row.metadata_json
-                        != _publication_metadata(row.commit_id, json.loads(operation.evidence_json))
-                    ):
-                        raise ValueError("Changed publication")
-                except (ValueError, TypeError, KeyError, AttributeError) as error:
-                    raise CompactionJournalError(
-                        "Compaction publication metadata changed"
-                    ) from error
+                if operation is None:
+                    raise CompactionJournalError("Compaction publication metadata changed")
+                row.require_operation(operation)
         return tuple(rows)
 
     def observe_publication(self, commit_id: str, metadata_json: str) -> None:
@@ -918,8 +930,9 @@ class CompactionJournal:
         """
         with self._transaction() as db:
             row = CompactionPublication.one(db, commit_id=commit_id)
-            if row is None or row.metadata_json != metadata_json:
+            if row is None:
                 raise CompactionJournalError("Unknown or changed publication metadata")
+            row.require_metadata(metadata_json)
             if row.state.may_become(ObservedPublication()):
                 CompactionPublication.update(
                     db, where="commit_id=?", parameters=(commit_id,), state=ObservedPublication()
@@ -935,9 +948,13 @@ class CompactionJournal:
         pre-write native refusal. Once UNKNOWN, only writer-fenced exact-ID
         reconciliation may establish committed or aborted-no-write.
         """
-        metadata = _publication_metadata(commit_id, evidence) if publication else None
-        if publication and not outcome.committed:
-            raise CompactionJournalError("Exact committed native metadata required")
+        metadata = None
+        if publication:
+            outcome.require_committed(commit_id)
+            try:
+                metadata = FieldCodec.decode(CommittedNativeOutcome, evidence).publication_json(commit_id)
+            except (ValueError, TypeError) as error:
+                raise CompactionJournalError("Exact committed native metadata required") from error
         payload = json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(payload.encode()) > 65536:
             raise ValueError("Compaction outcome exceeds bound")

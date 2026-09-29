@@ -534,8 +534,8 @@ class Publisher:
             sequence=last_sequence + 1,
             snapshot=registry_snapshot,
         )
-        if stored.message_id != intent.expected_message_id:
-            raise RelationViolationError("Stored response does not match expected Message ID.")
+        if not intent.matches_publication(stored):
+            raise RelationViolationError("Stored response does not match publication intent.")
         row = conversation.record(metadata.root_id, stored, intent)
         validate_delivery_record(row, metadata.root_id)
         self.log._append_private_unlocked(metadata, row)
