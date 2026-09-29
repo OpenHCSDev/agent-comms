@@ -36,11 +36,8 @@ from agent_comms.native_prompt_binding import (
     native_request_digest,
     read_expected_prompt_binding,
 )
-from agent_comms.native_source_cursor import (
-    advance_current_native_cursor,
-    read_current_native_cursor,
-)
-from agent_comms.proven_source_coverage import read_proven_source_coverage
+from agent_comms.native_source_cursor import NativeSourceCursor
+from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 
@@ -250,8 +247,8 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
     assert turn.cursor_status == "proven"
     assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        current = read_current_native_cursor(
-            comms.bus, store, wire_root_id=root_id, owner_name="alpha"
+        current = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+            owner_name="alpha"
         )
         assert current is not None and current.input_id == turn.input_id
         assert current.injected_seq == initial.message.seq
@@ -289,9 +286,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     lookup = stable_thread_lookup(people[1].created_at)
     bus = comms.bus
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        before = read_proven_source_coverage(
-            bus, store, wire_root_id=root_id, recipient_lookup=lookup
-        )
+        before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
         accept_initial_cohort(bus, root_id, second.seq, store)
     first_turn = await SelectedExecution(
@@ -299,26 +294,22 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        middle = read_proven_source_coverage(
-            bus, store, wire_root_id=root_id, recipient_lookup=lookup
-        )
+        middle = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert middle.covered_seq == first.message.seq
         assert middle.injected_source_seqs == (first.message.seq,)
         assert middle.blocked_seq == second.seq
-        current = read_current_native_cursor(bus, store, wire_root_id=root_id, owner_name="alpha")
+        current = NativeSourceCursor(bus, store, wire_root_id=root_id).read(owner_name="alpha")
         assert current is not None and current.injected_seq == first.message.seq
     second_turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        after = read_proven_source_coverage(
-            bus, store, wire_root_id=root_id, recipient_lookup=lookup
-        )
+        after = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert after.covered_seq == second.seq
         assert after.injected_source_seqs == (first.message.seq, second.seq)
         assert after.blocked_seq is None
-        current = read_current_native_cursor(bus, store, wire_root_id=root_id, owner_name="alpha")
+        current = NativeSourceCursor(bus, store, wire_root_id=root_id).read(owner_name="alpha")
         assert current is not None and current.injected_seq == second.seq
         assert current.input_id == second_turn.input_id
     assert len(calls) == 2
@@ -344,27 +335,26 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     assert later is not None and later.cursor_status == "blocked_gap"
     assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        coverage = read_proven_source_coverage(
+        coverage = SourceCoverage(
             comms.bus,
             store,
             wire_root_id=root_id,
             recipient_lookup=stable_thread_lookup(people[1].created_at),
-        )
+        ).read()
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == first.message.seq
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
             is None
         )
         with pytest.raises(IdentityConflict, match="bounded private initial scan"):
-            read_proven_source_coverage(
+            SourceCoverage(
                 comms.bus,
                 store,
                 wire_root_id=root_id,
                 recipient_lookup=stable_thread_lookup(people[1].created_at),
-                limit=1,
-            )
+            ).read(limit=1)
 
 
 async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):
@@ -393,12 +383,12 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         is not None
     )
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        coverage = read_proven_source_coverage(
+        coverage = SourceCoverage(
             comms.bus,
             store,
             wire_root_id=root_id,
             recipient_lookup=stable_thread_lookup(people[1].created_at),
-        )
+        ).read()
         assert coverage.covered_seq == second.seq
         assert coverage.injected_source_seqs == (first.message.seq,)
         assert coverage.no_wake_seqs == (second.seq,)
@@ -423,12 +413,12 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
         ).run()
     assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        coverage = read_proven_source_coverage(
+        coverage = SourceCoverage(
             comms.bus,
             store,
             wire_root_id=root_id,
             recipient_lookup=stable_thread_lookup(people[1].created_at),
-        )
+        ).read()
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == first.message.seq
@@ -444,13 +434,13 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        old = read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+        old = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
         assert old is not None and old.injected_seq == initial.message.seq
     comms.registry.unregister("alpha")
     comms.registry.heartbeat("alpha")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
             is None
         )
         retained = store.session._connection.execute(
@@ -477,14 +467,11 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
         lookup = stable_thread_lookup(people[1].created_at)
         generation = store.participants.get(lookup).participant_generation
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
             is None
         )
         assert (
-            advance_current_native_cursor(
-                comms.bus,
-                store,
-                wire_root_id=root_id,
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).advance(
                 owner=owner,
                 owner_admission_generation=admission_generation,
                 owner_generation=generation,
@@ -493,7 +480,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
             is None
         )
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
             is None
         )
         old_generation = store.session._connection.execute(
@@ -508,7 +495,9 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
                 (admission_generation, turn.input_id),
             )
         assert (
-            store.session._connection.execute("SELECT COUNT(*) FROM current_native_cursor").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT COUNT(*) FROM current_native_cursor"
+            ).fetchone()[0]
             == 1
         )
     assert len(calls) == 1
@@ -529,7 +518,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
             (first.message.seq + 100,),
         )
         with pytest.raises(IdentityConflict, match="exceeds canonical source proof"):
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
     assert len(calls) == 1
 
 
@@ -547,9 +536,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "alpha-new", expected_generation=1)
         assert (
-            read_current_native_cursor(
-                comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
-            )
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha-new")
             is None
         )
     second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
@@ -563,9 +550,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
         # The old selected native proof remains historical evidence, not a
         # prefix bridge into the renamed owner's new generation/epoch.
         assert (
-            read_current_native_cursor(
-                comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
-            )
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha-new")
             is None
         )
         rows = store.session._connection.execute(

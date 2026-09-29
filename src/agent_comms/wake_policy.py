@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .typed_table import sql_literal
+
+if TYPE_CHECKING:
+    from .historical_native_inputs import HistoricalNativeInput
 
 
 @dataclass(frozen=True)
@@ -60,12 +63,18 @@ class WakePolicy(DeclaredFamily, affix="Wake"):
     def triage_expectation(self):
         raise IntegrityViolationError("wake policy does not permit triage")
 
+    @abstractmethod
+    def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool: ...
+
     def full_expectation(self):
         return "this is yours; answer the original committed message"
 
 
 class PassiveWake(WakePolicy):
     active = False
+
+    def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
+        return False
 
     @classmethod
     def initial_state(cls):
@@ -80,6 +89,15 @@ class PassiveWake(WakePolicy):
 class BoundedTriageWake(WakePolicy):
     triage = True
 
+    def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
+        stages = {proof.stage: proof for proof in evidence}
+        triage = stages.get("triage")
+        if triage is None or not triage.expected_prompt_equality_established:
+            return False
+        if triage.triage_result == "ignore":
+            return True
+        return triage.triage_result == "full" and FullWake().proves_source(evidence)
+
     def triage_expectation(self):
         return "engage only if this concerns your assigned task; otherwise IGNORE"
 
@@ -91,6 +109,12 @@ class BoundedTriageWake(WakePolicy):
 
 
 class FullWake(WakePolicy):
+    def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
+        return any(
+            proof.stage == "full" and proof.expected_prompt_equality_established
+            for proof in evidence
+        )
+
     @classmethod
     def initial_state(cls):
         from .assignment_states import FullPendingAssignment

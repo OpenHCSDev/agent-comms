@@ -348,7 +348,10 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     assert reconnect_cursor.observation.cursor.input_id == current.observation.cursor.input_id
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            len(NativeRuntimeInput.select(store.session._connection, where="session_id IS NOT NULL")) == 1
+            len(
+                NativeRuntimeInput.select(store.session._connection, where="session_id IS NOT NULL")
+            )
+            == 1
         )
         assert (
             store.session._connection.execute(
@@ -517,7 +520,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
         comms.registry.heartbeat("beta")
         raise BlockingIOError("writer holds the observation lock")
 
-    monkeypatch.setattr("agent_comms.acp.read_current_native_cursor", replacement_during_read)
+    monkeypatch.setattr("agent_comms.acp.NativeSourceCursor.read", replacement_during_read)
     await agent._publish_private_cursor("beta", "beta")
     assert updates[-1].status == "unavailable"
     assert updates[-1].scope.admission_generation > scope.admission_generation
@@ -692,7 +695,9 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
         await agent.inputs.drain_inbox("beta")
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT COUNT(*) FROM claim_batch_receipts"
+            ).fetchone()[0]
             == 0
         )
     assert calls == []
