@@ -25,7 +25,7 @@ class NativeBackendFixture:
 
     def started(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
-        child = backend._ACTIVE_PROCESSES[asyncio.current_task()]
+        child = backend.TurnSession.active[asyncio.current_task()].native.proc
         # Custody is already with the saved-session owner at native input start;
         # there is no later copy from transient TurnSession process fields.
         assert self.persistent.custody.child.proc is child
@@ -199,7 +199,7 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
 
 
-@pytest.mark.parametrize("termination", ["cancel", "eof"])
+@pytest.mark.parametrize("termination", ["cancel", "eof", "owner_stop"])
 async def test_actual_native_interrupted_turn_never_replays_or_retains(native_backend, termination):
     owner = native_backend
     owner.provider.status = 0
@@ -215,9 +215,13 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
             with pytest.raises(asyncio.CancelledError):
                 await turn
         else:
-            await child.stop()
+            if termination == "owner_stop":
+                await backend.terminate_task_process(turn)
+            else:
+                await child.stop()
             result = await turn
             assert isinstance(result[-1], events.Done) and not result[-1].ok
+        assert turn not in backend.TurnSession.active
         assert not child.alive()
         assert not owner.persistent.available
         assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
