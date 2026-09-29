@@ -15,7 +15,8 @@ from agent_comms.bus_publication import HumanOrigin, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_initial_cohort
-from agent_comms.coordination_store import Applied, MutationStore
+from agent_comms.coordination_results import Applied
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
     HumanInitialUnknownError,
     RelationViolationError,
@@ -30,7 +31,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _root(tmp_path: Path) -> tuple[Comms, MutationStore, str, dict[str, str]]:
+def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root)
@@ -38,10 +39,10 @@ def _root(tmp_path: Path) -> tuple[Comms, MutationStore, str, dict[str, str]]:
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.register(Thread(name, frozenset({"team"}), str(root), created_at=created_at))
         lookups[name] = stable_thread_lookup(created_at)
-    store = MutationStore(str(root / "coordination.sqlite"), clock_ms=lambda: 9999)
+    store = Coordination(str(root / "coordination.sqlite"), clock_ms=lambda: 9999)
     install_private_cohort_schema(store)
     for name in lookups:
-        store.register_participant(lookups[name], name, name, committed=True)
+        store.participants.register(lookups[name], name, name, committed=True)
     return comms, store, comms.messaging.initialize_private_initial_protocol(), lookups
 
 

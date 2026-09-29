@@ -11,10 +11,12 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordinator import Coordination
+
 from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _receipt_matches
-from .coordination_store import IdentityConflict, MutationStore
 from .historical_native_inputs import read_historical_native_inputs
 from .message_bus import MessageBus
 from .private_bus_checkpoint import PrefixWitness, certified_initial_page_unlocked
@@ -37,7 +39,7 @@ class ProvenSourceCoverage:
 
 def read_proven_source_coverage(
     bus: MessageBus,
-    store: MutationStore,
+    store: Coordination,
     *,
     wire_root_id: str,
     recipient_lookup: str,
@@ -61,7 +63,7 @@ def read_proven_source_coverage(
     """
     if (
         type(bus) is not MessageBus
-        or type(store) is not MutationStore
+        or type(store) is not Coordination
         or type(wire_root_id) is not str
         or len(wire_root_id) != 32
         or any(ch not in "0123456789abcdef" for ch in wire_root_id)
@@ -76,7 +78,7 @@ def read_proven_source_coverage(
         or (after_seq != 0 and not partial)
     ):
         raise ValueError("source coverage needs exact private identities and bounded scan")
-    if store._connection.in_transaction:
+    if store.session._connection.in_transaction:
         raise IdentityConflict("source coverage requires a committed coordinator snapshot")
     deadline = time.monotonic() + _MAX_SCAN_SECONDS
     # This source certificate is not a selected claim, native proof or ACK.
@@ -113,16 +115,16 @@ def read_proven_source_coverage(
             covered = seq  # Canonical bus proves this source did not address us.
             continue
         recipient, decision = matches[0]
-        with store._read_transaction():
-            assert_cohort_schema(store._connection)
-            assert_native_runtime_schema(store._connection)
+        with store.session.read():
+            assert_cohort_schema(store.session._connection)
+            assert_native_runtime_schema(store.session._connection)
             sealed = ClaimBatchReceipts.one(
-                store._connection,
+                store.session._connection,
                 wire_root_id=wire_root_id,
                 wire_seq=seq,
             )
             receipt = (
-                _receipt_matches(store._connection, initial) if sealed and sealed.sealed else None
+                _receipt_matches(store.session._connection, initial) if sealed and sealed.sealed else None
             )
         if receipt is None:
             blocked = seq

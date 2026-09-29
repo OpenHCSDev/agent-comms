@@ -18,7 +18,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
@@ -60,7 +60,7 @@ def _fresh(tmp_path: Path, count: int = 2):
             )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
         install_native_runtime_schema(store)
@@ -68,7 +68,7 @@ def _fresh(tmp_path: Path, count: int = 2):
         for n in range(count):
             name = "alpha" if n == 0 else f"other{n:03}"
             owner = comms.registry.require(name)
-            store.register_participant(
+            store.participants.register(
                 stable_thread_lookup(owner.created_at), name, name, committed=True
             )
     return root, root_id, comms
@@ -76,7 +76,7 @@ def _fresh(tmp_path: Path, count: int = 2):
 
 def _seal(comms: Comms, root: Path, root_id: str, target: str, body: str):
     message = comms.messaging.send_initial_cohort("sender", target, body)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count
     return message
 
@@ -102,7 +102,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         cursor = read_current_native_cursor(
             comms.bus, reopened, wire_root_id=root_id, owner_name="alpha"
         )
@@ -131,7 +131,7 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         cursor = read_current_native_cursor(
             comms.bus, reopened, wire_root_id=root_id, owner_name="alpha"
         )
@@ -156,7 +156,7 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     delivery_ms = (time.perf_counter() - start) * 1000
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     start = time.perf_counter()
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         current = read_current_native_cursor(
             comms.bus, reopened, wire_root_id=root_id, owner_name="alpha"
         )
@@ -182,11 +182,11 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
     path = root / "private_bus_checkpoint.sqlite3"
     with sqlite3.connect(path) as db:
         db.execute("DELETE FROM addressed")  # Disposable corrupt sidecar only.
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RelationViolationError, match="seal changed"):
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"
             ).fetchone()[0]
             == 1

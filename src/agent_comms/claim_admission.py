@@ -12,12 +12,14 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordinator import Coordination
+
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .channel_targets import BuiltinChannel
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordination_cohort import _receipt_matches
-from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
@@ -33,14 +35,14 @@ from .threads import Thread
 
 
 def verify_selected_wake(
-    comms: Comms, store: MutationStore, admission: WakeAdmission, owner_name: str
+    comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str
 ) -> None:
     """Reject any unselected, stale, stopped, or unrelated N/K execution."""
-    if type(comms) is not Comms or type(store) is not MutationStore:
+    if type(comms) is not Comms or type(store) is not Coordination:
         raise TypeError("Wake admission requires the actual wire and coordinator stores")
     if type(admission) is not WakeAdmission or type(owner_name) is not str:
         raise IdentityConflict("Wake admission is not typed")
-    if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     with _store_lock(comms._wire_lock_path):
         _require_no_private_owner_rename(comms.root)
@@ -62,7 +64,7 @@ def _verify_selected_wake_state(
     initial: CommittedInitial,
     owner: Thread,
     generation: int,
-    store: MutationStore,
+    store: Coordination,
     admission: WakeAdmission,
 ) -> None:
     """Check an already locked bus/owner snapshot against one SQL state."""
@@ -76,17 +78,17 @@ def _verify_selected_wake_state(
         or turn.admission_generation != generation
     ):
         raise IdentityConflict("Wake source or owner turn does not match")
-    with store._read_transaction():
-        assert_cohort_schema(store._connection)
-        receipt = _receipt_matches(store._connection, initial)
+    with store.session.read():
+        assert_cohort_schema(store.session._connection)
+        receipt = _receipt_matches(store.session._connection, initial)
         if not any(
             assignment.assignment_id == admission.wake_assignment_id
             for assignment in receipt.assignments
         ):
             raise IdentityConflict("Wake claim is not in the sealed selected cohort")
-        assignment = store.assignment(admission.wake_assignment_id)
-        participant = store.participant(admission.recipient_lookup)
-        snapshot = store.snapshot(admission.execution_id)
+        assignment = store.assignments.get(admission.wake_assignment_id)
+        participant = store.participants.get(admission.recipient_lookup)
+        snapshot = store.snapshots.get(admission.execution_id)
         attempt = snapshot.attempt
         if (
             assignment.recipient_lookup != admission.recipient_lookup
@@ -117,14 +119,14 @@ def _verify_selected_wake_state(
 
 @contextmanager
 def _selected_claim_boundary(
-    comms: Comms, store: MutationStore, admission: WakeAdmission, owner_name: str
+    comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str
 ):
     """One wire/bus/registry boundary for claim acquisition and exact release."""
-    if type(comms) is not Comms or type(store) is not MutationStore:
+    if type(comms) is not Comms or type(store) is not Coordination:
         raise TypeError("Wake claim requires the actual wire and coordinator stores")
     if type(admission) is not WakeAdmission or type(owner_name) is not str:
         raise IdentityConflict("Wake claim admission is not typed")
-    if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     bus = comms.bus
     with (
@@ -162,14 +164,14 @@ def _selected_claim_boundary(
         )
         if initial is None:
             raise IdentityConflict("Selected wake has no committed initial row")
-        with store._read_transaction():
+        with store.session.read():
             _verify_selected_wake_state(initial, owner, generation, store, admission)
             yield bus, metadata, registry, owner, initial
 
 
 def publish_selected_resource_claim(
     comms: Comms,
-    store: MutationStore,
+    store: Coordination,
     admission: WakeAdmission,
     owner_name: str,
     resource_path: FileClaimPath,
@@ -233,7 +235,7 @@ def publish_selected_resource_claim(
 
 def release_selected_resources(
     comms: Comms,
-    store: MutationStore,
+    store: Coordination,
     admission: WakeAdmission,
     owner_name: str,
     claims: tuple[ClaimOwner, ...],
@@ -336,7 +338,7 @@ def _opened_selected_file(
 
 def write_selected_claimed_file(
     comms: Comms,
-    store: MutationStore,
+    store: Coordination,
     admission: WakeAdmission,
     owner_name: str,
     claimed: ClaimOwner,
@@ -348,7 +350,7 @@ def write_selected_claimed_file(
     subprocesses, or human edits. Failure after truncation/write is UNKNOWN;
     callers must inspect, never automatically retry this operation.
     """
-    if type(comms) is not Comms or type(store) is not MutationStore:
+    if type(comms) is not Comms or type(store) is not Coordination:
         raise TypeError("Selected write requires the actual wire and coordinator stores")
     if (
         type(admission) is not WakeAdmission
@@ -358,7 +360,7 @@ def write_selected_claimed_file(
         or len(contents) > 1024 * 1024
     ):
         raise IdentityConflict("Selected write requires a bounded typed claim and bytes")
-    if store.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
+    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Selected write coordinator belongs to another root")
     if not hasattr(os, "O_NOFOLLOW"):
         raise IdentityConflict("Selected write requires no-follow file descriptors")
@@ -400,7 +402,7 @@ def write_selected_claimed_file(
         # A separate fail-fast coordinator connection holds the transaction
         # through fsync. A concurrently settling attempt must not slip between
         # verification and irreversible file mutation.
-        with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._transaction():
+        with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             projection, _ = bus.log._claim_projection_unlocked(marker)

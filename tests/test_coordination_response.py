@@ -14,11 +14,18 @@ from pathlib import Path
 import pytest
 
 from agent_comms.assignment_states import CompletedAssignment
+from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    PublicationUncertain,
+    StaleRevision,
+)
 from agent_comms.coordination_response import (
     LiveResponseOwner,
     install_private_response_schema,
@@ -26,19 +33,13 @@ from agent_comms.coordination_response import (
     publish_fenced_response,
     resolve_existing_response,
 )
-from agent_comms.coordination_store import (
-    AlreadyApplied,
-    IdentityConflict,
-    MutationStore,
-    PublicationActivationBlocked,
-    PublicationUncertain,
-    StaleRevision,
-    prepare_fence_token,
-)
+from agent_comms.coordination_results import AlreadyApplied
 from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
+from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -53,7 +54,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus needs PO
 class Fixture:
     comms: Comms
     bus: MessageBus
-    store: MutationStore
+    store: Coordination
     root_id: str
     origin_seq: int
     reply_target: str
@@ -86,10 +87,10 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     assert len(original_record.audience.recipients) == 1
     recipient = original_record.audience.recipients[0]
     bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
-    store = MutationStore(str(comms.root / "coordination.sqlite3"), clock_ms=lambda: 1_000)
+    store = Coordination(str(comms.root / "coordination.sqlite3"), clock_ms=lambda: 1_000)
     install_private_cohort_schema(store)
     install_private_response_schema(store)
-    store.register_participant(
+    store.participants.register(
         recipient.recipient_lookup,
         recipient.canonical_thread,
         recipient.canonical_thread,
@@ -100,7 +101,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     assignment = accepted.value.assignments[0]
     reply_target = derive_exact_reply_target(original)
     assert reply_target is not None
-    store.create_execution(
+    store.executions.create(
         "exec",
         ExecutionOrigin.WIRE,
         recipient.recipient_lookup,
@@ -109,9 +110,9 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         assignment_ids=(assignment.assignment_id,),
         exact_target=reply_target,
     )
-    store.mark_pending("exec", expected_revision=1)
+    store.executions.mark_pending("exec", expected_revision=1)
     token = prepare_fence_token()
-    first = store.start_attempt(
+    first = store.attempts.start(AttemptStart(
         "exec",
         1,
         "owner",
@@ -119,14 +120,14 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         token,
         expected_execution_revision=2,
         expected_pointer_revision=0,
-    ).value.fence
-    accepted_turn = store.advance_attempt(
+    )).value.fence
+    accepted_turn = store.attempts.advance(
         first, PromptAcceptedAttempt, expected_pointer_revision=1
     ).value.fence
-    model = store.advance_attempt(
+    model = store.attempts.advance(
         accepted_turn, ModelRunningAttempt, expected_pointer_revision=1
     ).value.fence
-    final = store.advance_attempt(
+    final = store.attempts.advance(
         model,
         SettlingAttempt,
         expected_pointer_revision=1,
@@ -174,7 +175,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         )
         intent = result.value
         assert intent.exact_target == case.reply_target
-        assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
+        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PublishingResponse
         assert case.bus.log.read_keyed_response(intent) is None
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness)
@@ -205,9 +206,9 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
             resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness),
             AlreadyApplied,
         )
-        assert published == case.store.snapshot("exec")
+        assert published == case.store.snapshots.get("exec")
         case.store.close()
-        with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
+        with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
             reread = resolve_existing_response(
                 reopened, case.bus, case.fence, owner_witness=case.witness
             )
@@ -226,7 +227,7 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
                 case.store, disabled, case.fence, "not allowed", owner_witness=case.witness
             )
         with (
-            MutationStore(str(case.comms.root / "other.sqlite3")) as wrong_database,
+            Coordination(str(case.comms.root / "other.sqlite3")) as wrong_database,
             pytest.raises(IdentityConflict, match="different trusted roots"),
         ):
             prepare_fenced_response(
@@ -240,7 +241,7 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
             prepare_fenced_response(
                 case.store, alien_bus, case.fence, "not allowed", owner_witness=case.witness
             )
-        assert type(case.store.snapshot("exec").obligation.lifecycle) is PendingResponse
+        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PendingResponse
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
     finally:
         case.close()
@@ -266,7 +267,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
         assert case.bus.log.read_keyed_response(intent) is None
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert (
-            case.store._connection.execute(
+            case.store.session._connection.execute(
                 "SELECT COUNT(*) FROM publication_append_dispatches"
             ).fetchone()[0]
             == 1
@@ -277,7 +278,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness)
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
-        assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
+        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PublishingResponse
     finally:
         case.close()
 
@@ -302,10 +303,10 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         with pytest.raises(OSError):
             publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
         assert case.bus.log.read_keyed_response(intent) is not None
-        assert type(case.store.snapshot("exec").obligation.lifecycle) is PublishingResponse
+        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PublishingResponse
         monkeypatch.undo()
         case.store.close()
-        with MutationStore(str(case.comms.root / "coordination.sqlite3")) as reopened:
+        with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
             result = resolve_existing_response(
                 reopened, case.bus, case.fence, owner_witness=case.witness
             )
@@ -335,7 +336,7 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
             publish_fenced_response(case.store, case.bus, stale, owner_witness=case.witness)
         assert case.bus.log.read_keyed_response(intent) is None
         assert (
-            case.store._connection.execute(
+            case.store.session._connection.execute(
                 "SELECT COUNT(*) FROM publication_append_dispatches"
             ).fetchone()[0]
             == 0
@@ -371,8 +372,8 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
         def revoke():
             assert entered.wait(2)
             try:
-                with MutationStore(str(case.comms.root / "coordination.sqlite3")) as other:
-                    other.advance_owner_generation(
+                with Coordination(str(case.comms.root / "coordination.sqlite3")) as other:
+                    other.participants.advance_generation(
                         case.owner_lookup, "new-owner", expected_generation=1
                     )
                 outcomes.append("advanced")
@@ -400,7 +401,7 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
         assert not worker.is_alive() and outcomes == ["advanced"]
         assert not wire_worker.is_alive() and wire_done.is_set()
         assert type(settled.value.execution.lifecycle) is CompletedExecution
-        assert case.store.participant(case.owner_lookup).participant_generation == 2
+        assert case.store.participants.get(case.owner_lookup).participant_generation == 2
     finally:
         case.close()
 
@@ -468,7 +469,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
 @pytest.mark.parametrize("change", ["finish", "stop", "pid", "turn", "recipient"])
 def test_response_requires_current_exact_live_turn(tmp_path, change):
     """No PID-only or omitted-witness path can turn SQL finality into publication."""
-    from agent_comms.coordination_store import StaleFence
+    from agent_comms.coordination_errors import StaleFence
 
     case = _ready(tmp_path)
     try:
@@ -489,6 +490,6 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
                 case.store, case.bus, case.fence, "must not publish", owner_witness=witness
             )
         assert case.bus.log.latest_sequence() == case.origin_seq
-        assert case.store.snapshot("exec").publication_intent is None
+        assert case.store.snapshots.get("exec").publication_intent is None
     finally:
         case.close()

@@ -278,11 +278,11 @@ class OwnerLifecycle:
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
             from .bus_publication import stable_thread_lookup
-            from .coordination_store import MutationStore
+            from .coordinator import Coordination
 
-            with MutationStore(str(self.root / "coordination.sqlite3")) as store:
+            with Coordination(str(self.root / "coordination.sqlite3")) as store:
                 store.install_private_runtime()
-                store.register_participant(
+                store.participants.register(
                     stable_thread_lookup(thread.created_at),
                     thread.name,
                     thread.name,

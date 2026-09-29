@@ -18,8 +18,9 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import IdentityConflict, MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
@@ -66,13 +67,13 @@ def _root(tmp_path: Path):
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
         install_native_runtime_schema(store)
         install_prompt_binding_schema(store)
         lookup = stable_thread_lookup(people[1].created_at)
-        store.register_participant(lookup, "alpha", "alpha", committed=True)
+        store.participants.register(lookup, "alpha", "alpha", committed=True)
         accept_initial_cohort(comms.bus, root_id, first.seq, store)
     return root, root_id, comms, first, lookup
 
@@ -94,14 +95,14 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
         "sender", "#team", "selected after 1000 other rows"
     )
     assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         current = read_current_native_cursor(
             Comms(root).bus, reopened, wire_root_id=root_id, owner_name="alpha"
         )
@@ -124,7 +125,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     for number in range(101):
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
     later = comms.messaging.send_initial_cohort("sender", "alpha", "later selected")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, later.seq, store)
     good, good_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
@@ -132,9 +133,9 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert result is not None and result.cursor_status == "blocked_gap" and len(good_calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         assert (
-            reopened._connection.execute(
+            reopened.session._connection.execute(
                 f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name} WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
@@ -164,7 +165,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
         comms.messaging.send_initial_cohort("sender", "other", "uncertain other original")
     assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         retained = read_current_native_cursor(
             Comms(root).bus, reopened, wire_root_id=root_id, owner_name="alpha"
         )
@@ -175,7 +176,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
 
 def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
     root, root_id, comms, first, lookup = _root(tmp_path)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
             is None
@@ -183,13 +184,13 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
     index = root / "private_bus_checkpoint.sqlite3"
     with __import__("sqlite3").connect(index) as db:
         db.execute("DELETE FROM addressed WHERE lookup=? AND seq=?", (lookup, first.seq))
-    with MutationStore(str(root / "coordination.sqlite3")) as reopened:
+    with Coordination(str(root / "coordination.sqlite3")) as reopened:
         with pytest.raises((RelationViolationError, IdentityConflict)):
             read_current_native_cursor(
                 Comms(root).bus, reopened, wire_root_id=root_id, owner_name="alpha"
             )
         assert (
-            reopened._connection.execute(
+            reopened.session._connection.execute(
                 f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"
             ).fetchone()[0]
             == 0

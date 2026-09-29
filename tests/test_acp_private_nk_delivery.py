@@ -22,7 +22,8 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_initials
 from agent_comms.comms import Comms
-from agent_comms.coordination_store import MutationStore, PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
@@ -59,8 +60,8 @@ def _session(tmp_path, *, package=True):
     )
     comms.threads.register(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        store.register_participant(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.participants.register(
             stable_thread_lookup(owner.created_at), "beta", "beta", committed=True
         )
     agent = CommsAgent(
@@ -124,8 +125,8 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     session = await agent.new_session(cwd=str(project), mcp_servers=[])
     owner = comms.registry.require(session.session_id)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        store.register_participant(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.participants.register(
             stable_thread_lookup(owner.created_at), owner.name, owner.name, committed=True
         )
     invoke_tool(
@@ -143,8 +144,8 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
 ):
     comms, agent, _ = _session(tmp_path)
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        before = store.participant(lookup)
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        before = store.participants.get(lookup)
     assert before.owner_thread == "beta" and before.participant_generation == 1
     renamed = (
         comms.threads.rename_managed_thread("beta", "gamma", owner_pid=os.getpid())
@@ -152,8 +153,8 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
         else comms.threads._rename_thread("beta", "gamma")
     )
     assert renamed.previous == "beta" and renamed.current == "gamma"
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        after = store.participant(lookup)
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        after = store.participants.get(lookup)
     assert after.owner_thread == "gamma" and after.participant_generation == 2
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
@@ -178,7 +179,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"})
     if seal_old:
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
-        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"})
@@ -213,8 +214,8 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
 def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
     comms, _, _ = _session(tmp_path)
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        store.advance_owner_generation(lookup, "unexpected", expected_generation=1)
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        store.participants.advance_generation(lookup, "unexpected", expected_generation=1)
     with pytest.raises(RelationViolationError, match="Private coordinator owner differs"):
         comms.threads._rename_thread("beta", "gamma")
     assert comms.registry.require("beta").name == "beta"
@@ -237,15 +238,15 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
         comms.threads._rename_thread("beta", "gamma")
     monkeypatch.setattr(comms.registry, "rename", original)
     assert comms.registry.require("beta").name == "beta"
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        person = store.participant(lookup)
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        person = store.participants.get(lookup)
     assert person.owner_thread == "beta" and person.participant_generation == 3
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send_message("sender", "beta", "not published after uncertain rename")
     bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
     with (
-        MutationStore(str(comms.root / "coordination.sqlite3")) as store,
+        Coordination(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),
     ):
         _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
@@ -270,14 +271,14 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     )
     running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        reserved_count = len(NativeRuntimeInput.select(store._connection))
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        reserved_count = len(NativeRuntimeInput.select(store.session._connection))
         assert reserved_count == 1
 
     def fail_before_sql(*args, **kwargs):
         raise OSError("synthetic SQL rename CAS outage")
 
-    monkeypatch.setattr(MutationStore, "advance_owner_generation", fail_before_sql)
+    monkeypatch.setattr(Coordination, "advance_owner_generation", fail_before_sql)
     with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
         comms.threads._rename_thread("beta", "gamma")
     assert (comms.root / ".private-owner-rename.pending").is_file()
@@ -286,11 +287,11 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         await asyncio.wait_for(running, timeout=8)
     assert calls == []  # No raw native send; reserved outcome remains UNKNOWN, never retried.
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             len(
                 NativeRuntimeInput.select(
-                    store._connection, where="sent_owner_admission_generation IS NOT NULL"
+                    store.session._connection, where="sent_owner_admission_generation IS NOT NULL"
                 )
             )
             == 0
@@ -345,12 +346,12 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     assert reconnect_cursor.scope == current.scope
     assert reconnect_cursor.revision > current.revision
     assert reconnect_cursor.observation.cursor.input_id == current.observation.cursor.input_id
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            len(NativeRuntimeInput.select(store._connection, where="session_id IS NOT NULL")) == 1
+            len(NativeRuntimeInput.select(store.session._connection, where="session_id IS NOT NULL")) == 1
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
                 (root_id, original.seq),
             ).fetchone()[0]
@@ -454,8 +455,8 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
 async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
     comms, agent, _ = _session(tmp_path)
     before = cursor_envelope(agent.sessions.metadata("beta"))
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        store._connection.execute("DROP TABLE native_runtime_schema_meta")
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
     unavailable = cursor_envelope(agent.sessions.metadata("beta"))
     assert unavailable.status == "unavailable"
     assert unavailable.scope == before.scope
@@ -491,8 +492,8 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert len(updates) == before
     await agent._publish_private_cursor("beta", "beta")
     assert len(updates) == before  # Same proof; no spurious transition on unlock.
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        store._connection.execute("DROP TABLE native_runtime_schema_meta")
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
     await agent._publish_private_cursor("beta", "beta")
     assert updates[-1].status == "unavailable"
     assert updates[-1].scope == loaded.scope
@@ -543,9 +544,9 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
     original = comms.bus.log.message_by_id(sent["id"])
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
         await agent.inputs.drain_inbox("beta")
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
                 (root_id, original.seq),
             ).fetchone()[0]
@@ -563,8 +564,8 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
     comms.threads.register(alpha)
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        store.register_participant(
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        store.participants.register(
             stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True
         )
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
@@ -587,8 +588,8 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     )
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        receipt = store._connection.execute(
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        receipt = store.session._connection.execute(
             "SELECT kind,claim_id FROM cohort_delivery_receipts WHERE wire_root_id=? "
             "AND wire_seq=? AND recipient_lookup=?",
             (
@@ -614,8 +615,8 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
     assert agent.inputs.pending_turns == {}
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        rows = NativeRuntimeInput.select(store._connection)
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        rows = NativeRuntimeInput.select(store.session._connection)
         assert len(rows) == 1 and rows[0].session_id is None
 
 
@@ -651,28 +652,28 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
         with pytest.raises(StaleFence, match="busy"):
             await second.inputs.drain_inbox("beta")
         assert len(calls) == 1
-        with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             assert (
-                store._connection.execute(
+                store.session._connection.execute(
                     "SELECT COUNT(*) FROM wake_claims WHERE disposition='engaged'"
                 ).fetchone()[0]
                 == 1
             )
-            assert len(NativeRuntimeInput.select(store._connection)) == 1
+            assert len(NativeRuntimeInput.select(store.session._connection)) == 1
     finally:
         release.set()
         assert await asyncio.wait_for(running, timeout=5) == 1
     assert await second.inputs.drain_inbox("beta") == 1
     assert len(calls) == 2
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM wake_claims WHERE disposition='engaged'"
             ).fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM wake_claims WHERE disposition='completed'"
             ).fetchone()[0]
             == 2
@@ -689,9 +690,9 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
     comms.agents.begin_turn("beta", "human-live-turn")
     with pytest.raises(StaleFence, match="busy"):
         await agent.inputs.drain_inbox("beta")
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
             == 0
         )
     assert calls == []
@@ -725,8 +726,8 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
         await asyncio.wait_for(running, timeout=5)
     assert calls == []
     assert await agent.inputs.drain_inbox("beta") == 0
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        rows = NativeRuntimeInput.select(store._connection)
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        rows = NativeRuntimeInput.select(store.session._connection)
         assert len(rows) == 1 and rows[0].session_id is None
 
 
@@ -759,9 +760,9 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
     )
     with pytest.raises(PublicationActivationBlocked, match="unreviewed Pi"):
         await agent.inputs.drain_inbox("beta")
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_root_id=? AND wire_seq=?",
                 (root_id, original.seq),
             ).fetchone()[0]

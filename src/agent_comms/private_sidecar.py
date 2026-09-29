@@ -26,7 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .coordination_store import IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict
+
 from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
 
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024

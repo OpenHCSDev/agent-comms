@@ -6,7 +6,9 @@ import hashlib
 import json
 import sqlite3
 
-from .coordination_store import MutationStore, PublicationActivationBlocked
+from agent_comms.coordination_errors import PublicationActivationBlocked
+from agent_comms.coordinator import Coordination
+
 from .native_runtime_input import NativeRuntimeSchemaMeta, NativeRuntimeTable
 from .typed_table import SQLiteForeignKeys, SQLiteSchemaObject, TypedTable
 
@@ -43,11 +45,11 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
         raise PublicationActivationBlocked("native runtime schema has drifted")
 
 
-def install_native_runtime_schema(store: MutationStore) -> None:
+def install_native_runtime_schema(store: Coordination) -> None:
     """Explicit fresh schema install. Existing state must match the declared schema."""
-    if type(store) is not MutationStore:
+    if type(store) is not Coordination:
         raise TypeError("native runtime requires the actual coordinator store")
-    with store._transaction() as db:
+    with store.session.transaction() as db:
         present = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",

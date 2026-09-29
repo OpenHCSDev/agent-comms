@@ -25,8 +25,9 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
+from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
@@ -77,13 +78,13 @@ def _root(tmp_path: Path):
     root_id = comms.messaging.initialize_private_initial_protocol()
     message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
         install_native_runtime_schema(store)
         install_prompt_binding_schema(store)
         for recipient in initial.audience.recipients:
-            store.register_participant(
+            store.participants.register(
                 recipient.recipient_lookup,
                 recipient.canonical_thread,
                 recipient.canonical_thread,
@@ -248,7 +249,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
     assert turn is not None
     assert turn.cursor_status == "proven"
     assert len(calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         current = read_current_native_cursor(
             comms.bus, store, wire_root_id=root_id, owner_name="alpha"
         )
@@ -287,7 +288,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
     lookup = stable_thread_lookup(people[1].created_at)
     bus = comms.bus
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         before = read_proven_source_coverage(
             bus, store, wire_root_id=root_id, recipient_lookup=lookup
         )
@@ -297,7 +298,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         middle = read_proven_source_coverage(
             bus, store, wire_root_id=root_id, recipient_lookup=lookup
         )
@@ -310,7 +311,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         after = read_proven_source_coverage(
             bus, store, wire_root_id=root_id, recipient_lookup=lookup
         )
@@ -334,7 +335,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     later = await SelectedExecution(
@@ -342,7 +343,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     ).run()
     assert later is not None and later.cursor_status == "blocked_gap"
     assert len(calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         coverage = read_proven_source_coverage(
             comms.bus,
             store,
@@ -378,12 +379,12 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
     comms.threads.register(beta)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        store.register_participant(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.participants.register(
             stable_thread_lookup(beta.created_at), "beta", "beta", committed=True
         )
     second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     assert (
         await SelectedExecution(
@@ -391,7 +392,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         ).run()
         is not None
     )
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         coverage = read_proven_source_coverage(
             comms.bus,
             store,
@@ -421,7 +422,7 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         coverage = read_proven_source_coverage(
             comms.bus,
             store,
@@ -442,17 +443,17 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         old = read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
         assert old is not None and old.injected_seq == initial.message.seq
     comms.registry.unregister("alpha")
     comms.registry.heartbeat("alpha")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
             is None
         )
-        retained = store._connection.execute(
+        retained = store.session._connection.execute(
             "SELECT owner_admission_generation,input_id FROM current_native_cursor"
         ).fetchone()
         assert tuple(retained) == (old.owner_admission_generation, turn.input_id)
@@ -472,9 +473,9 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
     comms.registry.heartbeat("alpha")
     owner = comms.registry.require("alpha")
     admission_generation = comms.registry.snapshot().admission_generations["alpha"]
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
-        generation = store.participant(lookup).participant_generation
+        generation = store.participants.get(lookup).participant_generation
         assert (
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
             is None
@@ -495,19 +496,19 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
             read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
             is None
         )
-        old_generation = store._connection.execute(
+        old_generation = store.session._connection.execute(
             "SELECT sent_owner_admission_generation FROM native_runtime_input WHERE input_id=?",
             (turn.input_id,),
         ).fetchone()[0]
         assert old_generation != admission_generation
         with pytest.raises(sqlite3.IntegrityError, match="input identity is frozen"):
-            store._connection.execute(
+            store.session._connection.execute(
                 "UPDATE native_runtime_input SET sent_owner_admission_generation=? "
                 "WHERE input_id=?",
                 (admission_generation, turn.input_id),
             )
         assert (
-            store._connection.execute("SELECT COUNT(*) FROM current_native_cursor").fetchone()[0]
+            store.session._connection.execute("SELECT COUNT(*) FROM current_native_cursor").fetchone()[0]
             == 1
         )
     assert len(calls) == 1
@@ -522,8 +523,8 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.session._connection.execute(
             "UPDATE current_native_cursor SET covered_seq=?",
             (first.message.seq + 100,),
         )
@@ -543,8 +544,8 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     assert old_turn is not None and old_turn.cursor_status == "proven"
     lookup = stable_thread_lookup(people[1].created_at)
     comms.registry.rename("alpha", "alpha-new")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        store.advance_owner_generation(lookup, "alpha-new", expected_generation=1)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.participants.advance_generation(lookup, "alpha-new", expected_generation=1)
         assert (
             read_current_native_cursor(
                 comms.bus, store, wire_root_id=root_id, owner_name="alpha-new"
@@ -552,13 +553,13 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
             is None
         )
     second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
     fresh = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()
     assert fresh is not None and fresh.cursor_status == "blocked_gap"
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         # The old selected native proof remains historical evidence, not a
         # prefix bridge into the renamed owner's new generation/epoch.
         assert (
@@ -567,7 +568,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
             )
             is None
         )
-        rows = store._connection.execute(
+        rows = store.session._connection.execute(
             "SELECT owner_generation,input_id FROM current_native_cursor ORDER BY owner_generation"
         ).fetchall()
         assert [tuple(row) for row in rows] == [(1, old_turn.input_id)]
@@ -585,7 +586,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
     assert turn is not None
     assert turn.cursor_status == "proven"
     assert len(calls) == 2  # triage probe, then the FULL answer turn
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -616,7 +617,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
             native_package=tmp_path,
             opt_in=True,
         ).run()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         # A mismatched journal cannot become a live-recorded source receipt.
         evidence = read_historical_native_inputs(
             store,
@@ -625,7 +626,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
             source_seq=initial.message.seq,
         )
         assert evidence == ()
-        binding = store._connection.execute(
+        binding = store.session._connection.execute(
             "SELECT input_id,session_id FROM native_runtime_input WHERE assignment_id IN "
             "(SELECT assignment_id FROM wake_claims WHERE wire_seq=?)",
             (initial.message.seq,),
@@ -661,7 +662,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -670,7 +671,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         )
         assert [row.stage for row in evidence] == ["triage"]
         assert evidence[0].expected_prompt_equality_established
-        rows = store._connection.execute(
+        rows = store.session._connection.execute(
             "SELECT stage,session_id FROM native_runtime_input ORDER BY stage"
         ).fetchall()
         assert [(row["stage"], row["session_id"] is not None) for row in rows] == [
@@ -724,7 +725,7 @@ async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert tampered and len(calls) == (1 if stage == "triage" else 2)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -733,7 +734,7 @@ async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
         )
         assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_input "
                 "WHERE stage=? AND session_id IS NOT NULL",
                 (stage,),
@@ -765,7 +766,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
     root, root_id, _, initial, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         path = binding_store_path(store)
 
     async def mutate_after_admitted_send(package, **kwargs):
@@ -788,7 +789,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == (1 if stage == "triage" else 2)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -797,7 +798,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         )
         assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_input WHERE stage=? AND session_id IS NULL",
                 (stage,),
             ).fetchone()[0]
@@ -818,8 +819,8 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     def generation_bumps_then_bind(*args, **kwargs):
         # Simulate a concurrent owner generation advance after the reservation
         # committed but before the binding write.
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
-            store.advance_owner_generation(
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            store.participants.advance_generation(
                 stable_thread_lookup(people[1].created_at),
                 "alpha",
                 expected_generation=1,
@@ -857,7 +858,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
             native_package=tmp_path,
             opt_in=True,
         ).run()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         # No live proof row exists: the reserved input is invisible to the
         # historical view and its binding can never be promoted on its own.
         evidence = read_historical_native_inputs(
@@ -875,7 +876,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
         assert read_expected_prompt_binding(store, "0" * 32) is None
     # The sidecar binding row exists and stays immutable, but no equality is
     # reported anywhere because the live proof never arrived.
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         all_bindings = _all_bindings(store)
         assert len(all_bindings) == 1
         assert all_bindings[0].stage == "triage"

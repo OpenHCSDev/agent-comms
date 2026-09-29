@@ -41,13 +41,13 @@ from agent_comms.coordinated_runtime_schema import (
     install_native_runtime_schema,
 )
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
-from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import (
+from agent_comms.coordination_errors import (
     IdentityConflict,
-    MutationStore,
     PublicationActivationBlocked,
     StaleFence,
 )
+from agent_comms.coordination_response import install_private_response_schema
+from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
 from agent_comms.native_source_cursor import read_current_native_cursor
@@ -129,9 +129,9 @@ def _root(
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = comms.messaging.send_initial_cohort("sender", target, body)
     initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
-            store.register_participant(
+            store.participants.register(
                 recipient.recipient_lookup,
                 recipient.canonical_thread,
                 recipient.canonical_thread,
@@ -311,7 +311,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert "engage only if this concerns your assigned task" in alpha_calls[0][1]
     assert "No response obligation exists until triage engages" in alpha_calls[0][1]
     assert "you owe a response" not in alpha_calls[0][1]
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         ignored = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -346,18 +346,18 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         ).run()
         is None
     )
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         lookups = {person.name: stable_thread_lookup(person.created_at) for person in people}
-        assert store.participant(lookups["alpha"]).pointer.execution_id is None
-        assert store.participant(lookups["beta"]).pointer.execution_id is None
+        assert store.participants.get(lookups["alpha"]).pointer.execution_id is None
+        assert store.participants.get(lookups["beta"]).pointer.execution_id is None
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 3
         )
         assert (
-            store._connection.execute("SELECT count(*) FROM cohort_delivery_receipts").fetchone()[0]
+            store.session._connection.execute("SELECT count(*) FROM cohort_delivery_receipts").fetchone()[0]
             == 2
         )
     assert not (root / "read_markers.json").exists()
@@ -386,9 +386,9 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
     )
     assert not calls  # No-wake has no prompt frame or model invocation.
     assert len(comms.views.channel_history("#team")) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM cohort_delivery_receipts WHERE kind='unmentioned_observer'"
             ).fetchone()[0]
             == 1
@@ -397,7 +397,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
 
 def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         alpha_lookup = stable_thread_lookup(people[1].created_at)
         beta_lookup = stable_thread_lookup(people[2].created_at)
         assert sealed_cohort_assignments(store, alpha_lookup) == ()
@@ -415,7 +415,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
 
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = render_selected_wake_frame(initial, assignment, people[1], phase="triage")
@@ -440,7 +440,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     assert '"audience":"direct"' in calls[0][1]
     assert '"target":"sender"' in calls[0][1]
     assert "you owe a response" in calls[0][1]
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         one = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -665,9 +665,9 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     assert ("Selected source decisions through " in calls[0][1]) is available
     if available:
         assert outcome.assignment_id in calls[0][1]
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
                 (outcome.assignment_id,),
             ).fetchone()[0]
@@ -706,9 +706,9 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     assert outcome is not None and outcome.response_message_id
     assert len(calls) == 1 and "late context must not appear" not in calls[0][1]
     assert "Optional awareness omitted; original delivered alone" in caplog.text
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
                 (outcome.assignment_id,),
             ).fetchone()[0]
@@ -722,7 +722,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
     first_base = tmp_path / "first"
     first_base.mkdir()
     first_root, _first_id, first_comms, first_initial, people = _root(first_base, direct=True)
-    with MutationStore(str(first_root / "coordination.sqlite3")) as store:
+    with Coordination(str(first_root / "coordination.sqlite3")) as store:
         assignment = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
     owner = first_comms.registry.require("beta")
     monkeypatch.setattr(runtime, "_SUPPLEMENT_BUILD_SECONDS", 0.02)
@@ -814,7 +814,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     assert outcome is not None and outcome.response_message_id
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
     assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         cursor = read_current_native_cursor(
             comms.bus, store, wire_root_id=root_id, owner_name="beta"
         )
@@ -829,7 +829,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     engaged, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", engaged)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             read_historical_native_inputs(
                 store,
@@ -839,7 +839,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             )
             == ()
         )  # A selected pending claim has not accepted model input.
-        with store._transaction(), pytest.raises(IdentityConflict, match="committed snapshot"):
+        with store.session.transaction(), pytest.raises(IdentityConflict, match="committed snapshot"):
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
@@ -851,7 +851,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 2
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         rows = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -943,8 +943,8 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
         ).run()
     assert calls == [] and session_file.read_text() == original
     assert not Path(str(session_file) + ".input-proof").exists()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        rows = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        rows = store.session._connection.execute(
             "SELECT sent_owner_admission_generation, session_id FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and tuple(rows[0]) == (None, None)
@@ -1062,8 +1062,8 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
             opt_in=True,
         ).run()
     assert calls == [] and not saved.exists() and moved.exists()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        row = store.session._connection.execute(
             "SELECT sent_owner_admission_generation,session_id FROM native_runtime_input"
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
@@ -1077,7 +1077,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
     tmp_path: Path, monkeypatch
 ) -> None:
     root, root_id, _comms, initial, people = _root(tmp_path, mentioned=True)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             read_historical_native_inputs(
                 store,
@@ -1095,9 +1095,9 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM native_runtime_input WHERE session_id IS NULL"
             ).fetchone()[0]
             == 1
@@ -1142,8 +1142,8 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     history = comms.views.channel_history("#team")
     assert len(history) == 2 and history[-1].notice
     assert "input is uncertain" in history[-1].body
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        row = store.session._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
             "JOIN native_runtime_input i ON i.assignment_id=c.assignment_id "
             "WHERE c.recipient='alpha'"
@@ -1264,8 +1264,8 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
 
     async def revoke(*args, **kwargs):
         result = await runner(*args, **kwargs)
-        with MutationStore(str(root / "coordination.sqlite3")) as rival:
-            rival.advance_owner_generation(lookup, "alpha", expected_generation=1)
+        with Coordination(str(root / "coordination.sqlite3")) as rival:
+            rival.participants.advance_generation(lookup, "alpha", expected_generation=1)
         return result
 
     monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", revoke)
@@ -1305,9 +1305,9 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
             opt_in=True,
         ).run()
     assert len(calls) == 1 and len(comms.views.channel_history("#team")) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 0
@@ -1362,9 +1362,9 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     assert not comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
     assert len(comms.bus.dm_history("sender", "beta")) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+            store.session._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
             == 0
         )
 
@@ -1411,9 +1411,9 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         assert len(calls) == 1
         assert len(comms.bus.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        inputs = store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()
-        intents = store._connection.execute("SELECT count(*) FROM publication_intents").fetchone()
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        inputs = store.session._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()
+        intents = store.session._connection.execute("SELECT count(*) FROM publication_intents").fetchone()
         assert (inputs[0], intents[0]) == ((0, 0) if mutation == "stop_then_heartbeat" else (1, 1))
 
 
@@ -1445,12 +1445,12 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root_id = comms.messaging.initialize_private_initial_protocol()
     incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
     initial = comms.bus.log.read_initial_cohort(root_id, incoming.seq)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
         install_native_runtime_schema(store)
         for recipient in initial.audience.recipients:
-            store.register_participant(
+            store.participants.register(
                 recipient.recipient_lookup,
                 recipient.canonical_thread,
                 recipient.canonical_thread,
@@ -1511,13 +1511,13 @@ async def test_owner_stop_before_response_boundary_never_appends(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(comms.bus.dm_history("sender", "beta")) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        receipts = store._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()
-        dispatched = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        receipts = store.session._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()
+        dispatched = store.session._connection.execute(
             "SELECT count(*) FROM publication_append_dispatches"
         ).fetchone()
         assert receipts[0] == dispatched[0] == 0
-        assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
+        assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
             "pending" if stop_stage == "before_intent" else "publishing"
         )
 
@@ -1558,8 +1558,8 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     assert result is not None and result.disposition is CompletedAssignment
     assert stopped.is_set() and not comms.registry.status("beta").active
     assert len(comms.bus.dm_history("sender", "beta")) == 2
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        state = store._connection.execute("SELECT state FROM obligations").fetchone()
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        state = store.session._connection.execute("SELECT state FROM obligations").fetchone()
         assert state[0] == "published"
 
 
@@ -1601,18 +1601,18 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     assert comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
     assert len(comms.bus.dm_history("sender", "beta")) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
             "pending" if boundary == "before_tx1" else "publishing"
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM publication_append_dispatches"
             ).fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
             == 1
@@ -1703,18 +1703,18 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
             ).run()
         assert len(calls) == 1
     assert len(comms.bus.dm_history("sender", "beta")) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM publication_append_dispatches"
             ).fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()[0]
+            store.session._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()[0]
             == 0
         )
-        obligation = store._connection.execute("SELECT state FROM obligations").fetchone()
+        obligation = store.session._connection.execute("SELECT state FROM obligations").fetchone()
         assert (obligation[0] if obligation is not None else None) == (
             "publishing"
             if boundary.startswith("after_tx1")
@@ -1735,13 +1735,13 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
         ).run()
     assert calls == []
     assert comms.registry.require("beta").active_turn == original
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+            store.session._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
             == 0
         )
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT count(*) FROM wake_claims WHERE disposition='engaged'"
             ).fetchone()[0]
             == 0
@@ -1774,36 +1774,36 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     assert len(calls) == 1
     rows = comms.bus.dm_history("sender", "beta")
     assert len(rows) == 2 and rows[-1].notice
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        row = store.session._connection.execute(
             "SELECT stage,session_id FROM native_runtime_input"
         ).fetchone()
         assert tuple(row) == ("full", None)
-        assert store._connection.execute("SELECT state FROM obligations").fetchone()[0] == "failed"
+        assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == "failed"
 
 
 def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: Path) -> None:
     path = tmp_path / "fresh.sqlite3"
-    with MutationStore(str(path)) as store:
+    with Coordination(str(path)) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE name='native_runtime_input'"
             ).fetchone()
             is None
         )
         install_native_runtime_schema(store)
         install_native_runtime_schema(store)
-        assert_native_runtime_schema(store._connection)
-        store._connection.execute("DROP TRIGGER native_runtime_input_delete_guard")
+        assert_native_runtime_schema(store.session._connection)
+        store.session._connection.execute("DROP TRIGGER native_runtime_input_delete_guard")
         with pytest.raises(PublicationActivationBlocked, match="drifted"):
-            assert_native_runtime_schema(store._connection)
+            assert_native_runtime_schema(store.session._connection)
 
 
 async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch) -> None:
     """Page saturation is not an empty inbox; scaffolding is not model authority."""
     root, root_id, comms, _initial, people = _root(tmp_path)
     lookup = stable_thread_lookup(people[1].created_at)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         for number in range(100):
             message = comms.messaging.send_initial_cohort(
                 "sender", "#team", f"Bounded selected-page item {number}"
@@ -1813,7 +1813,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
         assert len(first_page) == 100
         for assignment in first_page:
             # Schema-legal terminal fixture only; no forged Pi context claim.
-            store._connection.execute(
+            store.session._connection.execute(
                 (
                     "UPDATE wake_claims SET lifecycle=json_object('kind','ignored'),revision=revi"
                     "sion+1 WHERE assignment_id=? AND disposition='triage_pending'"
@@ -1833,9 +1833,9 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     # status may advance a cursor or retry the current original.
     assert outcome.cursor_status in {"blocked_gap", "unavailable"}
     assert len(calls) == 1
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT COUNT(*) FROM current_native_cursor WHERE recipient_lookup=?",
                 (lookup,),
             ).fetchone()[0]
@@ -1887,7 +1887,7 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
         ).run()
     assert calls == []
     assert comms.registry.require("beta").active_turn is None
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         pending = sealed_cohort_assignments(store, stable_thread_lookup(owner.created_at))
         assert type(pending[0].lifecycle) is TriagePendingAssignment
 
@@ -1925,9 +1925,9 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert "No automatic retry" in notice.body
     notice_initial = comms.bus.log.read_initial_cohort(root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in notice_initial.decisions)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[2].created_at)
-        assert store.participant(lookup).pointer.execution_id is None
+        assert store.participants.get(lookup).pointer.execution_id is None
         assignment = sealed_cohort_assignments(store, lookup)[0]
         assert type(assignment.lifecycle) is FailedAssignment
     diagnostics = list((root / "diagnostics").glob("*.json"))
@@ -1942,7 +1942,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     )
     assert len(calls) == before  # Failed input never replayed.
     fresh = comms.messaging.send_initial_cohort("sender", "beta", "New independent message")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await SelectedExecution(

@@ -4,16 +4,24 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core e6fa8feb (295 cursor recovery, 289 registry race,
-287 nominal tools), Toad 5983adba (137 restore inherited widget CSS and actual message painting;
-135 separate saved-history and bus-input
-verification, 133 initialization failure feedback, 131 detached controller,
-130 tab/clipboard, 134 retained-history ready fix), Textual c9743801, native5fde.
-Runtime runtime-history-visible-20260928 is live through all five launchers.
-Core owners still run e6fa8feb in runtime-cursor-recovery; this UI-only update
-does not restart them. Core288/294 are merged, awaiting the next integrated deployment.
-Four idle owners restarted using canonical lifecycle fencing. No store reset,
-history rewrite, or input replay. Existing Toad must reopen for new imports.
+Latest installed pair: core03b6f9f (299 idle cursor recovery plus298 combined
+288/290/292/294 ownership and acceptance), Toad06003aff (138 observation owners;137 actual history paint),
+Textualc9743801, native5fde. All five launchers select immutable
+runtime-observation-20260928. Four core03b6f9f owners remain in the prior
+runtime-coordinator-idle slot; UI138 activation does not restart them.
+No runtime store reset, history rewrite, or input replay. Existing Toad loads138 on its next normal restart;137 already fixed actual paint.
+
+Latest integration proof: combined installed203passed/1test-only golden mismatch
+(the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
+native child/compaction/peer/restart/reopen cases. Final299 installed periodic
+lock/socket recovery case passes1.46s. Fresh actual ACP attachment and actual
+cropped conversation paint checks are recorded in evidence/coordinator-deployment.
+First NRA paint harness queried Conversation before MainScreen mounted content;
+its teardown produced a late-focus error. Waiting on existing wait_content_ready
+fixes the harness; the red log is retained, not counted as a product pass.
+Final live NRA observation actually transitions unavailable→none while saved
+text stays painted; PR95 coverage_only with saved text painted. All four fresh
+attachments pass. Six owned inactive runtimes removed, current rollback retained.
 
 Latest correction: the preceding checks proved loaded history and cleared loading,
 but missed zero-height paint. User reported the still-empty conversation. Textual
@@ -123,12 +131,11 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   pinned native host path and prove ordinary/private one-original admission,
   correction/queued input/refusal without replay.274 merged actual fixtures and
   retained-proof production fix;277 completes private queue/native rejection.
-- [ ] Tesla: establish116 ownership first, then finish an independent substantive
-  workspace/resource implementation slice (or take over only if unowned). Use110
-  measurements, preserve operational ACP/editor state, coordinate with Carver.
-  Completed independent slice126: demand-built session panels, installed64-tab
-  and actual terminal checks, editor/undo/shell continuity. Continues116 global
-  presentation bounds and actual ACP retention; original claim remains recorded.
+- [ ] Tesla: finish129 integrated workspace/resource scope retaining116/126 and
+  merged136 sidebar retirement. Main still excludes129; no partial-install claim.
+  Actual64-tab native path, editor/draft/undo, shell and terminal continuity plus
+  actual painted replies on return are required. Use110 measurements.136 merged
+  into129, not main; reconcile116/126/110 only after complete scope lands.
 - [x] Noether: finish50 authenticated loopback browser path. Merged and installed;
   actual Chromium/ACP initialization/keyboard/authentication/streamed downloads pass.
   No external exposure and no model-turn claim from the browser-only acceptance.
@@ -163,12 +170,27 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   with current Toad caller closure132. Central handler roster, parameter-kind
   dispatch and repeated raw decoding deleted; production core net113 fewer lines.
   Paired installed native tools and actual current Toad menu/commands pass.
-- [ ] Boyle: original S3/S7 coordination row/store/schema ownership and complete
-  caller migration; parent has made no coordination production edits.
-- [ ] Dalton: original S1/S2/S3/S4 acceptance gaps and obsolete typed-source
-  fixtures. Wegener's29 reproduced baseline failures handed over for closure.
-- [ ] Wegener: finish tracked native turn lifecycle ownership in288 using existing
-  PiEvent/dispatch authorities, deleting manual duplicated event handling.
+- [x] Boyle:292 coordinator declaration/schema/connection ownership, complete
+  callers and aggregate deletion, merged through298 and installed.170 focused,
+ 94 final SQL and actual native peer/restart evidence. Net68 production lines
+  and73 test lines removed for that scope; MutationStore not yet decomposed.
+- [x] Dalton:290 retired source fixtures and maintained private-ACP/read legality
+  acceptance, integrated through298. Remaining original requirements explicitly
+  mapped in evidence/combined-ready-integration, not declared globally complete.
+- [x] Wegener:288 tracked native turn owner and294 response/stats declaration
+  ownership merged and installed, procedural executor and duplicate stats removed.
+- [x] Wegener:299 idle observation recovery merged and installed; real periodic
+  lock/socket regression and unchanged-idle no-extra-read assertion pass.
+- [ ] Boyle: remaining planned MutationStore ownership/deletion closure.
+- [ ] Dalton: execute original47 legality predicate/coupling behavior independently
+  at current rule/SQLite boundaries; source accounting alone is insufficient.
+- [ ] Wegener: remaining S2 backend ownership and actual failure/retry/steering
+  acceptance, coordinated separately from Boyle/Dalton.
+- [x] Carver:138 goal/delivery observation owners and complete caller deletion,
+  actual live/saved response paint added to maintained native tests; duplicate
+ 98-line renderer pilot deleted. Merged/installed; parent real NRA reads pass.
+- [ ] Carver: next whole planned T4 Conversation ownership/deletion surface,
+  independent of Tesla workspace and Noether sidebar; no façade extraction.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
   run completed35.94s; its payload lacks detector coverage counts, so it is not
   claimed as complete-detector/zero-debt proof. Domain review rejected schema-index

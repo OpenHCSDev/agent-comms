@@ -13,7 +13,8 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_initial_cohort
-from agent_comms.coordination_store import IdentityConflict, MutationStore
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_source_cursor import read_current_native_cursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
@@ -37,7 +38,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             comms.bus.log.write_metadata_unlocked(marker)
         fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
         initial = comms.bus.log.read_initial_cohort(root_id, fresh.seq)
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
@@ -168,8 +169,8 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         assert comms.registry.require("beta").active_turn is None
         if not selected_write:
             assert not comms.bus.log.claim_projection()
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
-            snapshot = store.snapshot(execution.execution_id)
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            snapshot = store.snapshots.get(execution.execution_id)
             assert snapshot.execution.lifecycle.completed
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead

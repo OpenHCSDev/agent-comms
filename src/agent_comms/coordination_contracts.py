@@ -43,3 +43,8 @@ def validate_execution_id(execution_id: str) -> None:
     require_bounded(execution_id, "execution_id", MAX_IDENTIFIER_CHARS)
     if ":" in execution_id:
         raise ValueError("execution_id cannot contain ':'")
+
+
+def _bounded_reason(reason: str | None) -> None:
+    if reason is not None and not 1 <= len(reason) <= MAX_REASON_CODE_CHARS:
+        raise ValueError("reason code is invalid")

@@ -23,11 +23,8 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_initial_cohort
-from agent_comms.coordination_store import (
-    IdentityConflict,
-    MutationStore,
-    PublicationActivationBlocked,
-)
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
+from agent_comms.coordinator import Coordination
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
@@ -502,10 +499,10 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     lookup = stable_thread_lookup(late.created_at)
     message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
     with (
-        MutationStore(str(root / "coordination.sqlite3")) as store,
+        Coordination(str(root / "coordination.sqlite3")) as store,
         pytest.raises(IdentityConflict, match="not registered"),
     ):
-        store.participant(lookup)
+        store.participants.get(lookup)
 
     class StopBeforeSpawnError(Exception):
         pass
@@ -515,13 +512,13 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
         assert env["AGENT_COMMS_AGENT_BIN"] == str(
             Path(sys.executable).with_name("pi-comms-native")
         )
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
-            participant = store.participant(lookup)
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            participant = store.participants.get(lookup)
             assert participant.committed and participant.owner_thread == "late-owner"
         raise StopBeforeSpawnError
 
     monkeypatch.setattr(DetachedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners.start("late-owner", agent_bin="pi")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1
