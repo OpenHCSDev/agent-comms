@@ -280,11 +280,11 @@ async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_pat
                 tokens_before=preparation.tokens_before,
                 idle_timeout_seconds=20,
             )
-        state = journal.selected_summary(failure.value.operation_id).state
+        state = journal.summaries.get(failure.value.operation_id).state
         assert state.declared_name == "failed"
         assert state.terminal and state.settled_without_original
         assert not state.original_eligible
-        assert not journal.blocking_selected_summary(str(session))
+        assert not journal.summaries.blocking(str(session))
         assert persistent.custody.idle().current and child.returncode is None
         assert len(calls) == 2, "two map chunks, no retries"
         assert len({json.dumps(call["messages"]) for call in calls}) == 2
@@ -332,7 +332,7 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
             with pytest.raises(SelectedChildUnknown):
                 await task
             assert (
-                journal.unresolved_selected_summary(str(session))[0].state.declared_name
+                journal.summaries.unresolved(str(session))[0].state.declared_name
                 == "unknown"
             )
             assert not native_input_admitted(tmp_path, str(session))

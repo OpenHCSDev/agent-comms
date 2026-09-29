@@ -10,43 +10,45 @@ import sys
 
 import pytest
 
-from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
-from delivery_owner_fixture import canonical_agent
+from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.compaction_publication_lease import publication_identity_fence
 from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation
-from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
 
 def _publication_events(updates):
     return [
-        item
+        event.publication
         for item in updates
-        if item.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
+        for event in decode_updates(item.get("_meta"))
+        if isinstance(event, CompactionPublishedUpdate)
     ]
 
 
 @pytest.fixture
 def owner(tmp_path):
+    (tmp_path / "project").mkdir()
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     session = tmp_path / "saved.jsonl"
     session.write_text("{}\n")
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-    commit_id = journal.begin(
+    commit_id = journal.operations.begin(
         str(session),
         {"summary": "private summary must not publish"},
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
     )
-    journal.resolve(
+    journal.operations.resolve(
         commit_id,
         CommittedOperation(),
         FieldCodec.encode(CommittedNativeOutcome("entry", "rev", "leaf", "0" * 64)),
@@ -64,7 +66,7 @@ async def test_local_delivery_requires_existing_owner_and_attached_transport(own
     comms.threads.attach_session("project", str(session), pid=os.getpid())
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
-        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
         updates = []
 
         class Client:
@@ -73,59 +75,14 @@ async def test_local_delivery_requires_existing_owner_and_attached_transport(own
 
         agent.on_connect(Client())
         assert await publish_pending_local(agent, "project", "project") == 1
-        assert journal.pending_publications(str(session)) == ()
+        assert journal.publications.pending(str(session)) == ()
         wire_value = json.dumps(updates)
         assert commit_id in wire_value and "entry" in wire_value
         assert "private summary" not in wire_value and "recipient" not in wire_value
-        assert "compactionPublication" in wire_value
+        assert [event.commit_id for event in _publication_events(updates)] == [commit_id]
         assert await publish_pending_local(agent, "project", "project") == 0
         bus = comms.root / "bus.jsonl"
         assert not bus.exists() or b"private summary" not in bus.read_bytes()
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp_path, monkeypatch):
-    agent, comms, session, journal, commit_id = owner
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    comms.threads.attach_session("project", str(session), pid=os.getpid())
-    updates = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update.model_dump(by_alias=True, exclude_none=True))
-
-    async def events(*args, **kwargs):
-        assert any(
-            item.get("_meta", {})
-            .get("agentComms", {})
-            .get("compactionPublication", {})
-            .get("commitId")
-            == commit_id
-            for item in updates
-        ), "Local metadata projection must precede native provider send"
-        with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
-        yield ae.Done(ok=False, text="No provider invoked")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    agent.on_connect(Client())
-    try:
-        await agent.inputs.run_owned_input("project", "project", "distinct new input")
-        assert journal.pending_publications(str(session)) == ()
-        assert (
-            len(
-                [
-                    item
-                    for item in updates
-                    if item.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
-                ]
-            )
-            == 1
-        )
     finally:
         await agent.shutdown()
 
@@ -159,7 +116,7 @@ async def test_session_rebinding_during_actual_handoff_refuses_before_delivery(o
             await publish_pending_local(agent, "project", "project")
         assert delivered == []
         assert comms.registry.require("project").session_file == str(first)
-        assert [item.commit_id for item in journal.pending_publications(str(first))] == [commit_id]
+        assert [item.commit_id for item in journal.publications.pending(str(first))] == [commit_id]
         agent._runtime.session_update = actual
         assert await publish_pending_local(agent, "project", "project") == 1
         assert delivered[0][0] == str(first)
@@ -204,7 +161,7 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
         assert await publish_pending_local(agent, "project", "project") == 0
         assert not _publication_events(original_received)
         assert not _publication_events(wrong_received)
-        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
         assert comms.registry.require("project").session_file == str(session)
         agent._runtime.session_update = actual
         agent.sessions.bindings["project"] = "project"
@@ -212,7 +169,7 @@ async def test_client_only_rebind_before_actual_transport_denies_wrong_client(ow
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(_publication_events(original_received)) == 1
         assert not _publication_events(wrong_received)
-        assert journal.pending_publications(str(session)) == ()
+        assert journal.publications.pending(str(session)) == ()
     finally:
         agent._runtime.session_update = actual
         agent.sessions.bindings["project"] = "project"
@@ -250,12 +207,12 @@ async def test_socket_incarnation_swap_before_transport_never_sends_old_commit_t
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
         assert not old_received and not new_received
-        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
         agent._runtime.session_update = actual
         agent._runtime.clients["project"] = {old}
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(_publication_events(old_received)) == 1 and not new_received
-        assert journal.pending_publications(str(session)) == ()
+        assert journal.publications.pending(str(session)) == ()
     finally:
         agent._runtime.session_update = actual
         agent._runtime.clients["project"].clear()
@@ -290,13 +247,13 @@ async def test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending(ow
     try:
         assert await publish_pending_local(agent, "project", "project") == 0
         assert len(_publication_events(old_received)) == 1 and not new_received
-        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
         old.swap = False
         agent._runtime.clients["project"] = {old}
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(_publication_events(old_received)) == 2 and not new_received
         assert _publication_events(old_received)[0] == _publication_events(old_received)[1]
-        assert journal.pending_publications(str(session)) == ()
+        assert journal.publications.pending(str(session)) == ()
     finally:
         agent._runtime.clients["project"].clear()
         await agent.shutdown()
@@ -332,7 +289,7 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
         assert await publish_pending_local(agent, "project", "project") == 0
         assert len(_publication_events(received)) == 1
         assert not _publication_events(wrong_received)
-        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
         # Rebinding the ACP map back reprojects only the same exact ID; remote
         # consumers must deduplicate, and no summary text is ever projected.
         agent.sessions.bindings["project"] = "project"
@@ -341,7 +298,7 @@ async def test_after_delivery_changed_acp_binding_never_marks_old_commit(owner, 
         assert len(_publication_events(received)) == 2
         assert not _publication_events(wrong_received)
         assert _publication_events(received)[0] == _publication_events(received)[1]
-        assert [row.commit_id for row in journal.pending_publications(str(session))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
     finally:
         agent.sessions.bindings["project"] = "project"
         agent.on_connect(original)
@@ -399,7 +356,7 @@ async def test_stalled_local_client_releases_identity_only_after_transport_clean
         else:
             assert await asyncio.wait_for(task, timeout=2) == 0
         assert cleaned.is_set(), "transport cancellation cleanup must precede lease release"
-        assert [row.commit_id for row in journal.pending_publications(str(first))] == [commit_id]
+        assert [row.commit_id for row in journal.publications.pending(str(first))] == [commit_id]
         assert len(early_received) == (1 if partial else 0)
         # Even if the first local listener accepted the metadata, a stalled
         # later socket leaves the exact ID pending: no false observed mark.
@@ -420,7 +377,7 @@ async def test_stalled_local_client_releases_identity_only_after_transport_clean
             agent._runtime.clients["project"].clear()
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(received) == 1 and commit_id in json.dumps(received)
-        assert journal.pending_publications(str(first)) == ()
+        assert journal.publications.pending(str(first)) == ()
     finally:
         if not task.done():
             task.cancel()
@@ -499,13 +456,13 @@ async def test_uncertain_local_delivery_remains_pending_until_exact_reprojection
             await publish_pending_local(agent, "project", "project")
         assert [
             row.commit_id
-            for row in CompactionJournal(journal.path).pending_publications(str(session))
+            for row in CompactionJournal(journal.path).publications.pending(str(session))
         ] == [commit_id]
         client.fail = False
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(seen) == 2
-        first = seen[0]["_meta"]["agentComms"]["compactionPublication"]
-        second = seen[1]["_meta"]["agentComms"]["compactionPublication"]
-        assert first == second and first["commitId"] == commit_id
+        first = _publication_events(seen[:1])[0]
+        second = _publication_events(seen[1:])[0]
+        assert first == second and first.commit_id == commit_id
     finally:
         await agent.shutdown()

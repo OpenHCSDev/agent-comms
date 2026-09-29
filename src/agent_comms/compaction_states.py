@@ -12,12 +12,16 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ChildOutcome
+from .compaction_errors import CompactionJournalError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from .compaction_journal import CompactionJournal, SelectedSummaryAttempt
+    from .compaction_journal import CompactionJournal
+    from .compaction_records import SelectedSummaryAttempt
+    from .input_disposition import InputDocument
+
 
 
 def sql_names(family: type[DeclaredFamily], *, unresolved: bool = False) -> str:
@@ -37,10 +41,7 @@ def sql_names(family: type[DeclaredFamily], *, unresolved: bool = False) -> str:
 class OperationState(DeclaredFamily, LifecycleState, affix="Operation"):
     terminal: ClassVar[bool] = False
     committed: ClassVar[bool] = False
-
     def require_committed(self, commit_id: str) -> None:
-        from .compaction_journal import CompactionJournalError
-
         raise CompactionJournalError(
             f"Native compaction operation {commit_id} is {self.declared_name}; "
             "reconcile exact ID before any new input"
@@ -74,7 +75,6 @@ class TerminalOperation:
 
 class CommittedOperation(TerminalOperation, OperationState):
     committed = True
-
     def require_committed(self, commit_id: str) -> None:
         return None
 
@@ -97,40 +97,29 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[SummaryState], ...]: ...
+    def blocks_input(self, attempt: SelectedSummaryAttempt, inputs: InputDocument) -> bool:
+        """Only this lifecycle owns whether original-input start can retire its barrier."""
+        if self.settled_without_original:
+            return False
+        if not self.original_eligible:
+            return True
+        return not attempt.original_has_started(inputs)
 
     def require_original_admission(self) -> None:
-        from .compaction_journal import CompactionJournalError
-
         if not self.original_eligible:
             raise CompactionJournalError("Manual compaction cannot admit an original input")
-
     def require_commit_reservation(self) -> None:
-        from .compaction_journal import CompactionJournalError
-
         raise CompactionJournalError("Selected summary is not a commit reservation")
-
     def manual_recovery(self) -> SummaryState:
-        from .compaction_journal import CompactionJournalError
-
         raise CompactionJournalError(
             "Prior selected compaction is uncertain; inspect compaction-status, never replay"
         )
-
     def refuse(self, reason: str) -> SummaryState:
-        from .compaction_journal import CompactionJournalError
-
         raise CompactionJournalError("Selected summary refusal transition forbidden")
-
     def fail(self, reason: str) -> SummaryState:
-        from .compaction_journal import CompactionJournalError
-
         raise CompactionJournalError("Selected summary failure transition forbidden")
-
     def retire_unchanged_source(self) -> SummaryState:
-        from .compaction_journal import CompactionJournalError
-
         raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
-
     def verifies_original(
         self, journal: CompactionJournal, attempt: SelectedSummaryAttempt
     ) -> bool:
@@ -140,10 +129,8 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 class ReservedSummary(SummaryState):
     def require_commit_reservation(self) -> None:
         pass
-
     def refuse(self, reason: str) -> SummaryState:
         return RefusedSummary(reason)
-
     def fail(self, reason: str) -> SummaryState:
         return FailedSummary(reason)
 
@@ -161,7 +148,6 @@ class ReservedSummary(SummaryState):
 
 class UnknownSummary(SummaryState):
     reconcile_unchanged_source = True
-
     def retire_unchanged_source(self) -> SummaryState:
         return RetiredUnknownSummary()
 
@@ -199,7 +185,6 @@ class LinkedSummary(SummaryState):
     commit_id: str = field()
     terminal = True
     original_eligible = True
-
     def __post_init__(self):
         if not self.commit_id:
             raise ValueError("Linked summary requires its native commit ID")
@@ -207,9 +192,8 @@ class LinkedSummary(SummaryState):
     @classmethod
     def successors(cls):
         return ()
-
     def verifies_original(self, journal, attempt):
-        commit = journal.get(self.commit_id)
+        commit = journal.operations.get(self.commit_id)
         commit.require_summary_link(attempt, admit_original=True)
         return True
 
@@ -226,7 +210,6 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
     decline_reason: str = field()
     terminal = True
     original_eligible = True
-
     def __post_init__(self):
         if self.decline_reason not in {"split_turn", "unsupported"}:
             raise ValueError("Selected summary decline is not a clean skip")
@@ -234,7 +217,6 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
     @classmethod
     def successors(cls):
         return ()
-
     def verifies_original(self, journal, attempt):
         return True
 
@@ -245,14 +227,11 @@ class RefusedSummary(SummaryState):
 
     decline_reason: str = field()
     terminal = True
-
     def __post_init__(self):
         if not self.decline_reason or len(self.decline_reason) > 256:
             raise ValueError("Bounded native refusal reason required")
-
     def manual_recovery(self) -> SummaryState:
         return RetiredRefusalSummary(self.decline_reason)
-
     def refuse(self, reason: str) -> SummaryState:
         if reason != self.decline_reason:
             return super().refuse(reason)
@@ -274,7 +253,6 @@ class RetiredRefusalSummary(SummaryState):
     @classmethod
     def successors(cls):
         return ()
-
     def __post_init__(self):
         if not self.decline_reason or len(self.decline_reason) > 256:
             raise ValueError("Retired refusal requires its bounded native reason")
@@ -310,7 +288,6 @@ class NativeCommitPosition:
     entry_id: str = field(metadata={"wire_name": "entryId"})
     revision: str
     leaf_id: str = field(metadata={"wire_name": "leafId"})
-
     def __post_init__(self):
         if not self.entry_id or not self.revision or not self.leaf_id:
             raise ValueError("Invalid native metadata receipt; never replay")
@@ -327,12 +304,10 @@ class NativeOutcome(DeclaredFamily, affix="NativeOutcome"):
     family_discriminator = "status"
     state: ClassVar[OperationState]
     permits_failed_exit: ClassVar[bool] = False
-
     def checked_child(self, outcome: ChildOutcome) -> NativeOutcome:
         if not outcome.successful and not self.permits_failed_exit:
             raise ValueError("Inconsistent native outcome; never replay")
         return self
-
     def bind_metadata(self, expected: str) -> NativeOutcome:
         return self
 
@@ -342,7 +317,6 @@ class UnknownNativeOutcome(NativeOutcome):
     state = UnknownOperation()
     permits_failed_exit = True
     reason: str
-
     def __post_init__(self):
         if not self.reason:
             raise ValueError("Native uncertainty requires its observed reason")
@@ -352,22 +326,18 @@ class UnknownNativeOutcome(NativeOutcome):
 class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
     state = CommittedOperation()
     metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
-
     def __post_init__(self):
         super().__post_init__()
         TextDigest(self.metadata_digest)
-
     def bind_metadata(self, expected: str) -> NativeOutcome:
         if self.metadata_digest != expected:
             return UnknownNativeOutcome("native-metadata-mismatch")
         return self
-
     def publication_json(self, commit_id: str) -> str:
         from .field_codec import FieldCodec
 
         return json.dumps(FieldCodec.encode(self.publication(commit_id)), sort_keys=True,
                           separators=(",", ":"), allow_nan=False)
-
     def publication(self, commit_id: str) -> CompactionPublishedMetadata:
         return CompactionPublishedMetadata(self.entry_id, self.revision, self.leaf_id, commit_id)
 
@@ -377,7 +347,6 @@ class AbortedNoWriteNativeOutcome(NativeOutcome, declared_name="aborted-no-write
     state = AbortedNoWriteOperation()
     revision: str
     leaf_id: str = field(metadata={"wire_name": "leafId"})
-
     def __post_init__(self):
         if not self.revision or not self.leaf_id:
             raise ValueError("Incomplete native no-write receipt")

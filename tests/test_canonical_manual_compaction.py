@@ -51,8 +51,8 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
         result = await compact_manual_owner(runner, "owner", "owner", info, None)
         assert isinstance(result, CommittedCompactionResult)
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-        assert journal.get(result.commit_id).state.committed
-        (attempt,) = journal.selected_summaries(file)
+        assert journal.operations.get(result.commit_id).state.committed
+        (attempt,) = journal.summaries.history(file)
         assert isinstance(attempt.state, ManualCommittedSummary)
         assert not attempt.state.original_eligible
         assert native_input_admitted(tmp_path, file)
@@ -75,7 +75,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
     ):
         owner = registry.require("owner")
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-        operation = journal.reserve_selected_summary(
+        operation = journal.summaries.reserve(
             file,
             {
                 "source": FieldCodec.encode(
@@ -97,7 +97,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
                 "settings": {"reserveTokens": 1000, "keepRecentTokens": 10},
             },
         )
-        journal.refuse_selected_summary(operation, "limit_exceeded")
+        journal.summaries.refuse(operation, "limit_exceeded")
         before_inputs = inputs.path.read_bytes()
         runner = SimpleNamespace(
             persistent_backends={"owner": persistent},
@@ -109,7 +109,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
         )
         result = await compact_manual_owner(runner, "owner", "owner", info, None)
         assert isinstance(result, CommittedCompactionResult)
-        assert journal.selected_summary(operation).state.declared_name == "retired_refusal"
+        assert journal.summaries.get(operation).state.declared_name == "retired_refusal"
         assert inputs.path.read_bytes() == before_inputs
         assert inputs.read().rows["acp:original"].accepts_reservation
         assert native_input_admitted(tmp_path, file)
@@ -124,7 +124,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
 async def test_manual_does_not_retire_or_repeat_uncertain_provider(
     tmp_path, monkeypatch, uncertain
 ):
-    from agent_comms.compaction_journal import CompactionJournalError
+    from agent_comms.compaction_errors import CompactionJournalError
 
     async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
         persistent,
@@ -140,7 +140,7 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
             )
         )
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-        operation = journal.reserve_selected_summary(
+        operation = journal.summaries.reserve(
             file,
             {
                 "source": manual_source(file, incarnation=registry.require("owner").incarnation),
@@ -153,8 +153,8 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
             },
         )
         if uncertain:
-            journal.mark_selected_summary_unknown(operation)
-        attempt = journal.selected_summary(operation)
+            journal.summaries.mark_unknown(operation)
+        attempt = journal.summaries.get(operation)
         before = Path(file).read_bytes()
         runner = SimpleNamespace(
             persistent_backends={"owner": persistent},
@@ -166,6 +166,6 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
         )
         with pytest.raises(CompactionJournalError, match="uncertain"):
             await compact_manual_owner(runner, "owner", "owner", info, None)
-        assert journal.selected_summary(operation) == attempt
+        assert journal.summaries.get(operation) == attempt
         assert Path(file).read_bytes() == before
         assert not native_input_admitted(tmp_path, file)

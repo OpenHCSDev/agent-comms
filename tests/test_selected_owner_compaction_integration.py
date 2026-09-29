@@ -241,9 +241,9 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert any(isinstance(event, events.CompactionSummaryProgress) for event in observed)
 
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-        rows = journal.blocking_selected_summary(file)
+        rows = journal.summaries.blocking(file)
         assert len(rows) == 1 and rows[0].state.declared_name == "linked"
-        operation = journal.get(rows[0].state.commit_id)
+        operation = journal.operations.get(rows[0].state.commit_id)
         assert operation.state.declared_name == "committed"
         intent = json.loads(operation.intent_json)
         assert intent["selectedSummaryOperationId"] == rows[0].operation_id
@@ -253,7 +253,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         )
         entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in entries) == 1
-        assert len(journal.pending_publications(file)) == 1
+        assert len(journal.publications.pending(file)) == 1
         assert not persistent.available and persistent.custody.session_file == file
         assert not native_input_admitted(tmp_path, file)
         token = admitted[0]
@@ -293,13 +293,17 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
 
     from agent_comms.acp import CommsAgent
     from agent_comms.acp_extension import (
+        CompactionPublishedUpdate,
         InputDeliveryChangedUpdate,
         QueuePromptRequest,
         decode_updates,
         encode_request,
     )
     from agent_comms.comms import wire
+    from agent_comms.compaction_identity import SelectedCommitReference
+    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.errors import RelationViolationError
+    from agent_comms.field_codec import FieldCodec
     from agent_comms.goal_attempts import GoalAttemptStore
     from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
@@ -322,10 +326,24 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         project.mkdir()
 
         updates = []
+        publications = []
 
         class Client:
             async def session_update(self, **kwargs):
                 updates.append(kwargs)
+                for event in decode_updates(kwargs["update"].field_meta):
+                    if isinstance(event, CompactionPublishedUpdate):
+                        # Actual ACP delivery must precede binding/writing this exact
+                        # selected original. Read its authority from the journal owner.
+                        journal = CompactionJournal(root / "compaction-commits.sqlite3")
+                        operation = journal.operations.get(event.publication.commit_id)
+                        reference = SelectedCommitReference.from_intent(json.loads(operation.intent_json))
+                        attempt = journal.summaries.get(reference.operation_id)
+                        source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json)).source
+                        assert source.pending_input_key is not None
+                        original = dispositions.read().lookup(source.pending_input_key)
+                        assert original.exists and not original.has_native_binding
+                        publications.append(event.publication.commit_id)
 
         agent = CommsAgent(
             comms,
@@ -446,7 +464,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 assert summary_ids == []
                 assert not CompactionJournal(
                     root / "compaction-commits.sqlite3"
-                ).selected_summaries(file)
+                ).summaries.history(file)
                 assert Path(file).read_bytes() == before
                 assert not (tmp_path / "provider-requests.json").exists()
                 for key in (original_key, *queued_keys):
@@ -463,11 +481,14 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 await turn
                 assert dispositions.read().rows[original_key].declared_name == "started", updates
             journal = CompactionJournal(root / "compaction-commits.sqlite3")
-            attempt = journal.selected_summary(summary_ids[0])
+            attempt = journal.summaries.get(summary_ids[0])
             terminal_status = "declined-prestart" if clean_decline else "linked"
             assert attempt.state.declared_name == ("reserved" if correction else terminal_status)
-            assert bool(journal.blocking_selected_summary(file)) is correction
+            assert bool(journal.summaries.blocking(file)) is correction
             assert native_input_admitted(root, file) is not correction
+            if not correction and not clean_decline:
+                assert publications == [attempt.state.commit_id]
+                assert journal.publications.pending(file) == ()
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
             assert sum(row["type"] == "compaction" for row in entries) == (
                 0 if correction or clean_decline else 1
@@ -558,10 +579,10 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 assert dispositions.read().rows["acp:next"].declared_name == "started"
                 assert len(summary_ids) == 2
                 assert all(
-                    journal.selected_summary(key).state.declared_name == terminal_status
+                    journal.summaries.get(key).state.declared_name == terminal_status
                     for key in summary_ids
                 )
-                assert journal.blocking_selected_summary(file) == ()
+                assert journal.summaries.blocking(file) == ()
                 assert native_input_admitted(root, file)
                 assert persistent.custody.idle().current and persistent.available
                 final_entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
@@ -766,7 +787,7 @@ async def test_disconnected_selected_summary_stays_unknown_without_original_repl
                 with pytest.raises(SelectedChildUnknown):
                     await operation
             journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-            attempts = journal.blocking_selected_summary(file)
+            attempts = journal.summaries.blocking(file)
             assert len(attempts) == 1
             assert attempts[0].state.declared_name == "unknown"
             assert admissions == []
@@ -952,6 +973,6 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
             assert Path(file).read_bytes().startswith(before)
             assert not CompactionJournal(
                 tmp_path / "compaction-commits.sqlite3"
-            ).blocking_selected_summary(file)
+            ).summaries.blocking(file)
         finally:
             await agent.shutdown()

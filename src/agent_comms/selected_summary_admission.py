@@ -19,13 +19,11 @@ from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
 from .child_process import ProcessIdentity
+from .compaction_errors import CompactionJournalError
 from .compaction_identity import JournalCustody, ReturnedSummaryTerminal
-from .compaction_journal import (
-    CompactionJournal,
-    CompactionJournalError,
-    SelectedSummarySource,
-    _consume_selected_ack,
-)
+from .compaction_journal import CompactionJournal
+from .compaction_records import SelectedSummarySource
+from .compaction_summaries import _consume_selected_ack
 from .field_codec import FieldCodec
 from .reservation_rules import ReservationViolationError
 from .selected_source import SelectedAdmissionSource, SessionRevision
@@ -128,7 +126,7 @@ class SelectedSummaryAdmission:
                 return False
             identity.require_live_input(session_file, sent_text)
             journal = CompactionJournal(self._terminal.path)
-            journal.require_original_admission(attempt)
+            journal.summaries.require_original_admission(attempt)
             identity.source.reservation_check(
                 identity.source.reserved_revision, dispositions.read()
             ).require_valid()

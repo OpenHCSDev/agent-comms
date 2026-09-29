@@ -408,7 +408,7 @@ class SelectedExecution:
                 )
                 CompactionJournal(
                     self.root / "compaction-commits.sqlite3"
-                ).enroll_fresh_private_session(
+                ).private_inputs.enroll(
                     self.fresh_session,
                     incarnation=self.owner.incarnation,
                     owner_lookup=self.lookup,
