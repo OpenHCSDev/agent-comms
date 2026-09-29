@@ -36,7 +36,7 @@ class NativeSessionPreparation(backend.TurnSession):
     def can_retain(self) -> bool:
         return bool(
             self.native_capability_confirmed
-            and not self.fail_reason
+            and not self.output.failure_text
             and not self.session_identity_uncertain
             and self.proc.returncode is None
             and self.initial_session_id
@@ -46,7 +46,9 @@ class NativeSessionPreparation(backend.TurnSession):
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.retained:
-            raise NativePiUnavailable(self.fail_reason or "Native session preparation failed")
+            raise NativePiUnavailable(
+                self.output.failure_text or "Native session preparation failed"
+            )
         if False:
             yield
 

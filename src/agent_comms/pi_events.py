@@ -127,10 +127,10 @@ class AutoRetryEnd(PiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
         if self.success:
-            session.error_message = None
+            session.output.error_message = None
         else:
             session.watchdog.retry_recovery_pending = False
-            session.error_message = "Provider retry attempts were exhausted."
+            session.output.error_message = "Provider retry attempts were exhausted."
             yield session.watchdog.state(
                 session, "failed", "provider_retry_exhausted", 0, event_phase="model_wait"
             )
@@ -142,7 +142,7 @@ class AutoRetryStart(PiEvent):
     max_attempts: int | None = field(default=None, metadata={"wire_name": "maxAttempts"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.final_assistant_stop = False
+        session.output.final_assistant_stop = False
         session.watchdog.prompt_accepted = True
         session.watchdog.retry_recovery_pending = True
         session.watchdog.retry_recovery_reason = "provider_auto_retry_progress"
@@ -199,7 +199,7 @@ class CompactionEnd(PiEvent):
             will_retry=self.will_retry is True,
         )
         if not session.completed and (not session.initial_input_started):
-            session.record_failure(
+            session.output.record_failure(
                 failures.PrestartCompactionFailed(
                     "Context compaction failed before this input started; inspect ACP diagnostics."
                 )
@@ -211,7 +211,7 @@ class CompactionEnd(PiEvent):
             session.finished = True
             return
         if self.will_retry:
-            session.final_assistant_stop = False
+            session.output.final_assistant_stop = False
             session.watchdog.retry_recovery_pending = True
             session.watchdog.retry_recovery_reason = "overflow_retry_progress"
             yield session.watchdog.state(
@@ -363,7 +363,7 @@ class ExtensionUiRequest(PiEvent):
         session.request_id = self.id
         session.method = self.method
         if session.request_id is None or not session.request_id or len(session.request_id) > 128:
-            session.record_failure(
+            session.output.record_failure(
                 failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
             )
             await session.proc.stop()
@@ -395,7 +395,7 @@ class ExtensionUiRequest(PiEvent):
             session.proc.stdin.write(session.reader.encode(response))
             await asyncio.wait_for(session.proc.stdin.drain(), timeout=2)
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
-            session.record_failure(
+            session.output.record_failure(
                 failures.ExtensionUiFailed(
                     "Pi extension UI response could not reach the requesting child."
                 )
@@ -429,16 +429,15 @@ class MessageEnd(PiEvent):
                 and session.initial_input_started
                 and (not session.inputs.uncertain)
                 and (not session.session_identity_uncertain)
-                and session.committed_text
-                and (session.committed_text == "".join(session.assistant_message_parts))
+                and session.output.matches_message(session.committed_text)
             ):
                 yield events.CommittedProgress(text=session.committed_text)
-            session.assistant_message_parts.clear()
+            session.output.start_message()
             session.provider_usage = session.message.usage
             if session.provider_usage is not None and (not session.session_identity_uncertain):
                 yield session.usage.charge(session.provider_usage)
             session.stop_reason = session.message.stop_reason
-            session.final_assistant_stop = (
+            session.output.final_assistant_stop = (
                 session.stop_reason == "stop"
                 and session.initial_input_started
                 and (not session.inputs.uncertain)
@@ -448,23 +447,15 @@ class MessageEnd(PiEvent):
                     session.usage.used = session.usage.confirmed
                     session.usage.provisional = False
                     yield session.context_info()
-                session.error_message = (
-                    "Image prompt failed; backend diagnostics withheld."
-                    if session.image_input_sent or session.inherited_image_sensitive
-                    else str(session.message.error_message or "").strip()
-                    or f"Model request {session.stop_reason}"
+                error = session.output.error(
+                    str(session.message.error_message or "").strip()
+                    or f"Model request {session.stop_reason}",
+                    session.message.diagnostics,
                 )
                 if not (session.explicit_interrupt and session.stop_reason == "aborted"):
-                    yield events.Error(
-                        text=session.error_message,
-                        diagnostics=(
-                            ()
-                            if session.image_input_sent or session.inherited_image_sensitive
-                            else session.message.diagnostics
-                        ),
-                    )
+                    yield error
             else:
-                session.error_message = None
+                session.output.error_message = None
                 session.tokens = (
                     session.message.usage.positive_tokens
                     if session.message.usage is not None
@@ -499,7 +490,7 @@ class MessageStart(PiEvent):
         from .backend import _ACTIVE_STEERING
 
         if self.message is not None and self.message.assistant:
-            session.assistant_message_parts.clear()
+            session.output.start_message()
         elif self.message is not None and self.message.user:
             session.message = self.message
             session.user_text = session.message.text
@@ -515,7 +506,7 @@ class MessageStart(PiEvent):
                     not session.native_start(None, session.original_input_id, session.task)
                 ):
                     session.inputs.uncertain = True
-                    session.record_failure(
+                    session.output.record_failure(
                         failures.InputMissing("Pi input start did not match the durable attempt.")
                     )
                     await session.abort_stalled_rpc()
@@ -538,8 +529,8 @@ class MessageStart(PiEvent):
                     yield events.InputStarted(id=session.input_id)
                 else:
                     session.inputs.uncertain = True
-                    session.final_assistant_stop = False
-                    session.record_failure(
+                    session.output.final_assistant_stop = False
+                    session.output.record_failure(
                         failures.FollowupUnrecognized(
                             "Pi RPC saw an unrecognized follow-up user message start."
                         )
@@ -549,8 +540,8 @@ class MessageStart(PiEvent):
                     return
             else:
                 session.inputs.uncertain = True
-                session.final_assistant_stop = False
-                session.record_failure(
+                session.output.final_assistant_stop = False
+                session.output.record_failure(
                     failures.InputMissing(
                         "Pi RPC run ended without this prompt's user message start."
                     )
@@ -661,9 +652,7 @@ class Response(PiEvent):
 class SteeringInterruptCompleted(PiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.explicit_interrupt = False
-        session.text_parts.clear()
-        session.error_message = None
-        session.final_assistant_stop = False
+        session.output.interrupted()
         yield events.SteeringInterrupted()
 
 
