@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
+from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ class ReadDocument:
     notice: str | None = None
 
 
-class ReadLedger(LockedStore[ReadDocument]):
+class ReadLedger(Sealed, LockedStore[ReadDocument]):
     filename = "read_ledger.json"
 
     @property

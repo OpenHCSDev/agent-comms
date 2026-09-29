@@ -123,7 +123,7 @@ def test_codec_owner_rejects_subclasses_even_through_an_alias():
     from agent_comms.field_codec import FieldCodec
 
     alias = FieldCodec
-    with pytest.raises(TypeError, match="one implementation"):
+    with pytest.raises(TypeError, match="sealed mechanism FieldCodec"):
         class ExternalCodec(alias):
             pass
 
