@@ -1,0 +1,28 @@
+changed between origin/main..HEAD (touched files, after minus before)
+
+change in counts (origin/main..HEAD): read these first when code was deleted as well as added
+  type_identity_check           +0
+  long_boolean_chain            +0
+  boolean_chain_terms           +0
+  codec_subclass                +0
+  foreign_absence_probe         +0
+  string_key_subscript          +0
+  literal_key_get               +0
+  string_equality               +0
+  none_identity                 +1
+  isinstance_call               +0
+  attribute_by_name             +0
+  getattr_default               +0
+  broad_except                  +0
+  json_loads                    +0
+  long_function                 +0
+  class_definition              +3
+  abstract_base                 +0
+  enum_class                    +0
+  code lines                   +67
+
+(densities omitted: under 500 net code lines, a ratio of changes to net lines is meaningless)
+
+Top 3 files by weighted debt (type_identity_check x3, long_boolean_chain x5, boolean_chain_terms x1, codec_subclass x3, foreign_absence_probe x1, string_key_subscript x1, literal_key_get x1, attribute_by_name x3):
+       0  src/agent_comms/transcript_routes.py  (code lines +10)
+       0  src/agent_comms/transcripts.py  (code lines +57)
