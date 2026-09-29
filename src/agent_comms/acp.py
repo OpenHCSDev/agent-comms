@@ -465,6 +465,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._private_cursor_announced[session_id] = signature
 
     def _session_runtime_metadata(self, thread_name: str, session_id: str) -> tuple:
+        # A trusted load supersedes any earlier broadcast, including when a
+        # busy store makes its observation unavailable. Republish on the next
+        # successful read so the earlier broadcast cannot suppress recovery.
+        self._private_cursor_announced.pop(session_id, None)
         return (
             self.inputs.queue_state(session_id),
             *(
