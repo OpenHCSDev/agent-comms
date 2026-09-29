@@ -1,0 +1,61 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-cursor-observation-idle-sol-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 24 items / 23 deselected / 1 selected
+
+tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof Timeout (0:00:06)!
+Thread 0x00007f7457fff6c0 [asyncio_0] (most recent call first):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 116 in _worker
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1024 in run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1082 in _bootstrap_inner
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/threading.py", line 1044 in _bootstrap
+
+Thread 0x00007f7460fe1780 [python] (most recent call first):
+  File "/home/ts/wt/comms-cursor-observation-idle-sol-20260929/src/agent_comms/store_files.py", line 58 in _store_lock
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141 in __enter__
+  File "/home/ts/wt/comms-cursor-observation-idle-sol-20260929/src/agent_comms/goal_management.py", line 328 in goal_snapshot
+  File "/home/ts/wt/comms-cursor-observation-idle-sol-20260929/src/agent_comms/session_lifecycle.py", line 246 in metadata
+  File "/home/ts/wt/comms-cursor-observation-idle-sol-20260929/tests/test_acp_private_nk_delivery.py", line 499 in test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94 in _run
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 2046 in _run_once
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 677 in run_forever
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 706 in run_until_complete
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127 in run
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pytest_asyncio/plugin.py", line 905 in inner
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/python.py", line 167 in pytest_pyfunc_call
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/python.py", line 1707 in runtest
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pytest_asyncio/plugin.py", line 569 in runtest
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/runner.py", line 184 in pytest_runtest_call
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/runner.py", line 250 in <lambda>
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/runner.py", line 361 in from_call
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/runner.py", line 249 in call_and_report
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/runner.py", line 139 in runtestprotocol
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/runner.py", line 118 in pytest_runtest_protocol
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/main.py", line 408 in pytest_runtestloop
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/main.py", line 384 in _main
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/main.py", line 330 in wrap_session
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/main.py", line 377 in pytest_cmdline_main
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_callers.py", line 121 in _multicall
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_manager.py", line 120 in _hookexec
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pluggy/_hooks.py", line 512 in __call__
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/config/__init__.py", line 229 in _main
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/_pytest/config/__init__.py", line 253 in _console_main
+  File "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/lib/python3.14/site-packages/pytest/__main__.py", line 9 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 198 in _run_module_as_main
