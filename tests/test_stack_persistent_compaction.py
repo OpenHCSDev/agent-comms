@@ -13,9 +13,10 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.compaction_result import CommittedCompactionResult
 from agent_comms.manual_compaction_bridge import compact_context
+from delivery_owner_fixture import canonical_agent
 
 
 def _history(session: Path, project: Path) -> None:
@@ -151,19 +152,11 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
                 }
             )
         )
-        # The compact runner clears NODE_OPTIONS and uses its own private profile.
-        # A transparent node shim installs the localhost model config in that profile;
+        # A transparent node shim installs localhost provider config;
         # it executes the same installed native CLI and never replaces its RPC.
         preload = root / "local-only.cjs"
         preload.write_text(
             "const fs=require('node:fs');"
-            f"const root={json.dumps(str(root))};"
-            "if(process.argv.includes('--no-approve')){"
-            "const prior=Number(fs.readFileSync(root+'/retained-pid','utf8'));"
-            "let alive=true;try{process.kill(prior,0);}catch(e){"
-            "if(e.code!=='ESRCH')throw e;alive=false;}"
-            "fs.appendFileSync(root+'/writers.jsonl',JSON.stringify({pid:process.pid,"
-            "prior,alive})+'\\n');if(alive)throw Error('RETAINED_CHILD_STILL_ALIVE');}"
             "const net=require('node:net');const connect=net.Socket.prototype.connect;"
             "net.Socket.prototype.connect=function(...args){"
             "const opts=Array.isArray(args[0])?args[0][0]:net._normalizeArgs(args)[0];"
@@ -216,7 +209,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         session = root / "saved.jsonl"
         _history(session, project)
         comms = wire(root / "wire")
-        owner = CommsAgent(
+        owner = canonical_agent(
             comms,
             agent_bin=native,
             agent_args=[
@@ -229,6 +222,10 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             ],
             runtime_enabled=False,
             auto_wake=False,
+        )
+        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
+        monkeypatch.setenv(
+            "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner._private_nk_native_package)
         )
         updates = []
 
@@ -253,25 +250,21 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert len(requests) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[-1]["messages"])
             before = session.read_bytes()
-            (root / "retained-pid").write_text(str(retained.pid))
             compact_task = asyncio.create_task(compact_context(owner.turns, "worker"))
             entered = await asyncio.to_thread(summary_entered.wait, 15)
             if not entered and compact_task.done():
                 pytest.fail(f"Native compaction did not request summary: {compact_task.result()}")
             assert entered, "Native compaction did not reach localhost summary"
-            assert retained.returncode is not None
-            assert owner.turns.persistent_backends["worker"].proc is None
-            writers = [
-                json.loads(line) for line in (root / "writers.jsonl").read_text().splitlines()
-            ]
-            assert len(writers) == 1
-            assert writers[0]["prior"] == retained.pid
-            assert writers[0]["alive"] is False
+            # The selected retained owner supplies summary before the commit replaces it.
+            assert retained.returncode is None
+            assert owner.turns.persistent_backends["worker"].proc is retained
             assert session.read_bytes() == before
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[2]["messages"])
             release_summary.set()
             result = await asyncio.wait_for(compact_task, 20)
-            assert result["ok"] is True, result
+            assert isinstance(result, CommittedCompactionResult), result
+            assert retained.returncode is not None
+            assert owner.turns.persistent_backends["worker"].proc is None
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1

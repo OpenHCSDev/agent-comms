@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from acp.schema import AgentMessageChunk, TextContentBlock
-
 from . import agent_events as events
-from .acp_extension import TranscriptChangedUpdate, encode_updates
 from .activity import ActivityState
 from .compaction_journal import CompactionJournalError
+from .compaction_result import CompactionResult, RefusedCompactionResult
 from .transcript_updates import StartedTranscriptUpdate
 
 if TYPE_CHECKING:
@@ -21,21 +19,21 @@ if TYPE_CHECKING:
 
 async def compact_context(
     runner: TurnRunner, session_id: str, instructions: str | None = None
-) -> dict[str, Any]:
+) -> CompactionResult:
     """Call from a UI /compact handler only; no autonomous compaction/retry."""
     if instructions is not None and not isinstance(instructions, str):
-        return {"ok": False, "error": "Compaction instructions are invalid."}
+        return RefusedCompactionResult("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
     lock = runner.turn_locks.setdefault(session_id, asyncio.Lock())
     if lock.locked() or session_id in runner.active_turns:
-        return {"ok": False, "error": "Wait for the current response before compacting."}
+        return RefusedCompactionResult("Wait for the current response before compacting.")
     async with lock:
         if session_id in runner.active_turns:
-            return {"ok": False, "error": "Wait for the current response before compacting."}
+            return RefusedCompactionResult("Wait for the current response before compacting.")
         runner.effects._private_nk_marker()
         thread = runner.comms.registry.require(thread_name)
         if not thread.session_file:
-            return {"ok": False, "error": "This thread has no saved session to compact."}
+            return RefusedCompactionResult("This thread has no saved session to compact.")
         turn_id = f"compaction-{uuid4().hex}"
         task = asyncio.current_task()
         assert task is not None
@@ -75,29 +73,13 @@ async def compact_context(
 
             info = await runner.prepare_selected_session(session_id, thread)
             result = await compact_manual_owner(runner, session_id, thread_name, info, instructions)
-            success = result.get("ok") is True
-            # A client may receive this terminal event then raise. Do not send
-            # a contradictory abort after an uncertain delivery.
+            # Attempt terminal delivery once; an uncertain delivery cannot emit an abort.
             terminal_attempted = True
-            await runner.effects._emit_event(
-                session_id,
-                events.ManualCompactionEnd(
-                    aborted=not success,
-                    summary=result.get("summary", "") if success else result.get("error", ""),
-                ),
-            )
-            if success:
-                await runner.runtime.session_update(
-                    session_id=session_id,
-                    update=AgentMessageChunk(
-                        session_update="agent_message_chunk",
-                        content=TextContentBlock(type="text", text=""),
-                        field_meta=encode_updates(TranscriptChangedUpdate(None)),
-                    ),
-                )
+            await runner.effects._emit_event(session_id, result.terminal_event())
+            await result.after_terminal(runner, session_id)
             return result
         except (ValueError, CompactionJournalError) as error:
-            return {"ok": False, "error": str(error)}
+            return RefusedCompactionResult(str(error))
         finally:
             if started and not terminal_attempted:
                 with suppress(Exception, asyncio.CancelledError):

@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_result import CommittedCompactionResult
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
@@ -23,7 +24,7 @@ pytestmark = pytest.mark.skipif(
 
 
 async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_path, monkeypatch):
-    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+    async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
         persistent,
         registry,
         inputs,
@@ -48,9 +49,9 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
         )
         before_inputs = inputs.path.read_bytes()
         result = await compact_manual_owner(runner, "owner", "owner", info, None)
-        assert result["ok"] is True
+        assert isinstance(result, CommittedCompactionResult)
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-        assert journal.get(result["commitId"]).state.committed
+        assert journal.get(result.commit_id).state.committed
         (attempt,) = journal.selected_summaries(file)
         assert isinstance(attempt.state, ManualCommittedSummary)
         assert not attempt.state.original_eligible
@@ -64,7 +65,7 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
 async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
     tmp_path, monkeypatch
 ):
-    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+    async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
         persistent,
         registry,
         inputs,
@@ -107,7 +108,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
             ),
         )
         result = await compact_manual_owner(runner, "owner", "owner", info, None)
-        assert result["ok"] is True
+        assert isinstance(result, CommittedCompactionResult)
         assert journal.selected_summary(operation).state.declared_name == "retired_refusal"
         assert inputs.path.read_bytes() == before_inputs
         assert inputs.read().rows["acp:original"].accepts_reservation
@@ -125,7 +126,7 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
 ):
     from agent_comms.compaction_journal import CompactionJournalError
 
-    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+    async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
         persistent,
         registry,
         inputs,
