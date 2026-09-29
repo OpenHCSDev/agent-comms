@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
+from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
 from .thread_identity import GenerationCounter, OwnerIdentity
 from .thread_status import (
@@ -19,50 +20,6 @@ from .thread_status import (
 )
 from .threads import Thread
 from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence
-
-
-@dataclass(frozen=True, slots=True)
-class RegistrationChange:
-    previous: Thread | None
-    previous_status: ThreadStatus | None
-    thread: Thread
-    status: ThreadStatus
-    new_owner: bool
-
-    @property
-    def needs_maintenance_admission(self) -> bool:
-        return self.thread.role.executable and (
-            self.new_owner
-            or (
-                self.previous is None
-                and self.thread.process_identity is not None
-                and self.status.active
-            )
-            or (
-                self.previous is not None
-                and self.previous.process_identity != self.thread.process_identity
-            )
-            or (
-                self.previous_status is not None
-                and not self.previous_status.active
-                and self.status.active
-            )
-        )
-
-    @property
-    def changes_identity(self) -> bool:
-        previous, thread = self.previous, self.thread
-        return previous is not None and (
-            self.new_owner
-            or previous.created_at != thread.created_at
-            or previous.process_identity != thread.process_identity
-            or previous.session_file != thread.session_file
-            or previous.worktree != thread.worktree
-            or previous.role != thread.role
-            or (
-                self.previous_status is not None and self.previous_status.changes_owner(self.status)
-            )
-        )
 
 
 @dataclass(slots=True)
@@ -131,31 +88,14 @@ class RegistryDocument:
             )
         self.statuses.get(thread.name, RunningThreadStatus()).require_mutable(thread.name)
         previous = self.threads.get(thread.name)
-        previous_status = self.statuses.get(thread.name)
-        if previous:
-            thread = replace(thread, created_at=previous.created_at)
-            if thread.tags != previous.tags:
-                if previous.channel_scope_generation >= (1 << 63) - 1:
-                    raise RelationViolationError("Channel scope generation exhausted")
-                thread = replace(
-                    thread,
-                    channel_scope_generation=previous.channel_scope_generation + 1,
-                )
-            elif thread.channel_scope_generation != previous.channel_scope_generation:
-                # A metadata writer cannot erase or forge channel scope history.
-                thread = replace(thread, channel_scope_generation=previous.channel_scope_generation)
-            if thread.turn_generation != previous.turn_generation:
-                # A stale metadata writer cannot reset a completed-turn fence.
-                thread = replace(
-                    thread,
-                    turn_generation=previous.turn_generation,
-                    last_finished_turn_id=(
-                        previous.last_finished_turn_id
-                        if thread.active_turn == previous.active_turn
-                        else None
-                    ),
-                )
-        elif any(existing.created_at == thread.created_at for existing in self.threads.values()):
+        if previous is not None:
+            thread = thread.preserve_registration_history(previous)
+            change = UpdatedRegistration(
+                thread=thread, status=status, previous=previous,
+                previous_status=self.statuses[thread.name],
+            )
+            return change.restarted() if new_owner else change
+        if any(existing.created_at == thread.created_at for existing in self.threads.values()):
             # The Windows wall clock can return the same value for six
             # independent default-constructed threads. Allocate a distinct
             # identity under this store lock, but never rewrite an explicit
@@ -170,30 +110,8 @@ class RegistryDocument:
                 raise RelationViolationError("Registry creation identities collide.")
             thread = replace(thread, created_at=candidate)
 
-        return RegistrationChange(previous, previous_status, thread, status, new_owner)
-
-    def apply_registration(self, change: RegistrationChange) -> None:
-        previous, previous_status = change.previous, change.previous_status
-        thread, status, new_owner = change.thread, change.status, change.new_owner
-        self.threads[thread.name] = thread
-        self.statuses[thread.name] = status
-        self.last_seen[thread.name] = time.time()
-        if (
-            previous is None
-            or new_owner
-            or previous.process_identity != thread.process_identity
-            or previous.role != thread.role
-            or (previous_status is not None and previous_status.changes_owner(status))
-        ):
-            self.admissions.advance(thread.name)
-            self.owners.advance(thread.name)
-        if thread.active_turn is not None and (
-            previous is None or new_owner or thread.active_turn != previous.active_turn
-        ):
-            thread = replace(
-                thread, active_turn=replace(thread.active_turn, admission_generation=None)
-            )
-            self.threads[thread.name] = thread
+        change = InitialRegistration(thread=thread, status=status)
+        return change.restarted() if new_owner else change
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         """Restore selected missing identities without importing execution authority.
@@ -220,14 +138,7 @@ class RegistryDocument:
             additions.append(replace(thread, process_identity=None, active_turn=None))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
-        aliases = {
-            alias: canonical
-            for alias, canonical in source.aliases.items()
-            if canonical in available
-            and available[canonical].created_at == source.threads[canonical].created_at
-            and alias not in available
-            and alias not in self.aliases
-        }
+        aliases = source.restorable_aliases(available, self.aliases)
         for thread in additions:
             self.threads[thread.name] = thread
             self.statuses[thread.name] = source.statuses[thread.name].restored()
@@ -277,17 +188,13 @@ class RegistryDocument:
         The outer wire lock alone cannot exclude a direct registry claim; this
         check and the STOPPED transition share the registry's own lock.
         """
-        current = self.threads.get(expected.name)
-        status = self.statuses.get(expected.name)
-        if (
-            current != expected
-            or current is None
-            or current.active_turn is not None
-            or status is None
-            or not status.active
-            or self.admissions.generations.get(expected.name) != expected_admission_generation
-        ):
+        snapshot = self.snapshot()
+        current = snapshot.require_active(expected.name)
+        current.require_idle()
+        if current != expected:
             raise RelationViolationError("Idle owner changed before restart fence.")
+        if snapshot.admission_generations[current.name] != expected_admission_generation:
+            raise RelationViolationError("Idle owner admission changed before restart fence.")
         self.statuses[expected.name] = StoppedThreadStatus()
         self.admissions.advance(expected.name)
         self.owners.advance(expected.name)
@@ -377,23 +284,13 @@ class RegistryDocument:
         """Release only this exact lease; a revoked admission cannot attest completion."""
         name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
         current = self.threads.get(name)
-        if (
-            current is None
-            or current.active_turn is None
-            or current.active_turn.id != lease.turn_id
-            or current.created_at != lease.identity.incarnation.created_at
-            or current.turn_generation != lease.identity.generation
-            or current.active_turn.turn_generation != lease.identity.generation
-            or current.active_turn.admission_generation != lease.admission_generation
-        ):
+        if current is None:
             return False, None
-        admission = lease.admission_generation
-        attested = (
-            current.turn_generation > 0
-            and admission > 0
-            and self.admissions.generations.get(name) == admission
-            and self.statuses[name].active
-        )
+        canonical_lease = lease.renamed(name)
+        if current.turn_lease != canonical_lease:
+            return False, None
+        attested = canonical_lease.can_attest(self.admissions.generations[name])
+        attested = attested and self.statuses[name].active
         self.threads[name] = replace(
             current,
             active_turn=None,
@@ -406,7 +303,7 @@ class RegistryDocument:
         return True, FinishedTurnFence(
             identity=current.turn_identity,
             turn_id=lease.turn_id,
-            admission_generation=admission,
+            admission_generation=lease.admission_generation,
         )
 
 
@@ -418,6 +315,16 @@ class RegistrySnapshot:
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
+
+    def restorable_aliases(
+        self, available: Mapping[str, Thread], retained: Mapping[str, str]
+    ) -> dict[str, str]:
+        matching = {
+            name for name in self.threads.keys() & available.keys()
+            if self.threads[name].incarnation == available[name].incarnation
+        }
+        unoccupied = self.aliases.keys() - available.keys() - retained.keys()
+        return {alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching}
 
     def require_active(self, name: str) -> Thread:
         canonical = self.aliases.get(name, name)
