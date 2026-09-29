@@ -15,12 +15,14 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, PathText
+from .wire_metadata import WireRootIdText
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
@@ -48,10 +50,42 @@ class LocalRoute(CommsRoute):
         pass
 
 
+class AbsoluteRoutePathText(PathText):
+    """Root and native-package fields share the same absolute-path boundary."""
+
+    @classmethod
+    def require_absolute(cls, path: Path) -> Path:
+        if not path.is_absolute() or ".." in path.parts:
+            raise ValueError("active comms route requires absolute root and package identities")
+        return path
+
+    @classmethod
+    def from_text(cls, value: str) -> Path:
+        return cls.require_absolute(super().from_text(value))
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        text = super().encode(value)
+        cls.require_absolute(value)
+        return text
+
+
 @dataclass(frozen=True, slots=True)
 class ActiveRoute(CommsRoute):
-    wire_root_id: str
-    native_package: Path
+    root: Annotated[Path, AbsoluteRoutePathText]
+    wire_root_id: Annotated[str, WireRootIdText]
+    native_package: Annotated[Path, AbsoluteRoutePathText]
+    version: Literal[1] = field(default=1, kw_only=True, metadata={"wire_required": True})
+
+    @classmethod
+    def from_record(cls, value: object) -> ActiveRoute:
+        try:
+            route = FieldCodec.decode(cls, value)
+        except TypeError as error:
+            raise ValueError(f"active comms route is invalid: {error}") from error
+        if not route.root.is_dir():
+            raise ValueError("active comms route root is missing")
+        return route
 
     def observe_root(self) -> Path:
         from .wire_log import WireLog
@@ -142,31 +176,7 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
         value = json.loads(raw, object_pairs_hook=unique_wire_object)
     except (ValueError, UnicodeError) as error:
         raise ValueError("active comms route is invalid JSON") from error
-    if (
-        not isinstance(value, dict)
-        or set(value) != {"version", "root", "wire_root_id", "native_package"}
-        or type(value["version"]) is not int
-        or value["version"] != 1
-    ):
-        raise ValueError("active comms route has an unsupported shape")
-    root, root_id, package = (value["root"], value["wire_root_id"], value["native_package"])
-    if (
-        type(root) is not str
-        or type(package) is not str
-        or not root
-        or not package
-        or not Path(root).is_absolute()
-        or not Path(package).is_absolute()
-        or ".." in Path(root).parts
-        or ".." in Path(package).parts
-        or type(root_id) is not str
-        or len(root_id) != 32
-        or any(ch not in "0123456789abcdef" for ch in root_id)
-    ):
-        raise ValueError("active comms route has invalid absolute identities")
-    if not Path(root).is_dir():
-        raise ValueError("active comms route root is missing")
-    return ActiveRoute(Path(root), root_id, Path(package))
+    return ActiveRoute.from_record(value)
 
 
 @contextmanager
@@ -223,13 +233,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     path = active_route_path() if path is None else path
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
-    if (
-        not route.root.is_absolute()
-        or not route.native_package.is_absolute()
-        or ".." in route.root.parts
-        or ".." in route.native_package.parts
-    ):
-        raise ValueError("active comms route requires absolute root and package identities")
+    FieldCodec.encode(route)
     _preflight(route.root, route.wire_root_id, route.native_package, True)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
@@ -270,15 +274,7 @@ def _publish_active_route_locked(
                 else "active comms route is not the expected private root"
             )
         payload = (
-            json.dumps(
-                {
-                    "version": 1,
-                    "root": str(route.root),
-                    "wire_root_id": route.wire_root_id,
-                    "native_package": str(route.native_package),
-                },
-                sort_keys=True,
-            )
+            json.dumps(FieldCodec.encode(route), sort_keys=True)
             + "\n"
         ).encode()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"

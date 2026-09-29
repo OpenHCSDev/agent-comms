@@ -1,0 +1,25 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_late_private_owner_can_accept_first_message_before_worker_spawn _____
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-5jbf3tua')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5598ef4510>
+
+    def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
+        root, root_id, comms, _, _ = _root(tmp_path)
+        comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
+        comms.threads.register(Thread("late-owner", frozenset(), str(tmp_path)))
+        late = comms.registry.require("late-owner")
+        lookup = stable_thread_lookup(late.created_at)
+        message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
+        with (
+            Coordination(str(root / "coordination.sqlite3")) as store,
+>           pytest.raises(IdentityConflict, match="not registered"),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ):
+E       Failed: DID NOT RAISE IdentityConflict
+
+tests/test_private_nk_entrypoint.py:503: Failed
+=========================== short test summary info ============================
+FAILED tests/test_private_nk_entrypoint.py::test_late_private_owner_can_accept_first_message_before_worker_spawn
+1 failed in 0.90s
