@@ -4,19 +4,29 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core0931c47d (corrected312 send-admission ownership and
-315 audit; includes311/308/307), Toad4147eb1 (144 plus129/141/143), Textualc974,
-native5fde. Five launchers and four idle-restarted workers use
-runtime-send-admission-20260928. Installed9 checks pass: three actual native
-selected executions, selected native summary/commit/one input, shared rules and
-ownership guards. Four fresh live ACP attachments pass; PR95 savedpaint105matches,
-ready/noerrors. Process commandpaths verified. No reset/replay/historyrewrite.
-Parent rejected initial312 opaque fieldtuples; correctedcandidate reuses actual
-identity owners and named ReservationRule family failures. New policies add more
-lines than removed; displaced253line closure andhelpers/callers are deleted.
-Retired workspace/watchdog runtimes and completed native test scratch cleaned.
-142 is the single workspace implementation path;116 stays provenance until its
-unique viewport behavior/tests are transferred, then closes.
+Latest installed pair: core0931c47d, Toad19de70c (146 permission ownership,
+147 preview navigation), Textualc974/native5fde. All five launchers point to
+runtime-preview-permissions-20260928. Core workers keep the same0931 package
+in runtime-send-admission; no worker restart, reset, replay or history rewrite.
+Actual final installed saved-log link/scroll/selection/wrap/resize/close/reopen,
+paging/read recovery and ordinary Unicode file paint PASS. PR95 retained history
+paints105matching phrases, ready/noerrors. Combined installed physical native
+Pi/ACP/Toad permission removal/rebind/grant executes tool exactly once; actual
+pending-mount cancellation/replacement and inline/diff lifecycle PASS,2guardsPASS.
+Executed activation operator deleted. Fresh ACP attachments recorded separately.
+
+User reports a new RecursionError in running Toad; no traceback in latest ACP
+logs. Both previously observed user Toad processes exited; version/cause not
+proven. Carver owns investigation; parent requested terminal traceback. Do not
+attribute this crash to old runtime or claim147 resolves it without evidence.
+
+142 remains the sole workspace implementation: rapid/cold-tail paint and real
+source swaps pass; recent-source reuse and final latency/suite closure remain.
+Tesla owns transferring116 recent-source regression before116 closes.145Noether
+must consume existing ACPToolCallContent onto shared decode/render contract;
+318Boyle ready pending review;319Dalton correcting internal boolean discriminator
+compatibility to ordinary derived family tags;316Wegener ratchet correction.
+The original/refactor goal stays active, not globally complete.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
