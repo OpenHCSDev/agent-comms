@@ -33,6 +33,7 @@ from .turn_input_source import (
     NoInputDependency,
     OwnerOriginalInput,
     RoutedOriginalInput,
+    ScheduledOriginalInput,
 )
 from .turn_progress import TurnProgress
 
@@ -155,10 +156,6 @@ class OwnedTurn:
                             ).prompt,
                         )
                     self.original_keys = (*self.original_keys, self.key)
-        self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(
-            self.original_keys
-        )
-
         self.batch = InputBatch.capture(
             self.origins,
             self.original_keys,
@@ -246,6 +243,8 @@ class OwnedTurn:
             permission = InactiveGoalPermission()
         if self.original_owner_input:
             source_type = OwnerOriginalInput
+        elif not self.origins:
+            source_type = ScheduledOriginalInput
         elif self.dependency_wait_id is not None:
             source_type = DependencyOriginalInput
         else:
@@ -263,6 +262,15 @@ class OwnedTurn:
                 else NoInputDependency()
             ),
             batch=self.batch,
+        ).reserve(
+            self.runner.inputs.dispositions,
+            self.thread,
+            TurnId(self.turn_id),
+            self.turn_admission,
+        )
+        self.original_keys = self.original.keys
+        self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(
+            self.original_keys
         )
         self.runner.inputs.original_sources[self.session_id] = self.original
         self.progress = TurnProgress(

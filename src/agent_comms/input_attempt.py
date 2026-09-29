@@ -198,12 +198,8 @@ class ReservedInput(StoredInput):
 
     def pending_for(self, owner: Thread) -> bool:
         assert owner.active_turn is not None
-        return (
-            self.matches_owner(owner.incarnation)
-            and self.matches_admission(owner.active_turn.admission_generation)
-            and self.key.startswith("acp:")
-            and self.sequence is None
-            and self.target == owner.name
+        return self.matches_owner(owner.incarnation) and self.matches_admission(
+            owner.active_turn.admission_generation
         )
 
     def finish_unbound(self) -> NotSentInput:
