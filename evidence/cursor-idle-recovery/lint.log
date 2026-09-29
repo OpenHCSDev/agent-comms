@@ -1,13 +1,11 @@
-SIM102 Use a single `if` statement instead of nested `if` statements
-  --> tests/test_cursor_load_recovery.py:51:21
+E501 Line too long (101 > 100)
+  --> tests/test_cursor_load_recovery.py:51:101
    |
-49 |                   payload = json.loads(await reader.readline())
-50 |                   for update in decode_updates(payload["update"].get("_meta")):
-51 | /                     if isinstance(update, CursorAdvancedUpdate):
-52 | |                         if update.envelope.revision > after:
-   | |____________________________________________________________^
-53 |                               return update.envelope
+49 |                 payload = json.loads(await reader.readline())
+50 |                 for update in decode_updates(payload["update"].get("_meta")):
+51 |                     if isinstance(update, CursorAdvancedUpdate) and update.envelope.revision > after:
+   |                                                                                                     ^
+52 |                         return update.envelope
    |
-help: Combine `if` statements using `and`
 
 Found 1 error.

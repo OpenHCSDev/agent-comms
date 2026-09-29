@@ -48,9 +48,8 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
             while True:
                 payload = json.loads(await reader.readline())
                 for update in decode_updates(payload["update"].get("_meta")):
-                    if isinstance(update, CursorAdvancedUpdate):
-                        if update.envelope.revision > after:
-                            return update.envelope
+                    if isinstance(update, CursorAdvancedUpdate) and update.envelope.revision > after:
+                        return update.envelope
 
     try:
         await agent.inputs.drain_inbox(owner.name)
