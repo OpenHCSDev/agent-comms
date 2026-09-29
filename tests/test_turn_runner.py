@@ -198,9 +198,12 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
     with pytest.raises(RuntimeError, match="execution failed"):
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
     errors = failure_facts(updates, RequestFailedUpdate)
-    assert len(errors) == 1
+    assert len(errors) == (2 if isinstance(prior, events.Error) else 1)
+    from agent_comms.input_attempt import NotSentInput
+
+    assert errors[-1].failure.input_state is NotSentInput
     expected = prior.text if prior is not None else "execution failed"
-    assert errors[0].failure.detail == expected
+    assert errors[-1].failure.detail == expected
     assert native.session.read_bytes() == original
     assert native.provider.posts == 1  # Preparation/fault must not send or replay input.
     assert owner._comms.registry.require(session).active_turn is None
