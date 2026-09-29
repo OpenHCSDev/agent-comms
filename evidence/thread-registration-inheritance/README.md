@@ -59,3 +59,35 @@ own output handle; the old wrapper supplied it twice. Delete the interception an
 its separate log handle, consume actual production owner diagnostics instead.
 Retain all native answer/history/no-compaction/no-replay assertions unchanged.
 Initial RED retained in installed-native-fork-first.log; final run follows.
+
+## Final installed actual native proof
+
+`installed-native-fork.log`: **1 passed in 13.59s**, final production bytes from
+current-main merged wheel; existing physical Pi d396/localhost controlled provider,
+normal production fork, actual owner worker/RuntimeServer/ACP load and retained
+native history. Actual parent uses 7,888/32,768 tokens (~24%); token/JSON mismatch
+retained (32,164 serialized bytes versus old 23,040-byte erroneous admission).
+First fork input answers in 8.684s; no request/input failure, zero native or ACP
+compaction, physical parent unchanged, inherited parent context preserved, exactly
+one hey Boss and exactly two provider requests, no delayed replay. Native/owner
+children retired by existing fixtures; parent/native sessions are private copies.
+No DetachedProcess interception remains. Ordinary case shares the deleted logging
+wrapper but was not rerun: current scoped proof is the production fork/history.
+
+Exact command, own installed noneditable wheel verified in installed-imports.json:
+
+```sh
+timeout 115 env PYTHONPATH=tests PATH="$PWD/.artifacts/installed/bin:$PATH" \
+  PI_COMPACTION_TEST_PACKAGE=/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent \
+  .artifacts/installed/bin/python -m pytest -o addopts= -p no:cacheprovider -s \
+  'tests/test_native_fork_first_input.py::test_underbudget_physical_native_owner_answers_without_compaction[fork_owner]' \
+  --basetemp=.artifacts/native-fork-final
+```
+
+Ready for parent review/integration and affected LIVE fork/history gate. No durable
+format/reset/migration, user-thread operation, launcher/route/configuration change,
+paid provider or external merge. Remaining ThreadManagement/global size and other
+relation owner obligations remain explicitly open in completion map171.
+58 production lines deleted /73 added across the complete owned slice; 12 obsolete
+native diagnostic-wrapper lines deleted. Latest archive and relevant patterns
+reread, including dominant-chain ownership classification and 500-excess rule.

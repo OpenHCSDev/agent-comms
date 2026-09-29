@@ -1,0 +1,14 @@
+{
+  "agent_comms.threads": {
+    "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/threads.py",
+    "sha256": "0cbc2f87f76b5f8a168b726ab2faa4fd2ad46778f81456647d7c7bc8290ec95a"
+  },
+  "agent_comms.thread_management": {
+    "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/thread_management.py",
+    "sha256": "594cec4d30a9e7392ffa330ad6a62e3f1e68633f6ff3086d81886690483663d0"
+  },
+  "agent_comms.registration_inheritance": {
+    "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/registration_inheritance.py",
+    "sha256": "883035d04211e873b9c240efcde4b7c35c72c51f216fab7c54c7a5bf7d9e0f6a"
+  }
+}
