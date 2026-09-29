@@ -1,4 +1,4 @@
-# Native launch option ownership — draft
+# Native launch option ownership — installed acceptance complete
 
 Production lines deleted 101, added 195; test lines deleted 16, added 171. Based on mergedmain942f9824. Whole originalS2/S10 boundary: provider/model/thinking selection, native RPC mode, read/replace/render and every session/catalog/turn consumer. More source lines declare case behavior and shared grammar while removing five independent interpreters; this is not a line-count reduction claim.
 
@@ -10,7 +10,7 @@ Source checks:6passed2skipped0.74s; includes new declaration read/render/validat
 
 Boyle owns remaining-plan census and R0 ratchet; scope posted on344#issuecomment-5884246148. Tesla/Carver/Noether and their files remain excluded. Parent owns final combined installation and affected LIVE saved-thread selection path, including representative UI state; source tests cannot establish that.
 
-Cleanup compressed fourteen completed owned audit JSON artifacts, saving68434728bytes while preserving contents; see cleanup.json. Native343 d396 and source/wheels/evidence retained while parent's global copy awaits verification. No live changes, no paid provider, no CI hold.
+Cleanup compressed fourteen completed owned audit JSON artifacts, saving68434728bytes while preserving contents; see cleanup.json. Parent verified global d396; owned derivative later removed after process-reference check. Source/wheel/evidence retained. No live changes, no paid provider, no CI hold.
 
 ## Bounded continuous saved-state source acceptance
 
@@ -28,8 +28,7 @@ original replay. Log:saved-native-first.log. Disposable roots were cleaned only
 after child cleanup/process-reference check; run-cleanup.json records the scope.
 
 This is a source checkout journey, not a noneditable installation or painted UI
-claim. Parent retains sole integration/live acceptance ownership. PR stays draft
-for review and paired installation; no global work hold or repeated matrix.
+claim. Parent retains sole integration/live acceptance ownership. This source result was followed by the installed acceptance below; no repeated matrix.
 
 Exact archive bounded changed-file census: no per-file foreign absence probes,
 boolean chain terms or FieldCodec subclasses increase. String equality−6;
@@ -37,3 +36,31 @@ three generic nominal type-membership predicates replace string switches.
 Class excess beyond500 has zero growth; existing TurnRunner shrinks. Full NRA
 dependency scan deferred under explicit resource warning; no global clean claim.
 Ruff F/I and git diff --check pass.
+
+
+## Noneditable installed acceptance — ready for parent merge
+
+Parent requested exactly the existing saved-native/ACP/new-input journey at
+57ec47763340d0214fad5b57a0f210a7d061d95c. Built its wheel offline and installed it
+(noneditable, no source PYTHONPATH) into an isolated owned candidate. Dependencies
+were constrained to the parent staged core942 runtime. Actual native used the
+verified global native-current-d3967e8b6ee0cf28 package.
+
+The SAME case passed on its first installed attempt: **1 passed in 9.92s**.
+All six changed production helpers were imported from the candidate installation
+and matched the reviewed commit. After the journey, every loaded agent_comms
+module still resolved inside that installation. No source fallback; direct_url
+records the wheel installation. Receipt: installed-imports.json; execution log:
+installed-saved-native.log; build/setup logs and exact run script retained.
+
+This proves actual installed saved-history startup/load, selected model/thinking,
+unchanged original history/proof before input, one new original admission,
+end_turn, prefix preservation and native child cleanup. No paid provider or new
+agent; no expanded matrix. **Ready for merge; painted live gate remains parent.**
+
+After completion, process command/cwd/executable/open-file/mapping checks found
+no references to the disposable install, test root, or local d396 derivative.
+Removed only those three owned paths (164,334,898 logical bytes). Protected OS
+process details were unreadable and are recorded, not represented as inspected.
+Global canonical d396, source, wheel, and evidence remain intact. No live process
+or parent staged runtime was changed.
