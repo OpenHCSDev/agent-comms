@@ -45,7 +45,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert response.stop_reason == "end_turn"
             assert len(native.saved_inputs()) == 2
             goal = comms.goals.update_goal(sid, SetGoalAction(text="Exercise one explicit failed attempt"))
-            store = agent.turns.open_goal_store()
+            store = agent.turns.goals.open_goal_store()
             store.create_goal(goal.id)
             admission = comms.registry.snapshot().admission_generations[sid]
             key = "acp:retained-unknown"
@@ -78,7 +78,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert store.path.read_bytes() == before
             with pytest.raises(UnresolvedAttemptError):
                 GoalAttemptStore(store.root).resume(goal.id, 1)
-            agent.turns.schedule_goal(sid)
+            agent.turns.goals.schedule_goal(sid)
             assert not agent.inputs.pending_turns.get(sid)
             assert len(native.saved_inputs()) == 3
             print(f"native_failed_goal_projection={projected.to_primitive()} provider_posts={native.provider.posts}")

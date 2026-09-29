@@ -7,7 +7,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import stable_thread_lookup
@@ -19,7 +19,7 @@ from .errors import RelationViolationError
 from .native_admission_rules import (
     GoalRegistryAdmissionCheck,
     GoalRegistryIdentityCheck,
-    RegistryAdmissionCheck,
+    RegistryIdentityCheck,
 )
 from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class RegistryOwner:
-    check_type: ClassVar[type[RegistryAdmissionCheck]] = GoalRegistryAdmissionCheck
+    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck
     thread: Thread
     admission_generation: int
 
@@ -111,6 +111,20 @@ class RegistryOwner:
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry owner stopped or changed") from error
         self._require_current(actual, admission, "recipient registry owner stopped or changed")
+
+
+class GoalLaunchOwner(RegistryOwner):
+    """Unused READY recovery binds identity/admission, not an old goal revision."""
+
+    check_type = RegistryIdentityCheck
+
+    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> None:
+        name = snapshot.aliases.get(self.thread.name, self.thread.name)
+        canonical = replace(self, thread=replace(self.thread, name=name))
+        canonical.require_snapshot(snapshot, "Goal launch owner changed")
+        current = snapshot.require_active(name)
+        snapshot.statuses[current.name].require_running()
+        current.require_active_goal(goal_id)
 
 
 @dataclass(frozen=True)

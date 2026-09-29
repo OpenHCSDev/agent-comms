@@ -469,7 +469,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     activate_empty_source(agent)
     goal = comms.goals.update_goal(
-        owner, SetGoalAction(text="Review child work"), owner_store=agent.turns.open_goal_store()
+        owner, SetGoalAction(text="Review child work"), owner_store=agent.turns.goals.open_goal_store()
     )
     assert goal is not None
     wakes = []
@@ -484,7 +484,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
         assert comms.goals.release_waits_after_terminal_turn(fence) == (owner,)
         assert comms.registry.require(owner).goal.state.active
         assert comms.goals.goal_wait(owner) is None
-        agent.turns.schedule_goal(owner)
+        agent.turns.goals.schedule_goal(owner)
         assert wakes == [owner]
         assert [turn.goal_id for turn in agent.inputs.pending_turns[owner]] == [goal.id]
     finally:

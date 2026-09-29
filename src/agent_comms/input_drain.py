@@ -7,7 +7,7 @@ import os
 import sqlite3
 import time
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any
 from uuid import uuid4
 
@@ -31,12 +31,10 @@ from .acp_extension import (
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .comms import Comms
 from .coordination_errors import CoordinationError
-from .goal_waits import GoalWait
-from .goals import Goal
-from .image_inputs import ImageInput
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
+from .queued_input import QueuedInput, QueuedInputContext
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .selected_summary_admission import SelectedSummaryAdmission
@@ -51,29 +49,6 @@ AGENT_PREFIX = "!agent "
 LIVE_DRAIN_INTERVAL = 0.05
 WATCH_POLL_INTERVAL = 1.0
 GOAL_WAIT_RECHECK_INTERVAL = 60.0
-
-
-@dataclass(frozen=True, slots=True)
-class QueuedInput:
-    text: str
-    echo: bool
-    owner_created_at: float
-    admission: int
-    receipt: InputAttempt | None = None
-    turn_id: str | None = None
-    goal: Goal | None = None
-    wait: GoalWait | None = None
-    images: tuple[ImageInput, ...] = ()
-    controller: Any = None
-
-    def current(self, owner: Thread, admission: int, wait: GoalWait | None) -> bool:
-        """A fresh input retains the exact owner/goal/wait seen at acceptance."""
-        return (
-            self.owner_created_at == owner.created_at
-            and self.admission == admission
-            and self.goal == owner.goal
-            and self.wait == wait
-        )
 
 
 class InputDrain(FutureInputQueue):
@@ -151,8 +126,7 @@ class InputDrain(FutureInputQueue):
                 QueueItem(input_id, item.text)
                 for input_id, item in values.items()
                 if item.echo
-                and item.owner_created_at == scope.owner_created_at
-                and item.admission == scope.admission_generation
+                and item.context.owns(scope.owner)
             )
 
         items = current(self.queued_inputs.get(session_id, {}))
@@ -189,8 +163,7 @@ class InputDrain(FutureInputQueue):
         if (
             queued_item is None
             or scope is None
-            or (scope.owner_created_at, scope.admission_generation)
-            != (queued_item.owner_created_at, queued_item.admission)
+            or not queued_item.context.owns(scope.owner)
         ):
             scope = None
         revision = None
@@ -264,7 +237,7 @@ class InputDrain(FutureInputQueue):
                         if time.monotonic() >= next_goal_wait_check:
                             self.comms.goals.recover_closed_goal_wait(session_id)
                             next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
-                        self.effects.turns.schedule_goal(session_id)
+                        self.effects.turns.goals.schedule_goal(session_id)
                         await self.sessions.config.refresh_auth_models()
                     except asyncio.CancelledError:
                         raise
@@ -411,7 +384,7 @@ class InputDrain(FutureInputQueue):
                                 "input before explicit Retry. No input was replayed."
                             ),
                         )
-                        await self.effects.turns.sync_goal_execution(session_id, owner.name)
+                        await self.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                     finally:
                         self.effects.turns.turn_tasks.pop(session_id, None)
 
@@ -474,12 +447,9 @@ class InputDrain(FutureInputQueue):
             self.queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
                 display_text,
                 defer_display,
-                owner_row.created_at,
-                admission,
+                QueuedInputContext.capture(owner_row, admission, self.comms.goals.goal_wait(owner)),
                 self.dispositions.read().rows.get(key) if delivery == "queue" else None,
                 owner_row.active_turn.id if owner_row.active_turn else None,
-                owner_row.goal,
-                self.comms.goals.goal_wait(owner),
                 images,
                 controller,
             )
@@ -530,14 +500,9 @@ class InputDrain(FutureInputQueue):
                 continue
             for input_id, item in self.queued_inputs.get(session_id, {}).items():
                 key = self.steering_input_keys.get(session_id, {}).get(input_id)
-                if (
-                    key is not None
-                    and item.receipt is not None
-                    and item.owner_created_at == owner.created_at
-                    and item.admission == owner.active_turn.admission_generation
-                    and item.turn_id == owner.active_turn.id
-                ):
-                    result[key] = item.receipt
+                receipt = item.future_receipt(owner)
+                if key is not None and receipt is not None:
+                    result[key] = receipt
         return result
 
     def send_now(self, session_id: str) -> None:

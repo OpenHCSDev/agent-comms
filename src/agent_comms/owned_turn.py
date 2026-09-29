@@ -107,9 +107,9 @@ class OwnedTurn:
             self.goal_permit = TurnGoalAccount.reserve(
                 owner=self.thread,
                 comms=self.runner.comms,
-                store=self.runner.goal_store,
-                open_store=self.runner.open_goal_store,
-                ready_grant=self.runner.ready_goal_grant_locked,
+                store=self.runner.goals.goal_store,
+                open_store=self.runner.goals.open_goal_store,
+                ready_grant=self.runner.goals.ready_goal_grant_locked,
                 autonomous=self.autonomous_goal,
             )
             if self.goal_permit is None:
@@ -295,11 +295,11 @@ class OwnedTurn:
                 lease=self.turn_lease,
                 admission=self.turn_admission,
                 permit=self.goal_permit,
-                open_store=self.runner.open_goal_store,
-                pending_origins=self.runner.pending_goal_origins,
+                open_store=self.runner.goals.open_goal_store,
+                pending_origins=self.runner.goals.pending_goal_origins,
             ),
             finish_stream=self.runner.finish_turn_stream,
-            sync_goals=self.runner.sync_goal_execution,
+            sync_goals=self.runner.goals.sync_goal_execution,
         )
 
     async def prepare_native(self):
@@ -373,7 +373,7 @@ class OwnedTurn:
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
-            goal_store=self.runner.goal_store,
+            goal_store=self.runner.goals.goal_store,
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),
