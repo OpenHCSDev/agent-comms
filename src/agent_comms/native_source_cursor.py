@@ -54,7 +54,10 @@ class NativeSourceCursor:
         ):
             raise ValueError("current cursor requires exact coordinator and owner identities")
         identity = CursorOwner(
-            self.wire_root_id, owner, owner_generation, owner_admission_generation
+            wire_root_id=self.wire_root_id,
+            thread=owner,
+            generation=owner_generation,
+            admission_generation=owner_admission_generation,
         )
         sources = self._coverage(identity.lookup)
         witness = sources.witness()
@@ -160,7 +163,10 @@ class NativeSourceCursor:
                 if not person.committed or person.owner_thread != owner_name:
                     raise StaleFence("current native cursor recipient is not committed")
                 identity = CursorOwner(
-                    self.wire_root_id, actual, person.participant_generation, admission
+                    wire_root_id=self.wire_root_id,
+                    thread=actual,
+                    generation=person.participant_generation,
+                    admission_generation=admission,
                 )
                 cursor = identity.cursor(db)
                 if cursor is not None:

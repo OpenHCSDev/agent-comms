@@ -20,6 +20,7 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .native_input_owner import ParticipantOwner
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
@@ -138,7 +139,6 @@ def bind_expected_prompt(
     ):
         raise ValueError("prompt binding requires bounded exact prelaunch identities")
     digest = native_request_digest(prompt)
-    from .coordinated_runtime import _require_owner
 
     # Installation grants no owner authority. Recheck ownership after it, then
     # hold SQL generation writers through insertion. Registry lifecycle writers
@@ -147,7 +147,7 @@ def bind_expected_prompt(
     with store.session.transaction() as db:
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
-        _require_owner(store, assignment.recipient_lookup, owner, generation)
+        ParticipantOwner(owner, generation).require(store, assignment.recipient_lookup)
         reserved = NativeRuntimeInput.one(db, input_id=input_id)
         if reserved is None:
             raise IdentityConflict("prompt binding requires an already reserved input")

@@ -13,13 +13,12 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import secrets
 import sqlite3
 import threading
 import time
-from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, ExitStack, contextmanager, suppress
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -66,12 +65,12 @@ from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .message_bus import MessageBus
 from .messages import MessageType
+from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import (
     NativeContextProof,
     NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
-    _fresh_selected_revision,
     _private_session_dir,
     _trusted_package,
 )
@@ -80,11 +79,12 @@ from .native_prompt_binding import (
     expected_prompt_matches_journal,
     read_expected_prompt_binding,
 )
-from .native_prompt_send import PromptAdmissionBusy
 from .native_runtime_input import NativeRuntimeInput
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_registry_guard import _require_no_private_owner_rename
-from .private_sidecar import SidecarCommitUnknown, native_request_digest
+from .private_send_admission import PrivateSendAdmission
+from .private_send_stage import FullNativeSend, NativeSendStage, TriageNativeSend
+from .private_sidecar import SidecarCommitUnknown
 from .selected_write_plan import PlannedWrite
 from .threads import Thread
 from .turn_lease import TurnLeaseFence
@@ -267,49 +267,6 @@ def _token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _require_registry_owner(comms: Comms, owner: Thread, admission_generation: int) -> None:
-    """Match stable process admission and exact turn across metadata writes."""
-    try:
-        actual, actual_admission_generation = comms.registry.live_owner_with_admission(owner.name)
-    except (RelationViolationError, ValueError) as error:
-        raise StaleFence("recipient registry owner stopped or changed") from error
-    if (
-        actual_admission_generation != admission_generation
-        or actual.pid != os.getpid()
-        or actual.goal != owner.goal
-        or (
-            actual.name,
-            actual.created_at,
-            actual.pid,
-            actual.role,
-            actual.worktree,
-            actual.active_turn,
-        )
-        != (
-            owner.name,
-            owner.created_at,
-            owner.pid,
-            owner.role,
-            owner.worktree,
-            owner.active_turn,
-        )
-    ):
-        raise StaleFence("recipient registry owner stopped or changed")
-
-
-def _require_owner(store: Coordination, lookup: str, owner: Thread, generation: int) -> None:
-    participant = store.participants.get(lookup)
-    if (
-        not participant.committed
-        or participant.owner_thread != owner.name
-        or participant.participant_generation != generation
-        or stable_thread_lookup(owner.created_at) != lookup
-        or owner.pid != os.getpid()
-        or not owner.role.executable
-    ):
-        raise StaleFence("cohort recipient is not this live registered owner generation")
-
-
 def _execution_id(assignment: WakeAssignment) -> str:
     return "wirev1" + hashlib.sha256(assignment.assignment_id.encode()).hexdigest()
 
@@ -487,12 +444,14 @@ class SelectedExecution:
             )
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry identity stopped or changed") from error
-        _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        RegistryOwner(
+            thread=self.owner, admission_generation=self.owner_admission_generation
+        ).require_registry(self.comms.registry)
         self.lookup = stable_thread_lookup(self.owner.created_at)
         self.participant = self.store.participants.get(self.lookup)
         with self.store.session.read():
-            _require_owner(
-                self.store, self.lookup, self.owner, self.participant.participant_generation
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.lookup
             )
         self.assignment = next_sealed_assignment(
             self.store, self.lookup, self.owner.name, after_seq=after_seq
@@ -539,7 +498,9 @@ class SelectedExecution:
             raise StaleFence("selected owner stopped or busy before native turn") from error
         self.owned_turn_lease = self.owner.turn_lease
         assert self.owned_turn_lease is not None
-        _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        RegistryOwner(
+            thread=self.owner, admission_generation=self.owner_admission_generation
+        ).require_registry(self.comms.registry)
         if self.owner.active_turn is None or self.owner.active_turn.owner_pid != self.owner.pid:
             raise StaleFence("selected recipient has no live owner-turn identity")
         self.initial = self._selected_source(self.wire_root_id)
@@ -587,8 +548,8 @@ class SelectedExecution:
                     != self.owner_admission_generation
                 ):
                     raise StaleFence("fresh-session owner changed before enrollment")
-                _require_owner(
-                    self.store, self.lookup, self.owner, self.participant.participant_generation
+                ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                    self.store, self.lookup
                 )
                 from .maintenance_barrier import MaintenanceBarrier
 
@@ -647,12 +608,14 @@ class SelectedExecution:
                 thinking_level=self.owner.thinking_level,
                 maintenance_root=self.root,
                 fresh_selected=self.first_selected,
-                prompt_send_boundary=self._send_boundary(),
+                prompt_send_boundary=self._prepare_send(TriageNativeSend(self.assignment)),
             )
             self._verify_native(
                 result, expected_digest=self.prompt_digest, stage="triage", fence=None
             )
-            _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+            RegistryOwner(
+                thread=self.owner, admission_generation=self.owner_admission_generation
+            ).require_registry(self.comms.registry)
             decision = _parse_triage(result.text)
             self._record_triage_result(result, decision)
             if decision == "IGNORE":
@@ -673,7 +636,9 @@ class SelectedExecution:
                 raise IdentityConflict("pending claim wake decision is not executable")
 
     def _engage(self):
-        _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        RegistryOwner(
+            thread=self.owner, admission_generation=self.owner_admission_generation
+        ).require_registry(self.comms.registry)
         self.execution_id = self._engage_assignment()
         snapshot = self.store.snapshots.get(self.execution_id)
         if snapshot.execution.lifecycle.queued:
@@ -681,15 +646,17 @@ class SelectedExecution:
                 self.execution_id, expected_revision=snapshot.execution.revision
             ).value
         self.token = prepare_fence_token()
-        started = self.store.attempts.start(AttemptStart(
-            self.execution_id,
-            1,
-            self.owner.name,
-            self.participant.participant_generation,
-            self.token,
-            expected_execution_revision=snapshot.execution.revision,
-            expected_pointer_revision=snapshot.pointer_revision,
-        )).value
+        started = self.store.attempts.start(
+            AttemptStart(
+                self.execution_id,
+                1,
+                self.owner.name,
+                self.participant.participant_generation,
+                self.token,
+                expected_execution_revision=snapshot.execution.revision,
+                expected_pointer_revision=snapshot.pointer_revision,
+            )
+        ).value
         self.progress = DurableTurn(
             self.store.attempts, started.fence, started.snapshot.pointer_revision, ""
         )
@@ -879,14 +846,16 @@ class SelectedExecution:
             maintenance_root=self.root,
             fresh_selected=self.first_selected,
             **({"selected_tool_mode": self.tool_mode} if self.tool_mode is not None else {}),
-            prompt_send_boundary=self._send_boundary(fence=self.fence),
+            prompt_send_boundary=self._prepare_send(FullNativeSend(self.assignment, self.fence)),
         )
 
     def _verify(self, result: NativeTurnResult):
         self._verify_native(
             result, expected_digest=self.prompt_digest, stage="full", fence=self.fence
         )
-        _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        RegistryOwner(
+            thread=self.owner, admission_generation=self.owner_admission_generation
+        ).require_registry(self.comms.registry)
         if not result.text:
             raise IdentityConflict("successful model produced no publishable response")
 
@@ -928,7 +897,9 @@ class SelectedExecution:
     def _publish(self, result: NativeTurnResult):
         self._record_full_result(self.fence, result)
         self.progress.finish()
-        _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        RegistryOwner(
+            thread=self.owner, admission_generation=self.owner_admission_generation
+        ).require_registry(self.comms.registry)
         prepare_fenced_response(
             self.store,
             self.bus,
@@ -959,7 +930,9 @@ class SelectedExecution:
         # The native adapter observed agent_settled, verified its input proof,
         # and reaped its own child before raising this nominal final outcome.
         # Retire only this failed attempt; future messages remain serviceable.
-        _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+        RegistryOwner(
+            thread=self.owner, admission_generation=self.owner_admission_generation
+        ).require_registry(self.comms.registry)
         self._verify_native(
             NativeTurnResult("", error.context),
             expected_digest=self.prompt_digest,
@@ -997,14 +970,18 @@ class SelectedExecution:
                     self.owner_witness.require_live(registry, self.progress.fence)
                     self.progress.fail_unknown()
             else:
-                _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+                RegistryOwner(
+                    thread=self.owner, admission_generation=self.owner_admission_generation
+                ).require_registry(self.comms.registry)
         except StaleFence:
             # Recovery monitor owns a revoked owner's still-uncertain attempt.
             # Preserve the original backend error and never act for a successor.
             return
         if self.input_id is not None:
             try:
-                _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
+                RegistryOwner(
+                    thread=self.owner, admission_generation=self.owner_admission_generation
+                ).require_registry(self.comms.registry)
             except StaleFence:
                 # The original failure remains the result. A revoked owner
                 # cannot publish a notice under its successor's identity.
@@ -1019,255 +996,22 @@ class SelectedExecution:
                     native_response=error.rejected_response,
                 )
 
-    def _send_boundary(
-        self, *, fence: OwnerFence | None = None
-    ) -> Callable[..., AbstractContextManager[None]]:
-        """One-use final-send admission, with wire→bus→registry→SQL lock order.
-
-        Entered only by the native adapter's isolated raw-pipe writer (never an
-        event loop). The reservation already forbids recovery/retry; this closure additionally
-        forbids a second admitted use within this process. Contended exclusion
-        acquisition has no admission effect and can wait within the raw writer budget.
-        """
-        once = threading.Lock()
-        store_path = self.store.session.path
-        # Prepare durable journal schema before the deadline-constrained raw
-        # writer. A missing selected row must not mean a missing admission fence.
-        journal = CompactionJournal(self.bus.log.path.parent / "compaction-commits.sqlite3")
-
-        @contextmanager
-        def boundary(
-            actual_session_file: Path,
-            selected_runtime_revision: tuple[int, int, int, int, int] | None = None,
-        ) -> Iterator[None]:
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                pass
-            else:
-                raise IdentityConflict("native send admission requires the isolated raw writer")
-            # Release partial exclusion before asking the raw writer to wait. Only
-            # lock acquisition is repeatable: identity checks, journal reservations,
-            # raw bytes and commit outcomes below remain one-use and unreplayable.
-            with ExitStack() as authority:
-                try:
-                    admission_store = authority.enter_context(
-                        Coordination(str(store_path), lock_timeout=0)
-                    )
-                    registry = authority.enter_context(_response_boundary(self.bus, blocking=False))
-                    db = authority.enter_context(admission_store.session.irreversible_admission())
-                except BlockingIOError as error:
-                    raise PromptAdmissionBusy("Native admission exclusion is busy") from error
-                except sqlite3.OperationalError as error:
-                    if error.sqlite_errorcode & 0xFF in (
-                        sqlite3.SQLITE_BUSY,
-                        sqlite3.SQLITE_LOCKED,
-                    ):
-                        raise PromptAdmissionBusy("Native admission database is busy") from error
-                    raise
-                if not once.acquire(blocking=False):
-                    raise IdentityConflict("native send admission cannot be reused")
-                # Rename may begin after reservation but before the isolated raw
-                # send. Its wire-locked durable intent must fence the last
-                # irreversible boundary, not just the outer turn entry.
-                _require_no_private_owner_rename(self.bus.log.path.parent)
-                from .maintenance_barrier import MaintenanceBarrier
-
-                MaintenanceBarrier(self.bus._registry.store.path).assert_open_unlocked()
-                actual = registry.threads.get(self.owner.name)
-                status = registry.statuses.get(self.owner.name)
-                if (
-                    actual is None
-                    or status is None
-                    or not status.active
-                    or actual.goal != self.owner.goal
-                    or registry.admission_generations.get(self.owner.name)
-                    != self.owner_admission_generation
-                    or actual.pid != os.getpid()
-                    or (
-                        actual.created_at,
-                        actual.pid,
-                        actual.role,
-                        actual.worktree,
-                        actual.active_turn,
-                    )
-                    != (
-                        self.owner.created_at,
-                        self.owner.pid,
-                        self.owner.role,
-                        self.owner.worktree,
-                        self.owner.active_turn,
-                    )
-                ):
-                    raise StaleFence("recipient registry owner changed before native send")
-                assert_native_runtime_schema(db)
-                _require_owner(
-                    admission_store,
-                    self.assignment.recipient_lookup,
-                    self.owner,
-                    self.participant.participant_generation,
-                )
-                reserved = NativeRuntimeInput.one(db, input_id=self.input_id)
-                stage = "triage" if fence is None else "full"
-                execution_id = None if fence is None else fence.execution_id
-                ordinal = None if fence is None else fence.attempt_ordinal
-                if reserved is None or (
-                    reserved.stage,
-                    reserved.assignment_id,
-                    reserved.owner_lookup,
-                    reserved.owner_thread,
-                    reserved.owner_generation,
-                    reserved.execution_id,
-                    reserved.attempt_ordinal,
-                    reserved.owner_token_digest,
-                    reserved.sent_owner_admission_generation,
-                    reserved.session_id,
-                    reserved.verdict,
-                ) != (
-                    stage,
-                    self.assignment.assignment_id,
-                    self.assignment.recipient_lookup,
-                    self.owner.name,
-                    self.participant.participant_generation,
-                    execution_id,
-                    ordinal,
-                    _token_digest(self.token),
-                    None,
-                    None,
-                    None,
-                ):
-                    raise StaleFence("native reservation changed before send")
-                current = admission_store.assignments.get(self.assignment.assignment_id)
-                if (
-                    current.recipient_lookup,
-                    current.recipient,
-                    current.wire_seq,
-                    current.message_id,
-                    current.lifecycle.mode,
-                ) != (
-                    self.assignment.recipient_lookup,
-                    self.assignment.recipient,
-                    self.assignment.wire_seq,
-                    self.assignment.message_id,
-                    self.assignment.lifecycle.mode,
-                ):
-                    raise StaleFence("selected claim identity changed before native send")
-                if fence is None:
-                    if (
-                        not current.lifecycle.deferred
-                        or current.revision != self.assignment.revision + 1
-                    ):
-                        raise StaleFence("triage claim changed before native send")
-                else:
-                    snapshot, attempt = admission_store.attempts.require_fence(fence)
-                    if (
-                        not current.lifecycle.engaged
-                        or not snapshot.execution.lifecycle.active
-                        or not attempt.lifecycle.starting
-                        or attempt.lifecycle.backend_done
-                        or attempt.lifecycle.process_dead
-                    ):
-                        raise StaleFence("full execution is not running before native send")
-                binding = read_expected_prompt_binding(
-                    admission_store, self.input_id, blocking=False
-                )
-                if binding is None or (
-                    binding.stage,
-                    binding.assignment_id,
-                    binding.owner_lookup,
-                    binding.owner_thread,
-                    binding.owner_generation,
-                    binding.wire_root_id,
-                    binding.source_seq,
-                    binding.message_id,
-                    binding.expected_prompt_digest,
-                    binding.execution_id,
-                    binding.attempt_ordinal,
-                ) != (
-                    stage,
-                    self.assignment.assignment_id,
-                    self.assignment.recipient_lookup,
-                    self.owner.name,
-                    self.participant.participant_generation,
-                    self.wire_root_id,
-                    self.assignment.wire_seq,
-                    self.assignment.message_id,
-                    native_request_digest(self.prompt),
-                    execution_id,
-                    ordinal,
-                ):
-                    raise IdentityConflict("native send differs from its durable prompt binding")
-                # The real RPC get_state resolved this exact saved session file
-                # before creating a raw writer. Do not substitute a recipient-wide
-                # scan or post-send cursor: both admit a same-session selected row.
-                if (
-                    not isinstance(actual_session_file, Path)
-                    or actual_session_file.is_symlink()
-                    or (
-                        self.session_file is not None
-                        and (
-                            actual_session_file != self.session_file
-                            or not actual_session_file.is_file()
-                        )
-                    )
-                ):
-                    raise IdentityConflict("native send requires an exact saved session file")
-                try:
-                    # Pi may report a fresh path before writing its session header.
-                    # This lexical canonical path still equals any later durable
-                    # reservation; the journal lock below covers file creation.
-                    saved = actual_session_file.resolve(strict=False)
-                    expected_dir = (
-                        self.bus.log.path.parent
-                        / "native-sessions"
-                        / self.assignment.recipient_lookup
-                    ).resolve(strict=True)
-                except OSError as error:
-                    raise IdentityConflict(
-                        "native saved session unavailable before send"
-                    ) from error
-                if (
-                    saved.parent != expected_dir
-                    or saved.suffix != ".jsonl"
-                    or (actual_session_file.exists() and not actual_session_file.is_file())
-                ):
-                    raise IdentityConflict("native saved session changed before send")
-
-                # The actual source's native get_state was checked before this
-                # isolated writer acquired owner/wire/registry/SQL locks. Check the
-                # SAME enrolled inode, bootstrap prefix and exact post-startup
-                # revision again while holding locks and before any raw pipe byte.
-                if self.first_selected is not None and (
-                    selected_runtime_revision is None
-                    or saved != self.first_selected.path
-                    or _fresh_selected_revision(self.first_selected, started=True)
-                    != selected_runtime_revision
-                ):
-                    raise IdentityConflict("selected fresh source changed before native send")
-                # Persist UNKNOWN in the selected journal *before* the first raw
-                # byte. A crash, lost parent-fsync ACK, or provider uncertainty can
-                # never turn a previous raw send into a later selected reservation.
-                # This marker is never cleared by a raw pipe ACK or fake result.
-                journal.reserve_private_raw_input(saved, self.input_id)
-                # Reacquire the SAME journal's exclusion after the durable marker;
-                # a concurrent selected reserve sees it and must refuse. Hold the
-                # journal lock through every raw os.write under PR94's canonical
-                # wire→bus→registry→store lock order.
-                with journal.ordinary_input_send_fence(saved, private_input_id=self.input_id):
-                    # Bind the input ID to the owner admission in which Pi is sent
-                    # the prompt, never a later caller-provided epoch.
-                    updated = NativeRuntimeInput.update(
-                        db,
-                        where="input_id=? AND sent_owner_admission_generation IS NULL",
-                        parameters=(self.input_id,),
-                        sent_owner_admission_generation=self.owner_admission_generation,
-                    )
-                    if updated.rowcount != 1:
-                        raise StaleFence("native input admission was already bound")
-                    # No event-loop transport buffer may own prompt bytes here.
-                    yield
-
-        return boundary
+    def _prepare_send(self, stage: NativeSendStage) -> PrivateSendAdmission:
+        return PrivateSendAdmission(
+            bus=self.bus,
+            store_path=self.store.session.path,
+            wire_root_id=self.wire_root_id,
+            owner=RegistryOwner(
+                thread=self.owner, admission_generation=self.owner_admission_generation
+            ),
+            participant=ParticipantOwner(self.owner, self.participant.participant_generation),
+            stage=stage,
+            input_id=self.input_id,
+            token_digest=_token_digest(self.token),
+            prompt=self.prompt,
+            expected_session=self.session_file,
+            fresh_selected=self.first_selected,
+        )
 
     def _selected_source(self, root_id: str) -> CommittedInitial:
         initial = self.bus.log.read_initial_cohort(root_id, self.assignment.wire_seq)
@@ -1292,11 +1036,8 @@ class SelectedExecution:
         ):
             raise IdentityConflict("pending claim is not an original selected bus recipient")
         with self.store.session.read():
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
         return initial
 
@@ -1304,11 +1045,8 @@ class SelectedExecution:
         input_id, token = secrets.token_hex(16), secrets.token_hex(32)
         with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
             current = self.store.assignments.get(self.assignment.assignment_id)
             if (
@@ -1381,13 +1119,12 @@ class SelectedExecution:
         # Failure after launch is UNKNOWN: the reserved input is never replayed.
         with self.store.session.read():
             assert_native_runtime_schema(self.store.session._connection)
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
-            reserved = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)
+            reserved = NativeRuntimeInput.one(
+                self.store.session._connection, input_id=self.input_id
+            )
             binding = read_expected_prompt_binding(self.store, self.input_id)
             execution_id = None if fence is None else fence.execution_id
             ordinal = None if fence is None else fence.attempt_ordinal
@@ -1469,11 +1206,8 @@ class SelectedExecution:
     def _record_triage_result(self, result: NativeTurnResult, decision: str) -> None:
         with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
             current = self.store.assignments.get(self.assignment.assignment_id)
             row = NativeRuntimeInput.one(db, input_id=self.input_id)
@@ -1529,11 +1263,8 @@ class SelectedExecution:
         if target is None:
             raise IdentityConflict("selected response has no exact original reply route")
         with self.store.session.read():
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
         execution_id = _execution_id(self.assignment)
         # Store owns the execution/claim/obligation transaction and its SQL
@@ -1549,11 +1280,8 @@ class SelectedExecution:
             exact_target=target,
         )
         with self.store.session.read():
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
         return execution_id
 
@@ -1561,11 +1289,8 @@ class SelectedExecution:
         input_id = secrets.token_hex(16)
         with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
             snapshot, attempt = self.store.attempts.require_fence(fence)
             if (
@@ -1596,11 +1321,8 @@ class SelectedExecution:
     def _record_full_result(self, fence: OwnerFence, result: NativeTurnResult) -> None:
         with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
-            _require_owner(
-                self.store,
-                self.assignment.recipient_lookup,
-                self.owner,
-                self.participant.participant_generation,
+            ParticipantOwner(self.owner, self.participant.participant_generation).require(
+                self.store, self.assignment.recipient_lookup
             )
             snapshot, _ = self.store.attempts.require_fence(fence)
             row = NativeRuntimeInput.one(db, input_id=self.input_id)
