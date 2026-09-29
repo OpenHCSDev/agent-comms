@@ -9,6 +9,23 @@ import pytest
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
+async def test_actual_native_attestation_refuses_foreign_expected_identity(native_backend):
+    owner = native_backend
+    first = await owner.run("Diagnostic input before attestation mismatch")
+    assert first[-1].ok, first[-1]
+    previous = owner.persistent.proc
+    before = owner.session.read_bytes()
+    # Corrupt only the expected witness in this disposable fixture. Pi still
+    # reports its actual saved identity through the genuine get_state response.
+    owner.persistent.session_id = str(uuid4())
+    refused = await owner.run("Must remain unsent after witness mismatch")
+    assert not refused[-1].ok and refused[-1].reason_code == "session_identity_uncertain"
+    assert not previous.alive() and owner.persistent.proc is None
+    assert len(owner.starts) == owner.provider.posts == 1
+    assert owner.session.read_bytes() == before
+    print("native_attestation_refusal", refused[-1], flush=True)
+
+
 @pytest.mark.parametrize("changed", ["session", "credentials"])
 async def test_actual_native_revision_change_retires_child_without_replay(native_backend, changed):
     owner = native_backend

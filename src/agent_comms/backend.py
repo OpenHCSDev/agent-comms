@@ -805,9 +805,7 @@ class TurnSession:
                     try:
                         self.native.attestation.accept(self.payload)
                     except AttestationError as error:
-                        self.session_identity_uncertain = error.failure.input_uncertain
-                        self.output.record_failure(error.failure)
-                        await self.native.proc.stop()
+                        await error.refuse(self)
                         break
                     if self.startup is not None:
                         self.startup.release()
