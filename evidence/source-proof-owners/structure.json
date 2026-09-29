@@ -1,0 +1,42 @@
+{
+  "src/agent_comms": {
+    "added": 591,
+    "deleted": 640,
+    "net": -49
+  },
+  "tests": {
+    "added": 202,
+    "deleted": 162,
+    "net": 40
+  },
+  "owners": {
+    "native_source_cursor": {
+      "module_lines": 215,
+      "largest_method": [
+        53,
+        "advance"
+      ]
+    },
+    "cursor_owner": {
+      "module_lines": 182,
+      "largest_method": [
+        42,
+        "admits"
+      ]
+    },
+    "proven_source_coverage": {
+      "module_lines": 254,
+      "largest_method": [
+        64,
+        "read"
+      ]
+    },
+    "source_proof_requirement": {
+      "module_lines": 43,
+      "largest_method": [
+        8,
+        "proves_source"
+      ]
+    }
+  }
+}
