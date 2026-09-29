@@ -73,3 +73,12 @@ producer, checkpoint schema or Toad AgentProcess changes. Exact scope, physical
 SDK proof and passing post-upgrade native Read acceptance:
 `evidence/native-tool-declarations/HANDOFF.md`. Native Read -> official ACP passed with343 d396. Parent owns final paired
 installation; no CI gate.
+
+## Native launch selection boundary — native sidecar, active draft
+
+NativeArguments and its declaration family replace backend's four independent
+provider/model/thinking readers/replacers plus the RPC-mode interpreter. Session,
+turn and catalog callers share the decoded launch owner; the actual native
+producer/session custody remains unchanged. Scope excludes Boyle's ratchet and
+Tesla/Carver/Noether files. Acceptance and limitations:
+`evidence/native-launch-options/HANDOFF.md`. Parent owns installed/live acceptance.
