@@ -79,6 +79,8 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.admission)
 
     def matches_owner(self, owner: Thread, admission: int | None) -> bool:
+        if admission is None:
+            return False
         if self.owner_identity != owner.owner_identity(admission):
             return False
         if self.worktree != owner.worktree:
