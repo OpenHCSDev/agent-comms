@@ -4,10 +4,10 @@ import shutil
 from dataclasses import replace
 from pathlib import Path
 
+from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.native_source_cursor import _bounded_coverage_pages, _source_witness
 from agent_comms.private_bus_checkpoint import PrefixWitness, install_private_bus_checkpoint
 from agent_comms.wire_log import WireLog
@@ -30,7 +30,7 @@ for number, original in enumerate((source, source / 'history/source-0', source /
     assert witness.root_id == marker.root_id and witness.through_seq == marker.last_seq
     assert (root / 'bus.jsonl').read_bytes() == before
     rows = comms.bus.log.full_history()
-    with MutationStore(str(root / 'coordination.sqlite3')) as store:
+    with Coordination(str(root / 'coordination.sqlite3')) as store:
         install_private_cohort_schema(store)
         install_native_runtime_schema(store)
         coverage = _bounded_coverage_pages(comms.bus, store, marker.root_id, '0' * 32)
