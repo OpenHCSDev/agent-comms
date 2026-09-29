@@ -51,7 +51,9 @@ async def owner(tmp_path, monkeypatch):
     agent.sessions.bindings["owner"] = "owner"
     agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
     agent.turns.active_turns["owner"] = "turn"
-    agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+    from input_source_cases import owner_original
+
+    agent.inputs.original_sources["owner"] = owner_original(("acp:original",), "original")
     agent.inputs.dispositions.record(
         "acp:original",
         seq=None,
@@ -87,9 +89,12 @@ async def queue(agent, text="future", delivery=QueuePromptRequest):
     (receipt,) = decode_updates(response.field_meta)
     assert isinstance(receipt, InputDeliveryChangedUpdate)
     key = "acp:" + receipt.input_id
-    assert not InputDispositions(
-        agent._comms.root / InputDispositions.filename
-    ).read().lookup(key).has_native_binding
+    assert (
+        not InputDispositions(agent._comms.root / InputDispositions.filename)
+        .read()
+        .lookup(key)
+        .has_native_binding
+    )
     return key
 
 
@@ -180,8 +185,11 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
             text="old",
         )
         assert agent.inputs.dispositions.bind(
-            "acp:old", admission=current.active_turn.admission_generation,
-            turn_id="earlier", native_id="b" * 32, text="old",
+            "acp:old",
+            admission=current.active_turn.admission_generation,
+            turn_id="earlier",
+            native_id="b" * 32,
+            text="old",
         )
         assert agent.inputs.dispositions.read().rows["acp:old"].declared_name == "bound_unknown"
     with pytest.raises(RelationViolationError):

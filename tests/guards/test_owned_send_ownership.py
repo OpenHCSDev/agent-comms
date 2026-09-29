@@ -63,3 +63,22 @@ def test_new_input_owners_do_not_restore_long_boolean_chains():
             isinstance(node, ast.BoolOp) and len(node.values) >= 4
             for node in ast.walk(ast.parse(path.read_text()))
         ), path
+
+
+def test_input_drain_does_not_restore_parallel_admission_maps():
+    from agent_comms.input_drain import InputDrain
+    from agent_comms.turn_runner import TurnRunner
+    from agent_comms.agent_event_updates import AcpEventConsumer
+
+    removed = {
+        "forwarded_inputs",
+        "steering_input_keys",
+        "steering_goal_ids",
+        "turn_original_input_keys",
+        "turn_input_text",
+    }
+    for owner in (InputDrain, TurnRunner, OwnedTurn, OwnedSendAdmission, AcpEventConsumer):
+        tree = ast.parse(inspect.getsource(owner))
+        assert not any(
+            isinstance(node, ast.Attribute) and node.attr in removed for node in ast.walk(tree)
+        ), owner

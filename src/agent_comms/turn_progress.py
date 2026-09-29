@@ -209,7 +209,7 @@ class TurnProgress(events.AgentEventConsumer):
             self.inputs.turn_input_keys.get(self.session_id, set())
         )
         if event.ok is True and (
-            self.inputs.forwarded_inputs.get(self.session_id) or unknown_attempts
+            self.inputs.pending_followups(self.session_id) or unknown_attempts
         ):
             # A final assistant stop can prove the original turn,
             # not an ACKed follow-up lacking its own user start.

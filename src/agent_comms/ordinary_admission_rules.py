@@ -128,7 +128,7 @@ class AcceptedInputCheck(RuleCheck):
     wait: GoalWait | None
     input_id: str
     keys: tuple[str, ...]
-    steering_key: str | None
+    accepted_source: TurnInputSource | None
 
 
 class AcceptedInputAuthorityRule(ReservationRule):
@@ -144,15 +144,15 @@ class AcceptedInputKeyRule(ReservationRule):
     explanation = "The input does not name its exact accepted ACP receipt."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return check.keys != (f"acp:{check.input_id}",)
+        return (check.input_id, check.keys) != (check.receipt.input_id, (check.receipt.key,))
 
 
-class AcceptedInputSteeringRule(ReservationRule):
+class AcceptedInputSourceRule(ReservationRule):
     check_type = AcceptedInputCheck
-    explanation = "The accepted receipt is not the currently queued steering input."
+    explanation = "The captured accepted input source is no longer live."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return check.steering_key != f"acp:{check.input_id}"
+        return check.accepted_source != check.receipt.source()
 
 
 @dataclass(frozen=True, kw_only=True)

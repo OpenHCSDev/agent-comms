@@ -45,7 +45,14 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     comms, agent, created, generation = _owner(tmp_path)
     first, second = "a" * 32, "b" * 32
     agent.inputs.queued_inputs["beta"] = {
-        key: QueuedInput("same text", True, QueuedInputContext(OwnerIdentity(ThreadIncarnation("beta", created), generation))) for key in (first, second)
+        key: QueuedInput(
+            "same text",
+            True,
+            QueuedInputContext(OwnerIdentity(ThreadIncarnation("beta", created), generation)),
+            key,
+            "same text",
+        )
+        for key in (first, second)
     }
     initial = agent.inputs.queue_state("beta")
     assert initial.scope.admission_generation == generation
@@ -141,7 +148,14 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
 async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
     _, agent, created, generation = _owner(tmp_path)
     agent.inputs.queued_inputs["beta"] = {
-        key: QueuedInput(text, True, QueuedInputContext(OwnerIdentity(ThreadIncarnation("beta", created), generation))) for key, text in rows.items()
+        key: QueuedInput(
+            text,
+            True,
+            QueuedInputContext(OwnerIdentity(ThreadIncarnation("beta", created), generation)),
+            key,
+            text,
+        )
+        for key, text in rows.items()
     }
     state = agent.inputs.queue_state("beta")
     assert state.scope is not None

@@ -24,10 +24,8 @@ from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import TurnId
-from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_binding import OrdinaryTurnBinding, SelectedOriginalBinding, TurnInputBinding
 from .turn_input_source import (
-    AcceptedFollowingInput,
     OriginalTurnInput,
     RoutedFollowingInput,
     TurnInputSource,
@@ -60,17 +58,13 @@ class OwnedSendAdmission:
     def source(self, public_id: str | None) -> TurnInputSource:
         if public_id is None:
             return self.original
-        key = self.inputs.steering_input_keys.get(self.session_id, {}).get(public_id)
-        keys = (key,) if key else ()
-        goals = self.inputs.steering_goal_ids.get(self.session_id, {})
-        if public_id in goals:
-            return AcceptedFollowingInput(
-                keys=keys,
-                accepted_id=public_id,
-                goal_permission=AcceptedGoalPermission(goals[public_id]),
+        source = self.inputs.following_sources.get(self.session_id, {}).get(public_id)
+        return (
+            source
+            if source is not None
+            else RoutedFollowingInput(
+                keys=(), accepted_id=public_id, goal_permission=self.original.goal_permission
             )
-        return RoutedFollowingInput(
-            keys=keys, accepted_id=public_id, goal_permission=self.original.goal_permission
         )
 
     def _check_owner(
@@ -105,7 +99,7 @@ class OwnedSendAdmission:
             wait=wait,
             input_id=source.accepted_id,
             keys=source.keys,
-            steering_key=self.inputs.steering_input_keys.get(self.session_id, {}).get(
+            accepted_source=self.inputs.following_sources.get(self.session_id, {}).get(
                 source.accepted_id
             ),
         ).require_valid()
