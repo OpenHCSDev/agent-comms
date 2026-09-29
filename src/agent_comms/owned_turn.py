@@ -366,10 +366,6 @@ class OwnedTurn:
                     self.session_id, self.thread_name
                 )
         self.session_file = self.thread.session_file
-        self.fork_session = False
-        if not self.session_file and self.thread.parent:
-            self.session_file = self.runner.comms.registry.require(self.thread.parent).session_file
-            self.fork_session = bool(self.session_file)
         self.image_options: dict[str, Any] = {"images": self.images} if self.images else {}
 
     async def stream(self):
@@ -392,7 +388,6 @@ class OwnedTurn:
             self.env_extra,
             **self.image_options,
             session_file=self.session_file,
-            fork_session=self.fork_session,
             steering_queue=self.backend_inbox,
             finish_event=self.finish_event,
             send_boundary=admission,
