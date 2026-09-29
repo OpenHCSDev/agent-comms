@@ -56,6 +56,7 @@ from agent_comms.native_pi import (
     _fresh_selected_revision,
 )
 from agent_comms.native_source_cursor import NativeSourceCursor
+from agent_comms.optional_awareness_projection import OmittedAwareness, OptionalAwarenessProjection
 from agent_comms.publisher import Publisher
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -692,23 +693,23 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     release = threading.Event()
     entered = threading.Event()
 
-    def stalled_builder(_initial, _assignment, _owner):
+    def stalled_builder(_projection, _initial, _assignment, _owner):
         entered.set()
         release.wait(timeout=5)
-        return runtime.OptionalAwarenessSupplement("late context must not appear", True)
+        return OmittedAwareness("late context must not appear")
 
+    monkeypatch.setattr(OptionalAwarenessProjection, "__call__", stalled_builder)
     try:
         outcome = await SelectedExecution(
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=tmp_path,
-            optional_awareness_builder=stalled_builder,
         ).run()
     finally:
         release.set()
-    assert await asyncio.to_thread(runtime._OPTIONAL_BUILD_SLOT.acquire, True, 2)
-    runtime._OPTIONAL_BUILD_SLOT.release()
+    assert await asyncio.to_thread(OptionalAwarenessProjection._build_slot.acquire, True, 2)
+    OptionalAwarenessProjection._build_slot.release()
     assert entered.is_set()
     assert outcome is not None and outcome.response_message_id
     assert len(calls) == 1 and "late context must not appear" not in calls[0][1]
@@ -732,7 +733,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
     with Coordination(str(first_root / "coordination.sqlite3")) as store:
         assignment = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
     owner = first_comms.registry.require("beta")
-    monkeypatch.setattr(runtime, "_SUPPLEMENT_BUILD_SECONDS", 0.02)
+    monkeypatch.setattr(OptionalAwarenessProjection, "build_seconds", 0.02)
     entered, release = threading.Event(), threading.Event()
     calls = []
 
@@ -740,23 +741,20 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         calls.append(True)
         entered.set()
         release.wait(timeout=3)
-        return runtime.OptionalAwarenessSupplement("too late", True)
+        return OmittedAwareness("too late")
 
+    monkeypatch.setattr(OptionalAwarenessProjection, "__call__", blocked_builder)
+    projection = OptionalAwarenessProjection.for_selected(
+        WakeCandidateIndex(first_comms.bus),
+        through_seq=first_initial.message.seq,
+        generation=1,
+        admission_generation=1,
+    )
     try:
-        assert (
-            await runtime._bounded_optional_awareness(
-                blocked_builder, first_initial, assignment, owner, 1024
-            )
-            == ""
-        )
+        assert await projection.render(first_initial, assignment, owner, 1024) == ""
         assert entered.is_set()
         for _ in range(40):
-            assert (
-                await runtime._bounded_optional_awareness(
-                    blocked_builder, first_initial, assignment, owner, 1024
-                )
-                == ""
-            )
+            assert await projection.render(first_initial, assignment, owner, 1024) == ""
         assert len(calls) == 1  # no queued/retired builder fleet
         assert await asyncio.wait_for(asyncio.to_thread(lambda: 42), timeout=1) == 42
         second_base = tmp_path / "second"
@@ -775,33 +773,42 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         assert len(native_calls) == 1
     finally:
         release.set()
-        assert await asyncio.to_thread(runtime._OPTIONAL_BUILD_SLOT.acquire, True, 2)
-        runtime._OPTIONAL_BUILD_SLOT.release()
+        assert await asyncio.to_thread(OptionalAwarenessProjection._build_slot.acquire, True, 2)
+        OptionalAwarenessProjection._build_slot.release()
 
 
 @pytest.mark.parametrize("kind", ["complete", "incomplete", "oversize"])
 async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
-    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
+    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
+    if kind == "incomplete":
+
+        def unavailable(*_args, **_kwargs):
+            raise ProjectionUnavailableError("binding read incomplete")
+
+        monkeypatch.setattr(WakeCandidateIndex, "page", unavailable)
+    elif kind == "oversize":
+        captured = OptionalAwarenessProjection.for_selected
+
+        def small_budget(*args, **kwargs):
+            return replace(captured(*args, **kwargs), max_text_bytes=1)
+
+        monkeypatch.setattr(OptionalAwarenessProjection, "for_selected", small_budget)
     outcome = await SelectedExecution(
         root=root,
         wire_root_id=root_id,
         owner_name="beta",
         native_package=tmp_path,
-        optional_awareness_builder=lambda *_: runtime.OptionalAwarenessSupplement(
-            "x" * 32768 if kind == "oversize" else "bounded awareness",
-            kind != "incomplete",
-            omitted_count=2,
-        ),
     ).run()
     assert outcome is not None and outcome.response_message_id
-    assert len(calls) == 1
-    assert ("bounded awareness" in calls[0][1]) is (kind == "complete")
-    assert ("Nonbinding rows omitted: 2" in calls[0][1]) is (kind == "complete")
+    assert len(calls) == 1 and initial.message.body in calls[0][1]
+    assert ("Selected source decisions through " in calls[0][1]) is (kind == "complete")
+    assert ("Nonbinding rows omitted: 0" in calls[0][1]) is (kind == "complete")
 
 
 async def test_selected_original_survives_auxiliary_cursor_over_100_initials(

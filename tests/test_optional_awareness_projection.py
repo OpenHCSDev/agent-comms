@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from dataclasses import replace
@@ -277,8 +276,8 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         )
         current = store.assignments.get(assignment.assignment_id)
         result = _projection(index, store, owner, 0, initial.message.seq)(initial, current, owner)
-        assert result.mandatory_complete and result.omission_reason is None
-        context = json.loads(result.text)
+        assert result.complete
+        context = result.context()
         assert context["selected"] == [
             {
                 "claim_id": assignment.assignment_id,
@@ -301,11 +300,9 @@ def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) 
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "first")
         owner = _owner(comms, "member000")
-        assert not _projection(index, store, owner, 0, 1)(
-            initial, assignment, owner
-        ).mandatory_complete
+        assert not _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
         index.maintain(rebuild=True)
-        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).mandatory_complete
+        assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
 
         second = comms.messaging.send_initial_cohort("sender", "member000", "not yet sealed")
         index.maintain()
@@ -313,13 +310,11 @@ def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) 
         # It must include the later candidate or omit the whole supplement.
         assert not _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
-        ).mandatory_complete
+        ).complete
         unavailable = _projection(index, store, owner, 0, second.seq)(initial, assignment, owner)
-        assert not unavailable.mandatory_complete and unavailable.text == ""
+        assert not unavailable.complete and unavailable.render(32768) == ""
         replaced = replace(owner, created_at=owner.created_at + 10)
-        assert not _projection(index, store, owner, 0, 1)(
-            initial, assignment, replaced
-        ).mandatory_complete
+        assert not _projection(index, store, owner, 0, 1)(initial, assignment, replaced).complete
     finally:
         store.close()
 
@@ -348,7 +343,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         result = _projection(index, store, owner, older.message.seq, newer.message.seq, max_rows=1)(
             newer, current, owner
         )
-        assert not result.mandatory_complete and result.text == ""
+        assert not result.complete and result.render(32768) == ""
     finally:
         store.close()
 
@@ -360,12 +355,12 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
-        assert builder(initial, assignment, owner).mandatory_complete
+        assert builder(initial, assignment, owner).complete
         store.participants.advance_generation(
             assignment.recipient_lookup, owner.name, expected_generation=1
         )
         stale = builder(initial, assignment, owner)
-        assert not stale.mandatory_complete and stale.text == ""
+        assert not stale.complete and stale.render(32768) == ""
     finally:
         store.close()
 
@@ -386,7 +381,7 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert not result.mandatory_complete and result.text == ""
+        assert not result.complete and result.render(32768) == ""
     finally:
         store.close()
 
@@ -413,11 +408,13 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
         result = _projection(index, store, owner, 0, current.message.seq)(
             current, assignment, owner
         )
-        assert result.mandatory_complete and result.omitted_count == 2
-        context = json.loads(result.text)
+        assert result.complete and result.omitted_count == 2
+        context = result.context()
         assert [row["claim_id"] for row in context["selected"]] == [assignment.assignment_id]
         assert context["open_obligations"] == []
-        assert old_claim.assignment_id not in result.text and "old-reply" not in result.text
+        assert old_claim.assignment_id not in result.render(
+            32768
+        ) and "old-reply" not in result.render(32768)
         assert old.message.seq < current.message.seq
     finally:
         store.close()
@@ -435,8 +432,8 @@ def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.mandatory_complete and result.omitted_count == 0
-        assert [row["claim_id"] for row in json.loads(result.text)["selected"]] == [
+        assert result.complete and result.omitted_count == 0
+        assert [row["claim_id"] for row in result.context()["selected"]] == [
             assignment.assignment_id
         ]
     finally:
@@ -461,7 +458,7 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
 
         monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
         stale = builder(initial, assignment, owner)
-        assert not stale.mandatory_complete and stale.text == ""
+        assert not stale.complete and stale.render(32768) == ""
     finally:
         store.close()
 
@@ -474,7 +471,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         index.maintain(rebuild=True)
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
-        assert builder(initial, assignment, owner).mandatory_complete
+        assert builder(initial, assignment, owner).complete
         # Disposable legacy/disk inconsistency only: supported writes freeze
         # receipt facts. Restore the original trigger before checking schema.
         db = store.session._connection
@@ -488,7 +485,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         )
         db.execute(trigger)
         stale = builder(initial, assignment, owner)
-        assert not stale.mandatory_complete and stale.text == ""
+        assert not stale.complete and stale.render(32768) == ""
     finally:
         store.close()
 
@@ -544,10 +541,10 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         )
         assert old_claim.recipient == "member000" and current_claim.recipient == "gamma"
         assert old.message.seq < current.message.seq
-        assert result.mandatory_complete and result.omitted_count == 1
-        selected = json.loads(result.text)["selected"]
+        assert result.complete and result.omitted_count == 1
+        selected = result.context()["selected"]
         assert [row["claim_id"] for row in selected] == [current_claim.assignment_id]
-        assert old_claim.assignment_id not in result.text
+        assert old_claim.assignment_id not in result.render(32768)
     finally:
         store.close()
 
@@ -562,10 +559,10 @@ def test_other_owner_decision_never_enters_selected_context(tmp_path: Path) -> N
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.mandatory_complete
-        context = json.loads(result.text)
+        assert result.complete
+        context = result.context()
         assert [row["source_seq"] for row in context["selected"]] == [initial.message.seq]
-        assert "foreign-owner-message" not in result.text
+        assert "foreign-owner-message" not in result.render(32768)
     finally:
         store.close()
 
@@ -584,8 +581,8 @@ def test_many_frozen_members_do_not_become_selected_authority(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.mandatory_complete
-        assert len(json.loads(result.text)["selected"]) == 1
+        assert result.complete
+        assert len(result.context()["selected"]) == 1
     finally:
         store.close()
 
@@ -604,8 +601,8 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert result.mandatory_complete
-        context = json.loads(result.text)
+        assert result.complete
+        context = result.context()
         assert [row["source_seq"] for row in context["selected"]] == [101]
     finally:
         store.close()
@@ -654,8 +651,8 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         started = time.monotonic()
         result = builder(initial, assignment, owner)
         elapsed = time.monotonic() - started
-        assert result.mandatory_complete, result.omission_reason
-        context = json.loads(result.text)
+        assert result.complete, result
+        context = result.context()
         assert {row["claim_id"] for row in context["selected"]} == {
             assignment.assignment_id,
             passive.assignment_id,
@@ -679,8 +676,8 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             owner, process_identity=replace(identity, start_time=identity.start_time + 1)
         )
         changed = builder(initial, assignment, replaced_process)
-        assert not changed.mandatory_complete and changed.text == ""
-        assert builder(initial, assignment, owner).mandatory_complete
+        assert not changed.complete and changed.render(32768) == ""
+        assert builder(initial, assignment, owner).complete
 
         # Simulate damaged derived proof, restoring the real schema before read.
         # The passive row remains a completeness requirement, not an inner-join
@@ -695,7 +692,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         db.execute(trigger)
         missing = builder(initial, assignment, owner)
-        assert not missing.mandatory_complete and missing.text == ""
+        assert not missing.complete and missing.render(32768) == ""
         assert WakeAssignment.select(db) == assignments_before
         assert ResponseObligation.select(db) == obligations_before
         assert comms.bus.log.path.read_bytes() == wire_before
@@ -713,15 +710,15 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
         index.maintain(rebuild=True, max_rows=128)
         owner = _owner(comms, "member000")
         newest = _projection(index, store, owner, initial.message.seq - 1, initial.message.seq)
-        assert newest(initial, assignment, owner).mandatory_complete
+        assert newest(initial, assignment, owner).complete
         all_rows = _projection(index, store, owner, 0, initial.message.seq)
         started = time.monotonic()
         bounded = all_rows(initial, assignment, owner)
         elapsed = time.monotonic() - started
         # One hundred complete claim descriptions exceed the existing 16KiB
         # optional text budget; omission must still fit the actual 250ms gate.
-        assert not bounded.mandatory_complete and bounded.text == ""
-        assert bounded.omission_reason == "ProjectionUnavailableError"
+        assert not bounded.complete and bounded.render(32768) == ""
+        assert bounded.reason == "ProjectionUnavailableError"
         assert elapsed < 0.250
         print(f"actual 100-row optional projection: {elapsed:.6f}s", flush=True)
     finally:
