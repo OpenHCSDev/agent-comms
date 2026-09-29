@@ -617,7 +617,7 @@ class ThreadRelationships:
                 continue
             other_name = identity.name
             person = people.get(other_name)
-            available = identity.current(registry)
+            available = person is not None and person.thread.incarnation == identity
             collaborating[identity] = RelationshipEntry(
                 other_name,
                 "thread",
@@ -633,7 +633,7 @@ class ThreadRelationships:
             other_name = contact_identity.name
             current = collaborating.get(contact_identity)
             person = people.get(other_name)
-            available = contact_identity.current(registry)
+            available = person is not None and person.thread.incarnation == contact_identity
             provenance = (
                 f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
                 f"text revision {contact.text_revision} (awareness only)"

@@ -269,3 +269,33 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
     comms.relationships.edit("owner", "add", "child")
     row = next(row for row in collaboration_rows(comms) if not row.available)
     assert row.target == "peer" and row.detail == "Review before rename"
+
+
+def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path):
+    from agent_comms.goal_actions import SetGoalAction
+
+    comms = setup_wire(tmp_path)
+    peer = comms.registry.require("peer")
+    comms.relationships.edit("owner", "add", "peer", "Retained explicit contact")
+    comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
+    comms.registry.rename("peer", "renamed-peer")
+    visible = collaboration_rows(comms)[0]
+    assert visible.available and visible.person.thread.incarnation == comms.registry.require("renamed-peer").incarnation
+    assert visible.target == "renamed-peer"
+    assert visible.sources == ("explicit", "goal_mention")
+
+    # Deletion retains the exact current incarnation, but the real roster
+    # excludes it even when stopped/archived entries were requested.
+    comms.owners.stop("renamed-peer")
+    comms.registry.begin_delete("renamed-peer")
+    retained = comms.registry.require("renamed-peer")
+    assert retained.incarnation.current(comms.registry.snapshot())
+    assert retained.name not in {
+        view.thread.name
+        for view in comms.views.thread_views(show_stopped=True, show_archived=True)
+    }
+    unavailable = collaboration_rows(comms)[0]
+    assert unavailable.target == "renamed-peer"
+    assert unavailable.sources == ("explicit", "goal_mention")
+    assert not unavailable.available and unavailable.person is None
+    assert "Retained explicit contact" in unavailable.detail

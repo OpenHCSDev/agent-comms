@@ -114,3 +114,9 @@ increase. Final rebuilt wheel has no converter module (deletion-imports.json);
 current strict installed store9cases pass1.21s. No repeated native matrix for
 this dead-module/doc-only delta; runtime behavior already exercised above.
 Paired installed Toad real App context-action proof passes, recorded in178.
+
+## Projected relationship availability correction
+
+Removed two registry-only availability decisions. Availability now requires the actual projected person and compares its whole ThreadIncarnation with the retained contact identity (IDEN-1). Registry presence alone cannot certify roster visibility. Both explicit and goal contacts preserve aliases and retained notes.
+
+The real registry/HistoryViews regression renames a peer, stops it, and begins deletion: its exact incarnation remains registered but the production roster excludes it. Previous behavior fails with available=True/person=None; corrected focused relationship and goal-mention suite passes 24 tests in 3.09s. Receipts: projected-person-red.log and projected-person-green.log. No durable format or native fork path changed; previous installed native fork/history receipt remains applicable, with no redundant rerun.
