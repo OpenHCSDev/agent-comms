@@ -238,7 +238,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
@@ -563,7 +563,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
@@ -592,7 +592,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, _ = _fake_model(digest_override="b" * 64)
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
             root=root,
@@ -746,7 +746,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
 
     real_bind = runtime.bind_expected_prompt
 
@@ -783,7 +783,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
     async def dying(package, **_):
         raise NativePiUnavailable("fake backend died after the prelaunch binding")
 
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", dying)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", dying)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
             root=root,

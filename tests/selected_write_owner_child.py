@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms import acp, cohort_foreground, coordinated_runtime, worker
 from agent_comms.input_drain import InputDrain
 from test_coordinated_runtime import _fake_model
@@ -24,7 +25,7 @@ async def main(base: Path) -> None:
     cohort_foreground._trusted_package = lambda _: None
     coordinated_runtime._trusted_package = lambda _: None
     fake, calls = _fake_model(decision="FULL")
-    coordinated_runtime.TrackedTurnSession.execute = fake
+    TrackedTurnSession.execute = fake
     original_load = acp.CommsAgent.load_session
     InputDrain.ensure_live_drain = lambda self, _: None  # fixture-only dispatch hold
 

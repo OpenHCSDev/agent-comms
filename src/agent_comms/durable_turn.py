@@ -108,3 +108,20 @@ class DurableTurn(MroDispatch):
         return self.attempts.fail_unknown(
             self.fence, expected_pointer_revision=self.pointer_revision,
         ).value
+
+    def fail_terminal(self):
+        """Settle the corroborated failed input after its native child is reaped."""
+        final = self.attempts.advance(
+            self.fence,
+            self.current,
+            expected_pointer_revision=self.pointer_revision,
+            backend_done=True,
+            process_dead=True,
+            reason_code="native_terminal_failure",
+        ).value
+        return self.attempts.settle_nonpublication(
+            final.fence,
+            expected_pointer_revision=final.snapshot.pointer_revision,
+            success=False,
+            reason_code="native_terminal_failure",
+        ).value

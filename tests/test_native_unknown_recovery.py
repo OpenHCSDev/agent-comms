@@ -41,7 +41,7 @@ def unknown_owner(directory, admitted, output, exit_allowed):
             await fake(*args, **kwargs)
         raise NativePiUnavailable("UNKNOWN before admission receipt")
 
-    runtime.TrackedTurnSession.execute = fail
+    TrackedTurnSession.execute = fail
     try:
         asyncio.run(
             runtime.SelectedExecution(
