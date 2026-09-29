@@ -22,6 +22,7 @@ from agent_comms.acp_extension import (
     QueueItem,
     QueueScope,
     RequestFailedUpdate,
+    PromptCancelledUpdate,
     SelectedWriteAcceptedUpdate,
     TextRouteUpdate,
     TranscriptChangedUpdate,
@@ -50,6 +51,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     queue_scope = QueueScope("pilot", owner, 123)
     samples = (
         RequestFailedUpdate(ACPFailure.from_error(-32603, "The usage limit has been reached")),
+        PromptCancelledUpdate(None),
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(

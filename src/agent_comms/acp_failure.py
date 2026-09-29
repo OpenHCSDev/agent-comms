@@ -128,6 +128,31 @@ class ACPFailure(DeliveryFailure):
         return owner(code, detail, state, diagnostics)
 
 
+@dataclass(frozen=True)
+class PromptFailureReceipt:
+    """One request's failure and proof of its already published notification."""
+    failure: ACPFailure
+    notification_published: bool
+
+    def error_data(self):
+        from .field_codec import FieldCodec
+
+        return {"agentCommsFailure": FieldCodec.encode(self)}
+
+    def request_error(self):
+        from acp import RequestError
+
+        return RequestError.internal_error(self.error_data())
+
+    @classmethod
+    def from_error(cls, code, message, data):
+        from .field_codec import FieldCodec
+
+        if isinstance(data, dict) and "agentCommsFailure" in data:
+            return FieldCodec.decode(cls, data["agentCommsFailure"])
+        return cls(ACPFailure.from_error(code, message, data), False)
+
+
 class RequestACPFailure(ACPFailure):
     @classmethod
     def matches(

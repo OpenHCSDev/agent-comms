@@ -135,7 +135,7 @@ class TurnProgress(events.AgentEventConsumer):
         try:
             await self.effects._emit_event(
                 self.session_id,
-                events.Error(prior.detail if prior is not None else str(error)),
+                events.Error(prior.detail if prior is not None else str(error) or type(error).__name__),
                 turn_id=self.turn_id,
                 route=self.routing.reply,
             )

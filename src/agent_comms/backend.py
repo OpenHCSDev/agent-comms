@@ -39,6 +39,7 @@ from .native_custody import (
     BorrowedNative,
     EmptyNative,
     NativeCustody,
+    NativeCleanupFailed,
     PiSessionChild,
     RetainedNative,
 )
@@ -140,7 +141,11 @@ class PersistentPiSession:
 
     async def close(self) -> None:
         self.custody = self.custody.retire()
-        self.custody = await self.custody.closed()
+        try:
+            self.custody = await self.custody.closed()
+        except NativeCleanupFailed as error:
+            self.custody = error.successor
+            raise
 
     async def close_idle(self) -> None:
         async with self.lock:

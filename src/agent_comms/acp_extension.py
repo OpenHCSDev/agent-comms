@@ -17,6 +17,7 @@ from .agent_events import CompactionEvent, CompactionProgress
 from .compaction_states import CompactionPublishedMetadata
 from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
+from .input_attempt import InputAttempt
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
 from .goals import Goal
@@ -29,7 +30,6 @@ from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentit
 if TYPE_CHECKING:
     import asyncio
     from typing import Any
-    from .input_attempt import InputAttempt
     from .input_drain import InputDrain
     from .queued_input import QueuedInput
     from .threads import Thread
@@ -531,3 +531,12 @@ def decode_request(metadata: object = None, **expanded) -> CommsRequest:
 @dataclass(frozen=True)
 class RequestFailedUpdate(AgentCommsUpdate):
     failure: ACPFailure
+
+
+@dataclass(frozen=True)
+class PromptCancelledUpdate(AgentCommsUpdate):
+    input_state: type[InputAttempt] | None
+
+    @property
+    def feedback(self):
+        return (self.input_state or InputAttempt).cancellation_feedback

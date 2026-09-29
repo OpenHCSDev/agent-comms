@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
 from .declared_family import DeclaredFamily
+from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .tool_results import ToolDiff
@@ -59,6 +60,11 @@ class InputStarted(InputDisposition):
 @dataclass(frozen=True)
 class InputRefused(InputDisposition):
     pass
+
+
+@dataclass(frozen=True)
+class PromptCancelled(AgentEvent):
+    input_state: type[InputAttempt] | None
 
 
 @dataclass(frozen=True)
