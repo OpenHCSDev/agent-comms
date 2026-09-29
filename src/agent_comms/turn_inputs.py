@@ -59,7 +59,7 @@ class InputForwarding:
                 command = commands.PiCommand.from_wire(wire)
             except (ValueError, TypeError) as error:
 
-                session.record_failure(
+                session.output.record_failure(
                     failures.PromptSendFailed(f"Invalid queued Pi command: {error}")
                 )
                 await session.proc.stop()
@@ -92,8 +92,8 @@ class InputForwarding:
                 )
         if not authorized:
             self.uncertain = True
-            session.final_assistant_stop = False
-            session.record_failure(
+            session.output.final_assistant_stop = False
+            session.output.record_failure(
                 failures.AuthorityChanged("Input authority changed before immediate steering.")
             )
             await session.proc.stop()
@@ -127,7 +127,7 @@ class InputForwarding:
         with boundary as authorized:
             if authorized:
                 if command.images:
-                    session.image_input_sent = True
+                    session.output.sensitive = True
                 self.generation += 1
                 session.stdin.write(session.reader.encode(command))
         if authorized:
@@ -135,8 +135,8 @@ class InputForwarding:
             return True
         if authorized is False:
             self.uncertain = True
-            session.final_assistant_stop = False
-            session.record_failure(
+            session.output.final_assistant_stop = False
+            session.output.record_failure(
                 failures.AuthorityChanged("Input authority changed before Pi prompt send.")
             )
             await session.proc.stop()

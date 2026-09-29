@@ -1,0 +1,37 @@
+{
+  "deleted_owned_disposable": [
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/recorded",
+      "bytes": 172746
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/recorded-corrected",
+      "bytes": 173126
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/native",
+      "bytes": 2190057
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/native-final",
+      "bytes": 1828544
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/declarations",
+      "bytes": 107
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/nra-cache",
+      "bytes": 87621336
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/nra-cache-analysis",
+      "bytes": 10033054
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/terminal-results/nra-cache-semantic_descent",
+      "bytes": 25894623
+    }
+  ],
+  "kept": "source branch, failed and passing receipts, raw NRA JSON and migration script; canonical package unchanged"
+}
