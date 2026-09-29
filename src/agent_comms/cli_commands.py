@@ -439,7 +439,7 @@ class RegisterCliCommand(CliCommand):
             task=self.task,
             process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
         )
-        ctx.threads.register(thread)
+        ctx.registry.declare(thread)
         return {"registered": self.name}
 
 

@@ -1,0 +1,132 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/agent_comms/registration.py:3:1
+   |
+ 1 |   """Thread registration and authority transactions over their determining document."""
+ 2 |
+ 3 | / from __future__ import annotations
+ 4 | |
+ 5 | | from collections.abc import Iterator, Mapping, Sequence
+ 6 | | from contextlib import contextmanager, nullcontext
+ 7 | | from dataclasses import replace
+ 8 | | from pathlib import Path
+ 9 | |
+10 | | from .catalog_store import ChannelCatalog
+11 | | from .compaction_publication_lease import publication_identity_fence
+12 | | from .errors import UnregisteredThreadError
+13 | | from .field_codec import FieldCodec
+14 | | from .goal_history import GoalHistoryEntry, GoalHistoryStore
+15 | | from .maintenance_barrier import MaintenanceBarrier
+16 | | from .native_input_owner import RegistryOwner
+17 | | from .owner_compaction_gate import OwnerCompactionAttestation
+18 | | from .registry_document import RegistrySnapshot
+19 | | from .registration_change import RegistrationChange
+20 | | from .registry_store import RegistryEdit, RegistryStore
+21 | | from .routing import TurnRouting
+22 | | from .store_files import _store_lock, file_revision
+23 | | from .thread_identity import GenerationCounter, TurnId
+24 | | from .thread_status import RunningThreadStatus, ThreadStatus
+25 | | from .threads import Thread
+26 | | from .turn_lease import FinishedTurnFence, TurnLeaseFence
+   | |_________________________________________________________^
+help: Organize imports
+   |
+17 | from .owner_compaction_gate import OwnerCompactionAttestation
+18 + from .registration_change import RegistrationChange
+19 | from .registry_document import RegistrySnapshot
+   - from .registration_change import RegistrationChange
+20 | from .registry_store import RegistryEdit, RegistryStore
+   |
+
+B008 Do not perform function call `RunningThreadStatus` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/agent_comms/registration.py:39:32
+   |
+37 |         self,
+38 |         thread: Thread,
+39 |         status: ThreadStatus = RunningThreadStatus(),
+   |                                ^^^^^^^^^^^^^^^^^^^^^
+40 |         *,
+41 |         new_owner: bool = False,
+   |
+
+B008 Do not perform function call `RunningThreadStatus` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/agent_comms/registration.py:47:62
+   |
+45 |             self._commit_registration(edit, change)
+46 |
+47 |     def declare(self, thread: Thread, status: ThreadStatus = RunningThreadStatus()) -> Thread:
+   |                                                              ^^^^^^^^^^^^^^^^^^^^^
+48 |         """Operational declaration and channel provenance use one locked current owner.
+   |
+
+SIM102 Use a single `if` statement instead of nested `if` statements
+   --> src/agent_comms/registration_change.py:97:9
+    |
+ 95 |                   last_finished_turn_id=self.previous.last_finished_turn_id,
+ 96 |               ))
+ 97 | /         if self.previous.has_process and requested.has_process:
+ 98 | |             if requested.incarnation != self.previous.incarnation:
+    | |__________________________________________________________________^
+ 99 |                   return self.restarted()
+100 |           return self
+    |
+help: Combine `if` statements using `and`
+
+I001 [*] Import block is un-sorted or un-formatted
+  --> src/agent_comms/registry_document.py:3:1
+   |
+ 1 |   """One registry document: thread facts, identity domains and lifecycle behavior."""
+ 2 |
+ 3 | / from __future__ import annotations
+ 4 | |
+ 5 | | import math
+ 6 | | import time
+ 7 | | from collections.abc import Mapping, Sequence
+ 8 | | from dataclasses import dataclass, field, replace
+ 9 | |
+10 | | from .errors import RelationViolationError, UnregisteredThreadError
+11 | | from .child_process import ProcessIdentity
+12 | | from .field_codec import FieldCodec
+13 | | from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
+14 | | from .routing import TurnRouting
+15 | | from .thread_identity import GenerationCounter, OwnerIdentity
+16 | | from .thread_status import (
+17 | |     ArchivedThreadStatus,
+18 | |     RunningThreadStatus,
+19 | |     StoppedThreadStatus,
+20 | |     ThreadStatus,
+21 | | )
+22 | | from .threads import Thread
+23 | | from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence
+   | |_____________________________________________________________________^
+help: Organize imports
+   |
+9  |
+10 + from .child_process import ProcessIdentity
+11 | from .errors import RelationViolationError, UnregisteredThreadError
+   - from .child_process import ProcessIdentity
+12 | from .field_codec import FieldCodec
+   |
+
+E501 Line too long (102 > 100)
+   --> src/agent_comms/registry_document.py:334:101
+    |
+332 |         }
+333 |         unoccupied = self.aliases.keys() - available.keys() - retained.keys()
+334 |         return {alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching}
+    |                                                                                                     ^^
+335 |
+336 |     def require_active(self, name: str) -> Thread:
+    |
+
+E501 Line too long (112 > 100)
+  --> src/agent_comms/relationships.py:63:101
+   |
+62 |     def counterpart(self, thread: Thread) -> ThreadIncarnation:
+63 |         return self.peer_incarnation if self.owner_incarnation == thread.incarnation else self.owner_incarnation
+   |                                                                                                     ^^^^^^^^^^^^
+64 |
+65 |     def oriented(self, thread: Thread):
+   |
+
+Found 7 errors.
+[*] 2 fixable with the `--fix` option.

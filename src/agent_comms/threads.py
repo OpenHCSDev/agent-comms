@@ -213,6 +213,11 @@ class Thread:
             )
         return result
 
+    def for_claim(self, name: str) -> Thread:
+        """Assign an allocated name without turning a generated clock into caller identity."""
+        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
+        return replace(self, name=name, created_at=created)
+
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
         """Resolve metadata once from its field declarations, retaining exact identity.
 

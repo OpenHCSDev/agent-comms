@@ -24,7 +24,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
     declared = Thread("worker", frozenset(), str(tmp_path), task="retained task")
-    comms.threads.register(declared)
+    comms.registry.declare(declared)
     first = comms.owners.start(
         "worker", agent_bin="pi", agent_args=[]
     )
@@ -62,7 +62,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
     child = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
         comms = Comms(tmp_path)
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "stale",
                 frozenset(),
@@ -88,7 +88,7 @@ def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None
     try:
         comms = Comms(tmp_path)
         for index, child in enumerate(children):
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     f"worker-{index}",
                     frozenset(),
@@ -121,8 +121,8 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
             process_identity=child.identity,
             active_turn=ActiveTurn("work", child.pid),
         )
-        comms.threads.register(owner)
-        comms.threads.register(peer)
+        comms.registry.declare(owner)
+        comms.registry.declare(peer)
         targets = (GoalWaitTarget(peer.name, peer.created_at),)
         assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot()) == ()
         stale = replace(
@@ -142,7 +142,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", "invalid")
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", "/missing/native")
     comms = Comms(tmp_path)
-    comms.threads.register(Thread("failed-start", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("failed-start", frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
     owner = comms.registry.require("failed-start")
     deadline = time.monotonic() + 5

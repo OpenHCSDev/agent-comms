@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from threading import RLock
@@ -23,6 +24,7 @@ from .messages import Message
 from .presentation import ThreadView
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock, file_revision
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -31,8 +33,34 @@ if TYPE_CHECKING:
     from .registration import Registration
 
 
+class MutualThreadRelation(ABC):
+    """Shared identity behavior for explicit and goal-derived mutual visibility."""
+
+    @property
+    @abstractmethod
+    def owner_incarnation(self) -> ThreadIncarnation: ...
+
+    @property
+    @abstractmethod
+    def peer_incarnation(self) -> ThreadIncarnation: ...
+
+    @property
+    def pair_identity(self) -> frozenset[ThreadIncarnation]:
+        return frozenset((self.owner_incarnation, self.peer_incarnation))
+
+    def incident(self, thread: Thread) -> bool:
+        return thread.incarnation in self.pair_identity
+
+    def counterpart(self, thread: Thread) -> ThreadIncarnation | None:
+        if self.owner_incarnation == thread.incarnation:
+            return self.peer_incarnation
+        if self.peer_incarnation == thread.incarnation:
+            return self.owner_incarnation
+        return None
+
+
 @dataclass(frozen=True, slots=True)
-class CollaborationRevision:
+class CollaborationRevision(MutualThreadRelation):
     """One mutual contact, created by either participant and visible to both.
 
     Creation timestamps identify the registered incarnations. A new thread
@@ -47,19 +75,16 @@ class CollaborationRevision:
     created_at: float
     updated_at: float
 
-    def incident(self, thread: Thread) -> bool:
-        return (self.owner, self.owner_created) == (thread.name, thread.created_at) or (
-            self.peer,
-            self.peer_created,
-        ) == (thread.name, thread.created_at)
+    @property
+    def owner_incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner, self.owner_created)
 
-    def counterpart(self, thread: Thread) -> tuple[str, float]:
-        if (self.owner, self.owner_created) == (thread.name, thread.created_at):
-            return self.peer, self.peer_created
-        return self.owner, self.owner_created
+    @property
+    def peer_incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.peer, self.peer_created)
 
     def oriented(self, thread: Thread):
-        if (self.owner, self.owner_created) == (thread.name, thread.created_at):
+        if self.owner_incarnation == thread.incarnation:
             return self
         return replace(
             self,
@@ -69,20 +94,11 @@ class CollaborationRevision:
             peer_created=self.owner_created,
         )
 
-    @property
-    def pair_identity(self) -> frozenset[tuple[str, float]]:
-        return frozenset(((self.owner, self.owner_created), (self.peer, self.peer_created)))
-
     def resolved(self, registry: RegistrySnapshot):
-        def current_name(name: str, created: float) -> str:
-            canonical = registry.aliases.get(name, name)
-            thread = registry.threads.get(canonical)
-            return canonical if thread and thread.created_at == created else name
-
         return replace(
             self,
-            owner=current_name(self.owner, self.owner_created),
-            peer=current_name(self.peer, self.peer_created),
+            owner=self.owner_incarnation.resolved(registry).name,
+            peer=self.peer_incarnation.resolved(registry).name,
         )
 
 
@@ -101,7 +117,7 @@ class Collaboration(CollaborationRevision):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalDerivedContact:
+class GoalDerivedContact(MutualThreadRelation):
     """Mutual *visibility* only; a mention never accepts work or dispatches a wake."""
 
     owner: str
@@ -110,6 +126,14 @@ class GoalDerivedContact:
     peer_created_at: float
     goal_id: str
     text_revision: int
+
+    @property
+    def owner_incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner, self.owner_created_at)
+
+    @property
+    def peer_incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.peer, self.peer_created_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +193,17 @@ class RelationshipOrder:
     group: str
     order: ThreadSort
 
+    @property
+    def incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner, self.owner_created)
+
+    @property
+    def identity(self) -> tuple[ThreadIncarnation, str]:
+        return self.incarnation, self.group
+
+    def resolved(self, registry: RegistrySnapshot) -> RelationshipOrder:
+        return replace(self, owner=self.incarnation.resolved(registry).name)
+
 
 @dataclass(frozen=True, slots=True)
 class RelationshipDocument:
@@ -180,23 +215,17 @@ class RelationshipDocument:
         pairs = [edge.pair_identity for edge in self.collaborations]
         if len(pairs) != len(set(pairs)):
             raise ValueError("Duplicate collaboration pairs require explicit migration")
-        order_keys = [(row.owner, row.owner_created, row.group) for row in self.orders]
+        order_keys = [row.identity for row in self.orders]
         if len(order_keys) != len(set(order_keys)):
             raise ValueError("Duplicate relationship sort preferences")
 
     def resolved(self, registry: RegistrySnapshot) -> RelationshipDocument:
         # Rename aliases are current domain data; deleted/rebound names stay historical.
-        def resolve_order(row: RelationshipOrder) -> RelationshipOrder:
-            name = registry.aliases.get(row.owner, row.owner)
-            owner = registry.threads.get(name)
-            return (
-                replace(row, owner=name) if owner and owner.created_at == row.owner_created else row
-            )
 
         return replace(
             self,
             collaborations=tuple(edge.resolved(registry) for edge in self.collaborations),
-            orders=tuple(resolve_order(row) for row in self.orders),
+            orders=tuple(row.resolved(registry) for row in self.orders),
         )
 
     def edit(
@@ -211,8 +240,7 @@ class RelationshipDocument:
             (
                 edge
                 for edge in pairs
-                if second is not None
-                and edge.counterpart(first) == (second.name, second.created_at)
+                if second is not None and edge.counterpart(first) == second.incarnation
             ),
             None,
         )
@@ -263,12 +291,7 @@ class RelationshipDocument:
 
     def ordered(self, owner: Thread, group: str, order: ThreadSort) -> RelationshipDocument:
         row = RelationshipOrder(owner.name, owner.created_at, group, order)
-        rows = tuple(
-            saved
-            for saved in self.orders
-            if (saved.owner, saved.owner_created, saved.group)
-            != (owner.name, owner.created_at, group)
-        )
+        rows = tuple(saved for saved in self.orders if saved.identity != row.identity)
         return replace(self, orders=(*rows, row))
 
 
@@ -394,11 +417,7 @@ class ThreadRelationships:
             thread = self.registry.require(owner)
             contacts, diagnostics = self._goal_contacts(registry)
             return (
-                tuple(
-                    row
-                    for row in contacts
-                    if thread.created_at in {row.owner_created_at, row.peer_created_at}
-                ),
+                tuple(row for row in contacts if row.counterpart(thread) is not None),
                 tuple(row for row in diagnostics if row.owner == thread.name),
             )
 
@@ -410,24 +429,20 @@ class ThreadRelationships:
             edges = self.store.read().resolved(registry).collaborations
             explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
             contacts, diagnostics = self._goal_contacts(registry)
-            visible: dict[tuple[str, float], RelationshipEntry] = {}
+            visible: dict[ThreadIncarnation, RelationshipEntry] = {}
             for edge in explicit:
-                live = registry.threads.get(edge.peer)
-                visible[(edge.peer, edge.peer_created)] = RelationshipEntry(
+                visible[edge.peer_incarnation] = RelationshipEntry(
                     edge.peer,
                     "thread",
                     detail=edge.note,
-                    available=live is not None and live.created_at == edge.peer_created,
+                    available=edge.peer_incarnation.current(registry),
                     sources=("explicit",),
                 )
             for contact in contacts:
-                if (contact.owner, contact.owner_created_at) == (thread.name, thread.created_at):
-                    peer_name, peer_created = contact.peer, contact.peer_created_at
-                elif (contact.peer, contact.peer_created_at) == (thread.name, thread.created_at):
-                    peer_name, peer_created = contact.owner, contact.owner_created_at
-                else:
+                identity = contact.counterpart(thread)
+                if identity is None:
                     continue
-                identity = peer_name, peer_created
+                peer_name = identity.name
                 current = visible.get(identity)
                 provenance = (
                     f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
@@ -571,11 +586,7 @@ class ThreadRelationships:
 
         orders = {"children": ThreadSort.CREATED, "collaborating": ThreadSort.LAST_ACTIVITY}
         for row in state.orders:
-            if (
-                canonical(row.owner) == thread.name
-                and row.owner_created == thread.created_at
-                and row.group in orders
-            ):
+            if row.incarnation == thread.incarnation and row.group in orders:
                 orders[row.group] = row.order
         # Existing declaration-owned timestamp sort, shared with channel members.
         sent = (
@@ -599,14 +610,15 @@ class ThreadRelationships:
             for child in registry.threads.values()
             if child.parent and canonical(child.parent) == thread.name
         ]
-        collaborating: dict[tuple[str, float], RelationshipEntry] = {}
+        collaborating: dict[ThreadIncarnation, RelationshipEntry] = {}
         for edge in edges:
-            if not edge.incident(thread):
+            identity = edge.counterpart(thread)
+            if identity is None:
                 continue
-            other_name, other_created = edge.counterpart(thread)
+            other_name = identity.name
             person = people.get(other_name)
-            available = person is not None and person.thread.created_at == other_created
-            collaborating[(other_name, other_created)] = RelationshipEntry(
+            available = identity.current(registry)
+            collaborating[identity] = RelationshipEntry(
                 other_name,
                 "thread",
                 person if available else None,
@@ -615,16 +627,13 @@ class ThreadRelationships:
                 sources=("explicit",),
             )
         for contact in goal_contacts:
-            if (contact.owner, contact.owner_created_at) == (thread.name, thread.created_at):
-                other_name, other_created = contact.peer, contact.peer_created_at
-            elif (contact.peer, contact.peer_created_at) == (thread.name, thread.created_at):
-                other_name, other_created = contact.owner, contact.owner_created_at
-            else:
+            contact_identity = contact.counterpart(thread)
+            if contact_identity is None:
                 continue
-            contact_identity = other_name, other_created
+            other_name = contact_identity.name
             current = collaborating.get(contact_identity)
             person = people.get(other_name)
-            available = person is not None and person.thread.created_at == other_created
+            available = contact_identity.current(registry)
             provenance = (
                 f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
                 f"text revision {contact.text_revision} (awareness only)"

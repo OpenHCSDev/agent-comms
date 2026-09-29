@@ -46,7 +46,7 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     comms = Comms(root)
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset({"team"}),

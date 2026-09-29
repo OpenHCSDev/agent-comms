@@ -68,7 +68,7 @@ class TestEndToEndLifecycle:
         session = tmp_path / "session.json"
         session.write_text("{}")
         run_python(
-            "import json\nfrom agent_comms.comms import wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'name': c.registry.require('PR111').name}))",
+            "import json\nfrom agent_comms.comms import wire\nc = wire()\nc.registry.declare(c.threads.adopt_current())\nprint(json.dumps({'name': c.registry.require('PR111').name}))",
             thread="PR111",
             parent="",
             root=root,
@@ -82,7 +82,7 @@ class TestEndToEndLifecycle:
 
         comms = wire_root(root)
         parent = comms.registry.require("PR111")
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name=parent.name,
                 tags=parent.tags,
@@ -120,7 +120,7 @@ class TestEndToEndLifecycle:
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
-            "import json\nfrom agent_comms.comms import wire\nc = wire()\nc.threads.register(c.threads.adopt_current())\nprint(json.dumps({'ok': 'kid' in str(c.registry.all_threads())}))",
+            "import json\nfrom agent_comms.comms import wire\nc = wire()\nc.registry.declare(c.threads.adopt_current())\nprint(json.dumps({'ok': 'kid' in str(c.registry.all_threads())}))",
             thread="kid",
             parent="PR111",
             root=root,

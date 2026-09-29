@@ -30,7 +30,7 @@ from agent_comms.threads import Thread
 
 
 def register(comms, name):
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name,
             frozenset(),

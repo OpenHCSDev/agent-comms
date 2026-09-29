@@ -89,7 +89,7 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             assert row.native_id is None and row.declared_name == "unknown"
             if foreign:
                 for name in ("foreign", "another"):
-                    comms.threads.register(Thread(name, frozenset(), str(project)))
+                    comms.registry.declare(Thread(name, frozenset(), str(project)))
                 comms.messaging.send("foreign", "another", "unrelated ingress")
                 agent.inputs.dispositions.record(
                     "acp:foreign",

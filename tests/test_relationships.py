@@ -27,7 +27,7 @@ def change_shared_peer(root, instruction):
 def setup_wire(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name, parent in (("origin", None), ("owner", "origin"), ("peer", None), ("child", "owner")):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
     return comms
 
 
@@ -104,7 +104,7 @@ def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):
     comms = setup_wire(tmp_path)
     names = [f"worker-{index}" for index in range(8)]
     for name in names:
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     with ProcessPoolExecutor(max_workers=4) as pool:
         list(pool.map(add_peer, [comms.root] * len(names), names))
     assert {edge.peer for edge in comms.relationships.collaborations("owner")} == set(names)
@@ -214,7 +214,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Old incarnation's task")
     comms.owners.stop("peer")
     comms.registry.remove("peer")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
     )
 
@@ -241,7 +241,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.relationships.edit("origin", "add", "peer", "Independent work")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("owner", frozenset(), str(tmp_path), created_at=original.owner_created + 1)
     )
     assert comms.relationships.collaborations("owner") == ()

@@ -70,7 +70,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
         )
     )
     comms = wire(tmp_path / "wire")
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     decoded = []
     original = NativeEntry.read
 

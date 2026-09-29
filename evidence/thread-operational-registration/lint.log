@@ -1,0 +1,66 @@
+B008 Do not perform function call `RunningThreadStatus` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/agent_comms/registration.py:39:32
+   |
+37 |         self,
+38 |         thread: Thread,
+39 |         status: ThreadStatus = RunningThreadStatus(),
+   |                                ^^^^^^^^^^^^^^^^^^^^^
+40 |         *,
+41 |         new_owner: bool = False,
+   |
+
+B008 Do not perform function call `RunningThreadStatus` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/agent_comms/registration.py:47:62
+   |
+45 |             self._commit_registration(edit, change)
+46 |
+47 |     def declare(self, thread: Thread, status: ThreadStatus = RunningThreadStatus()) -> Thread:
+   |                                                              ^^^^^^^^^^^^^^^^^^^^^
+48 |         """Operational declaration and channel provenance use one locked current owner.
+   |
+
+B008 Do not perform function call `RunningThreadStatus` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> src/agent_comms/registration.py:57:72
+   |
+55 |             return self._declare_unlocked(thread, status)
+56 |
+57 |     def _declare_unlocked(self, thread: Thread, status: ThreadStatus = RunningThreadStatus()) -> Thread:
+   |                                                                        ^^^^^^^^^^^^^^^^^^^^^
+58 |         """Cross-store callers already holding wire use the same registry transaction."""
+59 |         with self.store.editing() as edit:
+   |
+
+E501 Line too long (104 > 100)
+  --> src/agent_comms/registration.py:57:101
+   |
+55 |             return self._declare_unlocked(thread, status)
+56 |
+57 |     def _declare_unlocked(self, thread: Thread, status: ThreadStatus = RunningThreadStatus()) -> Thread:
+   |                                                                                                     ^^^^
+58 |         """Cross-store callers already holding wire use the same registry transaction."""
+59 |         with self.store.editing() as edit:
+   |
+
+SIM102 Use a single `if` statement instead of nested `if` statements
+   --> src/agent_comms/registration_change.py:100:9
+    |
+ 98 |                   ),
+ 99 |               )
+100 | /         if self.previous.has_process and requested.has_process:
+101 | |             if requested.incarnation != self.previous.incarnation:
+    | |__________________________________________________________________^
+102 |                   return self.restarted()
+103 |           return self
+    |
+help: Combine `if` statements using `and`
+
+E501 Line too long (105 > 100)
+  --> tests/test_registration_inheritance.py:83:101
+   |
+83 | def test_generated_claim_clock_collision_preserves_allocated_names_and_identities(tmp_path, monkeypatch):
+   |                                                                                                     ^^^^^
+84 |     monkeypatch.setattr("agent_comms.threads.time.time", lambda: 42.0)
+85 |     comms = wire(tmp_path)
+   |
+
+Found 6 errors.

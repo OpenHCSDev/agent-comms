@@ -23,7 +23,7 @@ from agent_comms.threads import Thread
 @pytest.fixture
 async def owner(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "owner",
             frozenset(),
@@ -100,8 +100,8 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
     key = await queue(agent)
     assert capture(owner) == source
     comms = agent._comms
-    comms.threads.register(Thread("foreign", frozenset(), str(comms.root)))
-    comms.threads.register(Thread("another", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("foreign", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("another", frozenset(), str(comms.root)))
     comms.messaging.send("foreign", "another", "unrelated")
     agent.inputs.dispositions.record(
         "acp:foreign",
@@ -202,7 +202,7 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
         )
         assert capture(owner) != source
     elif change == "bus":
-        comms.threads.register(Thread("peer", frozenset(), str(comms.root)))
+        comms.registry.declare(Thread("peer", frozenset(), str(comms.root)))
         comms.messaging.send("peer", "owner", "correction")
         assert capture(owner) != source
     elif change == "owner":

@@ -119,7 +119,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         + "\n"
     )
     comms = wire(tmp_path / "wire")
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
     saved = FieldCodec.decode(TranscriptEvent, FieldCodec.encode(page.events[0]))

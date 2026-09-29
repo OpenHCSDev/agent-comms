@@ -349,7 +349,7 @@ class TestRegistration:
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
         comms = Comms(tmp_path / "wire")
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         comms.registry.unregister("a")
         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
             comms.agents.begin_turn("a", "revived")
@@ -364,7 +364,7 @@ class TestRegistration:
         comms = Comms(root, private_initial_writes=True)
         comms.messaging.initialize_private_initial_protocol()
         reopened = Comms(root)
-        reopened.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
+        reopened.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         assert reopened.registry.live_owner_with_generation("a")[1] > 0
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -374,7 +374,7 @@ class TestRegistration:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True)
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         comms.messaging.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
@@ -396,7 +396,7 @@ class TestRegistration:
 
         root = tmp_path / "isolated-private-root"
         comms = Comms(root, private_initial_writes=True)
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         root_id = comms.messaging.initialize_private_initial_protocol()
         assert len(root_id) == 32
         cold = Registration(root / "registry.json")
@@ -464,7 +464,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "new-private"
         comms = Comms(root, private_initial_writes=True)
-        comms.threads.register(Thread(name="sender", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
         original_fsync = os.fsync
         directory_calls = 0
 
@@ -494,7 +494,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "private"
         comms = Comms(root, private_initial_writes=True)
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.messaging.initialize_private_initial_protocol()
         original_pwrite = os.pwrite
         guard_calls = 0
@@ -523,7 +523,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "guarded"
         comms = Comms(root, private_initial_writes=True)
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         comms.messaging.initialize_private_initial_protocol()
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
@@ -625,7 +625,7 @@ class TestRegistration:
 def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
     for name in ("a", "b"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     for sender, target in (("missing", "b"), ("a", "missing")):
         with pytest.raises(ValueError):
             comms.messaging.send_message(sender, target, "invalid")

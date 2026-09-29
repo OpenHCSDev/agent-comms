@@ -9,7 +9,7 @@ from agent_comms.threads import Thread
 
 def test_silent_active_turn_does_not_age_into_ready(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "worker",
             frozenset(),
@@ -19,7 +19,7 @@ def test_silent_active_turn_does_not_age_into_ready(tmp_path):
     )
     first = comms.agents.begin_turn("worker", "first", "Long-running work")
     before = comms.registry.snapshot()
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     after = comms.registry.snapshot()
     assert after.owner_generations == before.owner_generations
     assert after.admission_generations == before.admission_generations

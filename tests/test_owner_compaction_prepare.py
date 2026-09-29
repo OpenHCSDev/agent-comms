@@ -598,7 +598,7 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
     prepared, source = candidate
     before = session.read_bytes()
     comms = Comms(root)
-    comms.threads.register(Thread("peer", frozenset(), str(root)))
+    comms.registry.declare(Thread("peer", frozenset(), str(root)))
     comms.messaging.send("peer", "owner", "Retain this corrected requirement")
     with pytest.raises(RelationViolationError, match="source changed"):
         bridge.commit(
@@ -635,7 +635,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
     persistent = PersistentPiSession()
     original = session.read_bytes()
     comms = Comms(root)
-    comms.threads.register(Thread("peer", frozenset(), str(root)))
+    comms.registry.declare(Thread("peer", frozenset(), str(root)))
 
     async def corrected_summary(metadata):
         assert metadata.tokens_before > 0

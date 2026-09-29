@@ -26,8 +26,8 @@ from agent_comms.tools import invoke_tool
 def _wire(tmp_path: Path) -> Comms:
     comms = Comms(tmp_path / "wire")
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path), created_at=created))
-    comms.threads.register(
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=created))
+    comms.registry.declare(
         Thread("human", frozenset(), str(tmp_path), role=ThreadRole.USER, created_at=17004.0)
     )
     return comms
@@ -143,7 +143,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert _rows(comms, "reviewer")[0][0].target == "owner"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")
-    comms.threads.register(Thread("peer", frozenset(), str(tmp_path), created_at=18002.0))
+    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
     assert _rows(comms, "owner")[0] == ()
     assert _rows(comms, "peer")[0] == ()
@@ -269,7 +269,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     assert goal is not None
     comms.owners.stop("owner")
     comms.registry.remove("owner")
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0))
     assert _rows(comms, "peer")[0] == ()
     assert _rows(comms, "owner")[0] == ()
     assert not comms.relationships.store.path.exists()

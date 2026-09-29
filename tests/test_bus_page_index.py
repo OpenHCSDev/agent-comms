@@ -15,7 +15,7 @@ from agent_comms.wire_metadata import ArchivedAccess
 def retained_source(root, count):
     comms = Comms(root)
     for name in ("a", "b", "c"):
-        comms.threads.register(Thread(name, frozenset(), str(root)))
+        comms.registry.declare(Thread(name, frozenset(), str(root)))
     comms.messaging.initialize_private_initial_protocol()
     with comms.bus.log.path.open("w") as output:
         for seq in range(1, count + 1):

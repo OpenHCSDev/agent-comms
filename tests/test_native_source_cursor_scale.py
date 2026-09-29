@@ -49,7 +49,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
-        comms.threads.register(member)
+        comms.registry.declare(member)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.participants.register(
                 stable_thread_lookup(member.created_at),
@@ -100,7 +100,7 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "other",
             frozenset({"team"}),
@@ -140,7 +140,7 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "other",
             frozenset(),
