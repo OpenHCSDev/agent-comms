@@ -59,7 +59,7 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
         assert inputs.path.read_bytes() == before_inputs
         rows = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in rows) == 1
-        assert persistent.proc is None and persistent.reopen_required == file
+        assert not persistent.available and persistent.custody.session_file == file
 
 
 async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(

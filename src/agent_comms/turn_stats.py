@@ -84,7 +84,7 @@ class StatsRequest:
         if session.persistent_session is None or not (self.complete or self.failed):
             return
         await asyncio.sleep(0)
-        queued = session.steering_queue is not None and not session.steering_queue.empty()
+        queued = session.inputs.queue is not None and not session.inputs.queue.empty()
         if not self.failed and (
             self.busy
             or session.inputs.pending

@@ -76,7 +76,7 @@ class InputMissing(TerminalFailure):
 
     @classmethod
     def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
-        return not session.initial_input_started and bool(
+        return not session.admission.started and bool(
             transport_ok or session.inputs.uncertain or session.output.failure_text
         )
 
@@ -104,7 +104,7 @@ class QueuedInputMissing(TerminalFailure):
 
     @classmethod
     def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
-        return transport_ok and session.output.error_message is None and session.unresolved_inputs
+        return transport_ok and session.output.error_message is None and session.inputs.unresolved
 
 
 class ModelStalled(TurnFailure):

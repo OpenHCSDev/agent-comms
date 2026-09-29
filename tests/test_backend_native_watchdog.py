@@ -21,7 +21,7 @@ async def test_actual_native_watchdog_failure_never_replays(native_backend, outc
     print("native_outcome", outcome, repr(result), flush=True)
     assert isinstance(result[-1], events.Done) and not result[-1].ok, result[-1]
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
-    assert owner.persistent.proc is None
+    assert not owner.persistent.available
     states = [item for item in result if isinstance(item, events.TurnState)]
     if outcome == "stall":
         assert [item.state for item in states] == ["model_stalled", "aborting", "failed"]

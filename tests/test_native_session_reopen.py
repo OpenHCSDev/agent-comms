@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import backend, native_session_reopen
+from agent_comms import backend, native_session_reopen, native_custody
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.native_session_reopen import NativeReopenError, validate_native_reopen
 
@@ -101,7 +101,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
         checks.append((session, expected_session_id))
         return original(package, session, expected_session_id=expected_session_id)
 
-    monkeypatch.setattr(native_session_reopen, "validate_native_reopen", checked)
+    monkeypatch.setattr(native_custody, "validate_native_reopen", checked)
     marker = tmp_path / "provider-prompt-sent"
     state_identity = tmp_path / "rpc-identity"
     state_identity.write_text("wrong-session")
@@ -122,7 +122,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
     stub.chmod(0o700)
     persistent = backend.PersistentPiSession()
     await persistent.discard_for_external_write(str(file))
-    assert persistent.proc is None and persistent.reopen_required == str(file)
+    assert not persistent.available and persistent.custody.session_file == str(file)
     first = [
         event
         async for event in backend.stream_agent_events(
@@ -135,7 +135,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
         )
     ]
     assert first[-1].ok is False and not marker.exists()
-    assert persistent.reopen_required == str(file)
+    assert persistent.custody.session_file == str(file)
     assert checks == [(str(file), None)]
     state_identity.write_text(identity)
 
@@ -157,7 +157,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
     ]
     assert second[-1].ok is False and not marker.exists()
     assert checks == [(str(file), None), (str(file), None)]
-    assert persistent.reopen_required == str(file), "Only a settled validated turn clears it"
+    assert persistent.custody.session_file == str(file), "Only a settled validated turn clears it"
     before = file.read_bytes()
     file.write_bytes(before.rstrip(b"\n"))
     third = [

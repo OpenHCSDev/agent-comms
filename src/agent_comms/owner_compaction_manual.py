@@ -47,7 +47,7 @@ async def compact_manual_owner(
     runner, session_id: str, thread_name: str, info, instructions: str | None
 ) -> CommittedCompactionResult:
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
-    if persistent is None or persistent.proc is None:
+    if persistent is None or not persistent.available:
         raise ValueError(
             "Canonical manual compaction requires the prepared selected native session"
         )

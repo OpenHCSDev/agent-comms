@@ -127,7 +127,7 @@ async def maybe_compact_owner_turn(
     if selected_native:
         if input_text is None or on_admission is None:
             raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
-        if persistent.proc is None:
+        if not persistent.available:
             raise PiSettingsEvidenceError("Selected native session must be prepared before input")
     elif configuration_unbound():
         return False

@@ -28,8 +28,8 @@ class NativeBackendFixture:
         child = backend._ACTIVE_PROCESSES[asyncio.current_task()]
         # Custody is already with the saved-session owner at native input start;
         # there is no later copy from transient TurnSession process fields.
-        assert self.persistent.proc is child
-        assert self.persistent.reader is not None and self.persistent.stderr_task is not None
+        assert self.persistent.custody.child.proc is child
+        assert self.persistent.custody.child.reader is not None
         if child not in self.children:
             self.children.append(child)
         return True
@@ -170,7 +170,7 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert [row[2] for row in owner.starts] == ["first", "queued followup"]
     assert [row[0] for row in owner.starts] == [None, "queued"]
     assert len([event for event in first if isinstance(event, events.StreamSettled)]) == 1
-    retained = owner.persistent.proc
+    retained = owner.persistent.custody.child.proc
     assert retained is not None and retained.alive()
 
     await owner.persistent.discard_for_external_write(str(owner.session))
@@ -178,15 +178,15 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     owner.provider.text = "Reopened retained context."
     reopened = await owner.run("after validated reopen")
     assert reopened[-1].ok and reopened[-1].text == owner.provider.text, reopened[-1]
-    assert owner.persistent.proc is not retained and owner.persistent.proc.alive()
-    assert owner.persistent.reopen_required is None
-    reopened_child = owner.persistent.proc
+    assert owner.persistent.custody.child.proc is not retained and owner.persistent.custody.child.proc.alive()
+    assert owner.persistent.custody.idle().current
+    reopened_child = owner.persistent.custody.child.proc
     # The deliberately oversized output tests framing, not permission to admit
     # a later prompt beyond the model's stored-context budget.
     owner.provider.text = "L" * (2 * 1024 * 1024 + 257)
     second = await owner.run("large response")
     assert second[-1].ok and second[-1].text == owner.provider.text, second[-1]
-    assert owner.persistent.proc is reopened_child
+    assert owner.persistent.custody.child.proc is reopened_child
     assert len(owner.saved_inputs()) == 4
     print(f"ordinary_native_response_bytes={len(second[-1].text.encode())}")
 
@@ -219,7 +219,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
             result = await turn
             assert isinstance(result[-1], events.Done) and not result[-1].ok
         assert not child.alive()
-        assert owner.persistent.proc is None
+        assert not owner.persistent.available
         assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
     finally:
         if not turn.done():

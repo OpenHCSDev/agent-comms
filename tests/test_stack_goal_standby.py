@@ -232,7 +232,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             assert comms.registry.require("parent").goal.state.active
             assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
             assert len(requests) == 2 + offset
-            first_proc = agent.turns.persistent_backends["parent"].proc
+            first_proc = agent.turns.persistent_backends["parent"].custody.idle().child.proc
             assert first_proc is not None and first_proc.returncode is None
             agent.turns.schedule_goal("parent")
             assert not agent.inputs.pending_turns.get("parent")
@@ -256,7 +256,10 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             assert not failures, failures
             assert len(requests) == 4 + offset
             if not restart:
-                assert agent.turns.persistent_backends["parent"].proc is first_proc
+                assert (
+                    agent.turns.persistent_backends["parent"].custody.idle().child.proc
+                    is first_proc
+                )
             else:
                 assert first_proc.returncode is not None
             assert (

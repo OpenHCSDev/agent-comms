@@ -189,7 +189,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
 
     async def stream(*args, **kwargs):
         persistent = owner.turns.persistent_backends[session]
-        assert persistent.proc is not None and persistent.proc.alive()
+        assert persistent.available and persistent.custody.child.proc.alive()
         if prior is not None:
             yield prior
         raise RuntimeError("execution failed")

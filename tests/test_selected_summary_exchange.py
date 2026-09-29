@@ -12,15 +12,16 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
+from retained_native_fixture import retained_native_host
 from selected_summary_cases import manual_source
 
 CHILD = r"""
@@ -101,25 +102,20 @@ async def selected(tmp_path, mode="success"):
     )
     async with asyncio.timeout(5):
         assert await child.stderr.readline() == b"ready\n"
-    persistent = PersistentPiSession()
-    persistent.proc = child
-    persistent.reader = PiRpcChannel(child.stdout)
-    persistent.launch_key = (
+    persistent = retained_native_host(
+        child,
         NativePiRpcLaunch((sys.executable,), tmp_path, {}, tmp_path, file, tmp_path),
-        (0, 0),
+        NativeSessionIdentity("session", str(file)),
     )
-    persistent.session_file = str(file)
-    persistent.session_id = "session"
-    persistent.revision = _session_revision(str(file))
     witness = NativeWitness(
         session_id="session",
         session_file=str(file),
         leaf_id="last",
         first_kept_entry_id="kept",
-        revision=":".join(map(str, persistent.revision[0])),
+        revision=":".join(map(str, persistent.custody.revision[0])),
     )
     source = dict(
-        source=manual_source(persistent.session_file),
+        source=manual_source(persistent.custody.identity.session_file),
         selected=dict(provider="fixture", modelId="fixture", contextWindow=4096),
         settings=dict(reserveTokens=100, keepRecentTokens=100),
     )
@@ -154,7 +150,7 @@ async def test_existing_child_summary_preserves_native_metadata_and_blocks_repla
         assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
         assert file.read_bytes() == before
         assert not native_input_admitted(journal.path.parent, str(file))
-        assert persistent.reopen_required is None
+        assert persistent.custody.idle().current
         with pytest.raises(CompactionJournalError, match="never replay"):
             await run()
 
@@ -172,11 +168,11 @@ async def test_decline_is_data_and_does_not_automatically_clear_input_gate(tmp_p
 )
 async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode):
     async with selected(tmp_path, mode) as (run, persistent, journal, file, _received):
-        child = persistent.proc
+        child = persistent.custody.child.proc
         with pytest.raises(SelectedChildUnknown):
             await run()
         assert child.returncode is not None
-        assert persistent.reopen_required == str(file)
+        assert persistent.custody.session_file == str(file)
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
         assert not native_input_admitted(journal.path.parent, str(file))
 
@@ -185,7 +181,7 @@ async def test_timeout_does_not_retry_summary(tmp_path):
     async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
         with pytest.raises(SelectedChildUnknown, match="made no progress for 0.15 seconds"):
             await run(idle_timeout_seconds=0.15)
-        assert persistent.proc is None and received.exists()
+        assert not persistent.available and received.exists()
         assert len(journal.unresolved_selected_summary(str(file))) == 1
 
 
@@ -201,7 +197,7 @@ async def test_failure_detail_survives_without_authorizing_replay(tmp_path, mode
     async with selected(tmp_path, mode) as (run, persistent, journal, file, received):
         with pytest.raises(SelectedChildUnknown, match=detail):
             await run()
-        assert persistent.proc is None
+        assert not persistent.available
         operation = json.loads(received.read_text())["operationId"]
         assert journal.selected_summary(operation).state.declared_name == "unknown"
         assert not native_input_admitted(journal.path.parent, str(file))
@@ -210,7 +206,7 @@ async def test_failure_detail_survives_without_authorizing_replay(tmp_path, mode
 
 async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
     async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
-        child = persistent.proc
+        child = persistent.custody.child.proc
         task = asyncio.create_task(run())
         async with asyncio.timeout(2):
             while not received.exists():
@@ -226,10 +222,13 @@ async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
 async def test_stale_child_never_reserves_or_sends(tmp_path, changed):
     async with selected(tmp_path) as (run, persistent, journal, file, received):
         if changed == "revision":
-            persistent.revision = None
+            persistent.custody.revision = ((0, 0, 0, 0, 0), None)
         else:
-            launch, auth = persistent.launch_key
-            persistent.launch_key = (replace(launch, package=tmp_path / "changed-package"), auth)
+            launch, auth = persistent.custody.child.key
+            persistent.custody.child.key = (
+                replace(launch, package=tmp_path / "changed-package"),
+                auth,
+            )
         with pytest.raises(SelectedChildUnknown, match="stale"):
             await run()
         assert not received.exists()
@@ -276,32 +275,29 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
         ("node", str(script)),
         env=env,
     )
-    persistent = PersistentPiSession()
-    persistent.proc = child
     try:
         async with asyncio.timeout(10):
             line = await child.stderr.readline()
             assert line.startswith(b"{"), line.decode()
             fixture = json.loads(line)
-            persistent.reader = PiRpcChannel(child.stdout)
-            persistent.session_file = fixture["sessionFile"]
-            persistent.session_id = fixture["witness"]["sessionId"]
-            persistent.revision = _session_revision(fixture["sessionFile"])
-            persistent.launch_key = (
+            persistent = retained_native_host(
+                child,
                 NativePiRpcLaunch(
                     ("node",), tmp_path, env, tmp_path, Path(fixture["sessionFile"]), package
                 ),
-                (0, 0),
+                NativeSessionIdentity(fixture["witness"]["sessionId"], fixture["sessionFile"]),
             )
             source = dict(
-                source=manual_source(persistent.session_file),
+                source=manual_source(persistent.custody.identity.session_file),
                 selected=fixture["selected"],
                 settings=fixture["settings"],
             )
             file = Path(fixture["sessionFile"])
             before = file.read_bytes()
             journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-            exchange = SelectedSummarySlot("owner", persistent.session_id).run_selected_summary(
+            exchange = SelectedSummarySlot(
+                "owner", persistent.custody.identity.session_id
+            ).run_selected_summary(
                 persistent,
                 journal,
                 FieldCodec.decode(NativeWitness, fixture["witness"]),
@@ -324,8 +320,8 @@ async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
                 assert not attempt.state.original_eligible
                 assert not journal.unresolved_selected_summary(str(file))
                 assert not journal.blocking_selected_summary(str(file))
-                assert persistent.proc.returncode is None
-                assert persistent.reopen_required is None
+                assert persistent.custody.child.proc.returncode is None
+                assert persistent.custody.idle().current
                 return
             result = await exchange
             assert "Synthetic summary" in result.summary.text
@@ -352,7 +348,7 @@ async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
         assert attempt.state.declared_name == "refused"
         assert attempt.state.decline_reason == "limit_exceeded"
         assert not attempt.state.original_eligible
-        assert persistent.proc.returncode is None
+        assert persistent.custody.child.proc.returncode is None
         assert not native_input_admitted(tmp_path, str(file))
         comms = wire(tmp_path)
         comms.registry.register(Thread("owner", frozenset(), str(tmp_path), session_file=str(file)))
@@ -367,7 +363,7 @@ async def test_observable_progress_extends_idle_deadline_without_total_limit(tmp
     async with selected(tmp_path, "progress") as (run, persistent, journal, file, _):
         result = await run(idle_timeout_seconds=0.08)
         assert result.summary.text == "native summary"
-        assert persistent.proc.returncode is None
+        assert persistent.custody.child.proc.returncode is None
 
 
 async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
@@ -375,7 +371,7 @@ async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
         with pytest.raises(SelectedChildUnknown, match="made no progress"):
             await run(idle_timeout_seconds=0.06)
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
-        assert persistent.proc is None
+        assert not persistent.available
 
 
 async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(tmp_path):
@@ -396,14 +392,14 @@ async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
         with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
             await run(idle_timeout_seconds=0.06)
         assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
-        assert persistent.proc is None
+        assert not persistent.available
 
 
 async def test_selected_frame_uses_transport_without_retired_file_count_budget(tmp_path):
     async with selected(tmp_path, "many-files") as (run, persistent, journal, file, _):
         result = await run()
         assert len(result.summary.details.read_files) == 3800
-        assert persistent.proc.returncode is None
+        assert persistent.custody.child.proc.returncode is None
         assert journal.blocking_selected_summary(str(file))
 
 

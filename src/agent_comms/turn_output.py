@@ -80,20 +80,20 @@ class TurnOutput:
     def done(self, session: TurnSession, stderr: str) -> events.Done:
         # Read admission and custody from their actual owners; output never grants either.
         transport_ok = not self.failure_text and (
-            session.retained or session.native.proc.returncode == 0
+            session.native_session.custody.retained or session.native.proc.returncode == 0
         )
         success = (
             transport_ok
             and self.error_message is None
-            and session.initial_input_started
+            and session.admission.started
             and self.final_assistant_stop
             and not session.inputs.uncertain
-            and not session.unresolved_inputs
+            and not session.inputs.unresolved
         )
         self.settle(session, transport_ok)
         return events.Done(
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
-            ok=success and self.failure is None and not session.session_identity_uncertain,
+            ok=success and self.failure is None and not session.native.attestation.uncertain,
             reason_code=self.failure.code if self.failure else None,
             diagnostic={
                 **self.diagnostic,
