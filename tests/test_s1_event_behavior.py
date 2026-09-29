@@ -11,6 +11,7 @@ from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.compaction_result import CommittedCompactionResult, RefusedCompactionResult
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.owned_turn import OwnedTurn
@@ -389,17 +390,16 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         print(
             "manual_bridge_result",
             enabled,
-            result["ok"],
+            result,
             native.provider.posts,
-            result.get("error", ""),
         )
-        assert result["ok"] is enabled
+        assert isinstance(result, CommittedCompactionResult if enabled else RefusedCompactionResult)
         assert native.provider.posts == (4 if enabled else 2)
         if enabled:
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
             assert len([row for row in rows if row.get("type") == "compaction"]) == 1
         else:
-            assert result["error"] == "Selected native history has no complete safe compaction cut"
+            assert result.error == "Selected native history has no complete safe compaction cut"
         assert comms.registry.require(name).active_turn is None
         assert comms.goals.goal_wait("waiting") is None
         assert comms.registry.require("waiting").goal.state.active

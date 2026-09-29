@@ -9,16 +9,15 @@ from acp.agent.router import build_agent_router
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
+from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_runner import TurnRunner
 from delivery_owner_fixture import canonical_agent
+from test_backend_native_lifecycle import native_backend as native_backend
 
 
 @pytest.fixture
 async def owner(comms, monkeypatch):
-    async def models(*args):
-        return []
-
-    monkeypatch.setattr(backend, "discover_models", models)
     agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
     try:
         yield agent
@@ -137,9 +136,48 @@ async def test_shutdown_joins_running_turn_before_releasing_session(owner, tmp_p
         await asyncio.gather(turn, return_exceptions=True)
 
 
-@pytest.mark.parametrize("prior", [None, "error", "done"])
-async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
-    _, session = await new_session(owner, tmp_path, "feedback")
+@pytest.fixture
+async def prepared_owner(native_backend):
+    """Real saved history and attested native preparation before fault injection."""
+    native = native_backend
+    await native.run("Completed seed exchange")
+    await native.persistent.close()
+    from agent_comms.comms import Comms
+
+    agent = canonical_agent(
+        Comms(native.root),
+        agent_bin="pi",
+        auto_wake=False,
+        agent_args=["--provider", "response-local", "--model", "fixture", "--thinking", "off"],
+    )
+    session = (await agent.new_session(cwd=str(native.project))).session_id
+    agent._comms.threads.attach_session(session, str(native.session))
+    try:
+        yield agent, session, native
+    finally:
+        await agent.shutdown()
+        assert not agent.turns.persistent_backends
+
+
+def failure_facts(updates, family):
+    return [
+        fact
+        for update in updates
+        for fact in decode_updates(update.field_meta)
+        if isinstance(fact, family)
+    ]
+
+
+@pytest.mark.parametrize(
+    "prior",
+    [
+        None,
+        events.Error("specific provider failure"),
+        events.Done("specific provider failure", False),
+    ],
+)
+async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+    owner, session, native = prepared_owner
     updates = []
 
     class Client:
@@ -147,31 +185,35 @@ async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, m
             updates.append(kwargs["update"])
 
     owner.on_connect(Client())
+    original = native.session.read_bytes()
 
     async def stream(*args, **kwargs):
-        if prior == "error":
-            yield events.Error("specific provider failure")
-        elif prior == "done":
-            yield events.Done("specific provider failure", False)
+        persistent = owner.turns.persistent_backends[session]
+        assert persistent.proc is not None and persistent.proc.alive()
+        if prior is not None:
+            yield prior
         raise RuntimeError("execution failed")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
     with pytest.raises(RuntimeError, match="execution failed"):
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
-    errors = [u for u in updates if "[agent error]" in str(u)]
+    errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == 1
-    expected = "specific provider failure" if prior else "execution failed"
-    assert errors[0].content.text == f"[agent error] {expected}"
+    expected = prior.text if prior is not None else "execution failed"
+    assert errors[0].failure.detail == expected
+    assert native.session.read_bytes() == original
+    assert native.provider.posts == 1  # Preparation/fault must not send or replay input.
+    assert owner._comms.registry.require(session).active_turn is None
+    assert not owner.turns.turn_tasks and not owner.turns.active_turns
+    assert not owner.inputs.backend_inboxes
 
 
 async def test_compaction_fault_reaches_acp_client_without_original_send(
-    owner, tmp_path, monkeypatch
+    prepared_owner, monkeypatch
 ):
-    from dataclasses import replace
-
     from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
 
-    _, session = await new_session(owner, tmp_path, "compacting")
+    owner, session, native = prepared_owner
     updates = []
 
     class Client:
@@ -179,17 +221,14 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
             updates.append(kwargs["update"])
 
     owner.on_connect(Client())
-    # No native process or provider is started. The real ACP input admission and
-    # TurnRunner adaptive hook execute; only the selected operation is substituted.
-    owner.turns.agent_bin = "pi"
-    owner._comms.registry.register(
-        replace(owner._comms.registry.require(session), session_file=str(tmp_path / "saved.jsonl"))
-    )
+    before = native.session.read_bytes()
     source = OSError("402: insufficient credits on this model")
-    failure = SelectedChildUnknown("402: insufficient credits on this model")
+    failure = SelectedChildUnknown(str(source))
     attempts = []
 
     async def compact(*args, **kwargs):
+        assert args[4].model == "response-local/fixture"
+        assert args[6].proc is not None and args[6].proc.alive()
         attempts.append(args[5])
         raise failure from source
 
@@ -203,14 +242,50 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
         await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
     assert caught.value is failure and caught.value.__cause__ is source
     assert len(attempts) == 1
-    errors = [u for u in updates if "[agent error]" in str(u)]
-    assert len(errors) == 1
-    assert errors[0].content.text == "[agent error] 402: insufficient credits on this model"
-    assert errors[0].field_meta["agentComms"]["inputFailed"] == {
-        "text": "Original stays unknown",
-        "reason": str(failure),
-    }
+    errors = failure_facts(updates, RequestFailedUpdate)
+    assert len(errors) == 1 and errors[0].failure.detail == str(failure)
+    failed_inputs = failure_facts(updates, InputFailedUpdate)
+    assert len(failed_inputs) == 1
+    assert failed_inputs[0].text == "Original stays unknown"
+    assert failed_inputs[0].failure == errors[0].failure
     assert owner.inputs.dispositions.read().rows[attempts[0]].declared_name == "not_sent"
+    assert native.provider.posts == 1
+    assert native.session.read_bytes() == before
+    assert not owner.turns.turn_tasks and not owner.turns.active_turns
+    assert not owner.inputs.backend_inboxes
+
+
+async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
+    owner, session, native = prepared_owner
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            updates.append(kwargs["update"])
+
+    owner.on_connect(Client())
+    native.provider.status = 503
+    async with asyncio.timeout(30):
+        await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+    errors = failure_facts(updates, RequestFailedUpdate)
+    assert len(errors) == 1
+    assert "loopback retryable failure" in errors[0].failure.detail
+    assert errors[0].failure.input_state.public_status == "started"
+    assert not failure_facts(updates, InputFailedUpdate)
+    assert native.provider.posts == 2  # seed + failed original, zero retry
+    saved = native.saved_inputs()
+    assert len(saved) == 2
+    # The owner adds its instruction/awareness prefix to the actual native prompt.
+    assert (
+        sum(
+            block["text"].endswith("Actual failed input")
+            for message in saved
+            for block in message["content"]
+            if block["type"] == "text"
+        )
+        == 1
+    )
+    assert owner._comms.registry.require(session).active_turn is None
     assert not owner.turns.turn_tasks and not owner.turns.active_turns
     assert not owner.inputs.backend_inboxes
 

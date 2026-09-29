@@ -1,0 +1,61 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-channel-participants-20260928",
+  "installed": {
+    "agent-comms": "1906e94f83e9bec6352fa3f03950eebf2d56c866",
+    "batrachian-toad": "19de70cacbfc20e7df39dba17488511c9786a586",
+    "textual": "c9743801c98dc570f82f82e25915ecce89800f4b"
+  },
+  "before": {
+    "agent-comms-ux": {
+      "pid": 2839214,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "high",
+      "session": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl"
+    },
+    "pr95-selected-pi-summary-owner": {
+      "pid": 2839215,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "medium",
+      "session": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-26T20-05-37-482Z_01a0df52-c049-764c-adc0-e1b8e606553b.jsonl"
+    },
+    "nra-architecture": {
+      "pid": 2839216,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "high",
+      "session": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl"
+    },
+    "nra-domain-mapping": {
+      "pid": 2839223,
+      "model": "openai-codex/gpt-6-sol",
+      "thinking": "xhigh",
+      "session": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-22T22-37-11-574Z_01a0cb44-1415-76ac-b5a0-26d3eb905f55.jsonl"
+    }
+  },
+  "history_mutated": false,
+  "runtime_stores_reset": false,
+  "prompts_replayed": 0,
+  "restarts": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 2839214,
+      "pid": 3088907
+    },
+    {
+      "thread": "pr95-selected-pi-summary-owner",
+      "previous_pid": 2839215,
+      "pid": 3088908
+    },
+    {
+      "thread": "nra-architecture",
+      "previous_pid": 2839216,
+      "pid": 3088909
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "previous_pid": 2839223,
+      "pid": 3088910
+    }
+  ],
+  "post_restart_probe_correction": "Initial verification referred to removed private helper; restart succeeded. Verified using current process identity and fresh ACP attachment instead. No second restart.",
+  "verified": true
+}

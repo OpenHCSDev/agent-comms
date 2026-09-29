@@ -52,7 +52,6 @@ from agent_comms.native_source_cursor import NativeSourceCursor
 from . import agent_events as events
 from . import manual_compaction_bridge
 from .acp_extension import (
-    CompactionCommittedUpdate,
     CompactRequest,
     CursorAdvancedUpdate,
     CursorEnvelope,
@@ -67,8 +66,10 @@ from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials
 from .comms import Comms, wire
+from .compaction_result import CompactionResult
 from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
+from .field_codec import FieldCodec
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
@@ -218,24 +219,17 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         # Idle owner bridge alone owns the lock and the one-POST budget.
         if session_id in self.sessions.proxies:
-            result = await self.sessions.proxies[session_id].request(
-                "compact", instructions=instructions
+            result = FieldCodec.decode(
+                CompactionResult,
+                await self.sessions.proxies[session_id].request(
+                    "compact", instructions=instructions
+                ),
             )
         else:
             result = await manual_compaction_bridge.compact_context(
                 self.turns, session_id, instructions
             )
-        if not isinstance(result, dict) or result.get("ok") is not True:
-            reason = (
-                result.get("error") if isinstance(result, dict) else None
-            ) or "Compaction failed or is uncertain; not retried."
-            raise RequestError(-32603, str(reason), {"reason": str(reason)})
-        return PromptResponse(
-            stop_reason="end_turn",
-            field_meta=encode_updates(
-                CompactionCommittedUpdate(result["commitId"], result["summary"])
-            ),
-        )
+        return result.prompt_response()
 
     async def _selected_write_request(self, session_id: str, request) -> PromptResponse:
         owner = self.sessions.require(session_id)

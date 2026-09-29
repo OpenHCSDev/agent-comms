@@ -1,9 +1,12 @@
 import pytest
+from acp.schema import SessionConfigSelectOption
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.config_options import ModelConfigOption
 from agent_comms.login import run_login
+from delivery_owner_fixture import canonical_agent
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
@@ -44,13 +47,13 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     monkeypatch.setattr(backend, "auth_revision", lambda: (revision[0], 0))
 
     async def discover(*args):
-        models = [backend.Model("test/base", "Base")]
+        models = [SessionConfigSelectOption(value="test/base", name="Base")]
         if revision[0]:
-            models.append(backend.Model("openai-codex/test", "Subscription"))
+            models.append(SessionConfigSelectOption(value="openai-codex/test", name="Subscription"))
         return models
 
-    monkeypatch.setattr(backend, "discover_models", discover)
-    agent = CommsAgent(wire(tmp_path), agent_args=["--model", "test/base"])
+    monkeypatch.setattr(ModelConfigOption, "discover", discover)
+    agent = canonical_agent(wire(tmp_path), agent_args=["--model", "test/base"])
     # Exercise the explicit refresh path without the background drain racing it.
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
     updates = []
@@ -60,7 +63,9 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
             updates.append(kwargs["update"])
 
     agent.on_connect(Client())
-    session = (await agent.new_session("/tmp/project")).session_id
+    project = tmp_path / "project"
+    project.mkdir()
+    session = (await agent.new_session(str(project))).session_id
     try:
         await agent.sessions.config.refresh_auth_models()
         assert not updates, "The session response already supplied this catalogue"

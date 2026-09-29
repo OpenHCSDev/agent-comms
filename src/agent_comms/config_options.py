@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from abc import abstractmethod
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -21,7 +22,13 @@ from . import backend
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .pending_requests import PendingRequests
-from .pi_commands import PiCommand, SetModel, SetThinkingLevel
+from .pi_commands import (
+    GetAvailableModels,
+    GetAvailableThinkingLevels,
+    SetModel,
+    SetThinkingLevel,
+    SettingCommand,
+)
 from .runtime import RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
@@ -35,113 +42,152 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     description: ClassVar[str]
     category: ClassVar[str]
 
-    @classmethod
-    def select(
-        cls, current: str, choices: list[SessionConfigSelectOption]
-    ) -> SessionConfigOptionSelect:
-        return SessionConfigOptionSelect(
-            id=cls.declared_name,
-            name=cls.title,
-            description=cls.description,
-            category=cls.category,
-            type="select",
-            current_value=current,
-            options=choices,
-        )
-
-    @classmethod
     @abstractmethod
-    def current_value(cls, thread: Thread) -> str | None: ...
+    def current_value(self, thread: Thread) -> str | None: ...
 
-    @classmethod
     @abstractmethod
-    async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect: ...
+    async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]: ...
 
-    @classmethod
+    @abstractmethod
+    async def describe(self, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect: ...
+
     @abstractmethod
     async def change(
-        cls, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None: ...
 
 
-class ModelConfigOption(ConfigOption):
+class CatalogConfigOption(ConfigOption):
+    """A selected option owns its catalog, auth revision, lock and generation."""
+
+    def __init__(self, agent_bin: str, agent_args: list[str]):
+        self.agent_bin, self.agent_args = agent_bin, agent_args
+        self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
+        self.auth: tuple[int, int] | None = None
+        self.lock = asyncio.Lock()
+        self.generation = 0
+
+    @property
+    def current_auth(self) -> bool:
+        return self.auth == backend.auth_revision()
+
+    def cache_key(self, thread: Thread) -> str | None:
+        return thread.model
+
+    async def choices(self, thread: Thread) -> list[SessionConfigSelectOption]:
+        async with self.lock:
+            if not self.current_auth:
+                self.catalogs.clear()
+                self.auth = backend.auth_revision()
+            key = self.cache_key(thread)
+            if key not in self.catalogs:
+                self.catalogs[key] = await self.discover(thread)
+                self.generation += 1
+            return self.catalogs[key]
+
+    def selection(self, owner: ConfigOptions, thread: Thread, choices) -> str:
+        return self.current_value(thread)
+
+    async def describe(self, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
+        choices = await self.choices(thread)
+        selected = self.selection(owner, thread, choices)
+        if selected not in {choice.value for choice in choices}:
+            choices = [SessionConfigSelectOption(value=selected, name=selected), *choices]
+        return SessionConfigOptionSelect(
+            id=self.declared_name,
+            name=self.title,
+            description=self.description,
+            category=self.category,
+            type="select",
+            current_value=selected,
+            options=choices,
+        )
+
+    @abstractmethod
+    async def apply(
+        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+    ) -> None: ...
+
+    async def change(
+        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+    ) -> None:
+        options = await self.describe(owner, thread)
+        if value not in {choice.value for choice in options.options}:
+            raise RequestError.invalid_params(
+                {"reason": f"Unknown {self.title.lower()}: {value!r}"}
+            )
+        await self.apply(owner, session_id, thread, value)
+
+
+class ModelConfigOption(CatalogConfigOption):
     title = "Model"
     description = "Model used by this persistent agent thread"
     category = "model"
 
-    @classmethod
-    def current_value(cls, thread: Thread) -> str | None:
+    def current_value(self, thread: Thread) -> str | None:
         return thread.model
 
-    @classmethod
-    async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
-        models = await owner.models_for(thread.name)
-        return cls.select(
-            cls.current_value(thread),
-            [
-                SessionConfigSelectOption(value=m.id, name=m.name, description=m.description)
-                for m in models
-            ],
-        )
+    def cache_key(self, thread: Thread) -> None:
+        return None
 
-    @classmethod
-    async def change(
-        cls, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+    async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
+        values = [
+            value.strip()
+            for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
+            if value.strip()
+        ]
+        if not values:
+            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args)
+            values = [model.display_name for model in data.models if model.provider and model.id]
+        return [
+            SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
+        ]
+
+    async def apply(
+        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None:
-        choices = {model.id for model in await owner.models_for(thread.name)}
-        if value not in choices:
-            raise RequestError.invalid_params({"reason": f"Unknown model: {value!r}"})
+        provider, model = value.split("/", 1)
         await owner.set_active_backend_option(
-            session_id,
-            SetModel(provider=value.split("/", 1)[0], model_id=value.split("/", 1)[1]),
-            events.ModelChanged,
-            "Model change timed out",
+            session_id, SetModel(provider=provider, model_id=model), "Model change timed out"
         )
         owner.comms.threads.set_thread_model(thread.name, value)
-        await ThinkingLevelConfigOption.selection(owner, replace(thread, model=value))
 
 
-class ThinkingLevelConfigOption(ConfigOption):
+class ThinkingLevelConfigOption(CatalogConfigOption):
     title = "Thinking level"
     description = "Reasoning effort used by this persistent agent thread"
     category = "thought_level"
 
-    @classmethod
-    def current_value(cls, thread: Thread) -> str | None:
+    def current_value(self, thread: Thread) -> str | None:
         return thread.thinking_level
 
-    @classmethod
-    async def selection(cls, owner: ConfigOptions, thread: Thread) -> tuple[str, list[str]]:
-        levels = await owner.thinking_levels_for(thread.model)
-        selected = cls.current_value(thread)
-        if selected not in levels:
-            selected = "medium" if "medium" in levels else levels[0]
-            owner.comms.threads.set_thread_thinking_level(thread.name, selected)
-        return selected, levels
-
-    @classmethod
-    async def describe(cls, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
-        selected, levels = await cls.selection(owner, thread)
-        return cls.select(
-            selected,
-            [SessionConfigSelectOption(value=level, name=level.title()) for level in levels],
-        )
-
-    @classmethod
-    async def change(
-        cls, owner: ConfigOptions, session_id: str, thread: Thread, value: str
-    ) -> None:
-        levels = await owner.thinking_levels_for(thread.model)
-        if value not in levels:
-            raise RequestError.invalid_params(
-                {"reason": f"Thinking level {value!r} is unavailable for this model"}
+    async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
+        if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
+            levels = ["off", "minimal", "low", "medium", "high"]
+        else:
+            data = await GetAvailableThinkingLevels().discover(
+                self.agent_bin, backend.args_for_model(self.agent_args, thread.model)
             )
+            levels = data.levels or ["off"]
+        return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
+
+    def selection(self, owner: ConfigOptions, thread: Thread, choices) -> str:
+        selected = self.current_value(thread)
+        levels = {choice.value for choice in choices}
+        if selected not in levels:
+            selected = "medium" if "medium" in levels else choices[0].value
+            self.persist(owner, thread, selected)
+        return selected
+
+    async def apply(
+        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+    ) -> None:
         await owner.set_active_backend_option(
-            session_id,
-            SetThinkingLevel(level=value),
-            events.ThinkingChanged,
-            "Thinking level change timed out",
+            session_id, SetThinkingLevel(level=value), "Thinking level change timed out"
         )
+        self.persist(owner, thread, value)
+
+    def persist(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
         owner.comms.threads.set_thread_thinking_level(thread.name, value)
 
 
@@ -157,15 +203,20 @@ class ConfigOptions:
     ):
         self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
         self.runtime, self.sessions, self.effects = runtime, sessions, effects
-        self.model_catalog: list[backend.Model] | None = None
-        self.model_catalog_auth: tuple[int, int] | None = None
-        self.model_catalog_lock = asyncio.Lock()
+        self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
         self.catalog_publish_lock = asyncio.Lock()
-        self.catalog_generation = 0
         self.session_catalog_generation: dict[str, int] = {}
         self.session_config_signature: dict[str, tuple[tuple[str, str | None], ...]] = {}
         self.setting_requests = PendingRequests()
-        self.thinking_catalog: dict[tuple[str | None, tuple[int, int]], list[str]] = {}
+
+    def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
+        if member not in self.catalogs:
+            self.catalogs[member] = member(self.agent_bin, self.agent_args)
+        return self.catalogs[member]
+
+    @property
+    def catalog_generation(self) -> int:
+        return sum(option.generation for option in self.catalogs.values())
 
     def ensure_thread_model(self, thread_name: str) -> str | None:
         thread = self.comms.registry.require(thread_name)
@@ -178,41 +229,19 @@ class ConfigOptions:
             self.comms.threads.set_thread_model(thread.name, selected)
         return selected
 
-    async def models_for(self, thread_name: str) -> list[backend.Model]:
-        selected = self.ensure_thread_model(thread_name)
-        async with self.model_catalog_lock:
-            if self.model_catalog is None or self.model_catalog_auth != backend.auth_revision():
-                self.model_catalog = await backend.discover_models(
-                    self.agent_bin, self.agent_args, selected
-                )
-                self.model_catalog_auth = backend.auth_revision()
-                self.catalog_generation += 1
-        if selected and all(model.id != selected for model in self.model_catalog):
-            return [backend.Model(selected, selected), *self.model_catalog]
-        return self.model_catalog
-
-    async def thinking_levels_for(self, model: str | None) -> list[str]:
-        key = (model, backend.auth_revision())
-        if key not in self.thinking_catalog:
-            self.thinking_catalog[key] = await backend.discover_thinking_levels(
-                self.agent_bin, self.agent_args, model
-            )
-        return self.thinking_catalog[key]
-
     async def options(self, thread_name: str) -> list[Any]:
         if self.ensure_thread_model(thread_name) is None:
             return []
         thread = self.comms.registry.require(thread_name)
         return [
-            await member.describe(self, thread)
-            for member in ConfigOption.members_with(ConfigOption)
+            await self.catalog_for(member).describe(self, thread)
+            for member in ConfigOption.members_with(CatalogConfigOption)
         ]
 
-    @staticmethod
-    def signature(thread: Thread) -> tuple[tuple[str, str | None], ...]:
+    def signature(self, thread: Thread) -> tuple[tuple[str, str | None], ...]:
         return tuple(
-            (member.declared_name, member.current_value(thread))
-            for member in ConfigOption.members_with(ConfigOption)
+            (member.declared_name, self.catalog_for(member).current_value(thread))
+            for member in ConfigOption.members_with(CatalogConfigOption)
         )
 
     async def session_options(self, session_id: str, thread_name: str) -> list[Any]:
@@ -223,9 +252,9 @@ class ConfigOptions:
         return options
 
     async def refresh_auth_models(self) -> None:
-        if self.model_catalog is None:
+        if not self.catalogs:
             return
-        if self.model_catalog_auth == backend.auth_revision() and all(
+        if all(option.current_auth for option in self.catalogs.values()) and all(
             self.session_catalog_generation.get(sid) == self.catalog_generation
             for sid in self.sessions.bindings
         ):
@@ -250,7 +279,7 @@ class ConfigOptions:
         self, config_id: str, session_id: str, value: str | bool
     ) -> SetSessionConfigOptionResponse:
         try:
-            member = ConfigOption.decode(config_id)
+            member = CatalogConfigOption.decode(config_id)
             if not isinstance(value, str):
                 raise ValueError("Expected string setting")
         except ValueError:
@@ -263,7 +292,9 @@ class ConfigOptions:
             )
             return SetSessionConfigOptionResponse.model_validate(result)
         name = await self.sessions.sync_identity(session_id)
-        await member.change(self, session_id, self.comms.registry.require(name), value)
+        await self.catalog_for(member).change(
+            self, session_id, self.comms.registry.require(name), value
+        )
         await self.effects.turns.close_idle_backend(session_id)
         options = await self.options(name)
         await self.publish(session_id, options)
@@ -272,22 +303,21 @@ class ConfigOptions:
     async def set_active_backend_option(
         self,
         session_id: str,
-        command: PiCommand,
-        result_type: type[events.SettingChangeResult],
+        command: SettingCommand,
         timeout_message: str,
     ) -> None:
         inbox = self.effects.turns.active_backend_inbox(session_id)
         if inbox is None:
             return
         request_id = uuid4().hex
-        future = self.setting_requests.add(result_type, request_id)
+        future = self.setting_requests.add(command.result_type, request_id)
         inbox.put_nowait(replace(command, id=request_id).to_rpc())
         try:
             await asyncio.wait_for(future, timeout=10)
         except (TimeoutError, RuntimeError) as error:
             raise RequestError.invalid_params({"reason": str(error) or timeout_message}) from error
         finally:
-            self.setting_requests.discard(result_type, request_id)
+            self.setting_requests.discard(command.result_type, request_id)
 
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)
