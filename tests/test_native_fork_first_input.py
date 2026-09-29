@@ -15,6 +15,8 @@ from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
     CompactionPublishedUpdate,
+    InputFailedUpdate,
+    RequestFailedUpdate,
     decode_updates,
 )
 from agent_comms.child_process import DetachedProcess
@@ -106,6 +108,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * case.repetitions
     )
     result = await native.run(parent_text)
+    print("PARENT_NATIVE_RESULT", repr(result[-1]), flush=True)
     assert result[-1].ok, result[-1]
     assert native.provider.posts == 1
     retained = native.persistent.custody.idle()
@@ -167,6 +170,8 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     monkeypatch.setenv(
         "PATH", str(Path(os.sys.executable).parent) + os.pathsep + os.environ["PATH"]
     )
+    debug_log = native.project / "runtime-debug.log"
+    monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
     comms = Comms(native.root)
     comms.threads.register(
         Thread(
@@ -217,7 +222,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         first_send_started = time.monotonic()
         try:
             async with asyncio.timeout(20):
-                await attachment.prompt(
+                response = await attachment.prompt(
                     child.name, [TextContentBlock(type="text", text="hey Boss")]
                 )
         except Exception as error:
@@ -235,7 +240,18 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
             )
             raise
         latency = time.monotonic() - first_send_started
-        print("FIRST_SEND_LATENCY_SECONDS", latency, flush=True)
+        print("FIRST_SEND_LATENCY_SECONDS", latency, "ACP_RESPONSE", repr(response), flush=True)
+        print(
+            "FIRST_SEND_PROVIDER_REQUEST_COUNT", native.provider.posts,
+            "REQUEST_BYTES", [len(json.dumps(request)) for request in native.provider.requests],
+            flush=True,
+        )
+        request_failures = [fact.failure for fact in facts if isinstance(fact, RequestFailedUpdate)]
+        input_failures = [fact.failure for fact in facts if isinstance(fact, InputFailedUpdate)]
+        assert not request_failures, "\n".join(failure.feedback for failure in request_failures)
+        assert not input_failures, "\n".join(
+            failure.description + "\n" + failure.input_disposition for failure in input_failures
+        )
         assert latency < 20
         assert not any(isinstance(fact, CompactionChangedUpdate) for fact in facts)
         assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
@@ -262,6 +278,11 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         await attachment.shutdown()
         output.flush()
         print("ACTUAL_WORKER_LOG", worker_log.read_text(), flush=True)
+        print(
+            "ACTUAL_RUNTIME_DEBUG",
+            debug_log.read_text() if debug_log.exists() else "",
+            flush=True,
+        )
         output.close()
         if child is not None:
             await asyncio.to_thread(comms.owners.stop, child.name)

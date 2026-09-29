@@ -90,3 +90,26 @@ No compaction fact/entry was observed before this failure. Earlier fork-startup
 refusal is corrected; this is a new meaningful first-send/history failure, notGREEN.
 See latest339-family.log and latest339-install.log. Boyle sole production owner
 informed; no retry, live changes or input replay performed.
+
+## Installed9251 host-loader refusal and actionable acceptance
+
+Deleted2 uninformative test lines; replaced with actual ACP response, provider
+request count/byte sizes, native parent result and owner runtime trace.
+Early assertions now reject declared RequestFailedUpdate/InputFailedUpdate and
+print existing failure feedback/disposition before original exactly-once checks.
+All original history/no-compaction/provider-context/no-replay assertions remain.
+No production/runtime launcher changes. Synced current main9251b823.
+
+Parent independently reproduced both ordinary/fork failures on staged9251/4230:
+ACP returns ~0.01s, no hey Boss journal entry. Actual142 painted-path likewise
+failed. Parent actual ACP log names missinglibada.so.3. Own fresh actualphysical
+parent native preflight on same package failed with the identical hostloader
+diagnostic and exit127 before sending input (main9251-diagnostic.log). Host
+/usr/bin/node also directly fails loadinglibada.so.3; host installedlibada.so.4.
+This is environment refusal, not evidence authorizing a new corepatch. Earlier
+latest339 fork zero-input result must not be labeled proven coreinputloss: it
+did not yet inspect the declared failure update. That gap is corrected here.
+
+Ruff passes; canonical IDEN-3 foreignabsence3->3, IMPL-14 chainterms0->0.
+Actual final healthy-runtime provider/native family proof remains pending parent
+hostruntime repair; no GREEN, no replay, no userattempt reset.
