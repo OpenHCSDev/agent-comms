@@ -17,6 +17,7 @@ from agent_comms.coordination_contracts import (
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import projected
+from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message, MessageType
 from agent_comms.typed_table import (
     Column,
@@ -39,6 +40,9 @@ def canonical_publication_key(execution_id: str, exact_target: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(CoordinatorTable, TypedTable):
+    def matches_request(self, execution_id: str, message: Message) -> bool:
+        return self.execution_id == execution_id and self.expected_message == message
+
     execution_id: str = dataclass_field(
         metadata={
             "snapshot_exclude": True,
@@ -245,6 +249,10 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class PublicationReceipt(TypedRow):
+    @property
+    def reference(self) -> MessageReference:
+        return MessageReference(self.seq, self.message_id)
+
     execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
     publication_key: str = dataclass_field(metadata={"snapshot_exclude": True})
     seq: int

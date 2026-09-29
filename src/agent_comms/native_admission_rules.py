@@ -28,6 +28,10 @@ class RegistryAdmissionCheck(RuleCheck):
     process: ProcessIdentity
 
 
+class GoalRegistryAdmissionCheck(RegistryAdmissionCheck):
+    """Selected input/awareness also captures the goal; reply settlement does not."""
+
+
 class RegistryIncarnationRule(ReservationRule):
     check_type = RegistryAdmissionCheck
     explanation = "The registered thread incarnation changed before native send."
@@ -80,7 +84,7 @@ class RegistryTurnRule(ReservationRule):
 
 
 class RegistryGoalRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = GoalRegistryAdmissionCheck
     explanation = "The captured goal changed."
 
     def violated(self, check: RegistryAdmissionCheck) -> bool:
