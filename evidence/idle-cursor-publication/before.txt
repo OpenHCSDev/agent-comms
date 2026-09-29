@@ -1,0 +1,41 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-rxk_8xnl')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0b391fd480>
+
+    async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model()
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            if cursor := cursor_fact(update.field_meta):
+                updates.append(cursor.envelope)
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        comms.messaging.send_message("sender", "beta", "first")
+        assert await agent.inputs.drain_inbox("beta") == 1
+        assert updates[-1].status == "proven"
+        before = len(updates)
+        for _ in range(3):
+            loaded = cursor_envelope(agent.sessions.metadata("beta"))
+            assert loaded.same_observation(updates[-1])
+            await agent._refresh_private_cursor("beta")
+>           assert len(updates) == before, "Unchanged trusted reads republished the same cursor"
+E           AssertionError: Unchanged trusted reads republished the same cursor
+E           assert 3 == 2
+E            +  where 3 = len([CursorEnvelope(scope=CursorScope(session_id='beta', wire_root_id='85b5aeec350841f2ba5532bc1fe9f4e8', owner=OwnerIdent...faf9f4f4e18982eed8a39e5ff274e04399de595b06247bd', stage='full', session_id='isolated-session', request_generation=1)))])
+
+tests/test_acp_private_nk_delivery.py:491: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:212 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+1 failed, 23 deselected in 1.45s

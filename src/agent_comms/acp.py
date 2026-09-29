@@ -465,18 +465,15 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             await self._publish_private_cursor(session_id, self.sessions.require(session_id))
 
     def _session_runtime_metadata(self, thread_name: str, session_id: str) -> tuple:
-        # A trusted load supersedes any earlier broadcast, including when a
-        # busy store makes its observation unavailable. Republish on the next
-        # successful read so the earlier broadcast cannot suppress recovery.
-        self._private_cursor_announced.pop(session_id, None)
-        return (
-            self.inputs.queue_state(session_id),
-            *(
-                (CursorAdvancedUpdate(self._private_cursor_metadata(thread_name, session_id)),)
-                if self._private_nk_wire_root_id is not None
-                else ()
-            ),
-        )
+        """Trusted reads supersede announcements only when their observation changes."""
+        metadata = (self.inputs.queue_state(session_id),)
+        if self._private_nk_wire_root_id is None:
+            return metadata
+        cursor = self._private_cursor_metadata(thread_name, session_id)
+        announced = self._private_cursor_announced.get(session_id, cursor)
+        if not cursor.same_observation(announced):
+            self._private_cursor_announced.pop(session_id, None)
+        return (*metadata, CursorAdvancedUpdate(cursor))
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
