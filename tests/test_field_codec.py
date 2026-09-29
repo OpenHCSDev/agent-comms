@@ -5,6 +5,43 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation
+from agent_comms.wire_value import WireValue
+
+
+@dataclass(frozen=True)
+class OwnedWireText(WireValue):
+    value: str
+
+    def to_wire(self):
+        return self.value
+
+    @classmethod
+    def from_wire(cls, data):
+        return cls(FieldCodec.decode(str, data))
+
+    @classmethod
+    def wire_schema(cls):
+        return FieldCodec.value_schema(str)
+
+
+@dataclass(frozen=True)
+class OwnedWireRecord:
+    value: OwnedWireText | None
+    nested: tuple[OwnedWireText, ...]
+
+
+def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
+    value = OwnedWireRecord(OwnedWireText("retained"), (OwnedWireText("nested"),))
+    encoded = {"value": "retained", "nested": ["nested"]}
+    assert FieldCodec.encode(value) == encoded
+    assert FieldCodec.decode(OwnedWireRecord, encoded) == value
+    assert FieldCodec.project(value, "status") == encoded
+    assert FieldCodec.value_schema(OwnedWireText) == {"type": "string"}
+    assert FieldCodec.decode(OwnedWireRecord, {**encoded, "value": None}).value is None
+    with pytest.raises(ValueError):
+        FieldCodec.decode(OwnedWireRecord, {**encoded, "value": 42})
+    with pytest.raises(TypeError):
+        FieldCodec.decode(OwnedWireText, object())
 
 
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():

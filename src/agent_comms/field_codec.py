@@ -24,6 +24,8 @@ from typing import (
 )
 
 from .declared_family import DeclaredFamily
+from .sealed import Sealed
+from .wire_value import WireValue
 
 T = TypeVar("T")
 
@@ -101,7 +103,7 @@ def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
 
 
-class FieldCodec:
+class FieldCodec(Sealed):
     """Family tags use their declared ``family_discriminator`` (default ``kind``); aliases
     use field(metadata={"wire_name": ...}).
 
@@ -113,10 +115,6 @@ class FieldCodec:
     Annotated field representations add scalar/capture behavior while retaining
     the single record codec and declaration-derived schema.
     """
-
-    def __init_subclass__(cls) -> None:
-        if cls.__module__ != __name__:
-            raise TypeError("FieldCodec has one implementation; declare a FieldRepresentation")
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -174,6 +172,8 @@ class FieldCodec:
         _, representation = cls._representation(annotation)
         if representation is not None and value is not None:
             return representation.encode(value)
+        if isinstance(value, WireValue):
+            return cls.encode(value.to_wire())
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
             result = (
@@ -285,6 +285,8 @@ class FieldCodec:
         }
         if annotation in primitive:
             return {"type": primitive[annotation]}
+        if isinstance(annotation, type) and issubclass(annotation, WireValue):
+            return annotation.wire_schema()
         if isinstance(annotation, type) and is_dataclass(annotation):
             return cls.record_schema(annotation)
         raise TypeError(f"No declared JSON schema for {annotation}")
@@ -299,6 +301,8 @@ class FieldCodec:
         _, representation = cls._representation(annotation)
         if representation is not None:
             return cls.encode(value, annotation)
+        if isinstance(value, WireValue):
+            return cls.encode(value)
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
             result = {
@@ -335,6 +339,9 @@ class FieldCodec:
         if target is Any:
             cls.encode(data)  # still require valid JSON data
             return data
+        if isinstance(target, type) and issubclass(target, WireValue):
+            cls.encode(data)  # Custom wire forms must still be JSON.
+            return target.from_wire(data)
         origin, args = get_origin(target), get_args(target)
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             if type(data) is not str:
