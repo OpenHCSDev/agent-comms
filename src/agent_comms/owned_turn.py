@@ -12,7 +12,7 @@ from acp import RequestError
 
 from . import backend
 from .channel_targets import is_channel_target
-from .goal_attempts import GoalAttemptError, LaunchPermit
+from .goal_attempts import LaunchPermit
 from .messages import Message
 from .owned_send_admission import OwnedSendAdmission
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
@@ -20,6 +20,7 @@ from .runtime import UNBOUND_CONTROLLER
 from .selected_summary_admission import SelectedSummaryAdmission
 from .store_files import _store_lock
 from .thread_identity import TurnId
+from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
     ContinuationGoalPermission,
     InactiveGoalPermission,
@@ -27,7 +28,6 @@ from .turn_goal_permission import (
 )
 from .turn_input_source import OwnerOriginalInput, RoutedOriginalInput
 from .turn_progress import TurnProgress
-from .turn_runner import _goal_attempt_unavailable
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
@@ -97,37 +97,16 @@ class OwnedTurn:
         if self.autonomous_goal and (self.goal is None or not self.goal.state.active):
             return
         if self.goal is not None and self.goal.state.active and not self.original_owner_input:
-            self.store = self.runner.goal_store
-            if (
-                self.store is None
-                and (self.runner.comms.root / "goal-private" / "goal_attempts.sqlite3").exists()
-            ):
-                self.store = self.runner.open_goal_store()
-            if self.store is None:
-                if self.autonomous_goal:
-                    return
-                raise _goal_attempt_unavailable()
-            self.admission = self.runner.comms.registry.snapshot().admission_generations[
-                self.thread_name
-            ]
-            with _store_lock(self.runner.comms._wire_lock_path):
-                self.generation = self.store.snapshot(self.goal.id)
-                if self.generation is None or not self.generation.lifecycle.ready:
-                    if self.autonomous_goal:
-                        return
-                    raise _goal_attempt_unavailable()
-                try:
-                    self.grant = self.runner.ready_goal_grant_locked(
-                        self.thread, self.admission, self.store, self.generation
-                    )
-                    self.reservation = self.store.reserve(
-                        self.goal.id, self.generation.number, ready_grant=self.grant
-                    )
-                    self.goal_permit = self.store.claim_launch(self.reservation)
-                except GoalAttemptError as error:
-                    if self.autonomous_goal:
-                        return
-                    raise _goal_attempt_unavailable() from error
+            self.goal_permit = TurnGoalAccount.reserve(
+                owner=self.thread,
+                comms=self.runner.comms,
+                store=self.runner.goal_store,
+                open_store=self.runner.open_goal_store,
+                ready_grant=self.runner.ready_goal_grant_locked,
+                autonomous=self.autonomous_goal,
+            )
+            if self.goal_permit is None:
+                return
         self.runner.sessions.bindings[self.session_id] = self.thread_name
         return True
 
@@ -271,6 +250,38 @@ class OwnedTurn:
             self.runner.inputs.turn_original_input_keys[self.session_id] = tuple(self.original_keys)
             self.runner.inputs.turn_input_text[self.session_id] = self.original_display or self.task
 
+        self.progress = TurnProgress(
+            comms=self.runner.comms,
+            sessions=self.runner.sessions,
+            inputs=self.runner.inputs,
+            effects=self.runner.effects,
+            runtime=self.runner.runtime,
+            emitted_errors=self.runner.emitted_errors,
+            session_id=self.session_id,
+            thread=self.thread,
+            turn_id=self.turn_id,
+            turn_lease=self.turn_lease,
+            routing=self.routing,
+            checkpoint=self.checkpoint,
+            task=self.task,
+            original_keys=self.original_keys,
+            accepted_input_id=self.accepted_input_id,
+            initial_display_text=self.initial_display_text,
+            finish_event=self.finish_event,
+            goals=TurnGoalAccount(
+                comms=self.runner.comms,
+                owner=self.thread,
+                turn=TurnId(self.turn_id),
+                lease=self.turn_lease,
+                admission=self.turn_admission,
+                permit=self.goal_permit,
+                open_store=self.runner.open_goal_store,
+                pending_origins=self.runner.pending_goal_origins,
+            ),
+            finish_stream=self.runner.finish_turn_stream,
+            sync_goals=self.runner.sync_goal_execution,
+        )
+
     async def prepare_native(self):
         await self.runner.effects._emit_event(
             self.session_id,
@@ -400,7 +411,7 @@ class OwnedTurn:
             await self.progress.consume(event)
 
     async def finish(self):
-        self.progress.finish_attempts()
+        self.progress.goals.finish(self.progress.terminal_ok)
         self.runner.emitted_errors.pop(self.session_id, None)
         self.thread_name = await self.runner.sessions.sync_identity(self.session_id)
         self.current_project = self.runner.comms.registry.require(self.thread_name).worktree
@@ -437,7 +448,6 @@ class OwnedTurn:
             return
         self.begin()
         self.prepare_prompt()
-        self.progress = TurnProgress(self)
         self.open_stream()
         try:
             await self.prepare_native()

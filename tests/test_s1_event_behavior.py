@@ -15,7 +15,6 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
-from agent_comms.turn_progress import TurnProgress
 from test_backend_native_lifecycle import native_backend as native_backend
 
 
@@ -133,7 +132,7 @@ async def owner_turn(comms, tmp_path):
     execution.begin()
     execution.prepare_prompt()
     execution.open_stream()
-    progress = execution.progress = TurnProgress(execution)
+    progress = execution.progress
     try:
         yield execution, progress
     finally:
@@ -297,7 +296,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
     execution.begin()
     execution.prepare_prompt()
     execution.open_stream()
-    progress = TurnProgress(execution)
+    progress = execution.progress
     waiting_owner(execution)
     try:
         records = await native.run("native acceptance")
