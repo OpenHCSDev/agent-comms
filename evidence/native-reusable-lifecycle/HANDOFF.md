@@ -1,4 +1,86 @@
-# S2/T4 reusable native lifecycle: ready for parent review
+# Review closure: ready on current main and #328
+
+**Production/test checkpoint:** `23e6c54289ab0a85ab621f35929e17e63e1b6b22`.
+Merged Dalton #328 (`1c7f53a7`) and current main/#329 (`da2b43d4`); PR325 targets
+main. Parent owns merge/install after the live testing quiet window. No CI wait.
+
+Reread both skills and the corrected **22:16** catalog, including IDEN-1/3,
+TIME-9 and IMPL-14's dominant-kind rule. Dalton's partial-identity finding was
+valid and is corrected:
+
+- **IDEN-1 / IDEN-3 / IMPL-5:** StateData and SessionStatsData inherit the one
+  external `NativeSessionSnapshot` declaration. It owns their shared optional
+  identity fields, known-component conflict behavior and complete identity
+  projection. Components derive from `fields(NativeSessionIdentity)`, with no
+  second roster. Attestation delegates to the snapshot instead of inspecting
+  its individual nullable fields. A missing/empty component says nothing;
+  complementary partial responses never synthesize a complete identity.
+- **TIME-8 / TIME-9 / BOUND-1:** external snapshots keep their actual partial wire
+  semantics. No codec subclass, internal parallel record, schema alias or
+  compatibility reader was introduced. The existing complete identity remains
+  non-nullable and validates its saved-session path.
+- Caller closure includes indexed `persistent_backends[...]` in the three stack
+  tests, in addition to all direct persistent/session consumers. Actual child
+  assertions use retained custody; post-compaction absence uses availability.
+  No remaining source/test access to the removed persistent child fields was
+  found by the explicit direct/indexed caller search.
+
+## Final affected evidence
+
+- `review325-observation.log`: **31 passed, 36.43s**. Twenty real-codec partial
+  snapshot cases, ten actual pinned-native observation cases, and one actual
+  native identity-attestation refusal. The native cases use local HTTP only.
+  Nine observation fault cases damage or withhold a response only after the real
+  native process has emitted it: wrong correlation/session/model, invalid window,
+  reserve/trigger/keep values, extra authority field, and deadline. Each retires
+  the exact child, preserves history, starts no original input and never retries.
+  Dalton's healthy/cancel/reopen/stale proof remains, with package refusal added.
+- `review325-attached.log`: **1 passed, 23.66s** on the committed final code.
+  Actual owner socket and attached ACP client: two inputs reuse the same child,
+  selected summary supplies one native commit, old child is reaped, a new explicit
+  input reopens compacted history. Exactly four local provider requests, one
+  compaction, required attached updates, durable commit, socket/child cleanup.
+- Ruff and diff check pass. Current-main R0/T4: **zero existing-measure increases**;
+  chain terms **-81**, no touched-file increase. StateData and SessionStatsData
+  each shrink two lines. Full current-main change: **445 production lines deleted,
+  515 added, executable lines +7**. See `review325-measurements.json`; earlier
+  checkpoint counts below are historical, not the final totals.
+
+The first receipt preserves my missing-newline test error and eleven baseline
+stack fixture failures; it is not green. A diagnostic fixture migration then
+passed attached compaction and reached channel warmup, exposing its obsolete
+pre-N/K bus-disposition assertion. That diagnostic migration was not retained.
+Only custody caller updates remain in channel/goal tests. **Dalton owns their
+canonical delivery/goal fixture and assertion migration** under the existing
+baseline assignment; concrete failures were posted on #325 and #328. There is
+no claim these eleven nodes pass and no compatibility restoration to make them
+pass. No remaining observed production failure in this review scope.
+
+## Deleted-test behavior mapping
+
+The removed `tests/test_selected_pi_route.py` exercised an unused Python dry-run
+API and also useful read-only observation contracts. Those are distinguished:
+
+| Deleted test | Current coverage / reason |
+| --- | --- |
+| `test_ready_is_non_authorizing_selected_existing_child_only` | #328 `test_actual_selected_observation_retirement_without_input_replay`: actual settings read on the same child, unchanged saved bytes/provider count. The removed `SelectedPiDryRun` boolean prohibition and unused preparation request shape have no remaining Python caller. |
+| `test_declined_is_bounded_not_a_paid_summary` | Actual `test_acp_selected_summary_handoff_uses_final_prompt_once[decline-*]` in the prior 33-pass receipt and durable decline/admission tests. The old dry-run `split_turn` refusal is obsolete: current combined-summary support includes the prefix. It is not restored. |
+| `test_malformed_or_overclaimed_ready_poison_old_child` | New actual `test_actual_selected_observation_untrusted_receipt_retires_without_replay` correlation/window/extra cases and `test_selected_observations_keep_strict_envelope_and_payload` at the codec boundary. Deleted dry-run route-status spelling has no current consumer. |
+| `test_timeout_is_unknown_without_replay_and_requires_reopen` | New actual observation timeout: native emits its response; held delivery expires; exact child reaped, unchanged history, retained strict-reopen requirement, no retry/input. |
+| `test_cancelled_sent_probe_poisoned_without_retry` | #328 actual observation cancellation, then a separately explicit new input through validated reopen; no original replay. |
+| `test_stale_child_refuses_before_rpc[revision/package]` | #328 actual retained revision refusal and added foreign-package refusal, with native history/provider/input counts preserved. |
+| `test_selected_settings_reads_once_without_starting_or_writing` | #328 healthy actual-native settings observation; existing actual custom model/project settings test in the prior 33-pass receipt. |
+| `test_selected_settings_uncertain_response_retires_child` | New actual-native session/model/window/reserve/trigger/keep/extra receipt fault cases. `contextTokens` was deleted from the protocol; strict unexpected-field rejection replaces any historical request/response use. |
+
+The deleted no-child `test_owner_summary_discards_idle_manager_before_external_native_write`
+is replaced by the **actual attached ACP compaction** case above and existing
+actual canonical manual compaction proof: the retained child is alive while
+selected summary is pending, retired by commit, and a new child reads the
+committed branch. No fabricated identity on an empty PersistentPiSession remains.
+
+---
+
+# S2/T4 reusable native lifecycle: earlier ready checkpoint
 
 **Code:** `a567b9fc3decf7bcef15eff77442221850b4a3cb`, draft #325, based on integrated
 #322 `fe76c50e`. Parent owns merge and live installation. No deployment/restart here.

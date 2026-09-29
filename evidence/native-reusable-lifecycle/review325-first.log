@@ -1,0 +1,2429 @@
+FFFFFFFFFFFFFFFFFFFF......................FFFFFFFFFFF                    [100%]
+=================================== FAILURES ===================================
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial0-False-get_state] _
+
+command = 'get_state', partial = {}, conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial0-False-get_session_stats] _
+
+command = 'get_session_stats', partial = {}, conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial1-False-get_state] _
+
+command = 'get_state', partial = {'sessionId': None, 'sessionFile': None}
+conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": null, "sessionFile": null}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial1-False-get_session_stats] _
+
+command = 'get_session_stats'
+partial = {'sessionId': None, 'sessionFile': None}, conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": null, "sessionFile": null}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial2-False-get_state] _
+
+command = 'get_state', partial = {'sessionId': '', 'sessionFile': ''}
+conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": "", "sessionFile": ""}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial2-False-get_session_stats] _
+
+command = 'get_session_stats', partial = {'sessionId': '', 'sessionFile': ''}
+conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": "", "sessionFile": ""}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial3-False-get_state] _
+
+command = 'get_state', partial = {'sessionId': 'selected'}, conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": "selected"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial3-False-get_session_stats] _
+
+command = 'get_session_stats', partial = {'sessionId': 'selected'}
+conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": "selected"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial4-False-get_state] _
+
+command = 'get_state', partial = {'sessionFile': '/selected.jsonl'}
+conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionFile": "/selected.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial4-False-get_session_stats] _
+
+command = 'get_session_stats', partial = {'sessionFile': '/selected.jsonl'}
+conflict = False
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionFile": "/selected.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial5-True-get_state] _
+
+command = 'get_state', partial = {'sessionId': 'foreign'}, conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": "foreign"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial5-True-get_session_stats] _
+
+command = 'get_session_stats', partial = {'sessionId': 'foreign'}
+conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": "foreign"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial6-True-get_state] _
+
+command = 'get_state', partial = {'sessionFile': '/foreign.jsonl'}
+conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionFile": "/foreign.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial6-True-get_session_stats] _
+
+command = 'get_session_stats', partial = {'sessionFile': '/foreign.jsonl'}
+conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionFile": "/foreign.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial7-True-get_state] _
+
+command = 'get_state', partial = {'sessionId': 'foreign', 'sessionFile': ''}
+conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": "foreign", "sessionFile": ""}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial7-True-get_session_stats] _
+
+command = 'get_session_stats'
+partial = {'sessionId': 'foreign', 'sessionFile': ''}, conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": "foreign", "sessionFile": ""}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial8-True-get_state] _
+
+command = 'get_state'
+partial = {'sessionId': None, 'sessionFile': '/foreign.jsonl'}, conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": null, "sessionFile": "/foreign.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_partial_native_snapshot_only_conflicts_on_known_components[partial8-True-get_session_stats] _
+
+command = 'get_session_stats'
+partial = {'sessionId': None, 'sessionFile': '/foreign.jsonl'}, conflict = True
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    @pytest.mark.parametrize(
+        "partial,conflict",
+        [
+            ({}, False),
+            ({"sessionId": None, "sessionFile": None}, False),
+            ({"sessionId": "", "sessionFile": ""}, False),
+            ({"sessionId": "selected"}, False),
+            ({"sessionFile": "/selected.jsonl"}, False),
+            ({"sessionId": "foreign"}, True),
+            ({"sessionFile": "/foreign.jsonl"}, True),
+            ({"sessionId": "foreign", "sessionFile": ""}, True),
+            ({"sessionId": None, "sessionFile": "/foreign.jsonl"}, True),
+        ],
+    )
+    def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
+        selected = StateData(session_id="selected", session_file="/selected.jsonl")
+>       observed = snapshot(command, partial)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": null, "sessionFile": "/foreign.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+____ test_complete_native_snapshot_uses_existing_identity_owner[get_state] _____
+
+command = 'get_state'
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    def test_complete_native_snapshot_uses_existing_identity_owner(command):
+>       observed = snapshot(command, {"sessionId": "selected", "sessionFile": "/selected.jsonl"})
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_state", "success": true, "data": {"sessionId": "selected", "sessionFile": "/selected.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+_ test_complete_native_snapshot_uses_existing_identity_owner[get_session_stats] _
+
+command = 'get_session_stats'
+
+    @pytest.mark.parametrize("command", ["get_state", "get_session_stats"])
+    def test_complete_native_snapshot_uses_existing_identity_owner(command):
+>       observed = snapshot(command, {"sessionId": "selected", "sessionFile": "/selected.jsonl"})
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_snapshot_identity.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_snapshot_identity.py:14: in snapshot
+    return PiRpcChannel.decode_record(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+raw = b'{"type": "response", "command": "get_session_stats", "success": true, "data": {"sessionId": "selected", "sessionFile": "/selected.jsonl"}}'
+strict = True, max_bytes = None
+
+    @staticmethod
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise ValueError("Native RPC record exceeds transport limit")
+        if strict and (not raw or not raw.endswith(b"\n")):
+>           raise ValueError("Native RPC record is incomplete")
+E           ValueError: Native RPC record is incomplete
+
+src/agent_comms/pi_rpc.py:64: ValueError
+__________ test_native_channel_input_receipt_and_revocation[deliver] ___________
+
+case = 'deliver'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea50a67b0>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea405ed50>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+___________ test_native_channel_input_receipt_and_revocation[batch] ____________
+
+case = 'batch'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea50046e0>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea405f9d0>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+____________ test_native_channel_input_receipt_and_revocation[goal] ____________
+
+case = 'goal'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea4103230>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea42f7a80>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+____________ test_native_channel_input_receipt_and_revocation[stop] ____________
+
+case = 'stop'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea40cd010>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea46208a0>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+___________ test_native_channel_input_receipt_and_revocation[reopen] ___________
+
+case = 'reopen'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea40ccde0>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea44ff410>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+___________ test_native_channel_input_receipt_and_revocation[steer] ____________
+
+case = 'steer'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea40cdd30>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea43b9bf0>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+___________ test_native_channel_input_receipt_and_revocation[rename] ___________
+
+case = 'rename'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea40cc910>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea43ba140>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+________ test_native_channel_input_receipt_and_revocation[batch_rename] ________
+
+case = 'batch_rename'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea43d44b0>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+>               await agent.new_session(str(project))
+
+tests/test_stack_channel_delivery.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea42c9c50>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+_________ test_native_goal_standby_then_exact_child_input[False-False] _________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea43d5470>
+restart = False, review_pending = False
+
+    @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
+    async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, review_pending):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires the prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-standby-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            failures = []
+            goal_id = None
+            pending_keys = []
+            offset = int(review_pending)
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    try:
+                        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                        requests.append(request)
+                        index = len(requests)
+                        assert index <= 4 + offset, "Standby must not schedule another provider turn"
+                        delta = {
+                            "content": (
+                                "Waiting for child." if index == 2 + offset else "Reviewed and done."
+                            )
+                        }
+                        finish = "stop"
+                        if index in {1 + offset, 3 + offset}:
+                            schema = next(
+                                t["function"]
+                                for t in request["tools"]
+                                if t["function"]["name"] == "comms_goal"
+                            )
+                            assert "standby" in schema["parameters"]["properties"]["status"]["enum"]
+                            arguments = {
+                                "goal_id": goal_id,
+                                "status": "standby" if index == 1 + offset else "completed",
+                                "progress": (
+                                    "Waiting for child"
+                                    if index == 1 + offset
+                                    else "Verified child report"
+                                ),
+                            }
+                            if index == 1 + offset:
+                                arguments["wait_for"] = ["@child"]
+                                if review_pending:
+                                    tool_messages = [
+                                        m for m in request["messages"] if m.get("role") == "tool"
+                                    ]
+                                    inspected = json.loads(tool_messages[-1]["content"])
+                                    assert inspected["messages"] == []
+                                    assert len(inspected["unresolved_inputs"]) == 9
+                                    projection = inspected["standby_review"]
+                                    assert len(projection["excluded_inputs"]) == 4
+                                    assert projection["reviewed_inputs"] == pending_keys
+                                    arguments["reviewed_inputs"] = projection["reviewed_inputs"]
+                            delta = {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": f"goal_{index}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_goal",
+                                            "arguments": json.dumps(arguments),
+                                        },
+                                    }
+                                ],
+                            }
+                            finish = "tool_calls"
+                        if review_pending and index == 1:
+                            delta = {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "inspect_inputs",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_inbox",
+                                            "arguments": json.dumps(
+                                                {
+                                                    "thread": "parent",
+                                                    "goal_id": goal_id,
+                                                    "wait_for": ["child"],
+                                                }
+                                            ),
+                                        },
+                                    }
+                                ],
+                            }
+                            finish = "tool_calls"
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/event-stream")
+                        self.end_headers()
+                        chunk = {
+                            "id": f"response-{index}",
+                            "object": "chat.completion.chunk",
+                            "created": 1,
+                            "model": "z-ai/glm-5.3-flash",
+                            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+                            "usage": {
+                                "prompt_tokens": 100,
+                                "completion_tokens": 10,
+                                "total_tokens": 110,
+                            },
+                        }
+                        self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                        self.wfile.flush()
+                    except Exception as error:
+                        failures.append(repr(error))
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+                "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+                "--extension",
+                str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            try:
+                project = root / "parent"
+                project.mkdir()
+>               await agent.new_session(str(project))
+
+tests/test_stack_goal_standby.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea42c9250>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+_________ test_native_goal_standby_then_exact_child_input[True-False] __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea43d73f0>
+restart = True, review_pending = False
+
+    @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
+    async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, review_pending):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires the prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-standby-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            failures = []
+            goal_id = None
+            pending_keys = []
+            offset = int(review_pending)
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    try:
+                        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                        requests.append(request)
+                        index = len(requests)
+                        assert index <= 4 + offset, "Standby must not schedule another provider turn"
+                        delta = {
+                            "content": (
+                                "Waiting for child." if index == 2 + offset else "Reviewed and done."
+                            )
+                        }
+                        finish = "stop"
+                        if index in {1 + offset, 3 + offset}:
+                            schema = next(
+                                t["function"]
+                                for t in request["tools"]
+                                if t["function"]["name"] == "comms_goal"
+                            )
+                            assert "standby" in schema["parameters"]["properties"]["status"]["enum"]
+                            arguments = {
+                                "goal_id": goal_id,
+                                "status": "standby" if index == 1 + offset else "completed",
+                                "progress": (
+                                    "Waiting for child"
+                                    if index == 1 + offset
+                                    else "Verified child report"
+                                ),
+                            }
+                            if index == 1 + offset:
+                                arguments["wait_for"] = ["@child"]
+                                if review_pending:
+                                    tool_messages = [
+                                        m for m in request["messages"] if m.get("role") == "tool"
+                                    ]
+                                    inspected = json.loads(tool_messages[-1]["content"])
+                                    assert inspected["messages"] == []
+                                    assert len(inspected["unresolved_inputs"]) == 9
+                                    projection = inspected["standby_review"]
+                                    assert len(projection["excluded_inputs"]) == 4
+                                    assert projection["reviewed_inputs"] == pending_keys
+                                    arguments["reviewed_inputs"] = projection["reviewed_inputs"]
+                            delta = {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": f"goal_{index}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_goal",
+                                            "arguments": json.dumps(arguments),
+                                        },
+                                    }
+                                ],
+                            }
+                            finish = "tool_calls"
+                        if review_pending and index == 1:
+                            delta = {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "inspect_inputs",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_inbox",
+                                            "arguments": json.dumps(
+                                                {
+                                                    "thread": "parent",
+                                                    "goal_id": goal_id,
+                                                    "wait_for": ["child"],
+                                                }
+                                            ),
+                                        },
+                                    }
+                                ],
+                            }
+                            finish = "tool_calls"
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/event-stream")
+                        self.end_headers()
+                        chunk = {
+                            "id": f"response-{index}",
+                            "object": "chat.completion.chunk",
+                            "created": 1,
+                            "model": "z-ai/glm-5.3-flash",
+                            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+                            "usage": {
+                                "prompt_tokens": 100,
+                                "completion_tokens": 10,
+                                "total_tokens": 110,
+                            },
+                        }
+                        self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                        self.wfile.flush()
+                    except Exception as error:
+                        failures.append(repr(error))
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+                "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+                "--extension",
+                str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            try:
+                project = root / "parent"
+                project.mkdir()
+>               await agent.new_session(str(project))
+
+tests/test_stack_goal_standby.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea4264320>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+__________ test_native_goal_standby_then_exact_child_input[True-True] __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efea40cc830>
+restart = True, review_pending = True
+
+    @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
+    async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, review_pending):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires the prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-standby-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            failures = []
+            goal_id = None
+            pending_keys = []
+            offset = int(review_pending)
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    try:
+                        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                        requests.append(request)
+                        index = len(requests)
+                        assert index <= 4 + offset, "Standby must not schedule another provider turn"
+                        delta = {
+                            "content": (
+                                "Waiting for child." if index == 2 + offset else "Reviewed and done."
+                            )
+                        }
+                        finish = "stop"
+                        if index in {1 + offset, 3 + offset}:
+                            schema = next(
+                                t["function"]
+                                for t in request["tools"]
+                                if t["function"]["name"] == "comms_goal"
+                            )
+                            assert "standby" in schema["parameters"]["properties"]["status"]["enum"]
+                            arguments = {
+                                "goal_id": goal_id,
+                                "status": "standby" if index == 1 + offset else "completed",
+                                "progress": (
+                                    "Waiting for child"
+                                    if index == 1 + offset
+                                    else "Verified child report"
+                                ),
+                            }
+                            if index == 1 + offset:
+                                arguments["wait_for"] = ["@child"]
+                                if review_pending:
+                                    tool_messages = [
+                                        m for m in request["messages"] if m.get("role") == "tool"
+                                    ]
+                                    inspected = json.loads(tool_messages[-1]["content"])
+                                    assert inspected["messages"] == []
+                                    assert len(inspected["unresolved_inputs"]) == 9
+                                    projection = inspected["standby_review"]
+                                    assert len(projection["excluded_inputs"]) == 4
+                                    assert projection["reviewed_inputs"] == pending_keys
+                                    arguments["reviewed_inputs"] = projection["reviewed_inputs"]
+                            delta = {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": f"goal_{index}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_goal",
+                                            "arguments": json.dumps(arguments),
+                                        },
+                                    }
+                                ],
+                            }
+                            finish = "tool_calls"
+                        if review_pending and index == 1:
+                            delta = {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "inspect_inputs",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "comms_inbox",
+                                            "arguments": json.dumps(
+                                                {
+                                                    "thread": "parent",
+                                                    "goal_id": goal_id,
+                                                    "wait_for": ["child"],
+                                                }
+                                            ),
+                                        },
+                                    }
+                                ],
+                            }
+                            finish = "tool_calls"
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/event-stream")
+                        self.end_headers()
+                        chunk = {
+                            "id": f"response-{index}",
+                            "object": "chat.completion.chunk",
+                            "created": 1,
+                            "model": "z-ai/glm-5.3-flash",
+                            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+                            "usage": {
+                                "prompt_tokens": 100,
+                                "completion_tokens": 10,
+                                "total_tokens": 110,
+                            },
+                        }
+                        self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                        self.wfile.flush()
+                    except Exception as error:
+                        failures.append(repr(error))
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            preload = root / "local-only.cjs"
+            preload.write_text(
+                "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
+                "const link=url instanceof Request?url.url:String(url);"
+                f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
+                "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "NODE_OPTIONS": f"--require={preload}",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+                "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+            }.items():
+                monkeypatch.setenv(key, value)
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+                "--extension",
+                str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
+            ]
+            comms = wire(root / "wire")
+            agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            try:
+                project = root / "parent"
+                project.mkdir()
+>               await agent.new_session(str(project))
+
+tests/test_stack_goal_standby.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7efea4265c70>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:486: PublicationActivationBlocked
+=========================== short test summary info ============================
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial0-False-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial0-False-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial1-False-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial1-False-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial2-False-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial2-False-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial3-False-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial3-False-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial4-False-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial4-False-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial5-True-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial5-True-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial6-True-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial6-True-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial7-True-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial7-True-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial8-True-get_state]
+FAILED tests/test_native_snapshot_identity.py::test_partial_native_snapshot_only_conflicts_on_known_components[partial8-True-get_session_stats]
+FAILED tests/test_native_snapshot_identity.py::test_complete_native_snapshot_uses_existing_identity_owner[get_state]
+FAILED tests/test_native_snapshot_identity.py::test_complete_native_snapshot_uses_existing_identity_owner[get_session_stats]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[deliver]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[batch]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[goal]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[stop]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[reopen]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[steer]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[rename]
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[batch_rename]
+FAILED tests/test_stack_goal_standby.py::test_native_goal_standby_then_exact_child_input[False-False]
+FAILED tests/test_stack_goal_standby.py::test_native_goal_standby_then_exact_child_input[True-False]
+FAILED tests/test_stack_goal_standby.py::test_native_goal_standby_then_exact_child_input[True-True]
+31 failed, 22 passed in 35.28s
