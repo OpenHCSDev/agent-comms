@@ -112,7 +112,7 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
         registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(saved)
     for read in (registry.live_owner_with_generation, registry.live_owner_with_admission):
-        with pytest.raises(RelationViolationError, match="unavailable"):
+        with pytest.raises(RelationViolationError, match="live owner turn admission is no longer current"):
             read("owner")
 
 

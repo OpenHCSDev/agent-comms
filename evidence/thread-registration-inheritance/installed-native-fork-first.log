@@ -1,0 +1,190 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, platformdirs-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_native_fork_first_input.py PARENT_NATIVE_RESULT Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
+PHYSICAL_PARENT_STATS SessionStatsData(session_id='775e884a7c4b4182b7154086ca76890b', session_file='/var/tmp/ac-sealed-test-cgeel55m/sessions/enrolled-775e884a7c4b4182b7154086ca76890b.jsonl', context_usage=PiContextUsage(tokens=7888, context_window=32768))
+PHYSICAL_PARENT_STATE StateData(session_id='775e884a7c4b4182b7154086ca76890b', session_file='/var/tmp/ac-sealed-test-cgeel55m/sessions/enrolled-775e884a7c4b4182b7154086ca76890b.jsonl', session_name=None, native_input_proof_capability='pi-native-input-v1-live-only', model=PiModel(provider='response-local', id='fixture', name='Local response fixture', context_window=32768), thinking_level='off', message_count=2, pending_message_count=0, is_streaming=False, is_compacting=False)
+ACTUAL_SELECTED_COMPACTION_DECISION PiCompactionDecision(reserve_tokens=2048, keep_recent_tokens=1024, enabled=True, trigger=False)
+TOKEN_BYTE_MISMATCH tokens 7888 effective_tokens 30720 serialized_context_bytes 32164 old_mixed_unit_budget 23040.0
+ACTUAL_WORKER_LOG 
+ACTUAL_RUNTIME_DEBUG 
+F
+
+=================================== FAILURES ===================================
+_ test_underbudget_physical_native_owner_answers_without_compaction[fork_owner] _
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fbab531d550>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fbab5320050>
+case = <test_native_fork_first_input.ForkOwnerCase object at 0x7fbab538fb60>
+
+    @pytest.mark.parametrize(
+        "case",
+        [member() for member in OwnerAdmissionCase.members_with(OwnerAdmissionCase)],
+        ids=lambda case: case.declared_name,
+    )
+    async def test_underbudget_physical_native_owner_answers_without_compaction(
+        native_backend, monkeypatch, case
+    ):
+        native = native_backend
+        # Select a normal bounded model before creating physical parent history.
+        config_path = native.config / "models.json"
+        config = json.loads(config_path.read_text())
+        config["providers"]["response-local"]["models"][0]["contextWindow"] = 32768
+        config_path.write_text(json.dumps(config))
+        (native.config / "settings.json").write_text(
+            json.dumps(
+                {
+                    "compaction": {"enabled": True, "reserveTokens": 2048, "keepRecentTokens": 1024},
+                    "retry": {"enabled": False, "maxRetries": 0},
+                }
+            )
+        )
+        parent_text = (
+            "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * case.repetitions
+        )
+        result = await native.run(parent_text)
+        print("PARENT_NATIVE_RESULT", repr(result[-1]), flush=True)
+        assert result[-1].ok, result[-1]
+        assert native.provider.posts == 1
+        retained = native.persistent.custody.idle()
+    
+        async def probe(command):
+            retained.child.proc.stdin.write(PiRpcChannel.command_bytes(command))
+            await retained.child.proc.stdin.drain()
+            raw = await retained.child.reader.readline()
+            response = PiRpcChannel.decode_record(raw, strict=True)
+            assert response.success
+            return response.data
+    
+        state = await probe(GetState(id="parent-state"))
+        stats = await probe(GetSessionStats(id="parent-stats"))
+        fraction = stats.context_usage.tokens / state.model.context_window
+        case.verify_fraction(fraction)
+        print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
+        assert state.model.context_window == 32768
+        print("PHYSICAL_PARENT_STATE", repr(state), flush=True)
+        decision = await read_selected_compaction_decision(
+            native.persistent,
+            session_file=str(native.session),
+            expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            provider=state.model.provider,
+            model_id=state.model.id,
+            context_window=state.model.context_window,
+        )
+        print("ACTUAL_SELECTED_COMPACTION_DECISION", repr(decision), flush=True)
+        assert decision.enabled
+        assert not decision.trigger
+        original = native.session.read_bytes()
+        source_rows = [json.loads(line) for line in original.splitlines()]
+        selected_messages = [row["message"] for row in source_rows if row["type"] == "message"]
+        serialized_bytes = len(
+            json.dumps(selected_messages, ensure_ascii=False, separators=(",", ":")).encode()
+        )
+        effective_tokens = state.model.context_window - decision.reserve_tokens
+        old_mixed_unit_budget = effective_tokens * 0.75
+        assert stats.context_usage.tokens < effective_tokens
+        assert serialized_bytes > old_mixed_unit_budget
+        print(
+            "TOKEN_BYTE_MISMATCH",
+            "tokens",
+            stats.context_usage.tokens,
+            "effective_tokens",
+            effective_tokens,
+            "serialized_context_bytes",
+            serialized_bytes,
+            "old_mixed_unit_budget",
+            old_mixed_unit_budget,
+            flush=True,
+        )
+    
+        native.provider.text = "FIRST_OWNER_ANSWER"
+        await native.persistent.close()
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+        monkeypatch.setenv(
+            "AGENT_COMMS_AGENT_ARGS", "--offline --no-extensions --no-skills --no-context-files"
+        )
+        monkeypatch.setenv(
+            "PATH", str(Path(os.sys.executable).parent) + os.pathsep + os.environ["PATH"]
+        )
+        debug_log = native.project / "runtime-debug.log"
+        monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
+        comms = Comms(native.root)
+        comms.threads.register(
+            Thread(
+                "physical-parent",
+                frozenset(),
+                str(native.project),
+                session_file=str(native.session),
+                model="response-local/fixture",
+                thinking_level="off",
+            )
+        )
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
+        comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+        attachment = CommsClient(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=package,
+            private_nk_wire_root_id=root_id,
+        )
+        facts = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                facts.extend(decode_updates(kwargs["update"].get("_meta")))
+    
+        attachment.on_connect(Client())
+        child = None
+        launch = DetachedProcess.launch
+        worker_log = native.project / "worker.log"
+        output = worker_log.open("wb")
+    
+        def logged_launch(*args, **kwargs):
+            return launch(*args, output=output, **kwargs)
+    
+        monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
+        first_send_started = time.monotonic()
+        try:
+>           child = await case.create(comms)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_native_fork_first_input.py:227: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_fork_first_input.py:76: in create
+    return await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.artifacts/installed/lib/python3.14/site-packages/agent_comms/thread_management.py:546: in fork
+    return self._fork_unlocked(spec, resolved_bin)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/installed/lib/python3.14/site-packages/agent_comms/thread_management.py:583: in _fork_unlocked
+    owned = self.owners._launch_owner_unlocked(
+.artifacts/installed/lib/python3.14/site-packages/agent_comms/owner_lifecycle.py:327: in _launch_owner_unlocked
+    DetachedProcess.launch(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (('/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/bin/python', '-m', 'agent_comms.worker'),)
+kwargs = {'env': {'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...encoding='UTF-8'>, 'before_start': <function OwnerLifecycle._launch_owner_unlocked.<locals>.reserve at 0x7fbab50afc10>}
+
+    def logged_launch(*args, **kwargs):
+>       return launch(*args, output=output, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: agent_comms.child_process.DetachedProcess.launch() got multiple values for keyword argument 'output'
+
+tests/test_native_fork_first_input.py:222: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_native_fork_first_input.py::test_underbudget_physical_native_owner_answers_without_compaction[fork_owner]
+============================== 1 failed in 5.05s ===============================
