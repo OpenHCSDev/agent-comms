@@ -17,10 +17,11 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination import ExecutionOrigin, WakeAssignment
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import MutationStore
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex

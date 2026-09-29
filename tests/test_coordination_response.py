@@ -18,7 +18,6 @@ from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttemp
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination import ExecutionOrigin
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import (
     LiveResponseOwner,
@@ -36,6 +35,7 @@ from agent_comms.coordination_store import (
     StaleRevision,
     prepare_fence_token,
 )
+from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse

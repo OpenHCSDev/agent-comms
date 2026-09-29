@@ -10,6 +10,11 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.coordination_tables.publications import (
+    PublicationIntents,
+    canonical_publication_key,
+)
+
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     HumanOrigin,
@@ -29,8 +34,8 @@ from .envelope_claim_transitions import (
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
-    HumanInitialUnknownError,
     HumanAdmissionBlockedError,
+    HumanInitialUnknownError,
     RelationViolationError,
     UnregisteredThreadError,
 )
@@ -44,7 +49,7 @@ from .store_files import (
 )
 
 if TYPE_CHECKING:
-    from .coordination import PublicationIntents
+
     from .registration import Registration
 
 from .catalog_store import ChannelCatalog
@@ -487,8 +492,8 @@ class Publisher:
         self, intent: PublicationIntents, *, registry_snapshot: RegistrySnapshot | None = None
     ) -> Message:
         """Internal append with bus lock; a supplied registry snapshot stays locked."""
+
         from .audience_manifest import MAX_WIRE_SEQ
-        from .coordination import canonical_publication_key
 
         if self._private_response_writes is not True:
             raise RelationViolationError("Private response publication is disabled.")

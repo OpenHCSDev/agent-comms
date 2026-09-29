@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .coordination import ExecutionRecord, Participants, PrivateRuntimeSchema, WakeAssignment
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.executions import ExecutionRecord
+from agent_comms.coordination_tables.participants import Participants
+from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+
 from .typed_table import Column, TypedTable
 
 

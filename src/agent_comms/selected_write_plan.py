@@ -22,9 +22,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
 
+from agent_comms.coordination_tables.assignments import WakeAssignment
+
 from .bus_publication import stable_thread_lookup
 from .comms import Comms
-from .coordination import WakeAssignment
 from .coordination_cohort import sealed_cohort_assignments
 from .coordination_store import IdentityConflict, MutationStore
 from .envelope_claim_transitions import ExistingFileClaim

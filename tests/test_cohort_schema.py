@@ -11,7 +11,8 @@ from threading import Barrier
 import pytest
 
 from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.coordination import COORDINATION_SCHEMA_VERSION, SchemaVersionError
+from agent_comms.coordination_errors import SchemaVersionError
+from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.coordination_store import MutationStore
 
 ROOT = "a" * 32

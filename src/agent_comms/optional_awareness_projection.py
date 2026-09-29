@@ -15,17 +15,18 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_schema import (
+    COORDINATION_SCHEMA_VERSION,
+    COORDINATION_SNAPSHOT_VERSION,
+)
+from agent_comms.coordination_tables.assignments import WakeAssignment
+
 from .bus_publication import CommittedInitial, stable_thread_lookup
 from .cohort_schema import (
     COHORT_SCHEMA_VERSION,
     assert_cohort_schema,
     assert_optional_awareness_schema,
-)
-from .coordination import (
-    COORDINATION_SCHEMA_VERSION,
-    COORDINATION_SNAPSHOT_VERSION,
-    CoordinationError,
-    WakeAssignment,
 )
 from .coordination_cohort import _receipt_matches
 from .errors import RelationViolationError

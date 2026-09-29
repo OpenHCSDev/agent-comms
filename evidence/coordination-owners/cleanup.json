@@ -1,0 +1,18 @@
+{
+  "removed_owned_disposable_directories": [
+    ".scratch",
+    ".venv",
+    ".test-coordination",
+    ".test-owner-authority",
+    ".test-native-coordination",
+    ".test-derived-sql",
+    ".test-final-import-boundary",
+    ".test-baseline-cohort",
+    ".test-native-coordination-main",
+    ".test-coordination-fixed",
+    ".test-coordination-main",
+    ".test-cohort-fix",
+    ".test-coordination-final"
+  ],
+  "retained": "Persistent worktree, committed source and evidence/coordination-owners receipts. All test-managed native owners exited through their finally cleanup."
+}

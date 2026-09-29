@@ -56,7 +56,7 @@ def violations(tree):
 def test_production_sqlite_access_uses_the_declared_boundary():
     from agent_comms import typed_table
 
-    owner = Path(typed_table.__file__).resolve()
+    owner = SOURCE / Path(typed_table.__file__).name
     failures = {
         str(path.relative_to(SOURCE)): violations(ast.parse(path.read_text()))
         for path in SOURCE.rglob("*.py")
