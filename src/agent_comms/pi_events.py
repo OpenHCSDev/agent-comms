@@ -895,6 +895,8 @@ class AgentCommsCompactionProgress(PiEvent):
     id: str
     operation_id: str = field(metadata={"wire_name": "operationId"})
     sequence: int
+    text: str
+    source: events.CompactionSourceProgress | None
 
     def __post_init__(self):
         if type(self.sequence) is not int or self.sequence < 1:

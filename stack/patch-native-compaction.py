@@ -23,8 +23,21 @@ PROMPT_END = "    promptText += basePrompt;\n"
 SUMMARY_RETURN = (
     "    return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
 )
+SUMMARY_PRODUCE = """    const produce = async () => streamFn
+        ? (await streamFn(model, context, requestOptions)).result()
+        : completeSimple(model, context, requestOptions);
+"""
+STREAM_SUMMARY = """    const produce = async () => {
+        const stream = await (streamFn ?? streamSimple)(model, context, requestOptions);
+        for await (const event of stream) {
+            if (event.type === 'text_delta') callbacks?.onSummaryText?.(event.delta, callbacks?.sourceProgress);
+        }
+        return stream.result();
+    };
+"""
 REPORT_SUMMARY = (
     "    const response = await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);\n"
+    "    if (response.stopReason === 'stop') CompactionPolicy.fromEnvironment().requireSummaryOutput(response.usage, requestOptions.maxTokens);\n"
     "    callbacks?.onSummaryResponse?.(response.usage, response.stopReason === 'stop' && contentText(response.content).trim() ? callbacks?.sourceProgress : undefined);\n"
     "    if (response.stopReason === 'stop' && !contentText(response.content).trim()) "
     "throw new Error('Compaction returned an empty summary');\n"
@@ -198,6 +211,7 @@ def main(path: Path) -> None:
         or source.count(TOKEN_LIMIT) != 1
         or source.count(PROMPT_END) != 1
         or source.count(SUMMARY_RETURN) != 1
+        or source.count(SUMMARY_PRODUCE) != 1
         or source.count(TURN_PREFIX_PROMPT) != 1
         or source.count(CUT_SEARCH) != 1
         or source.count(COMPACT_PREPARATION) != 1
@@ -214,6 +228,9 @@ def main(path: Path) -> None:
         + BOUNDED,
     )
     source = source.replace(SUMMARY_RETURN, REPORT_SUMMARY, 1)
+    source = source.replace(SUMMARY_PRODUCE, STREAM_SUMMARY, 1)
+    source = source.replace('import { completeSimple } from "@earendil-works/pi-ai/compat";',
+                            'import { streamSimple } from "@earendil-works/pi-ai/compat";', 1)
     source = source.replace(
         TOKEN_LIMIT,
         "const maxTokens = boundedChunk "

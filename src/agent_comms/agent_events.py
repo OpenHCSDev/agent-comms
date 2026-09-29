@@ -7,7 +7,7 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
@@ -165,8 +165,23 @@ class CompactionStart(CompactionEvent):
 
 
 @dataclass(frozen=True)
+class CompactionSourceProgress:
+    source_bytes_done: int = field(metadata={"wire_name": "sourceBytesDone"})
+    source_bytes_total: int = field(metadata={"wire_name": "sourceBytesTotal"})
+    summary_phase: str = field(metadata={"wire_name": "summaryPhase"})
+
+    def __post_init__(self):
+        if not 0 <= self.source_bytes_done <= self.source_bytes_total:
+            raise ValueError("Invalid compaction source progress")
+
+
+@dataclass(frozen=True)
 class CompactionSummaryProgress(CompactionEvent):
-    """The selected native model is alive; no chunk completion is implied."""
+    """Provisional provider text and source work, never a committed summary."""
+
+    operation_id: str = ""
+    text: str = ""
+    source: CompactionSourceProgress | None = None
 
     @property
     def phase(self) -> str:

@@ -197,8 +197,9 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
     const inFlight = new Set();
     let uncertainStream = false;
     let progressSequence = 0;
-    const progress = () => output({ type: "agent_comms_compaction_progress",
-        id: request.id, operationId: request.operationId, sequence: ++progressSequence });
+    const progress = (text = "", source = null) => output({ type: "agent_comms_compaction_progress",
+        id: request.id, operationId: request.operationId, sequence: ++progressSequence,
+        text, source });
     const selectedStream = (model, context, options) => {
         // No standalone getAuth: actual selected streamFn resolves auth on use.
         if (slot.controller.signal.aborted ||
@@ -219,6 +220,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             inFlight.add(unjoined);
             return { result: () => unjoined };
         }
+        const visible = new AssistantMessageEventStream();
         const response = (async () => {
             let source;
             try { source = await stream; }
@@ -256,8 +258,9 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
                     if (type?.startsWith("toolcall_")) invalidEvent = true;
                     if (invalidEvent && !slot.controller.signal.aborted) slot.controller.abort();
                     if (!invalidEvent && (type === "start" || type === "done" ||
-                        type === "error" || ((type === "text_delta" || type === "thinking_delta") && event.delta.length)))
+                        type === "error" || (type === "thinking_delta" && event.delta.length)))
                         progress();
+                    if (!invalidEvent && type !== "done" && type !== "error") visible.push(event);
                     if (type === "done" || type === "error") terminal = event;
                 }
             } catch (error) {
@@ -291,9 +294,6 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             if (!value || value.stopReason !== "stop" || !acSummaryValidUsage(value.usage) ||
                 !Array.isArray(value.content) || value.content.some(block => block.type === "toolCall"))
                 throw new Error("Invalid native summary response");
-            if (!Number.isSafeInteger(options.maxTokens) || options.maxTokens < 1 ||
-                value.usage.output > options.maxTokens)
-                throw new Error("Summary provider exceeded the native plan output token budget");
             return value;
         })();
         inFlight.add(response);
@@ -301,14 +301,19 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             if (!(error instanceof AcSummaryProviderFailure)) uncertainStream = true;
             inFlight.delete(response);
         });
-        return { result: () => response };
+        void response.then(() => visible.end(), () => visible.end());
+        return { result: () => response,
+            [Symbol.asyncIterator]: () => visible[Symbol.asyncIterator]() };
     };
     try {
         // Native Pi generation only: never call AgentSession.compact(), which
         // aborts turns, emits hooks and appends session entries.
         const result = await compact(preparation, binding.model, undefined, undefined,
             request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
-            { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, undefined, undefined);
+            { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
+            { onSummaryText: progress,
+              onSummaryStart: source => progress("", source),
+              onSummaryResponse: (_usage, source) => progress("", source) }, undefined);
         await Promise.allSettled([...inFlight]);
         if (slot.controller.signal.aborted ||
             !acSummaryCurrent(session, request, binding) || !acSummaryValidResult(result, request))

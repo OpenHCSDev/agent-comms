@@ -21,9 +21,9 @@ const runtime = await pi.ModelRuntime.create({
 });
 const provider = process.env.PR95_CUSTOM_MODEL ? 'custom-local' : 'local-owner';
 const modelId = process.env.PR95_CUSTOM_MODEL ? 'custom-model' : 'selected';
-await runtime.setRuntimeApiKey(provider, 'offline-fixture');
+await runtime.setRuntimeApiKey(provider, process.env.PR95_RUNTIME_API_KEY ?? 'offline-fixture');
 const model = runtime.getModel(provider, modelId);
-const settings = pi.SettingsManager.inMemory({
+const settings = pi.SettingsManager.inMemory(process.env.PR95_NATIVE_SETTINGS ? JSON.parse(process.env.PR95_NATIVE_SETTINGS) : {
   compaction: { enabled: process.env.PR95_EFFECTIVE_DISABLED !== '1', reserveTokens: process.env.PR95_DECLINE_SUMMARY === "1" && process.env.PR95_COLD_DECLINE !== "1" ? 0 : 1000, keepRecentTokens: 10 },
   retry: { enabled: false },
 });

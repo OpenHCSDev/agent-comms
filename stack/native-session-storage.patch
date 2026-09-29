@@ -1422,7 +1422,7 @@
 @@ -7,36 +8,13 @@
   */
  import { contentText, retryAssistantCall, uuidv7 } from "@earendil-works/pi-ai";
- import { completeSimple } from "@earendil-works/pi-ai/compat";
+ import { streamSimple } from "@earendil-works/pi-ai/compat";
 -import { convertToLlm } from "../messages.js";
 -import { buildSessionContext, sessionEntryToContextMessages, } from "../session-manager.js";
 +import { convertToLlm, createCompactionSummaryMessage } from "../messages.js";
