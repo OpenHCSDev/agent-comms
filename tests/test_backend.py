@@ -346,8 +346,7 @@ for line in sys.stdin:
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
-        assert owner not in backend._ACTIVE_PROCESSES
-        assert owner not in backend._ACTIVE_STEERING
+        assert owner not in backend.TurnSession.active
 
     async def test_caller_cancellation_reaps_backend_and_steering_task(self, tmp_path):
         stub = _stub(
@@ -369,17 +368,16 @@ for line in sys.stdin:
                 pass
 
         turn = asyncio.create_task(consume())
-        while turn not in backend._ACTIVE_PROCESSES or not queue.empty():
+        while turn not in backend.TurnSession.active or not queue.empty():
             await asyncio.sleep(0)
-        process = backend._ACTIVE_PROCESSES[turn]
+        process = backend.TurnSession.active[turn].native.proc
 
         turn.cancel()
         with pytest.raises(asyncio.CancelledError):
             await turn
 
         assert process.returncode is not None
-        assert turn not in backend._ACTIVE_PROCESSES
-        assert turn not in backend._ACTIVE_STEERING
+        assert turn not in backend.TurnSession.active
         # Once written, this input may already have crossed a provider boundary.
         # It must not be silently requeued after caller cancellation.
         assert queue.empty()
@@ -942,7 +940,7 @@ for line in sys.stdin:
         assert all(e.model == "test/A" for e in info)
         assert events[-1].reason_code == "session_identity_uncertain"
         assert events[-1].ok is False
-        assert owner not in backend._ACTIVE_PROCESSES
+        assert owner not in backend.TurnSession.active
 
     async def test_in_flight_branch_mutation_evidence_invalidates_usage(self, tmp_path):
         identity = {"sessionId": "first", "sessionFile": "/tmp/first.jsonl"}
@@ -1074,7 +1072,7 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
             ):
                 events.append(event)
                 if isinstance(event, ae.Chunk) and event.text == "A-before ":
-                    process = backend._ACTIVE_PROCESSES[owner]
+                    process = backend.TurnSession.active[owner].native.proc
                     queue.put_nowait({"type": mutation_type, "id": "rejected-1"})
                 if isinstance(event, ae.Error) and event.reason_code == "steering_command_rejected":
                     release.touch()
@@ -1091,8 +1089,7 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         assert [type(e) for e in events].count(ae.Done) == 1
         assert events[-1] == ae.Done(ok=True, text="A-before A-after", diagnostic={"exit_code": 0})
         assert process is not None and process.returncode == 0
-        assert owner not in backend._ACTIVE_PROCESSES
-        assert owner not in backend._ACTIVE_STEERING
+        assert owner not in backend.TurnSession.active
 
     @pytest.mark.parametrize(
         "evidence", ["get_state", "get_session_stats", "fork_failed", "clone_cancelled"]
@@ -1171,7 +1168,7 @@ for line in sys.stdin:
         ):
             events.append(event)
             if isinstance(event, ae.Chunk):
-                process = backend._ACTIVE_PROCESSES[owner]
+                process = backend.TurnSession.active[owner].native.proc
                 queue.put_nowait(pending)
         assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before"]
         assert [e.context_used for e in events if isinstance(e, ae.AgentInfo)] == [None, 250, None]
@@ -1199,7 +1196,7 @@ for line in sys.stdin:
             reason_code="session_identity_uncertain",
             diagnostic={"exit_code": process.returncode},
         )
-        assert owner not in backend._ACTIVE_PROCESSES
+        assert owner not in backend.TurnSession.active
         assert [type(e) for e in events].count(ae.InputStarted) == 0
         if abort_pipe_closed:
             assert abort_write_failed
@@ -2046,8 +2043,7 @@ while True: time.sleep(0.1)
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
-        assert not backend._ACTIVE_PROCESSES
-        assert not backend._ACTIVE_STDERR_TASKS
+        assert not backend.TurnSession.active
 
     @pytest.mark.parametrize("exit_mode", ["malformed", "early_close"])
     async def test_steering_forwarder_is_reaped_on_invalid_rpc_or_early_close(
@@ -2095,9 +2091,7 @@ while True: time.sleep(0.1)
             assert pid_file.exists()
             with pytest.raises(ProcessLookupError):
                 os.kill(int(pid_file.read_text()), 0)
-            assert not backend._ACTIVE_STEERING
-            assert not backend._ACTIVE_PROCESSES
-            assert not backend._ACTIVE_STDERR_TASKS
+            assert not backend.TurnSession.active
             await asyncio.sleep(0)
             assert not [
                 task
@@ -2205,8 +2199,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
         else:
             assert events[-1].reason_code == expected_reason
             assert "original only" not in events[-1].text
-        assert not backend._ACTIVE_PROCESSES
-        assert not backend._ACTIVE_STEERING
+        assert not backend.TurnSession.active
 
     async def test_inbox_queued_at_settled_but_not_dispatched_is_not_success(self, tmp_path):
         stub = _stub(

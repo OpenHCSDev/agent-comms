@@ -477,8 +477,6 @@ class MessageStart(PiEvent):
     message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _ACTIVE_STEERING
-
         if self.message is not None and self.message.assistant:
             session.output.start_message()
         elif self.message is not None and self.message.user:
@@ -510,8 +508,6 @@ class MessageStart(PiEvent):
                     and (session.steering_task is None)
                 ):
                     session.steering_task = asyncio.create_task(session.inputs.forward(session))
-                    if session.owner is not None:
-                        _ACTIVE_STEERING[session.owner] = session.steering_task
             elif session.admission.started and (not session.inputs.uncertain):
                 session.matched, session.input_id = session.inputs.mark_started(session, self)
                 if session.matched:
