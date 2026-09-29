@@ -1,0 +1,81 @@
+{
+  "GodClassExcess": {
+    "GodClassExcess:src/agent_comms/acp.py::CommsAgent": {
+      "before": 76,
+      "after": 76
+    },
+    "GodClassExcess:src/agent_comms/attempt_store.py::AttemptStore": {
+      "before": 12,
+      "after": 12
+    },
+    "GodClassExcess:src/agent_comms/compaction_journal.py::CompactionJournal": {
+      "before": 243,
+      "after": 243
+    },
+    "GodClassExcess:src/agent_comms/coordinated_runtime.py::SelectedExecution": {
+      "before": 305,
+      "after": 305
+    },
+    "GodClassExcess:src/agent_comms/goal_attempts.py::GoalAttemptStore": {
+      "before": 281,
+      "after": 281
+    },
+    "GodClassExcess:src/agent_comms/history_views.py::HistoryViews": {
+      "before": 518,
+      "after": 518
+    },
+    "GodClassExcess:src/agent_comms/input_drain.py::InputDrain": {
+      "before": 96,
+      "after": 96
+    },
+    "GodClassExcess:src/agent_comms/message_bus.py::MessageBus": {
+      "before": 252,
+      "after": 252
+    },
+    "GodClassExcess:src/agent_comms/owner_compaction_commit.py::OwnerCompactionCommit": {
+      "before": 43,
+      "after": 43
+    },
+    "GodClassExcess:src/agent_comms/thread_management.py::ThreadManagement": {
+      "before": 61,
+      "after": 61
+    },
+    "GodClassExcess:src/agent_comms/turn_runner.py::TurnRunner": {
+      "before": 3,
+      "after": 3
+    },
+    "GodClassExcess:src/agent_comms/wire_log.py::WireLog": {
+      "before": 159,
+      "after": 159
+    }
+  },
+  "TypeIdentity": {
+    "TypeIdentity": {
+      "before": 6,
+      "after": 6
+    }
+  },
+  "LongBooleanChain": {},
+  "BooleanChainTerms": {},
+  "ForeignAbsenceProbe": {
+    "ForeignAbsenceProbe:src/agent_comms/registry_document.py": {
+      "before": 3,
+      "after": 3
+    },
+    "ForeignAbsenceProbe:src/agent_comms/runtime.py": {
+      "before": 4,
+      "after": 3
+    },
+    "ForeignAbsenceProbe:src/agent_comms/threads.py": {
+      "before": 4,
+      "after": 4
+    }
+  },
+  "CodecSubclass": {},
+  "StringSubscript": {
+    "StringSubscript": {
+      "before": 14,
+      "after": 14
+    }
+  }
+}
