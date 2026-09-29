@@ -13,3 +13,11 @@ IDEN-5 / BOUND-2: historical assignments were consumed as new tail input because
 Actual isolated installed paired candidate: small saved source and 47,316,341-byte native SessionManager journal passed continuously open 31-second view, genuine fixture owner restart, actual ACP reconnect and first native input, no old live tail and no old model replay. Final physical A/B/A immediate-Enter/CPU journey in progress, not a default activation receipt. Current source verification: 27 passed, one unsupported source-case skip. The live user's bus, owners, history and uncertain inputs have not been changed.
 
 The native source, ACP process and UI are real. Only the localhost provider responses are controlled. Existing FieldCodec carries the composite cursor unchanged; no alternate protocol decoder or compatibility format. The selected installation must pair #420 with #207; parent owns integration and activation.
+
+## Final paired acceptance
+
+Exact paired installation passed with exit 0: 41,602,421-byte retained native journal; continuous 31-second open view; cold fixture owner restart and ACP reconnect; first new input; real fork to alpha; five physical A/B/A agent-tab selections with immediate Enter; then a fresh channel receipt and repeated handling updates. Exactly 11 expected localhost provider requests, no old input replay, no old tail append, no UI exception. Earlier 47,316,341-byte saved-source run also passed the continuous/reconnect/first-input boundary.
+
+Instrumented selection took 606–1540 ms and Enter-to-provider 4728–6080 ms; cProfile and current native/UI work are included, so this proves useful functionality, not the final latency target. Parent and #202 keep residual warm/CPU/turn-lifecycle scope moving independently. Final retained source, profile and logs are at `/home/ts/.cache/agent-scratch/toad-restored-inbound-chronology-20260929/candidate-switch-final`. No live bus or owners were changed; uncertain user inputs were never retried.
+
+Ready for parent review and paired #207 activation. Local source tests: 27 passed, one existing unsupported source-case skip. CI is deferred; final default entrypoint verification belongs to parent activation, not this isolated candidate receipt.
