@@ -43,8 +43,36 @@ identity. No writes to Boyle's files or worktree, no new shared table API needed
 Existing RegistryOwner.require_snapshot API is already on the base and its
 ongoing goal-sensitive capability remains compatible. AssignmentBinding only
 represents ENGAGED work, so awareness does not use it to admit passive decisions.
-Parent can integrate disjoint351/350. Confirmation of Boyle's scope update is
-still pending as of this receipt; no competing source has been integrated here.
+Parent can integrate disjoint351/350. Boyle confirmed withdrawal on351#issuecomment-5884778006. No competing
+source was integrated. He retains shared identity350, with API use coordinated
+on351#issuecomment-5884819114.
 
-Source implementation complete and reviewable in draft351. No installed or
-painted live-readiness claim; final integration/activation remains parent-owned.
+Implementation and bounded installed wire acceptance complete in draft351.
+No painted live-readiness claim; final integration/activation remains parent-owned.
+
+
+## Current-main noneditable acceptance
+
+Merged current main d4f09edf (348) into351 as6cc7fd4c; no source/awareness/helper
+changes or conflicts in that incoming integration. Built the complete wheel at
+6cc7fd4c offline and installed into an isolated owned environment using staged
+runtime dependency versions. Python isolated mode, no source PYTHONPATH.
+
+The SAME persisted-wire/SQLite passive/captured-owner/missing-proof journey
+passed on the first installed run: **1 passed0.50s**, projection9.152ms.
+The changed module matches the source commit, and every loaded agent_comms
+module resolved within the noneditable candidate. Receipts: installed-imports.json,
+installed-wire.log, installed-build.log, installed-setup.log; exact runner retained.
+No new matrix/provider/native process/UI assertion; parent retains live gate.
+
+After the test, no user-process command/cwd/executable/open-file references were
+found to the candidate or test root. Those two owned disposable paths were
+removed; source, wheel, logs and global native package remain preserved.
+Protected OS process details that could not be read are recorded in
+installed-cleanup.json rather than described as inspected.
+
+Shared350 API integration is explicit: use RegistryOwner.require_active_turn
+and WakeAssignment.source/Message.reference once350 lands. Those replace the
+remaining local active-turn/value-pair reads without parallel helpers. This
+checkpoint remains independently mergeable on current main with its existing
+RegistryOwner.require_snapshot contract.
