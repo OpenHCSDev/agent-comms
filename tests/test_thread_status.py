@@ -51,6 +51,13 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     view = ThreadView(thread, reopened.status("owner"), activity, None, 0)
     assert view.to_wire()["status"] == status.declared_name
     assert view.presentation.busy == status.active
+    visible = comms.views.thread_views()
+    individual = comms.views.thread_presentation("owner")
+    if visible:
+        assert individual == visible[0].presentation
+    else:
+        assert individual is None
+    assert comms.views.thread_presentation("missing") is None
 
 
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
