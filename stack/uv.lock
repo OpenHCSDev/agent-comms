@@ -46,7 +46,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=4510dddf737da3d445ba20d90c79f3dcb3f08b27" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=b4bdae1657a819dd943ed1fbd5a2b684c2683019" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=08ee5aac2943c59757242dedd9938c0b9ec3387b" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=c9743801c98dc570f82f82e25915ecce89800f4b" },
 ]
 
@@ -193,7 +193,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=b4bdae1657a819dd943ed1fbd5a2b684c2683019#b4bdae1657a819dd943ed1fbd5a2b684c2683019" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=08ee5aac2943c59757242dedd9938c0b9ec3387b#08ee5aac2943c59757242dedd9938c0b9ec3387b" }
 dependencies = [
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },

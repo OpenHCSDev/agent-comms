@@ -5,9 +5,11 @@ local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
 Latest installed pair: core4510dddf (289 registry race,287 nominal tools,
-280 wake visibility,283 proof decoding,284 framing), Toadb4bdae1 (132 paired tool
+280 wake visibility,283 proof decoding,284 framing), Toad08ee5aa (134 ready-message
+initialization fixing invisible retained native history,132 paired tool
 callers,128 attention,127 T4 and50 browser), Textualc9743801, native5fde.
-The immutable runtime-registry-tools-20260928 is live. Four idle owners restarted;
+The immutable runtime-history-ready-20260928 is live. Core owners retain4510dddf;
+the UI-only134 installation did not restart them. Earlier four idle owners restarted;
 no store reset, session loss or input replay. Restart the user's Toad to load the
 new imports. Combined local checks38 passed; installed native wake/restart and
 feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
@@ -26,6 +28,13 @@ ACP initialize/load attachments pass. Initial candidate caught a missed current
 Toad import;132 migrates it without aliases. First attachment harness hit its
 own asyncio line limit; reuse of the existing complete-record reader fixes the
 harness, and all four attachments pass. Failed outputs are retained honestly.
+User then reported native history hidden by the loading overlay. ACP attachment
+alone had not tested this boundary. Parent reproduced the actual retained PR95
+native view: history widgets existed, but AgentReady did not initialize its
+Textual Message base.134 replaces the misplaced presentation construction with
+super().__init__. Same installed live-session UI then reaches ready, mounts
+TranscriptHistory and removes loading; Agent.run completes without exception.
+No prompt or history mutation.134 merged and installed; restart existing Toad.
 
 ## Current shipping batch
 
