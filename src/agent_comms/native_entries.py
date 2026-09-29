@@ -7,6 +7,7 @@ import re
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
+from datetime import datetime
 from typing import Any, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
@@ -115,6 +116,23 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
         return None
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        """Project one journal clock onto every display part without inventing time.
+
+        Pi owns the external ISO8601 field. Decode it once here, before splitting
+        into message/tool/routing events; ACP consumers receive Unix seconds.
+        Missing or invalid external time leaves history readable but undated.
+        """
+        timestamp = None
+        if self.timestamp is not None:
+            try:
+                recorded = datetime.fromisoformat(self.timestamp)
+                if recorded.utcoffset() is not None:
+                    timestamp = recorded.timestamp()
+            except (ValueError, OverflowError):
+                pass
+        return [replace(event, timestamp=timestamp) for event in self._events(context)]
+
+    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return []
 
     @property
@@ -182,7 +200,7 @@ class MessageEntry(NativeEntry):
         ):
             raise ValueError("Native recovery requires an unambiguous failed terminal")
 
-    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self.message.transcript_events(context)
 
     @property
@@ -194,7 +212,7 @@ class MessageEntry(NativeEntry):
 class CompactionEntry(NativeEntry):
     summary: str = ""
 
-    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         text = self.summary.strip()
         return [NoticeTranscript(f"## Context compacted\n\n{text}")] if text else []
 
