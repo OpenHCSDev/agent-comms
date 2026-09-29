@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import DetachedProcess, ProcessIdentity
+from .diagnostics import owner_process_output
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -322,12 +323,14 @@ class OwnerLifecycle:
             owned = replace(thread, process_identity=identity, active_turn=None)
             self.registry.register(owned, new_owner=True)
 
-        DetachedProcess.launch(
-            (sys.executable, "-m", "agent_comms.worker"),
-            env=env,
-            cwd=thread.worktree,
-            before_start=reserve,
-        )
+        with owner_process_output(self.root, thread) as output:
+            DetachedProcess.launch(
+                (sys.executable, "-m", "agent_comms.worker"),
+                env=env,
+                cwd=thread.worktree,
+                output=output,
+                before_start=reserve,
+            )
         assert owned is not None
         return owned
 

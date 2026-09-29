@@ -5,14 +5,37 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from .store_files import _atomic_write_text
 
 if TYPE_CHECKING:
     from .pi_events import Response
+    from .threads import Thread
+
+
+@contextmanager
+def owner_process_output(root: Path, thread: Thread):
+    """Retain a detached owner's startup traceback in the existing diagnostics.
+
+    The child inherits this descriptor; closing the parent's copy does not end
+    capture. Each launch gets its own private file, without changing thread or
+    input disposition state.
+    """
+    from .bus_publication import stable_thread_lookup
+
+    directory = root / "diagnostics"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    path = directory / f"owner-{stable_thread_lookup(thread.created_at)}-{uuid4().hex}.log"
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w") as output:
+        output.write(f"Owner launch: {thread.name}\n")
+        output.flush()
+        yield output
 
 
 class FailureReason(StrEnum):
