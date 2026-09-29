@@ -18,9 +18,9 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.field_codec import projected
 from agent_comms.owner_fence import AttemptAuthority
-from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.typed_table import (
     Column,
     ForeignKey,

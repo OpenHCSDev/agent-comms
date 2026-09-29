@@ -14,6 +14,7 @@ from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .mentions import ThreadMention
+from .message_reference import MessageReference
 from .response_policy import (
     CollectivePolicy,
     DirectPolicy,
@@ -68,6 +69,10 @@ class Message:
     claim_transition: ClaimTransition | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_order": 11}
     )
+
+    @property
+    def reference(self) -> MessageReference:
+        return MessageReference(self.seq, self.message_id)
 
     def __post_init__(self) -> None:
         if not self.sender:

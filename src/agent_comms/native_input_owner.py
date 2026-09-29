@@ -36,9 +36,11 @@ class RegistryOwner:
         turn = self.thread.active_turn
         if turn is None:
             raise StaleFence("registry owner has no active turn")
-        if not self.thread.role.executable or not turn.owned_by(
-            self.thread.pid, self.admission_generation
-        ):
+        try:
+            self.thread.role.require_executable()
+        except RelationViolationError as error:
+            raise StaleFence("registry owner is not executable") from error
+        if not turn.owned_by(self.thread.pid, self.admission_generation):
             raise StaleFence("registry owner turn witness is invalid")
         return turn
 
@@ -92,12 +94,13 @@ class ParticipantOwner:
 
     def require(self, store: Coordination, lookup: str) -> None:
         participant = store.participants.get(lookup)
-        if (
-            not participant.committed
-            or participant.owner_thread != self.thread.name
-            or participant.participant_generation != self.generation
-            or stable_thread_lookup(self.thread.created_at) != lookup
-            or self.thread.process_identity != ProcessIdentity.capture(os.getpid())
-            or not self.thread.role.executable
-        ):
+        if not participant.committed or participant.owner_identity != self.coordinator_identity(lookup):
+            raise StaleFence("cohort participant generation changed")
+        if stable_thread_lookup(self.thread.created_at) != lookup:
+            raise StaleFence("cohort participant incarnation changed")
+        if self.thread.process_identity != ProcessIdentity.capture(os.getpid()):
             raise StaleFence("cohort recipient is not this live registered owner generation")
+        try:
+            self.thread.role.require_executable()
+        except RelationViolationError as error:
+            raise StaleFence("cohort participant is not executable") from error

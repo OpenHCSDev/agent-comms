@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import sqlite3
 import time
 from collections.abc import Iterator
@@ -51,13 +50,13 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
+from agent_comms.native_admission_rules import RegistryAdmissionCheck
+from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _store_lock
-from agent_comms.native_input_owner import RegistryOwner
-from agent_comms.native_admission_rules import RegistryAdmissionCheck
 from agent_comms.typed_table import (
     Column,
     SQLiteForeignKeys,
@@ -109,10 +108,10 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
     without_rowid = True
 
     def matches(self, wire_root_id: str, fence: OwnerFence) -> bool:
-        return (self.wire_root_id, self.owner_generation, self.attempt_ordinal) == (
-            wire_root_id,
-            fence.owner_generation,
-            fence.attempt_ordinal,
+        return self == PublicationAppendDispatches(
+            execution_id=fence.execution_id, wire_root_id=wire_root_id,
+            owner_generation=fence.owner_generation, attempt_ordinal=fence.attempt_ordinal,
+            dispatched_at_ms=self.dispatched_at_ms,
         )
 
 
@@ -127,6 +126,16 @@ class SelectedResponseRoute(TypedRow):
     policy_version: str
     recipient_lookup: str
     canonical_thread: str
+
+    def require_source(self, initial, assignment: WakeAssignment) -> None:
+        expected = SelectedResponseRoute(
+            initial.message.message_id, initial.message.target,
+            initial.audience.wire_envelope_digest, initial.audience.digest,
+            initial.decisions_digest, assignment.resolver_version,
+            assignment.policy_version, assignment.recipient_lookup, assignment.recipient,
+        )
+        if self != expected:
+            raise IdentityConflict("response sealed route differs from committed source")
 
 
 def _response_schema() -> dict[str, str]:
@@ -279,27 +288,19 @@ def _require_cohort_assignments(
             )
             if type(decision) is WakeDecision
         }
-        if (
-            initial.wire_root_id != wire_root_id
-            or assignment.message_id != initial.message.message_id
-            or receipts[0]
-            != SelectedResponseRoute(
-                initial.message.message_id,
-                initial.message.target,
-                initial.audience.wire_envelope_digest,
-                initial.audience.digest,
-                initial.decisions_digest,
-                assignment.resolver_version,
-                assignment.policy_version,
-                assignment.recipient_lookup,
-                assignment.recipient,
-            )
-            or assignment.recipient_lookup not in selected
-            or derive_exact_reply_target(initial.message) != snapshot.execution.exact_target
-            or assignment.lifecycle.exact_target != snapshot.execution.exact_target
-            or not (assignment.lifecycle.completed if terminal else assignment.lifecycle.engaged)
-        ):
+        if initial.wire_root_id != wire_root_id or assignment.source != initial.message.reference:
+            raise IdentityConflict("response claim conflicts with original bus source")
+        receipts[0].require_source(initial, assignment)
+        if assignment.recipient_lookup not in selected:
+            raise IdentityConflict("response recipient was not selected by the original source")
+        engagement = (
+            assignment.lifecycle.require_completion() if terminal
+            else assignment.lifecycle.require_engagement()
+        )
+        target = snapshot.execution.exact_target
+        if engagement.exact_target != target or derive_exact_reply_target(initial.message) != target:
             raise IdentityConflict("response claim conflicts with original selected bus route")
+
 
 
 def _require_final_owner(
@@ -323,28 +324,6 @@ def _require_final_owner(
         raise RecoveryBlocked("response requires final model/death evidence and exact wire route")
     _require_cohort_assignments(store, bus, snapshot, wire_root_id)
     return snapshot
-
-
-def _intent_matches_request(
-    intent: PublicationIntents,
-    *,
-    execution_id: str,
-    sender: str,
-    target: str,
-    payload: str,
-    kind: MessageType,
-    notice: bool,
-    timestamp: float | None,
-) -> bool:
-    return (
-        intent.execution_id == execution_id
-        and intent.sender == sender
-        and intent.exact_target == target
-        and intent.payload == payload
-        and intent.message_type is kind
-        and intent.notice is notice
-        and (timestamp is None or intent.timestamp == timestamp)
-    )
 
 
 def prepare_fenced_response(
@@ -387,15 +366,13 @@ def prepare_fenced_response(
                 if (
                     snapshot.obligation is None
                     or not snapshot.obligation.lifecycle.publishing
-                    or not _intent_matches_request(
-                        existing,
-                        execution_id=execution.execution_id,
-                        sender=execution.owner_thread,
-                        target=execution.exact_target,
-                        payload=payload,
-                        kind=message_type,
-                        notice=notice,
-                        timestamp=timestamp,
+                    or not existing.matches_request(
+                        execution.execution_id,
+                        Message(
+                            execution.owner_thread, execution.exact_target, payload, message_type,
+                            timestamp=existing.timestamp if timestamp is None else timestamp,
+                            notice=notice,
+                        ),
                     )
                 ):
                     raise IdentityConflict("prepared response envelope conflicts")
@@ -457,10 +434,7 @@ def _terminal_replay(
         raise StaleFence("finished response has no frozen publication evidence")
     _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=True)
     matched, _, _ = bus.log._keyed_receipt_unlocked(snapshot.publication_intent)
-    if matched is None or (
-        matched.message_id != snapshot.publication_receipt.message_id
-        or matched.seq != snapshot.publication_receipt.seq
-    ):
+    if matched is None or matched.reference != snapshot.publication_receipt.reference:
         raise PublicationUncertain("published SQL receipt has no exact durable bus row")
     return AlreadyApplied(snapshot)
 

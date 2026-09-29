@@ -53,7 +53,7 @@ from agent_comms.obligation_states import (
     PendingResponse,
     SilentResponse,
 )
-from agent_comms.owner_fence import OwnerFence, _digest
+from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
 from agent_comms.recovery_states import RecoveryCondition

@@ -20,6 +20,8 @@ from .channel_targets import BuiltinChannel
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordination_cohort import _receipt_matches
+from .coordination_errors import StaleFence
+from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
     ClaimConflict,
     ClaimOwner,
@@ -30,8 +32,6 @@ from .envelope_claim_transitions import (
 from .errors import RelationViolationError
 from .messages import Message, MessageType
 from .native_input_owner import RegistryOwner
-from .coordination_tables.participants import OwnerGenerations
-from .coordination_errors import StaleFence
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import _store_lock
 from .threads import Thread
@@ -76,7 +76,7 @@ def _verify_selected_wake_state(
         turn = registry_owner.require_active_turn()
     except StaleFence as error:
         raise IdentityConflict("Wake source or owner turn does not match") from error
-    if initial.message.message_id != admission.source_message_id:
+    if initial.message.reference != admission.source:
         raise IdentityConflict("Wake source message changed")
     if stable_thread_lookup(owner.created_at) != admission.recipient_lookup:
         raise IdentityConflict("Wake recipient incarnation changed")

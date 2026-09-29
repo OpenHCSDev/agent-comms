@@ -17,6 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from .errors import RelationViolationError
+from .message_reference import MessageReference
 
 
 class ClaimTransitionError(ValueError):
@@ -124,8 +125,7 @@ class AssignmentBinding:
     assignment_id: str
     revision: int
     recipient_lookup: str
-    source_seq: int
-    source_message_id: str
+    source: MessageReference
     execution_id: str
 
 
@@ -151,8 +151,12 @@ class WakeAdmission:
     def binding(self) -> AssignmentBinding:
         return AssignmentBinding(
             self.wake_assignment_id, self.wake_revision, self.recipient_lookup,
-            self.source_seq, self.source_message_id, self.execution_id,
+            self.source, self.execution_id,
         )
+
+    @property
+    def source(self) -> MessageReference:
+        return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
         for label, value, size in (
