@@ -18,7 +18,7 @@ from agent_comms import native_pi, native_prompt_send
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination_errors import StaleFence
+from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
@@ -137,7 +137,12 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
                 yield
                 observed.append(_held(root))
 
-        return write(fd, payload, scope, cancelled, deadline)
+        result = write(fd, payload, scope, cancelled, deadline)
+        # The same production admission cannot write twice even after all locks
+        # are released. Its UNKNOWN journal reservation survives the first send.
+        with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
+            pytest.fail("one-use native admission reopened")
+        return result
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
@@ -501,7 +506,9 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
             assert os.read(read_fd, 100) == b"one prompt\n"
             assert not store.session._connection.in_transaction
             assert (
-                store.session._connection.execute("SELECT generation FROM owner_generations").fetchone()[0]
+                store.session._connection.execute(
+                    "SELECT generation FROM owner_generations"
+                ).fetchone()[0]
                 == 1
             )
         finally:

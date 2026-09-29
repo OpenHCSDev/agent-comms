@@ -49,7 +49,12 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
+from agent_comms.native_pi import (
+    NativeContextProof,
+    NativePiUnavailable,
+    NativeTurnResult,
+    _fresh_selected_revision,
+)
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.publisher import Publisher
 from agent_comms.registration import Registration
@@ -357,7 +362,9 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
             == 3
         )
         assert (
-            store.session._connection.execute("SELECT count(*) FROM cohort_delivery_receipts").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT count(*) FROM cohort_delivery_receipts"
+            ).fetchone()[0]
             == 2
         )
     assert not (root / "read_markers.json").exists()
@@ -516,7 +523,7 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
         selected = kwargs["fresh_selected"]
         assert selected is not None and selected.selected_thinking_level == "high"
         selected.verify_prewrite()  # Before any fake raw prompt reservation/write.
-        witnessed.append(runtime._fresh_selected_revision(selected))
+        witnessed.append(_fresh_selected_revision(selected))
         assert kwargs["session_file"] == selected.path
         return await runner(*args, **kwargs)
 
@@ -837,7 +844,10 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             )
             == ()
         )  # A selected pending claim has not accepted model input.
-        with store.session.transaction(), pytest.raises(IdentityConflict, match="committed snapshot"):
+        with (
+            store.session.transaction(),
+            pytest.raises(IdentityConflict, match="committed snapshot"),
+        ):
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
@@ -1362,7 +1372,9 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     assert len(comms.bus.dm_history("sender", "beta")) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store.session._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT count(*) FROM native_runtime_input"
+            ).fetchone()[0]
             == 0
         )
 
@@ -1410,8 +1422,12 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         assert len(comms.bus.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        inputs = store.session._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()
-        intents = store.session._connection.execute("SELECT count(*) FROM publication_intents").fetchone()
+        inputs = store.session._connection.execute(
+            "SELECT count(*) FROM native_runtime_input"
+        ).fetchone()
+        intents = store.session._connection.execute(
+            "SELECT count(*) FROM publication_intents"
+        ).fetchone()
         assert (inputs[0], intents[0]) == ((0, 0) if mutation == "stop_then_heartbeat" else (1, 1))
 
 
@@ -1510,7 +1526,9 @@ async def test_owner_stop_before_response_boundary_never_appends(
         ).run()
     assert len(comms.bus.dm_history("sender", "beta")) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        receipts = store.session._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()
+        receipts = store.session._connection.execute(
+            "SELECT count(*) FROM publication_receipts"
+        ).fetchone()
         dispatched = store.session._connection.execute(
             "SELECT count(*) FROM publication_append_dispatches"
         ).fetchone()
@@ -1709,7 +1727,9 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
             == 0
         )
         assert (
-            store.session._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT count(*) FROM publication_receipts"
+            ).fetchone()[0]
             == 0
         )
         obligation = store.session._connection.execute("SELECT state FROM obligations").fetchone()
@@ -1735,7 +1755,9 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     assert comms.registry.require("beta").active_turn == original
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store.session._connection.execute("SELECT count(*) FROM native_runtime_input").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT count(*) FROM native_runtime_input"
+            ).fetchone()[0]
             == 0
         )
         assert (
@@ -1777,7 +1799,10 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
             "SELECT stage,session_id FROM native_runtime_input"
         ).fetchone()
         assert tuple(row) == ("full", None)
-        assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == "failed"
+        assert (
+            store.session._connection.execute("SELECT state FROM obligations").fetchone()[0]
+            == "failed"
+        )
 
 
 def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: Path) -> None:

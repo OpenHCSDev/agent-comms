@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from dataclasses import dataclass
 
@@ -12,54 +11,26 @@ from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .historical_native_inputs import HistoricalNativeInput
 from .message_bus import MessageBus
+from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .registry_document import RegistrySnapshot
-from .threads import Thread
 
 
 @dataclass(frozen=True)
-class CursorOwner:
+class CursorOwner(RegistryOwner):
     """A captured identity, never an admission permit until rechecked under locks."""
 
     wire_root_id: str
-    thread: Thread
     generation: int
-    admission_generation: int
 
     @property
     def lookup(self) -> str:
         return stable_thread_lookup(self.thread.created_at)
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
-        actual = registry.threads.get(self.thread.name)
-        status = registry.statuses.get(self.thread.name)
-        if (
-            bus.log._private_marker_unlocked().root_id != self.wire_root_id
-            or actual is None
-            or status is None
-            or not status.active
-            or actual.pid != os.getpid()
-            or registry.admission_generations.get(self.thread.name) != self.admission_generation
-            or (
-                actual.name,
-                actual.created_at,
-                actual.pid,
-                actual.role,
-                actual.worktree,
-                actual.active_turn,
-                actual.goal,
-            )
-            != (
-                self.thread.name,
-                self.thread.created_at,
-                self.thread.pid,
-                self.thread.role,
-                self.thread.worktree,
-                self.thread.active_turn,
-                self.thread.goal,
-            )
-        ):
+        if bus.log._private_marker_unlocked().root_id != self.wire_root_id:
             raise StaleFence(reason)
+        self.require_snapshot(registry, reason)
 
     def require_participant(self, store: Coordination, reason: str) -> None:
         assert_native_runtime_schema(store.session._connection)

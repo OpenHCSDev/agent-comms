@@ -7,7 +7,6 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 
 from __future__ import annotations
 
-import os
 import sqlite3
 
 from .bus_publication import stable_thread_lookup
@@ -18,6 +17,7 @@ from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
 from .message_bus import MessageBus
+from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from .threads import Thread
@@ -54,7 +54,10 @@ class NativeSourceCursor:
         ):
             raise ValueError("current cursor requires exact coordinator and owner identities")
         identity = CursorOwner(
-            self.wire_root_id, owner, owner_generation, owner_admission_generation
+            wire_root_id=self.wire_root_id,
+            thread=owner,
+            generation=owner_generation,
+            admission_generation=owner_admission_generation,
         )
         sources = self._coverage(identity.lookup)
         witness = sources.witness()
@@ -141,26 +144,23 @@ class NativeSourceCursor:
 
     def read(self, *, owner_name: str) -> CurrentNativeCursor | None:
         with _response_boundary(self.bus, blocking=False) as registry:
-            actual = registry.threads.get(owner_name)
-            status = registry.statuses.get(owner_name)
-            admission = registry.admission_generations.get(owner_name)
-            if (
-                self.bus.log._private_marker_unlocked().root_id != self.wire_root_id
-                or actual is None
-                or status is None
-                or not status.active
-                or actual.pid != os.getpid()
-                or admission is None
-            ):
-                raise StaleFence("current native cursor has no matching live owner")
+            reason = "current native cursor has no matching live owner"
+            if self.bus.log._private_marker_unlocked().root_id != self.wire_root_id:
+                raise StaleFence(reason)
+            captured = RegistryOwner.capture(registry, owner_name, reason)
             with self.store.session.read():
                 db = self.store.session._connection
                 assert_native_runtime_schema(db)
-                person = self.store.participants.get(stable_thread_lookup(actual.created_at))
+                person = self.store.participants.get(
+                    stable_thread_lookup(captured.thread.created_at)
+                )
                 if not person.committed or person.owner_thread != owner_name:
                     raise StaleFence("current native cursor recipient is not committed")
                 identity = CursorOwner(
-                    self.wire_root_id, actual, person.participant_generation, admission
+                    wire_root_id=self.wire_root_id,
+                    thread=captured.thread,
+                    generation=person.participant_generation,
+                    admission_generation=captured.admission_generation,
                 )
                 cursor = identity.cursor(db)
                 if cursor is not None:
