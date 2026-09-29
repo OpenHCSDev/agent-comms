@@ -6,6 +6,55 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ## Current urgent fixes and shipping batch
 
+### Latest verified checkpoint, 2026-09-29
+
+- NOW LIVE runtime-refactor-checkpoint-20260929: core1dbb318d (353/354/355),
+  Toad16cfcb18 (162/165), unchanged Textual1738/native d396. All five launchers
+  and nine idle workers activated; full native user journey, actual checkbox
+  filtering and physical input-history/draft journey pass. Fresh9 ACP loads and
+  actual default saved-wire UI plus recovered-fork13phrasepaint pass after
+  activation. READYgeneration11; settings/history retained, zero active turns
+  interrupted, store reset or input replay. Earlier checkpoints below historical.
+  Restart Toad to load this UI. Warm160/163 and startup intermittency remain open.
+
+- LIVE runtime-context-observation-20260929: corea01927ed, Toad83d1d2c8,
+  Textual1738/native d396. Five launchers aligned; nine idle owners restored
+  with settings/history retained and zero active interruptions or input replay.
+  Fresh nine ACP loads, actual default saved-data navigation/history paint and
+  full installed native user journey pass. Actual native compaction start,
+  selected-summary progress and successful end are physically painted.
+- Fork first-input reliability remains OPEN. A private canonical fork of the
+  recovered 41MB saved child timed out GetState after13s before prompt dispatch;
+  original user sessions were untouched, durable input NotSent. A new isolated
+  attempt on identical installed versions then completed the real configured
+  Sol/high reply and actual UI paint in18.56s, exactly one prompt/reply. Direct
+  native GetState with copied config and managed project completes1.56s. This is
+  an intermittent failure, not a verified production fix. Wegener owns startup
+  diagnosis; Carver owns misleading Unknown feedback and missing timeout stderr.
+- Warm-body/velocity/End checkpoint160 remains in progress; Dalton163's actual
+  rendered-body geometry/paint failure is sent directly to Tesla. No warm-cache
+  readiness claim from editor retention alone. CI and final50ms target deferred.
+- Reviewed/merged shipping batch: core354 selected dispatch,353 goal failure,
+  355 typing-annotation ratchet; Toad162 transcript filtering,165 input history.
+  These follow-up changes are merged, not yet installed in the live default.
+
+### Earlier checkpoint receipts (historical)
+
+- LIVE identity/MCP checkpoint: runtime-identity-mcp-20260929 selects
+  core95a792db/Toad510716/Textual1738/native d396. Nine idle owners (including
+  recovered fork) restored with their settings/history preserved; no active
+  interruption, input replay or store reset. Fresh9 ACP loads pass. Actual
+  default normal-App channel/participant/recent-return journey passes; recovered
+  fork visibly paints13 inherited phrases. Full installed native continuous
+  journey and real MCP button/PTY/ledger/cancellation journey pass exit0.
+- Next paired feature checkpoint: core349 MERGEDa01927ed, Toad152 MERGED81e2befd
+  and155 MERGEDfbda093b. Existing AgentProcess now owns lifecycle/session
+  admission; duplicate process supervisors and nullable context projections are
+  deleted. The existing native→ACP compaction event family publishes genuine
+  selected-model summarization and outcome-owned completion. Final merged paired
+  runtime-context-observation-20260929 is staged for installed phase/user journey
+  checks and affected live attachment; it is not yet the default installation.
+
 - LIVE checkpoint2026-09-29: paired runtime-workspace-navigation-20260929 selects
   core77c2, merged Toad15651fdf, Textual1738/native d396. Five launchers and the
   default route aligned; eight idle owners restored with all settings/history
@@ -19,16 +68,27 @@ No feature is complete merely because a draft exists or a PR was merged.
   Full body/mount reuse and final50ms latency stay Tesla follow-up; CI deferred.
   Original/round2/S14/T4/T9 remaining deletion scopes stay active below.
 
-- New live defect: fresh fork opening for openhcs-pr159-viewer-bind-owner fails
-  ACP attachment with missing owner socket. Registered PID is dead, Running
-  status and no native session; startup cause not yet established. Carver owns
-  the production startup/open repair; Dalton extends the existing continuous
-  journey to immediate fork opening before the first answer. No user input replay
-  or speculative owner restart. Already verified navigation checkpoint stays live.
+- Recovered live fork: openhcs-pr159-viewer-bind-owner was an older fork whose
+  creation omitted native history. The original fork point is not retained.
+  Canonical recovery created a new snapshot from the CURRENT parent and bound
+  the empty child, preserving model/thinking/worktree and sending no prompt or
+  replay. The installed normal App now visibly paints13 inherited phrases with
+  Ready/no attachment or delivery error. This does not prove a first provider
+  answer on that exact user thread. Reopen its tab to attach to the recovered
+  worker. Core352 startup-output diagnostics and Toad159/161 physical immediate
+  fork opening tests are merged. No compaction/history format fallback added.
+
+- Next paired installation stages merged core350/351/352 and Toad158/159/161
+  (core95a792db/Toad510716/Textual1738/native d396). S14 identity/admission and
+  optional-awareness closure delete205+194 production lines;352 deletes8;
+  Toad158 deletes350. These are gross deletions, not net line reduction.
+  Default launchers still use the verified navigation checkpoint above; only
+  the recovered child uses the separate immutable owner-startup slot. Parent
+  owns final continuous native and MCP user journeys and next quiet activation.
 
 - User-confirmed remaining rendering scope: agent-tab return clears warm rendered
   history while IRC remains warm. Tesla owns retained body/mount reuse in the
-  follow-up, with actual A/B/A identity/work/reader/editor checks. Also implement
+  follow-up160, with actual A/B/A identity/work/reader/editor checks. Also implement
   authorized velocity/direction-adaptive history lookahead in the same existing
   viewport/preparation owners: grow for fast scroll, shrink on slow/idle, cancel
   obsolete work, bound resources and verify actual fast/reverse/idle paint. End
