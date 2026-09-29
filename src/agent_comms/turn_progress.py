@@ -128,13 +128,14 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def report_failure(self, error: Exception) -> None:
         """Attempt existing ACP error publication once without hiding the original fault."""
-        if self.failure_reported or self.session_id in self.emitted_errors:
+        prior = self.emitted_errors.get(self.session_id)
+        if self.failure_reported and prior is None:
             return
         self.failure_reported = True
         try:
             await self.effects._emit_event(
                 self.session_id,
-                events.Error(str(error)),
+                events.Error(prior.detail if prior is not None else str(error)),
                 turn_id=self.turn_id,
                 route=self.routing.reply,
             )

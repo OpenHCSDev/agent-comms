@@ -1,0 +1,8 @@
+{
+  "deleted_inactive_owned_install": "/home/ts/.local/share/agent-comms/runtime-owner-startup-20260929",
+  "running_references": [],
+  "bytes_reclaimed": 71265072,
+  "deleted_completed_one_use_operator": true,
+  "current_runtime_changed": false,
+  "worktrees_deleted": []
+}
