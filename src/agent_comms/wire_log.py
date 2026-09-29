@@ -17,7 +17,6 @@ from agent_comms.coordination_tables.publications import (
 )
 
 from .bus_publication import (
-    PRIVATE_WIRE_FIELD,
     CommittedDelivery,
     has_private_wire_fields,
     unique_wire_object,
@@ -508,26 +507,9 @@ class WireLog:
                             os.close(directory_fd)
                         verify_private_bus_checkpoint_unlocked(self, private_marker)
                         return
-                    while line := stream.readline(8 * 1024 * 1024 + 1):
-                        if len(line) > 8 * 1024 * 1024 or not line.endswith(b"\n"):
-                            raise RelationViolationError("Incomplete or oversized claim bus row.")
-                        try:
-                            row = json.loads(line, object_pairs_hook=unique_wire_object)
-                        except (ValueError, UnicodeError) as error:
-                            raise RelationViolationError("Malformed claim bus row.") from error
-                        if not isinstance(row, dict):
-                            raise RelationViolationError("Claim bus row must be an object.")
-                        if "claim_transition" in row:
-                            try:
-                                public = Message.from_wire(row).to_wire()
-                            except (KeyError, TypeError, ValueError, AttributeError) as error:
-                                raise RelationViolationError("Malformed claim envelope.") from error
-                            if {
-                                key: value
-                                for key, value in row.items()
-                                if key != PRIVATE_WIRE_FIELD
-                            } != public:
-                                raise RelationViolationError("Noncanonical claim envelope.")
+                    scan = WireScan(private_marker)
+                    while line := stream.readline(scan.max_row_bytes + 1):
+                        scan.read(line)
             directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
             try:
                 os.fsync(directory_fd)
