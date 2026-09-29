@@ -63,6 +63,11 @@ python3 "$stack_root/patch-native-model-config.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
 python3 "$stack_root/patch-native-adaptive-settings.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+completion_api=node_modules/@earendil-works/pi-ai/dist/api
+cp -- "$stack_root/native-context-budget.mjs" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/agent-comms-context-budget.js"
+python3 "$stack_root/patch-native-context-budget.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/openai-completions.js"
 rpc=dist/modes/rpc/rpc-mode.js
 python3 "$stack_root/patch-native-selected-compaction-summary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
