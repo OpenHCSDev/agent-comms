@@ -15,6 +15,8 @@ from .transcript_merge import EventMerge, StreamingMerge
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     routing: TurnRouting | None = None
+    # Original journal event time in Unix seconds; None is unrecorded, never now.
+    timestamp: float | None = None
 
     @property
     def text_size(self) -> int:
