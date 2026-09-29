@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from .channel_input_batch import InputBatch
 from .messages import Message
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
@@ -51,17 +52,58 @@ class TurnInputSource(ABC):
         return False
 
 
+class InputDependency(ABC):
+    @abstractmethod
+    def current(self, wait: GoalWait | None) -> bool: ...
+
+    @abstractmethod
+    def allows(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool: ...
+
+    @abstractmethod
+    def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool: ...
+
+
+class NoInputDependency(InputDependency):
+    def current(self, wait: GoalWait | None) -> bool:
+        return True
+
+    def allows(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        return wait is None
+
+    def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class CapturedInputDependency(InputDependency):
+    wait_id: str
+    origins: tuple[Message, ...]
+
+    def current(self, wait: GoalWait | None) -> bool:
+        return wait is not None and wait.wait_id == self.wait_id
+
+    def allows(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        return wait is None or (
+            self.current(wait) and any(wait.matches(origin, registry) for origin in self.origins)
+        )
+
+    def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
+        return wait is None or comms.goals.consume_goal_wait(canonical, wait.wait_id)
+
+
 @dataclass(frozen=True, kw_only=True)
 class OriginalTurnInput(TurnInputSource):
     prompt: str
     original_display: str | None
     origins: tuple[Message, ...]
-    direct_origins: tuple[Message, ...]
-    dependency_wait_id: str | None
-    channel_batch: bool
+    dependency: InputDependency
+    batch: InputBatch
 
     def valid_keys(self, text: str) -> bool:
-        return super().valid_keys(text) or (self.channel_batch and text == self.prompt)
+        return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
+
+    def compaction_key(self, session_file: str | None) -> str | None:
+        return None
 
     def selected_admission(self, inputs: InputDrain, session_id: str):
         return inputs.selected_summary_admissions.get(session_id)
@@ -70,24 +112,23 @@ class OriginalTurnInput(TurnInputSource):
         return self.original_display
 
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
-        return (
-            wait is None
-            or self.dependency_wait_id is None
-            or comms.goals.consume_goal_wait(canonical, wait.wait_id)
-        )
+        return self.dependency.consume(comms, canonical, wait)
 
     def dependency_current(self, wait: GoalWait | None) -> bool:
-        return self.dependency_wait_id is None or (
-            wait is not None and wait.wait_id == self.dependency_wait_id
-        )
+        return self.dependency.current(wait)
 
 
-class OwnerOriginalInput(OriginalTurnInput):
+class DirectInput(TurnInputSource):
     def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
         return True
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
         return True
+
+
+class OwnerOriginalInput(OriginalTurnInput, DirectInput):
+    def compaction_key(self, session_file: str | None) -> str | None:
+        return self.keys[0] if session_file is not None and len(self.keys) == 1 else None
 
 
 class RoutedInput(TurnInputSource):
@@ -102,19 +143,9 @@ class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
     pass
 
 
-@dataclass(frozen=True, kw_only=True)
-class DependencyOriginalInput(OriginalTurnInput):
-    dependency_wait_id: str
-
+class DependencyOriginalInput(OriginalTurnInput, DirectInput):
     def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
-        return wait is None or (
-            wait.wait_id == self.dependency_wait_id
-            and any(wait.matches(origin, registry) for origin in self.direct_origins)
-        )
-
-    def allows_goal_input(self, goal: Goal | None) -> bool:
-        # dependency_current and allows_wait prove this exact dependency source.
-        return True
+        return self.dependency.allows(wait, registry)
 
 
 class FollowingTurnInput(TurnInputSource):
@@ -130,15 +161,8 @@ class FollowingTurnInput(TurnInputSource):
         )
 
 
-class AcceptedFollowingInput(FollowingTurnInput):
+class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
     bypasses_goal_permit = True
-
-    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
-        # QueuedInput.current separately proves the exact accepted wait.
-        return True
-
-    def allows_goal_input(self, goal: Goal | None) -> bool:
-        return True
 
 
 class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
