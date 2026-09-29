@@ -745,8 +745,7 @@ class GoalAttemptStore:
                 goal_id, expected_generation, ReservedGeneration(), attempt_id
             ) or (
                 attempt is None
-                or attempt.reservation.goal_id != goal_id
-                or attempt.reservation.generation != expected_generation
+                or attempt.reservation.identity != GoalAttemptIdentity(goal_id, expected_generation, attempt_id)
                 or not attempt.phase.may_become(FailedAttempt())
             ):
                 raise StaleAttemptError("Attempt changed before human abandonment decision.")
@@ -849,8 +848,7 @@ class GoalAttemptStore:
             attempt = self._attempt(conn, attempt_id)
             if (
                 attempt is None
-                or attempt.reservation.goal_id != goal_id
-                or attempt.reservation.generation != expected_generation
+                or attempt.reservation.identity != GoalAttemptIdentity(goal_id, expected_generation, attempt_id)
                 or not isinstance(attempt.phase, FailedAttempt)
             ):
                 raise UnresolvedAttemptError(
@@ -954,8 +952,7 @@ class GoalAttemptStore:
             attempt = self._attempt(conn, attempt_id) if attempt_id is not None else None
             if attempt_id is not None and (
                 attempt is None
-                or attempt.reservation.goal_id != goal_id
-                or attempt.reservation.generation != expected_generation
+                or attempt.reservation.identity != GoalAttemptIdentity(goal_id, expected_generation, attempt_id)
             ):
                 raise StaleAttemptError("Unresolved goal has no matching attempt to retire.")
             if not current.lifecycle.permits_retirement(attempt.phase if attempt else None):
