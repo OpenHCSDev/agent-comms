@@ -62,7 +62,7 @@ class NativeSendStage(ABC):
         """Fence this stage and reject any previous dispatch before inserting an ID."""
 
     @abstractmethod
-    def fail_terminal(self, store: Coordination) -> None:
+    def fail_terminal(self) -> None:
         """Settle only the stage's proved, reaped failure; never grant replay."""
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
@@ -195,7 +195,7 @@ class TriageNativeSend(NativeSendStage):
     execution_id: ClassVar[None] = None
     attempt_ordinal: ClassVar[None] = None
 
-    def fail_terminal(self, store: Coordination) -> None:
+    def fail_terminal(self) -> None:
         # Reservation already deferred the triage assignment. A terminal failure
         # has no execution attempt to settle and must not create a fresh triage.
         return None
@@ -289,23 +289,8 @@ class FullNativeSend(NativeSendStage):
     def attempt_ordinal(self) -> int:
         return self.fence.attempt_ordinal
 
-    def fail_terminal(self, store: Coordination) -> None:
-        snapshot = store.snapshots.get(self.fence.execution_id)
-        assert snapshot.attempt is not None
-        final = store.attempts.advance(
-            self.fence,
-            type(snapshot.attempt.lifecycle),
-            expected_pointer_revision=snapshot.pointer_revision,
-            backend_done=True,
-            process_dead=True,
-            reason_code="native_terminal_failure",
-        ).value
-        store.attempts.settle_nonpublication(
-            final.fence,
-            expected_pointer_revision=final.snapshot.pointer_revision,
-            success=False,
-            reason_code="native_terminal_failure",
-        )
+    def fail_terminal(self) -> None:
+        self.progress.fail_terminal()
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         snapshot, _ = store.attempts.require_fence(self.fence)

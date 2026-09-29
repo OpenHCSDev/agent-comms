@@ -159,7 +159,7 @@ class PrivateSendAdmission:
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)
-                self.stage.fail_terminal(store)
+                self.stage.fail_terminal()
                 raise
             self.verify(store, result.context)
             return result
