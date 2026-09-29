@@ -4,20 +4,21 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: corec338e8ab (308 terminal-output ownership;307 current
-S4 read acceptance;306/301/303), Toade46f8cb5 (129 functional workspace plus141
-saved publication/reconnect and143 Project scroll restoration), Textualc9743801,
-native5fde. All five launchers select runtime-terminal-output-20260928.
-Four idle owners restarted through canonical fenced restart; four fresh ACP
-attachments pass. Actual PR95 saved text paints105 matching phrases, readytrue,
-no delivery error. Actual installed native output/tool/error/compaction shard:
-5 passed. Fresh copied39MB native session through actual ACP/Toad loads25events,
-paints history and advances the durable read marker; no prompts or original
-source mutation. No state reset, history rewrite, or uncertain input replay.
-The user's still-open Toad maps runtime-coordinator: verified via /proc mapped
-packages and ACP command. Reopening loads installed history/reconnect fixes;
-a fresh installed view is passing, not proof of hot-updating that old process.
-Full116/110 persistent WorkspaceScreen/rebinding and30–40ms target continue142.
+Latest installed pair: core0a1f126d (311 native child/attestation custody plus
+308/307), Toad4147eb1 (144 nominal goal interactions plus129/141/143),
+Textualc9743801, native5fde. Five launchers and four idle-restarted owners use
+runtime-goal-controls-20260928. Final installed nine actual native custody,
+revision/reopen/cancellation/EOF/preparation/compaction cases pass45.77s.
+Actual native goal read/write/modal/draft/outage and painted declaration checks
+pass. Four fresh live ACP attachments and actual PR95/UX savedpaint105/61phrase
+checks pass. Worker process command paths verified. No reset/replay/historyrewrite.
+Initial staging failed dependency URL resolution; tests stopped before imports.
+The exact frozen environment was installed without re-resolving its conflicting
+transitive git pins, then final311/144 pinned and tested; red receipts retained.
+Current immutable slots preserve the previous working runtime for rollback.
+Existing Toad requires normal reopen for new UI imports.
+142 is the single workspace implementation path;116 is reference/provenance only
+until its remaining unique behavior/tests are carried into142, then close116.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
@@ -158,6 +159,23 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   to142's WorkspaceScreen owner; old screen/pool plumbing must not be restored.
   116 remains draft as provenance.110 investigation itself is merged; this does
   not prove its proposed runtime/performance target complete.
+  Exact handoff: https://github.com/OpenHCSDev/toad/pull/116#issuecomment-5881976193.
+  - [x] Installed rapid PageDown/End and cold-tail exact-anchor paint on142's
+    WorkspaceScreen reported passing; retain visible-body paint gate on everyframe.
+    This branch result is not installed/live main evidence.
+  - [ ] Fix first operational swap detached Conversation/NoScreen/missing Prompt
+    (native-reused-main306-v2). Preserve Agent, queue, permissions, editor state;
+    no event replay or process restart to mask a failed source return.
+  - [ ] Migrate viewport_rapid_scroll_pilot and viewport_recent_tabs_pilot;
+    recent non-tail returns must avoid repeated rebuilds while memory stays bounded.
+    Old8/24body and3window measurements do not prescribe replacement topology.
+  - [ ] Matched4/16/32/64 loaded and blank cohorts on final pins: cropped real
+    answers, native input/scroll/frame tail gaps and ordinary GC. Measure spike
+    frequency and stable30–40ms; old166/225ms maxima are adverse measurements.
+  - [ ] Run canonical installed-wheel suite on final142. Classify predecessor
+    257passes/13subtests/49failures against actual regressions versus retired UI
+    assumptions; no silent skips or inflated per-pilot deadlines. Close116 only
+    after its unique behavior/tests are represented in the continuation.
 - [x] Noether: finish50 authenticated loopback browser path. Merged and installed;
   actual Chromium/ACP initialization/keyboard/authentication/streamed downloads pass.
   No external exposure and no model-turn claim from the browser-only acceptance.
@@ -217,13 +235,17 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
 - [x] Dalton:305 current S1 event/settlement acceptance merged19281c46;16 final
   installed checks, actual native manual success/refusal, relay and native terminal
   release. OPEN2 resolved using current active-goal policy, not historical pause.
-- [ ] Dalton: current binding S4 PartB acceptance gaps; no retired format or
-  deleted-consumer reconstruction.
+- [x] Dalton307: current S4 predicates, mounted channel/DM and actual copied
+  native ACP durable read-ACK accepted. Parent installed check confirms25events,
+  painted text and durable native read; no retired consumer reconstruction.
+  Full-plan/NRA coverage audit remains separate and active.
 - [x] Wegener:303 S2 watchdog owns clocks/progress/cancellation/timeouts, old root
   methods deleted;196 backend checks,11 installed native then5 after clock fix.
   Merged664623a3 and installed. Backend shrinks165lines, total322added255deleted.
-- [ ] Wegener: remaining S2 native launch/attestation/retention/outcome ownership,
-  independent of Boyle cursor and Dalton acceptance.
+- [x] Wegener308/311: terminal output and native launch/attestation/retention
+  owners merged and installed. Actual native failure/reuse/revision/cancellation/
+  strict reopen/preparation/selected compaction pass. Old handle copies and
+  cached flags deleted; remaining backend scheduling/cleanup scope stays active.
 - [x] Carver:138 goal/delivery observation owners and complete caller deletion,
   actual live/saved response paint added to maintained native tests; duplicate
  98-line renderer pilot deleted. Merged/installed; parent real NRA reads pass.
@@ -236,7 +258,9 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   141 saved transcript ownership is now merged/installed; source lifecycle
   coordination with142 continues. 308 backend output and307 S4 acceptance merged and installed;
   actual native output/compaction and mounted durable read-ACK checks pass.
-  311 native lifecycle and312 send admission remain active; parent review of312
+  144 goal interactions merged/installed with actual native goal and painted
+  declaration acceptance. Remaining T4 root ownership stays active.
+  312 send admission remains active; parent review of312
   requires identity/state-owned comparisons and named failures instead of
   relocated field-tuple validity chains. Boyle owns that correction before
   the remaining ordinary OwnedTurn boundary.
