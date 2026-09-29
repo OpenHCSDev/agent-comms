@@ -21,7 +21,7 @@ No C1 type needs custom `WireValue`: existing field metadata and declared famili
 ## Current verification
 
 - Source-focused payload, RPC, import, registration, mentions and family guards: **96 passed in 2.10s** on the final candidate; the final strengthened family guard additionally passed all 3 cases.
-- Caller suite including backend: **284 passed, 1 failed in 28.64s**. The failure expects `prompt was not sent` in a preflight error. The production preflight line is unchanged from current main; the exact reproducer was sent to the parent for the feedback owner's disposition. This suite is not reported green.
+- Caller suite including backend: **284 passed, 1 failed in 28.64s**. The failure expects `prompt was not sent` in a preflight error. The exact same assertion also fails against an isolated copy of current main `350b14a9` (1 failed in 0.35s), confirming it is pre-existing. The reproducer and both results were sent to the parent for the feedback owner's disposition. This suite is not reported green.
 - Earlier expanded fresh-session/coordinated-runtime run: **176 passed, 2 skipped**. Those skips are not native acceptance.
 - Retired `test_selected_summary_exchange.py` fails before assertions because its child imports removed `SelectedSummaryAttempt`. Mendel owns tests-only PR422 to replace that fake child with the retained actual-native fixture, preserving protocol negative coverage. No compatibility export was restored.
 - Noneditable `[acp]` candidate is staged in owned persistent scratch. Actual installed native/ACP acceptance is **pending the serial fixture slot**, with Arendt's urgent PR416 run taking priority. No live readiness or installation claim is made.
