@@ -48,7 +48,7 @@ def test_known_nested_payload_has_one_typed_authority():
         ToolCallContent(id="call", name="read", arguments={"path": "a"}),
     )
     assert event.message.usage.total_tokens == 9
-    assert event.message.stop_reason == "toolUse"
+    assert event.message.stop_reason.tool_round
     assert not isinstance(event, Mapping)
     assert not hasattr(event, "wire") and not hasattr(event.message, "wire")
 

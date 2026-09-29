@@ -13,6 +13,7 @@ from acp.schema import (
     RequestPermissionResponse,
 )
 
+from .pi_vocabulary import ThinkingLevel
 from .queued_input import InputHandoffRefused
 from . import agent_events as events
 from . import backend
@@ -173,7 +174,7 @@ class TurnRunner:
         await CompactionObservation(self, session_id, lease, thread.turn_state.phase).dispatch(event)
 
     def native_arguments(self, thread: Thread) -> tuple[str, ...]:
-        return self.agent_args.with_model(thread.model).with_thinking(thread.thinking_level).argv
+        return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
 
     def native_environment(self, thread: Thread, worktree: str) -> dict[str, str]:
         return {

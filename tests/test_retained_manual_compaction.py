@@ -38,6 +38,9 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
     source = Path(os.environ["RETAINED_COMPACTION_SOURCE"])
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()
     launcher = os.environ["AC_NATIVE_STACK_BIN"]
+    settings = PiCompactionSettings(
+        16384, int(os.environ.get("RETAINED_COMPACTION_KEEP_RECENT_TOKENS", "20000"))
+    )
     before_source = source.stat()
     session = tmp_path / "retained.jsonl"
     shutil.copyfile(source, session)
@@ -90,8 +93,8 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             {
                 "compaction": {
                     "enabled": True,
-                    "reserveTokens": 16384,
-                    "keepRecentTokens": 20000,
+                    "reserveTokens": settings.reserve_tokens,
+                    "keepRecentTokens": settings.keep_recent_tokens,
                 }
             }
         )
@@ -105,7 +108,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             prepare_native_source,
             package,
             str(session),
-            settings=PiCompactionSettings(16384, 20000),
+            settings=settings,
             context_window=272000,
         )
         assert preparation is not None

@@ -135,19 +135,12 @@ async def compact_manual_owner(
             on_event=lambda event: runner.effects._emit_event(session_id, event),
             reason="manual",
         )
-        if result.summary is None:
-            bridge.journal.summaries.refuse(result.operation_id, result.decline_reason)
-            raise ValueError(f"Selected Pi declined manual summary ({result.decline_reason})")
+        summary = result.manual_summary(bridge.journal)
         current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)
         if current != owner or current_generation != generation or await decision() != settings:
             raise RelationViolationError("Manual selected source changed after summary")
-        summary_text = result.summary.text
-        return ManualSelectedSummary(
-            result.summary.text,
-            result.summary.details,
-            result.summary.usage,
-            bridge.journal.summaries.get(result.operation_id),
-        )
+        summary_text = summary.text
+        return summary
 
     operation = await compact_owner_once(
         bridge,
