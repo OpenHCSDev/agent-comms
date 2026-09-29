@@ -140,7 +140,7 @@ class SelectedWritePlans:
             owner, admission_generation = self.comms.registry.live_owner_with_admission(owner_name)
             if owner.pid != os.getpid() or owner.active_turn is not None:
                 raise IdentityConflict("Selected write owner is not idle in this process")
-            initial = self.comms.bus.log.read_initial_cohort(self.root_id, source_seq)
+            initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = stable_thread_lookup(owner.created_at)

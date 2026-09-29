@@ -18,7 +18,7 @@ from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
@@ -134,7 +134,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     )
     source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, source.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -292,7 +292,7 @@ print(json.dumps({"type":"response", "id":request["id"],
         "sender", "beta", "Independent after local failure"
     )
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, source.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(

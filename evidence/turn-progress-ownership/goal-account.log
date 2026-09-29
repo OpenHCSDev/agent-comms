@@ -1,0 +1,64 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+______ test_goal_settlement_and_new_state_subclass_use_same_durable_owner ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-turn-progress-ownership-20260928/.test-goal-account/test_goal_settlement_and_new_s0')
+
+    def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path):
+        class SpecializedPausedGoal(PausedGoal):
+            pass
+    
+>       store = GoalAttemptStore.initialize(tmp_path / "attempts")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.goal_attempts.GoalAttemptStore'>
+root = PosixPath('/home/ts/wt/comms-turn-progress-ownership-20260928/.test-goal-account/test_goal_settlement_and_new_s0/attempts')
+
+    @classmethod
+    def initialize(cls, root: str | Path) -> GoalAttemptStore:
+        """Explicit setup; creation or fsync uncertainty never returns a store."""
+        directory = Path(root)
+        if not directory.is_dir() or (
+            os.name == "posix" and stat.S_IMODE(directory.stat().st_mode) != 0o700
+        ):
+>           raise StorageUncertainError("An existing owner-0700 directory is required.")
+E           agent_comms.goal_attempts.StorageUncertainError: An existing owner-0700 directory is required.
+
+.venv/lib/python3.14/site-packages/agent_comms/goal_attempts.py:231: StorageUncertainError
+___ test_failed_origin_claim_retains_unresolved_reservation_and_blocks_goal ____
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7efd51b4f8c0>, <agent_comms.turn_progress.TurnProgress object at 0x7efd51a89010>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efd51ccd220>
+
+    @pytest.mark.asyncio
+    async def test_failed_origin_claim_retains_unresolved_reservation_and_blocks_goal(
+        owner_turn, monkeypatch
+    ):
+        execution, progress = owner_turn
+        runner = execution.runner
+        goal = runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text="new work"))
+        store = runner.open_goal_store()
+    
+        def lost_claim(_reservation):
+            raise GoalAttemptError("claim outcome unavailable")
+    
+        monkeypatch.setattr(store, "claim_launch", lost_claim)
+        with pytest.raises(GoalAttemptError, match="claim outcome unavailable"):
+            progress.goals.tool_ended(events.ToolEnd("goal", "comms_set_goal", True, "created"))
+        progress.goals.finish(None)
+>       assert store.snapshot(goal.id).lifecycle == ReservedGeneration()
+E       AssertionError: assert CancelledGeneration() == ReservedGeneration()
+E        +  where CancelledGeneration() = Generation(goal_id='8cbd53f8477842d5be5c88eee4df9460', number=1, lifecycle=CancelledGeneration(), attempt_id='5e80b6a2170a4e34b677480cdbb458df').lifecycle
+E        +    where Generation(goal_id='8cbd53f8477842d5be5c88eee4df9460', number=1, lifecycle=CancelledGeneration(), attempt_id='5e80b6a2170a4e34b677480cdbb458df') = snapshot('8cbd53f8477842d5be5c88eee4df9460')
+E        +      where snapshot = <agent_comms.goal_attempts.GoalAttemptStore object at 0x7efd51a88980>.snapshot
+E        +      and   '8cbd53f8477842d5be5c88eee4df9460' = Goal(text='new work', id='8cbd53f8477842d5be5c88eee4df9460', progress='', revision=1, reported_turn=None, mention_sour...', owner_name='test_failed_origin_claim_retai0', owner_created_at=1790649352.4623673, bindings=()), state=ActiveGoal()).id
+E        +  and   ReservedGeneration() = ReservedGeneration()
+
+tests/test_turn_goal_account.py:58: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_turn_goal_account.py::test_goal_settlement_and_new_state_subclass_use_same_durable_owner
+FAILED tests/test_turn_goal_account.py::test_failed_origin_claim_retains_unresolved_reservation_and_blocks_goal
+2 failed in 1.00s

@@ -37,7 +37,7 @@ from .coordinated_runtime import (
     SelectedExecution,
     SelectedExistingFileWrite,
 )
-from .coordination_cohort import accept_initial_cohort, sealed_cohort_sequences
+from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences
 from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
 from .message_bus import MessageBus
@@ -69,7 +69,7 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
         raise IdentityConflict("private initial wire root changed")
 
 
-def _accept_visible_initials(
+def _accept_visible_deliveries(
     bus: MessageBus,
     root_id: str,
     store: Coordination,
@@ -113,7 +113,7 @@ def _accept_visible_initials(
         # A prior canonical name is historical after a private owner rename.
         # Never create a NEW generation's selected attempt from that old
         # frozen recipient, or infer it was consumed.
-        accept_initial_cohort(bus, root_id, initial.message.seq, store)
+        accept_delivery_cohort(bus, root_id, initial.message.seq, store)
     return initials[-1].message.seq if initials else after_seq
 
 
@@ -182,7 +182,7 @@ async def run_foreground_once(
         cursor = 0
         with Coordination(str(root / "coordination.sqlite3")) as store:
             while True:
-                cursor = _accept_visible_initials(
+                cursor = _accept_visible_deliveries(
                     bus, wire_root_id, store, lookup, cursor, owner_name=thread.name
                 )
                 # Even an empty scan checks this PID against the live registry.

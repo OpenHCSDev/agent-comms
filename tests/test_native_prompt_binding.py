@@ -24,7 +24,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
@@ -74,7 +74,7 @@ def _root(tmp_path: Path):
         comms.threads.register(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
-    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -87,7 +87,7 @@ def _root(tmp_path: Path):
                 recipient.canonical_thread,
                 committed=True,
             )
-        accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store)
+        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
     return root, root_id, comms, initial, people
 
@@ -288,7 +288,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
-        accept_initial_cohort(bus, root_id, second.seq, store)
+        accept_delivery_cohort(bus, root_id, second.seq, store)
     first_turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -327,7 +327,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
         ).run()
     second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, second.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     later = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -375,7 +375,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         )
     second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, second.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     assert (
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -541,7 +541,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
         )
     second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, second.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     fresh = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()

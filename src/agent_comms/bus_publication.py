@@ -108,8 +108,8 @@ def decisions_digest(decisions: list[dict[str, str]]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class CommittedInitial:
-    """Bus-reader result, never a caller-supplied SQLite authority."""
+class CommittedDelivery:
+    """Bus-reader delivery, for both an original and a keyed response."""
 
     wire_root_id: str
     message: Message
@@ -148,28 +148,29 @@ def initial_sideband(
     }
 
 
-def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> CommittedInitial:
+def validate_delivery_record(record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
     """Strictly reconstruct and independently recompute all N from raw committed bytes.
 
-    This alone is not authority: only MessageBus.read_initial_cohort calls it
+    This alone is not authority: only MessageBus.read_delivery_cohort calls it
     after checking the owner-only marker and scanning the original bus inode.
     """
     from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 
     from .audience_manifest import FrozenRecipient, freeze_audience
+    from .delivery_policy import DeliveryPolicy
     from .messages import Message
-    from .wake import ControlClassification, resolve_wake_cohort
+    from .wake import ControlClassification
 
     if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {PRIVATE_WIRE_FIELD}:
         raise ValueError("Unknown private bus namespace.")
     private = record[PRIVATE_WIRE_FIELD]
     if (
         not isinstance(private, dict)
-        or set(private) != {"version", "initial"}
         or type(private["version"]) is not int
         or private["version"] != 1
     ):
         raise ValueError("Unsupported initial bus sideband version.")
+    policy = DeliveryPolicy.from_private(private)
     raw = private["initial"]
     if not isinstance(raw, dict) or set(raw) != {
         "wire_root_id",
@@ -252,7 +253,7 @@ def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> 
         or type(audience_raw["wire_seq"]) is not int
     ):
         raise ValueError("Initial audience does not match the committed public envelope.")
-    decisions = resolve_wake_cohort(message, frozen_audience=candidate, control=control)
+    decisions = policy.resolve(message, candidate, control)
     rows = decisions_wire(decisions)
     if (
         type(raw["decisions"]) is not list
@@ -261,7 +262,7 @@ def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> 
         or raw["decisions_digest"] != decisions_digest(rows)
     ):
         raise ValueError("Initial decisions do not match the full committed N.")
-    return CommittedInitial(
+    return CommittedDelivery(
         wire_root_id,
         message,
         candidate,

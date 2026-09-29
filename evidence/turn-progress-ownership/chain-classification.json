@@ -1,0 +1,90 @@
+[
+  {
+    "file": "src/agent_comms/owned_turn.py",
+    "line": 179,
+    "terms": 6,
+    "kind": "same_value",
+    "pattern": "IDEN-1",
+    "profile": "same_value 3, absence 1, literal 1, rule 1"
+  },
+  {
+    "file": "src/agent_comms/owned_turn.py",
+    "line": 290,
+    "terms": 4,
+    "kind": "flag",
+    "pattern": "IMPL-10",
+    "profile": "flag 2, absence 1, literal 1"
+  },
+  {
+    "file": "src/agent_comms/turn_progress.py",
+    "line": 222,
+    "terms": 4,
+    "kind": "absence",
+    "pattern": "IDEN-3",
+    "profile": "absence 3, same_value 1"
+  },
+  {
+    "file": "src/agent_comms/turn_progress.py",
+    "line": 241,
+    "terms": 4,
+    "kind": "rule",
+    "pattern": "IMPL-14",
+    "profile": "rule 2, absence 1, same_value 1"
+  },
+  {
+    "file": "src/agent_comms/turn_progress.py",
+    "line": 354,
+    "terms": 4,
+    "kind": "absence",
+    "pattern": "IDEN-3",
+    "profile": "absence 2, same_value 2"
+  },
+  {
+    "file": "src/agent_comms/turn_progress.py",
+    "line": 508,
+    "terms": 4,
+    "kind": "type",
+    "pattern": "BOUND-1",
+    "profile": "type 1, absence 1, same_value 1, literal 1"
+  },
+  {
+    "file": "src/agent_comms/turn_progress.py",
+    "line": 553,
+    "terms": 4,
+    "kind": "absence",
+    "pattern": "IDEN-3",
+    "profile": "absence 2, type 1, same_value 1"
+  },
+  {
+    "file": "src/agent_comms/turn_progress.py",
+    "line": 525,
+    "terms": 4,
+    "kind": "absence",
+    "pattern": "IDEN-3",
+    "profile": "absence 2, type 1, same_value 1"
+  },
+  {
+    "file": "src/agent_comms/turn_runner.py",
+    "line": 498,
+    "terms": 4,
+    "kind": "rule",
+    "pattern": "IMPL-14",
+    "profile": "rule 3, flag 1"
+  },
+  {
+    "file": "src/agent_comms/turn_runner.py",
+    "line": 574,
+    "terms": 10,
+    "kind": "same_value",
+    "pattern": "IDEN-1",
+    "profile": "same_value 6, absence 4"
+  },
+  {
+    "file": "src/agent_comms/turn_runner.py",
+    "line": 730,
+    "terms": 8,
+    "kind": "absence",
+    "pattern": "IDEN-3",
+    "profile": "absence 4, same_value 2, rule 2"
+  }
+]

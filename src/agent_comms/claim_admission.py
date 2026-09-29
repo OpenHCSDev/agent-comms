@@ -15,7 +15,7 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .bus_publication import CommittedInitial, stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .channel_targets import BuiltinChannel
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
@@ -51,7 +51,7 @@ def verify_selected_wake(
                 marker = comms.bus.log._private_marker_unlocked()
                 if admission.source_seq <= marker.admission_after_seq:
                     raise IdentityConflict("Selected wake precedes the current admission floor")
-            initial = comms.bus.log.read_initial_cohort(
+            initial = comms.bus.log.read_delivery_cohort(
                 admission.wire_root_id, admission.source_seq
             )
             owner, generation = comms.registry.live_owner_with_admission(owner_name)
@@ -61,7 +61,7 @@ def verify_selected_wake(
 
 
 def _verify_selected_wake_state(
-    initial: CommittedInitial,
+    initial: CommittedDelivery,
     owner: Thread,
     generation: int,
     store: Coordination,
