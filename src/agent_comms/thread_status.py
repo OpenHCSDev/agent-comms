@@ -24,6 +24,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
+    def require_running(self) -> None:
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("goal owner is not running")
+
     def require_active(self) -> None:
         from .errors import RelationViolationError
 
@@ -84,6 +89,9 @@ class ActiveThreadPresence:
 
 class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
     running = True
+
+    def require_running(self) -> None:
+        pass
 
 
 class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):

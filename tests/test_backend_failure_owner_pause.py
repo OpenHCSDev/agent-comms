@@ -5,7 +5,6 @@ import json
 import pytest
 
 from agent_comms import agent_events as ae
-from delivery_owner_fixture import canonical_agent
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -17,6 +16,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import UnresolvedAttemptError
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 from test_acp import TestAgentTurn as GoalFixture
 
 
@@ -89,11 +89,11 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
             agent.inputs.dispositions.read().rows["acp:earlier-uncertain"].declared_name
             == "unknown"
         )
-        generation = agent.turns.goal_store.snapshot(goal.id)
+        generation = agent.turns.goals.goal_store.snapshot(goal.id)
         assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None
         with pytest.raises(UnresolvedAttemptError):
-            agent.turns.goal_store.resume(goal.id, generation.number)
-        agent.turns.schedule_goal("project")
+            agent.turns.goals.goal_store.resume(goal.id, generation.number)
+        agent.turns.goals.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
         diagnostics = list((wired.root / "diagnostics").glob("*.json"))
         assert len(diagnostics) == 1
