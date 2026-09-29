@@ -282,8 +282,11 @@ class ImportAdapter(ABC):
 class OpenCodeImporter(ImportAdapter, format=ImportFormat.OPENCODE):
     def read(self, source: Path, limits: ImportLimits, session_id: str | None) -> ImportSnapshot:
         buffer = ImportBuffer(limits)
-        if source.suffix in {".db", ".sqlite", ".sqlite3"}:
-            return self._database(source, buffer, session_id)
+        from .import_records import OpenCodeSource
+
+        return OpenCodeSource.for_path(source).read(self, source, buffer, session_id)
+
+    def _export(self, source, buffer, session_id):
         data = object_value(json.loads(source.read_text(encoding="utf-8")))
         info = object_value(data.get("info", {}))
         if session_id and info.get("id") != session_id:
@@ -311,36 +314,12 @@ class OpenCodeImporter(ImportAdapter, format=ImportFormat.OPENCODE):
         if role not in {"user", "assistant"}:
             return
         source_id = text(info.get("id"))
+        from .import_records import OpenCodePart
+
         for part in parts:
-            kind = part.get("type")
-            if kind == "text" and not part.get("ignored"):
-                body = text(part.get("text"))
-                if info.get("summary") is True:
-                    buffer.set_summary(body)
-                else:
-                    buffer.add(ImportRole(role), body, source_id)
-            elif kind == "tool":
-                state = object_value(part.get("state", {}))
-                name = text(part.get("tool"))
-                status = text(state.get("status"))
-                arguments = json.dumps(state.get("input"), ensure_ascii=False)
-                body = f"[Historical tool {name} — {status}]\nInput: {arguments}"
-                output = state.get("output") if status == "completed" else state.get("error")
-                if output is not None:
-                    body += "\nResult: " + (
-                        output if isinstance(output, str) else json.dumps(output)
-                    )
-                buffer.add(ImportRole.TOOL, body, text(part.get("callID")))
-            elif kind == "file":
-                buffer.notices.add(
-                    "Attachment contents are not imported; source references are retained."
-                )
-                reference = text(part.get("filename")) or text(part.get("mime"))
-                buffer.add(
-                    ImportRole.TOOL,
-                    f"[Historical attachment: {reference}]",
-                    source_id,
-                )
+            OpenCodePart.from_wire(part).apply(
+                buffer, ImportRole(role), source_id, info.get("summary") is True
+            )
 
     def _database(
         self, source: Path, buffer: ImportBuffer, session_id: str | None
@@ -507,126 +486,46 @@ class ReverseImportBuffer:
 
 class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
     def read(self, source: Path, limits: ImportLimits, session_id: str | None) -> ImportSnapshot:
+        from .import_records import CodexImportScan, CodexRecord
+
         reverse = ReverseImportBuffer(limits)
-        identity = project = latest_project = ""
-        checkpoint: tuple[int, bytes, Mapping[str, object]] | None = None
-        prior_request = ""
+        scan = CodexImportScan(reverse)
         with source.open("rb") as stream:
             boundary = stream.seek(0, 2)
             stream.seek(0)
-
-            # Codex owns the header contract: the current session_meta is at the head.
-            # Stop immediately after it so a multi-gigabyte obsolete prefix is never replayed.
             for offset, raw, terminated in forward_lines(stream, 0, boundary):
                 record = codex_record(raw, terminated=terminated, notices=reverse.notices)
-                if record is None:
-                    break
-                if record.get("type") == "session_meta":
-                    payload = object_value(record.get("payload", {}))
-                    identity = text(payload.get("id"))
-                    project = text(payload.get("cwd"))
+                if record is None or CodexRecord.from_wire(record).header(scan):
                     break
                 if offset > _CODEX_REVERSE_BLOCK:
                     raise ValueError("Codex session metadata was not found near the rollout head.")
-
             for offset, raw, terminated in reverse_lines(stream, boundary):
                 record = codex_record(raw, terminated=terminated, notices=reverse.notices)
-                if record is None:
-                    continue
-                payload = object_value(record.get("payload", {}))
-                kind = record.get("type")
-                if checkpoint is not None:
-                    if kind == "response_item":
-                        probe = ReverseImportBuffer(limits)
-                        self._item(payload, probe)
-                        if probe.latest_request:
-                            prior_request = probe.latest_request
-                            break
-                    elif kind == "compacted":
-                        prior_request = self._checkpoint_request(payload, limits)
-                        if prior_request:
-                            break
-                    continue
-                if kind == "turn_context" and not latest_project:
-                    latest_project = text(payload.get("cwd"))
-                elif kind == "compacted":
-                    checkpoint = (offset, raw, payload)
-                    if reverse.latest_request or self._checkpoint_request(payload, limits):
-                        break
-                elif kind == "response_item":
-                    self._item(payload, reverse)
-
-            if checkpoint is None:
+                if record is not None and CodexRecord.from_wire(record).reverse(scan, offset, raw):
+                    break
+            if scan.checkpoint is None:
                 buffer = reverse.forward_buffer()
             else:
                 buffer = ImportBuffer(limits, notices=set(reverse.notices))
-                offset, raw, payload = checkpoint
-                self._checkpoint(payload, buffer)
-                after = offset + len(raw)
+                offset, size, checkpoint = scan.checkpoint
+                checkpoint.forward(scan, buffer)
+                after = offset + size
                 if after < boundary:
-                    after += 1  # Skip the LF terminating the compaction record.
-                for _, tail_raw, terminated in forward_lines(stream, after, boundary):
-                    record = codex_record(tail_raw, terminated=terminated, notices=buffer.notices)
-                    if record is None:
-                        continue
-                    tail_payload = object_value(record.get("payload", {}))
-                    kind = record.get("type")
-                    if kind == "turn_context":
-                        latest_project = text(tail_payload.get("cwd")) or latest_project
-                    elif kind == "response_item":
-                        self._item(tail_payload, buffer)
+                    after += 1
+                for _, raw, terminated in forward_lines(stream, after, boundary):
+                    record = codex_record(raw, terminated=terminated, notices=buffer.notices)
+                    if record is not None:
+                        CodexRecord.from_wire(record).forward(scan, buffer)
                 if not buffer.latest_request:
-                    buffer.latest_request = prior_request
-
-        if session_id and session_id != identity:
+                    buffer.latest_request = scan.prior_request
+        if session_id and session_id != scan.identity:
             raise ValueError("The rollout belongs to a different Codex session.")
         return buffer.snapshot(
             ImportFormat.CODEX,
-            identity or source.stem,
-            latest_project or project,
+            scan.identity or source.stem,
+            scan.latest_project or scan.project,
             source.stem,
         )
-
-    def _checkpoint_request(self, payload: Mapping[str, object], limits: ImportLimits) -> str:
-        probe = ImportBuffer(limits)
-        for item in objects(payload.get("replacement_history")):
-            self._item(item, probe)
-        return probe.latest_request
-
-    def _checkpoint(self, payload: Mapping[str, object], buffer: ImportBuffer) -> None:
-        buffer.set_summary(text(payload.get("message")) or text(payload.get("summary")))
-        for item in objects(payload.get("replacement_history")):
-            self._item(item, buffer)
-        if tuple(objects(payload.get("guardian_history"))):
-            buffer.notices.add("Codex guardian history is source-private and was not imported.")
-
-    def _item(self, item: Mapping[str, object], buffer: ImportBuffer | ReverseImportBuffer) -> None:
-        kind = item.get("type")
-        if kind == "message" and item.get("role") in {"user", "assistant"}:
-            content = item.get("content")
-            pieces = (
-                [content]
-                if isinstance(content, str)
-                else [
-                    text(part.get("text"))
-                    for part in objects(content)
-                    if part.get("type") in {"input_text", "output_text", "text"}
-                ]
-            )
-            buffer.add(ImportRole(str(item["role"])), "\n".join(pieces), text(item.get("id")))
-        elif kind in {"function_call", "custom_tool_call"}:
-            buffer.add(
-                ImportRole.TOOL,
-                f"[Historical tool call: {text(item.get('name'))}]\n"
-                + text(item.get("arguments", item.get("input"))),
-                text(item.get("call_id")),
-            )
-        elif kind in {"function_call_output", "custom_tool_call_output"}:
-            output = item.get("output")
-            body = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
-            buffer.add(
-                ImportRole.TOOL, "[Historical tool result]\n" + body, text(item.get("call_id"))
-            )
 
 
 @dataclass(frozen=True, slots=True)

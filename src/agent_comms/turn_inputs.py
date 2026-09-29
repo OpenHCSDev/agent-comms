@@ -163,7 +163,7 @@ class InputForwarding:
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
         message = payload.message
-        if message is None or not message.user:
+        if not message.user:
             return False, None
         text = message.text
         native_id = message.input_id

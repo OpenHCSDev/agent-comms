@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -11,8 +10,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
+from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
+    AbsentMessage,
     CompactionData,
     PiDelta,
     PiMessage,
@@ -30,6 +31,14 @@ if TYPE_CHECKING:
 class PiEvent(PiPayload, DeclaredFamily):
     wire_tag = "type"
     opaque = False
+
+    @classmethod
+    def normalize_field(cls, target, key, value, record):
+        if key == "message" and target is PiMessage and value is None:
+            return {"kind": AbsentMessage.declared_name}
+        if key == "reason" and target == type[CompactionReason]:
+            return CompactionReason.from_external(value).declared_name
+        return super().normalize_field(target, key, value, record)
 
     @classmethod
     def wire_member(cls, wire):
@@ -165,43 +174,46 @@ class AutoRetryStart(PiEvent):
         )
 
 
+class ReasonedCompaction(PiEvent):
+    """A compaction record owns decoding its external reason."""
+
+    def __post_init__(self):
+        if not isinstance(self.reason, type):
+            object.__setattr__(self, "reason", CompactionReason.from_external(self.reason))
+
+    @abstractmethod
+    async def apply(self, session):
+        if False:
+            yield
+
+
 @dataclass(frozen=True, kw_only=True)
-class CompactionEnd(PiEvent):
+class CompactionEnd(ReasonedCompaction):
     aborted: bool | None = field(default=None, metadata={"wire_name": "aborted"})
-    reason: str | None = field(default=None, metadata={"wire_name": "reason"})
+    reason: type[CompactionReason] = field(
+        default=UnknownCompactionReason, metadata={"wire_name": "reason"}
+    )
     result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import compaction_summary
-
         session.watchdog.progress()
-        session.result = self.result
-        session.completed = self.aborted is False and session.result is not None
-        if (
-            session.completed
-            and (not session.usage.compaction_recorded)
-            and session.result.usage is not None
-        ):
-            yield session.usage.charge(session.result.usage)
-        if session.completed:
+        completed = self.aborted is False and self.result is not None
+        if completed:
+            for event in self.result.charge(session):
+                yield event
+        if completed:
             session.watchdog.compacted(session.admission.started)
         session.usage.invalidate()
         yield session.context_info()
-        session.reason = self.reason
-        session.summary = session.result.summary if session.completed else None
         yield events.CompactionEnd(
-            reason=(
-                session.reason
-                if session.reason in {"manual", "threshold", "overflow"}
-                else "unknown"
-            ),
-            aborted=not session.completed,
-            summary=compaction_summary(session.summary) if session.summary is not None else None,
+            reason=self.reason.declared_name,
+            aborted=not completed,
+            summary=self.result.display_summary if completed else None,
             context_used=None,
             will_retry=self.will_retry is True,
         )
-        if not session.completed and (not session.admission.started):
+        if not completed and (not session.admission.started):
             session.output.record_failure(
                 failures.PrestartCompactionFailed(
                     "Context compaction failed before this input started; inspect ACP diagnostics."
@@ -232,36 +244,34 @@ class CompactionProgress(PiEvent):
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
-        session.chunk_index = self.chunk_index
-        session.provider_usage = self.usage
-        if session.provider_usage is not None:
+        if self.usage is not None:
             session.usage.response_index += 1
             session.usage.compaction_recorded = True
             yield events.ProviderUsage(
-                response_id=str(session.usage.response_index), usage=session.provider_usage
+                response_id=str(session.usage.response_index), usage=self.usage
             )
-        session.done = self.source_bytes_done
-        session.total = self.source_bytes_total
-        session.measured = (
-            session.done is not None
-            and session.total is not None
-            and (0 <= session.done <= session.total)
-            and (session.total > 0)
+        measured = (
+            self.source_bytes_done is not None
+            and self.source_bytes_total is not None
+            and 0 <= self.source_bytes_done <= self.source_bytes_total
+            and self.source_bytes_total > 0
         )
-        if session.chunk_index is not None and (
-            session.chunk_index > 0 or (session.chunk_index == 0 and session.measured)
+        if self.chunk_index is not None and (
+            self.chunk_index > 0 or (self.chunk_index == 0 and measured)
         ):
             yield events.CompactionProgress(
-                chunk_index=session.chunk_index,
-                source_bytes_done=session.done if session.measured else None,
-                source_bytes_total=session.total if session.measured else None,
+                chunk_index=self.chunk_index,
+                source_bytes_done=self.source_bytes_done if measured else None,
+                source_bytes_total=self.source_bytes_total if measured else None,
                 summary_phase=self.summary_phase if self.summary_phase else None,
             )
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionStart(PiEvent):
-    reason: str | None = field(default=None, metadata={"wire_name": "reason"})
+class CompactionStart(ReasonedCompaction):
+    reason: type[CompactionReason] = field(
+        default=UnknownCompactionReason, metadata={"wire_name": "reason"}
+    )
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.compaction_started = True
@@ -269,14 +279,7 @@ class CompactionStart(PiEvent):
         session.watchdog.progress()
         session.usage.invalidate()
         yield session.context_info()
-        session.reason = self.reason
-        yield events.CompactionStart(
-            reason=(
-                session.reason
-                if session.reason in {"manual", "threshold", "overflow"}
-                else "unknown"
-            )
-        )
+        yield events.CompactionStart(reason=self.reason.declared_name)
 
     def observe_abort(self, session: TurnSession) -> None:
         session.watchdog.compaction_started = True
@@ -512,149 +515,41 @@ class InputCommitted(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEnd(PiEvent):
-    message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
+    message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.message = self.message
-        if session.message is not None and session.message.assistant:
-            session.committed_text = session.message.text
-            if (
-                session.message.stop_reason == "toolUse"
-                and session.admission.started
-                and (not session.inputs.uncertain)
-                and (not session.native.attestation.uncertain)
-                and session.output.matches_message(session.committed_text)
-            ):
-                yield events.CommittedProgress(text=session.committed_text)
-            session.output.start_message()
-            session.provider_usage = session.message.usage
-            if session.provider_usage is not None and (not session.native.attestation.uncertain):
-                yield session.usage.charge(session.provider_usage)
-            session.stop_reason = session.message.stop_reason
-            session.output.final_assistant_stop = (
-                session.stop_reason == "stop"
-                and session.admission.started
-                and (not session.inputs.uncertain)
-            )
-            if session.stop_reason in {"error", "aborted"}:
-                if session.usage.provisional:
-                    session.usage.used = session.usage.confirmed
-                    session.usage.provisional = False
-                    yield session.context_info()
-                error = session.output.error(
-                    str(session.message.error_message or "").strip()
-                    or f"Model request {session.stop_reason}",
-                    session.message.diagnostics,
-                )
-                if not (session.explicit_interrupt and session.stop_reason == "aborted"):
-                    yield error
-            else:
-                session.output.error_message = None
-                session.tokens = (
-                    session.message.usage.positive_tokens
-                    if session.message.usage is not None
-                    else None
-                )
-                if session.tokens is not None and (not session.native.attestation.uncertain):
-                    session.usage.used = session.tokens
-                    session.usage.confirmed = session.tokens
-                    yield session.context_info()
-                elif session.usage.provisional:
-                    session.usage.used = session.usage.confirmed
-                    yield session.context_info()
-                session.usage.provisional = False
+        async for event in self.message.apply_end(session):
+            yield event
 
     accepts_prompt = True
     output_progress = True
 
     @property
     def retry_progress(self) -> bool:
-        return (
-            self.message is not None
-            and self.message.assistant
-            and self.message.stop_reason not in {"error", "aborted"}
-        )
+        return self.message.retry_progress
 
 
 @dataclass(frozen=True, kw_only=True)
 class MessageStart(PiEvent):
-    message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
+    message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if self.message is not None and self.message.assistant:
-            session.output.start_message()
-        elif self.message is not None and self.message.user:
-            session.message = self.message
-            session.user_text = session.message.text
-            session.native_id = session.message.input_id
-            if (
-                session.admission.awaiting_start
-                and (not session.inputs.uncertain)
-                and (session.user_text == session.task)
-                and (not session.require_input_id or session.native_id == session.original_input_id)
-            ):
-                if session.native_start is not None and (
-                    not session.native_start(None, session.original_input_id, session.task)
-                ):
-                    session.inputs.uncertain = True
-                    session.output.record_failure(
-                        failures.InputMissing("Pi input start did not match the durable attempt.")
-                    )
-                    await session.abort_stalled_rpc()
-                    session.finished = True
-                    return
-                session.admission = session.admission.start(self)
-                if session.native_start is not None:
-                    yield events.InputStarted(id=None)
-                if (
-                    session.inputs.queue is not None
-                    and session.native.proc.stdin is not None
-                    and (session.steering_task is None)
-                ):
-                    session.steering_task = asyncio.create_task(session.inputs.forward(session))
-            elif session.admission.started and (not session.inputs.uncertain):
-                session.matched, session.input_id = session.inputs.mark_started(session, self)
-                if session.matched:
-                    yield events.InputStarted(id=session.input_id)
-                else:
-                    session.inputs.uncertain = True
-                    session.output.final_assistant_stop = False
-                    session.output.record_failure(
-                        failures.FollowupUnrecognized(
-                            "Pi RPC saw an unrecognized follow-up user message start."
-                        )
-                    )
-                    await session.abort_stalled_rpc()
-                    session.finished = True
-                    return
-            else:
-                session.inputs.uncertain = True
-                session.output.final_assistant_stop = False
-                session.output.record_failure(
-                    failures.InputMissing(
-                        "Pi RPC run ended without this prompt's user message start."
-                    )
-                )
-                await session.abort_stalled_rpc()
-                session.finished = True
-                return
+        async for update in self.message.apply_start(session, self):
+            yield update
 
     accepts_prompt = True
     output_progress = True
 
     @property
     def invalidates_stop(self) -> bool:
-        return self.message is not None and (self.message.user or self.message.assistant)
+        return self.message.invalidates_start
 
     @property
     def retry_progress(self) -> bool:
-        return self.message is not None and self.message.assistant
+        return self.message.assistant
 
     def observe_abort(self, session: TurnSession) -> None:
-        if not session.native.attestation.uncertain:
-            matched, identity = session.inputs.mark_started(session, self)
-            if matched:
-                session.started_during_abort.append(identity)
+        self.message.observe_start_abort(session, self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -662,20 +557,19 @@ class MessageUpdate(PiEvent):
     assistant_message_event: PiDelta | None = field(
         default=None, metadata={"wire_name": "assistantMessageEvent"}
     )
-    message: PiMessage | None = field(default=None, metadata={"wire_name": "message"})
+    message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
     usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.message = self.message
-        if session.message is None or session.message.assistant:
-            message_usage = session.message.usage if session.message is not None else None
-            session.tokens = (
-                message_usage.positive_tokens if message_usage is not None else None
-            ) or (self.usage.positive_tokens if self.usage is not None else None)
-            if session.tokens is not None and (not session.native.attestation.uncertain):
-                session.usage.used = session.tokens
+        if self.message.update_context:
+            tokens = self.message.measured_tokens or (
+                self.usage.positive_tokens if self.usage is not None else None
+            )
+            if tokens is not None and not session.native.attestation.uncertain:
+                session.usage.used = tokens
                 session.usage.provisional = True
                 yield session.context_info()
+
         if self.assistant_message_event is not None:
             for event in self.assistant_message_event.emit(session):
                 yield event

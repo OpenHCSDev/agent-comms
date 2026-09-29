@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, ClassVar, Literal
 
+from .pi_vocabulary import ThinkingLevel
 from .declared_family import DeclaredFamily
 from .messages import Message
 from .pi_payloads import PiMessage, PiPayload
@@ -146,7 +147,7 @@ class SelectedFreshMarker(PiPayload):
 
     strict_fields = True
     schema: Literal[1]
-    thinking_level: Literal["low", "high"] = field(metadata={"wire_name": "thinkingLevel"})
+    thinking_level: str = field(metadata={"wire_name": "thinkingLevel", "wire_choices": ThinkingLevel.selected_names})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -194,7 +195,7 @@ class MessageEntry(NativeEntry):
         if (
             self.parent_id != parent_id
             or not self.message.assistant
-            or self.message.stop_reason != "error"
+            or not self.message.stop_reason.recoverable_terminal
             or not self.message.error_message
             or self.message.content != ()
         ):
@@ -277,7 +278,7 @@ class ModelChangeEntry(StartupMetadataEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ThinkingLevelChangeEntry(StartupMetadataEntry):
-    thinking_level: str = field(metadata={"wire_name": "thinkingLevel"})
+    thinking_level: type[ThinkingLevel] = field(metadata={"wire_name": "thinkingLevel"})
 
     def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
-        return self.thinking_level == thinking_level
+        return self.thinking_level is ThinkingLevel.decode(thinking_level)

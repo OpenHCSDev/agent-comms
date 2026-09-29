@@ -10,36 +10,52 @@ import re
 import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
+from functools import singledispatch
 from typing import Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_session_reopen import NativeSessionIdentity
+from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 
 
 def wire_field(name: str, default=None):
     return field(default=default, metadata={"wire_name": name, "wire_omit_default": True})
 
 
-def normalize(target, value):
-    """Project external extension fields using declarations before strict decoding."""
-    origin, args = get_origin(target), get_args(target)
-    if origin in (Union, types.UnionType):
-        for option in args:
-            if value is None and option is type(None):
-                return None
-            if isinstance(option, type) and isinstance(value, option):
-                return value
-            if isinstance(value, dict) and isinstance(option, type) and is_dataclass(option):
-                return normalize(option, value)
-            if isinstance(value, list) and get_origin(option) in (tuple, list):
-                return normalize(option, value)
-        return value  # FieldCodec rejects wrong primitive shapes.
-    if origin in (list, tuple) and isinstance(value, list):
-        return [normalize(args[0], item) for item in value]
-    if isinstance(target, type) and issubclass(target, PiPayload):
-        return target.normalize_wire(value)
+def wire_options(target):
+    """Python's annotation taxonomy is interpreted only at this ingress boundary."""
+    return get_args(target) if get_origin(target) in (Union, types.UnionType) else (target,)
+
+
+@singledispatch
+def project_wire(value, target):
+    """Project known Pi extension fields; FieldCodec still owns all decoding."""
     return value
+
+
+@project_wire.register(dict)
+def project_object(value, target):
+    member = next(
+        (
+            option
+            for option in wire_options(target)
+            if isinstance(option, type) and is_dataclass(option)
+        ),
+        None,
+    )
+    if member is not None and issubclass(member, PiPayload):
+        return member.normalize_wire(value)
+    return value
+
+
+@project_wire.register(list)
+def project_array(value, target):
+    member = next(
+        (option for option in wire_options(target) if get_origin(option) in (tuple, list)),
+        None,
+    )
+    return value if member is None else [project_wire(item, get_args(member)[0]) for item in value]
 
 
 class PiPayload:
@@ -70,7 +86,7 @@ class PiPayload:
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
-        return normalize(target, value)
+        return project_wire(value, target)
 
     @classmethod
     def from_wire(cls, value):
@@ -347,9 +363,46 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
     input_digest: str | None = wire_field("inputDigest")
-    stop_reason: str | None = wire_field("stopReason")
+    stop_reason: type[PiStopReason] = wire_field("stopReason", UnreportedStopReason)
     error_message: str | None = wire_field("errorMessage")
     diagnostics: tuple[PiDiagnostic, ...] = ()
+
+    def __post_init__(self):
+        if isinstance(self.stop_reason, str):
+            object.__setattr__(self, "stop_reason", PiStopReason.from_external(self.stop_reason))
+
+    @classmethod
+    def normalize_field(cls, target, key, value, record):
+        if key == "stopReason":
+            return PiStopReason.from_external(value).declared_name
+        return super().normalize_field(target, key, value, record)
+
+    @property
+    def measured_tokens(self):
+        return self.usage.positive_tokens if self.usage is not None else None
+
+    async def apply_end(self, session):
+        if False:
+            yield
+
+    async def apply_start(self, session, event):
+        if False:
+            yield
+
+    def observe_start_abort(self, session, event):
+        pass
+
+    @property
+    def invalidates_start(self):
+        return self.user or self.assistant
+
+    @property
+    def update_context(self):
+        return self.assistant
+
+    @property
+    def retry_progress(self):
+        return False
 
     @classmethod
     def wire_member(cls, value):
@@ -367,8 +420,44 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         return ("\n" if self.user else "").join(p.text for p in self.content if p.text)
 
 
+class AbsentMessage(PiMessage):
+    """An omitted external message carries no admission or output authority."""
+
+    update_context = True
+
+
 class AssistantMessage(PiMessage):
     assistant = True
+
+    async def apply_start(self, session, event):
+        session.output.start_message()
+        if False:
+            yield
+
+    @property
+    def retry_progress(self):
+        return not self.stop_reason.failed
+
+    async def apply_end(self, session):
+        from .agent_events import CommittedProgress
+
+        reason = self.stop_reason
+        if (
+            reason.tool_round
+            and session.admission.started
+            and not session.inputs.uncertain
+            and not session.native.attestation.uncertain
+            and session.output.matches_message(self.text)
+        ):
+            yield CommittedProgress(text=self.text)
+        session.output.start_message()
+        if self.usage is not None and not session.native.attestation.uncertain:
+            yield session.usage.charge(self.usage)
+        session.output.final_assistant_stop = (
+            reason.successful and session.admission.started and not session.inputs.uncertain
+        )
+        async for event in reason.apply(session, self):
+            yield event
 
     @property
     def unread_reply(self) -> bool:
@@ -382,11 +471,7 @@ class AssistantMessage(PiMessage):
     def transcript_events(self, context):
         from .transcript_events import AssistantTranscript, NoticeTranscript
 
-        if (
-            self.stop_reason in {"error", "aborted"}
-            and self.error_message
-            and self.error_message.strip()
-        ):
+        if self.stop_reason.failed and self.error_message and self.error_message.strip():
             return [NoticeTranscript(f"[agent error] {self.error_message.strip()}")]
         events = []
         for part in self.parts:
@@ -404,6 +489,67 @@ class AssistantMessage(PiMessage):
 
 class UserMessage(PiMessage):
     user = True
+
+    async def apply_start(self, session, event):
+        import asyncio
+        from . import agent_events as events
+        from . import turn_failure as failures
+
+        if (
+            session.admission.awaiting_start
+            and (not session.inputs.uncertain)
+            and (self.text == session.task)
+            and (not session.require_input_id or self.input_id == session.original_input_id)
+        ):
+            if session.native_start is not None and (
+                not session.native_start(None, session.original_input_id, session.task)
+            ):
+                session.inputs.uncertain = True
+                session.output.record_failure(
+                    failures.InputMissing("Pi input start did not match the durable attempt.")
+                )
+                await session.abort_stalled_rpc()
+                session.finished = True
+                return
+            session.admission = session.admission.start(event)
+            if session.native_start is not None:
+                yield events.InputStarted(id=None)
+            if (
+                session.inputs.queue is not None
+                and session.native.proc.stdin is not None
+                and (session.steering_task is None)
+            ):
+                session.steering_task = asyncio.create_task(session.inputs.forward(session))
+        elif session.admission.started and (not session.inputs.uncertain):
+            matched, input_id = session.inputs.mark_started(session, event)
+            if matched:
+                yield events.InputStarted(id=input_id)
+            else:
+                session.inputs.uncertain = True
+                session.output.final_assistant_stop = False
+                session.output.record_failure(
+                    failures.FollowupUnrecognized(
+                        "Pi RPC saw an unrecognized follow-up user message start."
+                    )
+                )
+                await session.abort_stalled_rpc()
+                session.finished = True
+                return
+        else:
+            session.inputs.uncertain = True
+            session.output.final_assistant_stop = False
+            session.output.record_failure(
+                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+            )
+            await session.abort_stalled_rpc()
+            session.finished = True
+            return
+
+    def observe_start_abort(self, session, event):
+        if not session.native.attestation.uncertain:
+            matched, identity = session.inputs.mark_started(session, event)
+            if matched:
+                session.started_during_abort.append(identity)
 
     def transcript_events(self, context):
         from .routing import TurnRouting
@@ -636,7 +782,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     session_name: str | None = wire_field("sessionName")
     native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
     model: PiModel | None = None
-    thinking_level: str | None = wire_field("thinkingLevel")
+    thinking_level: type[ThinkingLevel] | None = wire_field("thinkingLevel")
     message_count: int | None = wire_field("messageCount")
     pending_message_count: int | None = wire_field("pendingMessageCount")
     is_streaming: bool | None = wire_field("isStreaming")
@@ -659,7 +805,7 @@ class ModelsData(PiResponseData):
 
 @dataclass(frozen=True)
 class ThinkingLevelsData(PiResponseData):
-    levels: tuple[str, ...] = ()
+    levels: tuple[type[ThinkingLevel], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -669,6 +815,16 @@ class CompactionData(PiResponseData):
     first_kept_entry_id: str | None = wire_field("firstKeptEntryId")
     tokens_before: int | None = wire_field("tokensBefore")
     estimated_tokens_after: int | None = wire_field("estimatedTokensAfter")
+
+    @property
+    def display_summary(self):
+        from .backend import compaction_summary
+
+        return compaction_summary(self.summary) if self.summary is not None else None
+
+    def charge(self, session):
+        if self.usage is not None and not session.usage.compaction_recorded:
+            yield session.usage.charge(self.usage)
 
 
 @dataclass(frozen=True)

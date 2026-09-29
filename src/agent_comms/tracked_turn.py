@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 
+from .pi_vocabulary import ThinkingLevel
 from . import pi_commands as commands
 from . import pi_events as pi
 from .backend import TurnSession
@@ -101,7 +102,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             if (
                 type(fresh_selected) is not FreshPrivateSession
                 or session_file != fresh_selected.path
-                or fresh_selected.selected_thinking_level not in {"low", "high"}
+                or not ThinkingLevel.supports_selected(fresh_selected.selected_thinking_level)
                 or prompt_send_boundary is None
                 or maintenance_root is None
             ):
@@ -252,7 +253,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             or state.model is None
             or state.model.provider != "openrouter"
             or state.model.id != "z-ai/glm-5.3-flash"
-            or state.thinking_level != selected.selected_thinking_level
+            or ThinkingLevel.optional_name(state.thinking_level) != selected.selected_thinking_level
             or state.message_count != 0
             or state.pending_message_count != 0
             or state.is_streaming is not False
@@ -315,8 +316,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.MessageEnd)
     async def message_end(self, event: pi.MessageEnd) -> None:
-        if event.message is not None:
-            await self.dispatch(event.message)
+        await self.dispatch(event.message)
 
     @handles(AssistantMessage)
     async def assistant_end(self, message: AssistantMessage) -> None:
@@ -326,22 +326,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         content = message.content
         if content is None or isinstance(content, str):
             raise NativePiUnavailable("Native Pi assistant content is malformed")
-        if message.stop_reason == "toolUse" and self.tool_socket is not None:
-            self.tool_socket.announce(content)
-            self.text_parts.clear()
-            self.final_messages.clear()
-        elif message.stop_reason == "stop":
-            if self.tool_socket is not None:
-                self.tool_socket.assert_complete()
-            if any(not item.final_text_allowed for item in content):
-                raise NativePiUnavailable("Native Pi assistant returned non-text content")
-            self.final_messages.append("".join(item.text for item in content))
-        else:
-            self.terminal_error = (
-                "Model output limit reached"
-                if message.stop_reason == "length"
-                else "Provider returned an unsuccessful terminal"
-            )
+        message.stop_reason.tracked(self, message)
 
     def context_proof(self) -> NativeContextProof:
         if self.prompt_response is None or self.input_event is None or self.context_event is None:

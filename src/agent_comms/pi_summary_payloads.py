@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -35,7 +36,10 @@ class SummaryFiles(PiPayload):
                 raise ValueError("Invalid selected native file operations")
 
     def commit_metadata(self) -> list[list[str]]:
-        return [[path.encode("utf-8").hex() for path in paths] for paths in (self.read_files, self.modified_files)]
+        return [
+            [path.encode("utf-8").hex() for path in paths]
+            for paths in (self.read_files, self.modified_files)
+        ]
 
 
 @dataclass(frozen=True)
@@ -50,9 +54,16 @@ class SummaryCost(PiCost):
             raise ValueError("Invalid selected native cost")
 
     def commit_metadata(self) -> list[str]:
-        return [struct.pack(">d", float(value)).hex() for value in (
-            self.input, self.output, self.cache_read, self.cache_write, self.total,
-        )]
+        return [
+            struct.pack(">d", float(value)).hex()
+            for value in (
+                self.input,
+                self.output,
+                self.cache_read,
+                self.cache_write,
+                self.total,
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -82,8 +93,14 @@ class SummaryUsage(PiUsage):
 
     def commit_metadata(self) -> list[int | str | None]:
         return [
-            self.input, self.output, self.cache_read, self.cache_write, self.total_tokens,
-            self.reasoning, self.cache_write_1h, *self.cost.commit_metadata(),
+            self.input,
+            self.output,
+            self.cache_read,
+            self.cache_write,
+            self.total_tokens,
+            self.reasoning,
+            self.cache_write_1h,
+            *self.cost.commit_metadata(),
         ]
 
 
@@ -108,6 +125,10 @@ class SelectedSummaryData(PiResponseData):
     version: Literal[1]
     operation_id: str = field(metadata={"wire_name": "operationId"})
 
+    @abstractmethod
+    def response(self, request, tokens_before):
+        """Interpret this native outcome without granting commit or replay authority."""
+
     @classmethod
     def wire_member(cls, value):
         # Status is the native discriminator, mapped through the existing family.
@@ -119,6 +140,11 @@ class SummaryDeclinedData(SelectedSummaryData, declared_name="summary_declined")
     status: Literal["declined"]
     reason: str
 
+    def response(self, request, tokens_before):
+        from .selected_pi_summary_rpc import SelectedSummaryResult
+
+        return SelectedSummaryResult(self.operation_id, None, self.reason)
+
     def __post_init__(self):
         if not 0 < len(self.reason) <= 256:
             raise ValueError("Invalid summary decline reason")
@@ -129,6 +155,16 @@ class SummaryUnknownData(SelectedSummaryData, declared_name="summary_unknown"):
     status: Literal["unknown"]
     reason: str | None = None
 
+    def response(self, request, tokens_before):
+        from .selected_pi_summary_rpc import SelectedChildUnknown
+
+        detail = (
+            f"Selected summary failed: {self.reason} (outcome uncertain; input not retried)"
+            if self.reason is not None
+            else "Selected summary outcome is uncertain; native child supplied no failure detail"
+        )
+        raise SelectedChildUnknown(detail)
+
     def __post_init__(self):
         if self.reason is not None and (
             not 0 < len(self.reason) <= 1024
@@ -137,17 +173,44 @@ class SummaryUnknownData(SelectedSummaryData, declared_name="summary_unknown"):
             raise ValueError("Invalid selected summary failure detail")
 
 
+class WitnessedSummaryData(SelectedSummaryData):
+    """Both known outcomes carry the same source custody and selected settings."""
+
+    def require_source(self, request):
+        if (
+            self.witness != request.witness
+            or self.selected != request.selected
+            or self.settings != request.settings
+        ):
+            raise ValueError("Selected summary outcome unknown")
+
+
 @dataclass(frozen=True, kw_only=True)
-class SummarySummarizedData(SelectedSummaryData, declared_name="summary_summarized"):
+class SummarySummarizedData(WitnessedSummaryData, declared_name="summary_summarized"):
     status: Literal["summarized"]
     witness: NativeWitness
     selected: SelectedModel
     settings: PiCompactionSettings
     result: SummaryResult
 
+    def response(self, request, tokens_before):
+        from .owner_compaction_provider import NativeSummary
+        from .selected_pi_summary_rpc import SelectedSummaryResult
+
+        self.require_source(request)
+        if (
+            self.result.first_kept_entry_id != request.witness.first_kept_entry_id
+            or self.result.tokens_before != tokens_before
+        ):
+            raise ValueError("Selected summary result source changed")
+        return SelectedSummaryResult(
+            self.operation_id,
+            NativeSummary(self.result.summary, self.result.details, self.result.usage),
+        )
+
 
 @dataclass(frozen=True, kw_only=True)
-class SummaryFailedData(SelectedSummaryData, declared_name="summary_failed"):
+class SummaryFailedData(WitnessedSummaryData, declared_name="summary_failed"):
     """Joined provider failure with unchanged summary-only native source."""
 
     status: Literal["failed"]
@@ -155,6 +218,10 @@ class SummaryFailedData(SelectedSummaryData, declared_name="summary_failed"):
     selected: SelectedModel
     settings: PiCompactionSettings
     reason: str
+
+    def response(self, request, tokens_before):
+        self.require_source(request)
+        return self
 
     def __post_init__(self):
         if not 0 < len(self.reason) <= 1024 or any(
