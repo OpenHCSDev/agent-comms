@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from .pending_requests import PendingRequests
 from .pi_commands import PiCommand
-from .pi_events import PiEvent
+from .pi_events import PiEvent, Response
 
 
 def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -77,9 +77,13 @@ class PiRpcChannel:
 
     def encode(self, command: PiCommand) -> bytes:
         """Register before writing; correlated proof still requires its native input ID."""
-        key = command.id or uuid4().hex
-        self.pending.add(type(command), key, request=command)
+        self.track(command)
         return self.command_bytes(command)
+
+    def track(self, command: PiCommand) -> asyncio.Future[Response]:
+        """Expose the same pending response to the request's lifecycle owner."""
+        key = command.id or uuid4().hex
+        return self.pending.add(type(command), key, request=command)
 
     @staticmethod
     def command_bytes(command: PiCommand) -> bytes:

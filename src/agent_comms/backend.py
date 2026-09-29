@@ -41,7 +41,6 @@ from .maintenance_barrier import MaintenanceBarrier
 from .native_pi import CAPABILITY as NATIVE_INPUT_CAPABILITY
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
-from .pi_payloads import StateData
 from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
 from .turn_inputs import InputForwarding
@@ -780,26 +779,13 @@ class TurnSession:
                 break
             if self.skip:
                 continue
-            async for event in self.guard_identity():
+            async for event in self.payload.consume(self):
                 yield event
             if self.finished:
                 break
             if self.skip:
                 continue
-            async for event in self.observe_progress():
-                yield event
-            if self.finished:
-                break
-            if self.skip:
-                continue
-            async for emitted in self.payload.apply(self):
-                yield emitted
-            self.phase = self.phase.on(self.payload, self.active_tools)
-            if self.finished:
-                break
-            if self.skip:
-                continue
-            async for event in self.settle_or_continue():
+            async for event in self.stats.settle(self):
                 yield event
             if self.finished:
                 break
@@ -984,139 +970,23 @@ class TurnSession:
             self.finished = True
             return
 
-    async def guard_identity(self) -> AsyncIterator[events.AgentEvent]:
-        self.data = self.payload.data if isinstance(self.payload, pi.Response) else None
-        self.identity_changed = isinstance(self.payload, pi.Response) and issubclass(
-            self.payload.command, commands.MutatesSession
+    async def invalidate_identity(self) -> AsyncIterator[events.AgentEvent]:
+        self.session_identity_uncertain = True
+        self.usage.invalidate()
+        self.text_parts.clear()
+        yield self.context_info()
+        yield events.TurnState(
+            state="failed",
+            reason_code="session_identity_uncertain",
+            elapsed_ms=0,
+            phase="shutdown",
+            retryable=False,
+            replay_safe=False,
+            side_effects_possible=True,
         )
-        if (
-            isinstance(self.payload, pi.Response)
-            and self.payload.success
-            and self.data is not None
-            and issubclass(self.payload.command, commands.SessionSnapshot)
-            and self.initial_session_observed
-        ):
-            self.identity_changed = self.identity_changed or bool(
-                self.initial_session_id
-                and self.data.session_id
-                and (self.data.session_id != self.initial_session_id)
-                or (
-                    self.initial_session_file
-                    and self.data.session_file
-                    and (self.data.session_file != self.initial_session_file)
-                )
-            )
-        if self.identity_changed:
-            self.session_identity_uncertain = True
-            self.usage.invalidate()
-            self.text_parts.clear()
-            yield self.context_info()
-            yield events.TurnState(
-                state="failed",
-                reason_code="session_identity_uncertain",
-                elapsed_ms=0,
-                phase="shutdown",
-                retryable=False,
-                replay_safe=False,
-                side_effects_possible=True,
-            )
-            self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
-            await self.abort_stalled_rpc()
-            self.finished = True
-            return
-
-    async def observe_progress(self) -> AsyncIterator[events.AgentEvent]:
-        self.now = self.loop.time()
-        if isinstance(self.payload, pi.Response):
-            self.response_command = self.reader.correlate(self.payload)
-        if (
-            self.stats.requested
-            and isinstance(self.payload, pi.Response)
-            and (self.persistent_session is not None)
-        ):
-            self.response_id = self.payload.id
-            if self.response_id is not None and self.response_id in {
-                self.stats.state_id,
-                self.stats.usage_id,
-            }:
-                if self.payload.success is True:
-                    self.stats.responses.add(self.response_id)
-                    self.stats.complete = len(self.stats.responses) == 2
-                    if self.response_id == self.stats.state_id and isinstance(self.data, StateData):
-                        self.stats.busy = (
-                            self.data.is_streaming is True or self.data.is_compacting is True
-                        )
-                else:
-                    self.stats.failed = True
-        self.initial_prompt_response = (
-            isinstance(self.payload, pi.Response)
-            and self.payload.command is commands.Prompt
-            and (self.payload.id == self.prompt_id)
-        )
-        if (
-            isinstance(self.payload, pi.Response)
-            and self.payload.command is commands.Prompt
-            and (not self.initial_prompt_response)
-        ):
-            self.queued_response_id = self.payload.id
-            if self.payload.success is True and any(
-                item[0] == self.queued_response_id for item in self.inputs.pending
-            ):
-                self.inputs.accepted.add(self.queued_response_id)
-            self.inputs.changed.set()
-        if isinstance(self.payload, pi.SteeringInterruptStarted):
-            self.explicit_interrupt = True
-        elif isinstance(self.payload, pi.SteeringInterruptCompleted):
-            self.explicit_interrupt = False
-            self.text_parts.clear()
-            self.error_message = None
-            self.final_assistant_stop = False
-            yield events.SteeringInterrupted()
-        elif (
-            isinstance(self.payload, pi.Response)
-            and self.payload.command is commands.InterruptSteering
-            and (self.payload.success is False)
-        ):
-            yield events.Error(text=str(self.payload.error or "Send now was refused"))
-        if self.retry_recovery_pending and self.payload.retry_progress:
-            self.output_started |= self.payload.output_progress
-            self.tool_ever_started |= self.payload.tool_progress
-            self.retry_recovery_pending = False
-            yield self.turn_state(
-                "recovered", self.retry_recovery_reason, 0, event_phase="model_wait"
-            )
-        if self.payload.accepts_prompt:
-            self.prompt_accepted = True
-            if self.payload.invalidates_stop:
-                self.final_assistant_stop = False
-            self.last_model_progress = self.now
-            if not self.active_tools:
-                self.phase = self.phase.model_progress()
-
-    async def settle_or_continue(self) -> AsyncIterator[events.AgentEvent]:
-        if self.persistent_session is not None and (self.stats.complete or self.stats.failed):
-            await asyncio.sleep(0)
-            self.queued_commands = self.steering_queue is not None and (
-                not self.steering_queue.empty()
-            )
-            if not self.stats.failed and (
-                self.stats.busy
-                or self.inputs.pending
-                or self.queued_commands
-                or (self.inputs.generation != self.stats.generation)
-            ):
-                self.stats.requested = self.stats.complete = self.stats.busy = False
-                self.stats.responses.clear()
-                self.phase = phases.ModelWaitPhase()
-                if (
-                    self.settlement_count > self.stats.settlement_count or self.queued_commands
-                ) and (not self.inputs.pending):
-                    await self.stats.request(self)
-                self.skip = True
-                return
-            yield events.StreamSettled()
-            self.finished = True
-            return
+        self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+        await self.abort_stalled_rpc()
+        self.finished = True
 
     def prepare_launch(self) -> None:
         self.prompt_id = (
