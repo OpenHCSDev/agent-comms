@@ -22,7 +22,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
+from contextlib import ExitStack, asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -538,6 +538,27 @@ class ChildLaunch(ABC):
     @abstractmethod
     def options(self) -> dict: ...
 
+    def spawn(
+        self,
+        *,
+        cwd=None,
+        env=None,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ) -> ParentedProcess:
+        """Capture parent custody while the platform exec gate is still closed."""
+        process = subprocess.Popen(
+            self.argv,
+            cwd=cwd,
+            env=env,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            **self.options,
+        )
+        return ParentedProcess(process, Platform.current().identity(process.pid))
+
     @abstractmethod
     def release(self, identity: ProcessIdentity) -> None: ...
 
@@ -942,6 +963,43 @@ class ParentLifeline:
         threading.Thread(target=parent_watchdog, daemon=True).start()
 
 
+class InheritedDeadline:
+    """Pidfd watchdog custody; preserves the direct parent's authority FDs."""
+
+    def __init__(self, platform: PidfdHandles, child: ParentedProcess, deadline: float):
+        self.platform, self.child, self.deadline = platform, child, deadline
+        self.custody = ExitStack()
+
+    def __enter__(self):
+        try:
+            descriptor = self.platform.open_pidfd(self.child.pid)
+            self.custody.callback(os.close, descriptor)
+            # Only the pidfd crosses to the watchdog, never authority FDs.
+            with Platform.current().launch(
+                WatchDeadlineCommand(descriptor, self.deadline).argv(), (descriptor,)
+            ) as launch:
+                watcher = self.custody.enter_context(launch.spawn(stdout=subprocess.PIPE))
+                launch.release(watcher.identity)
+                launch.verify()
+            self.custody.callback(self.child.stop_sync)
+            assert watcher.process.stdout is not None
+            with selectors.DefaultSelector() as selector:
+                selector.register(watcher.process.stdout, selectors.EVENT_READ)
+                if not selector.select(max(0, self.deadline - time.monotonic())):
+                    raise TimeoutError("Inherited child watchdog did not arm before deadline")
+            if watcher.process.stdout.readline() != b"armed\n":
+                raise RuntimeError("Inherited child watchdog failed to arm")
+            if time.monotonic() >= self.deadline:
+                raise TimeoutError("Inherited child deadline elapsed before exec")
+            return self
+        except BaseException:
+            self.custody.close()
+            raise
+
+    def __exit__(self, *_):
+        self.custody.close()
+
+
 class BoundedRun:
     @staticmethod
     def require_inherited_deadline() -> PidfdHandles:
@@ -982,77 +1040,30 @@ class BoundedRun:
             raise ValueError("A command and future finite absolute deadline are required")
         for descriptor in pass_fds:
             os.fstat(descriptor)
-        child = watchdog = None
-        pidfd = None
-        try:
-            with platform.launch(command, pass_fds) as launch:
-                process = subprocess.Popen(
-                    launch.argv,
+        with ExitStack() as custody, platform.launch(command, pass_fds) as launch:
+            child = custody.enter_context(
+                launch.spawn(
                     cwd=cwd,
                     env=env,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    **launch.options,
                 )
-                child = DetachedProcess(platform.identity(process.pid), process)
-                pidfd = platform.open_pidfd(child.pid)
-                # Popen's normal close_fds plus this allow-list excludes every
-                # authority descriptor from the independent watchdog.
-                with platform.launch(
-                    WatchDeadlineCommand(pidfd, deadline).argv(), (pidfd,)
-                ) as watch_launch:
-                    watcher = subprocess.Popen(
-                        watch_launch.argv,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.DEVNULL,
-                        **watch_launch.options,
-                    )
-                    watchdog = DetachedProcess(platform.identity(watcher.pid), watcher)
-                    watch_launch.release(watchdog.identity)
-                    watch_launch.verify()
-                assert watcher.stdout is not None
-                with selectors.DefaultSelector() as selector:
-                    selector.register(watcher.stdout, selectors.EVENT_READ)
-                    if not selector.select(max(0, deadline - time.monotonic())):
-                        raise TimeoutError("Inherited child watchdog did not arm before deadline")
-                if watcher.stdout.readline() != b"armed\n":
-                    raise RuntimeError("Inherited child watchdog failed to arm")
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("Inherited child deadline elapsed before exec")
-                launch.release(child.identity)
-                launch.verify()
-                stdout, stderr = process.communicate(
-                    input, timeout=max(0, deadline - time.monotonic())
-                )
-                if time.monotonic() >= deadline:
-                    return ChildResult(TimedOutOutcome(child.stop_sync()), stdout, stderr)
-                return ChildResult(ChildOutcome.from_returncode(process.returncode), stdout, stderr)
-        except (TimeoutError, subprocess.TimeoutExpired):
-            if child is None:
-                raise
-            return ChildResult(TimedOutOutcome(child.stop_sync()))
-        finally:
-            if pidfd is not None:
-                os.close(pidfd)
-            # Includes KeyboardInterrupt and owner-side cancellation. Do not
-            # unlock inherited file descriptions; reap before caller releases.
+            )
             try:
-                if child is not None:
-                    child.stop_sync()
-            finally:
-                if watchdog is not None:
-                    watchdog.stop_sync()
-                for owned in (child, watchdog):
-                    if owned is not None:
-                        for stream in (
-                            owned._process.stdin,
-                            owned._process.stdout,
-                            owned._process.stderr,
-                        ):
-                            if stream is not None:
-                                stream.close()
+                # Watchdog lifetime is outside child retirement, even on
+                # exceptions: the authority-bearing child retires first.
+                with InheritedDeadline(platform, child, deadline):
+                    launch.release(child.identity)
+                    launch.verify()
+                    stdout, stderr = child.process.communicate(
+                        input, timeout=max(0, deadline - time.monotonic())
+                    )
+                    if time.monotonic() >= deadline:
+                        return ChildResult(TimedOutOutcome(child.stop_sync()), stdout, stderr)
+                    return ChildResult(child.reap(), stdout, stderr)
+            except (TimeoutError, subprocess.TimeoutExpired):
+                return ChildResult(TimedOutOutcome(child.stop_sync()))
 
     @classmethod
     @asynccontextmanager
@@ -1102,10 +1113,58 @@ class BoundedRun:
                 await _join_retirement(exchange)
 
 
-class DetachedProcess(ChildProcess):
-    def __init__(self, identity: ProcessIdentity, process: subprocess.Popen[bytes] | None = None):
+class SynchronousProcess(ChildProcess):
+    """Identity-bound control with synchronous reaping supplied by custody."""
+
+    def require_stop_authority(self) -> None:
+        """A retained parent handle already establishes stop/reap authority."""
+
+    def force(self) -> None:
+        self.platform.require(self.identity)
+        self.platform.force_group(self.identity)
+
+    async def stop(self) -> ChildOutcome:
+        if self._stop_task is None:
+            self.require_stop_authority()
+        return await super().stop()
+
+    @abstractmethod
+    def reap(self) -> ChildOutcome: ...
+
+    def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
+        self.require_stop_authority()
+        plan = self._stop_plan(guard)
+        while True:
+            try:
+                delay = next(plan)
+            except StopIteration as done:
+                stage = done.value
+                break
+            time.sleep(delay)
+        return stage(self.reap())
+
+
+class ObservedProcess(SynchronousProcess):
+    """A recorded incarnation: may signal it, cannot claim a parent's exit code."""
+
+    def require_stop_authority(self) -> None:
+        self.platform.require(self.identity)
+
+    def reap(self) -> ChildOutcome:
+        return DetachedExitOutcome()
+
+    async def wait(self) -> ChildOutcome:
+        while self.alive():
+            await asyncio.sleep(0.02)
+        return self.reap()
+
+
+class ParentedProcess(SynchronousProcess):
+    """Owns the OS child handle, its reap result, and any captured pipe streams."""
+
+    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity):
         super().__init__(identity)
-        self._process = process
+        self.process = process
 
     @classmethod
     def launch(
@@ -1116,76 +1175,51 @@ class DetachedProcess(ChildProcess):
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
-    ) -> DetachedProcess:
+    ) -> ParentedProcess:
         if not command:
             raise ValueError("A child command is required")
-        platform = Platform.current()
-        with platform.launch(command, ()) as launch:
-            process = subprocess.Popen(
-                launch.argv,
-                cwd=cwd,
-                env=env,
-                stdin=subprocess.DEVNULL,
-                stdout=output,
-                stderr=output,
-                **launch.options,
-            )
-            identity = platform.identity(process.pid)
-            child = cls(identity, process)
+        with Platform.current().launch(command, ()) as launch:
+            child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:
-                    before_start(identity)
+                    before_start(child.identity)
             except BaseException:
-                launch.cancel_before_release(identity)
-                process.wait(timeout=STOP_GRACE_SECONDS)
+                launch.cancel_before_release(child.identity)
+                child.reap()
+                child.close_streams()
                 raise
             try:
-                launch.release(identity)
+                launch.release(child.identity)
                 launch.verify()
             except BaseException:
-                child.stop_sync()
+                child.close()
                 raise
         return child
 
-    @classmethod
-    def attach(cls, identity: ProcessIdentity) -> DetachedProcess:
-        return cls(identity)
-
-    def force(self) -> None:
-        self.platform.require(self.identity)
-        self.platform.force_group(self.identity)
-
-    async def stop(self) -> ChildOutcome:
-        if self._stop_task is None and self._process is None:
-            self.platform.require(self.identity)
-        return await super().stop()
-
-    def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
-        if self._process is None:
-            self.platform.require(self.identity)
-        plan = self._stop_plan(guard)
-        while True:
-            try:
-                delay = next(plan)
-            except StopIteration as done:
-                stage = done.value
-                break
-            time.sleep(delay)
-        result = (
-            ChildOutcome.from_returncode(self._process.wait(timeout=STOP_GRACE_SECONDS))
-            if self._process is not None
-            else DetachedExitOutcome()
-        )
-        return stage(result)
+    def reap(self) -> ChildOutcome:
+        return ChildOutcome.from_returncode(self.process.wait(timeout=STOP_GRACE_SECONDS))
 
     async def wait(self) -> ChildOutcome:
-        if self._process is not None:
-            while self._process.poll() is None:
-                await asyncio.sleep(0.02)
-            return ChildOutcome.from_returncode(self._process.returncode)
-        while self.alive():
+        while self.process.poll() is None:
             await asyncio.sleep(0.02)
-        return DetachedExitOutcome()
+        return self.reap()
+
+    def close_streams(self) -> None:
+        for stream in (self.process.stdin, self.process.stdout, self.process.stderr):
+            if stream is not None:
+                stream.close()
+
+    def close(self) -> None:
+        try:
+            self.stop_sync()
+        finally:
+            self.close_streams()
+
+    def __enter__(self) -> ParentedProcess:
+        return self
+
+    def __exit__(self, *_):
+        self.close()
 
 
 @dataclass(frozen=True)

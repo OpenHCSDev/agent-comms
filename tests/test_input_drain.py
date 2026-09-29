@@ -18,7 +18,7 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_request,
 )
-from agent_comms.child_process import DetachedProcess, ProcessIdentity
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.errors import RelationViolationError
@@ -224,7 +224,7 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
         comms.messaging.send("peer", "owner", "correction")
         assert capture(owner) != source
     elif change == "owner":
-        foreign = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(30)"))
+        foreign = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(30)"))
         try:
             comms.registry.register(
                 replace(current, process_identity=foreign.identity, active_turn=None)

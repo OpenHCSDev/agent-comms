@@ -36,14 +36,19 @@ this document does not promote an activation-in-progress claim to completed.
   settlement and caller deletion. [PR384 receipt](../evidence/q8-selected-execution/README.md)
   records actual installed native and saved ACP reply journeys; parent owns integration/live.
 - Current ownership supersedes earlier snapshots:383 InputDrain and382/182
-  MessageBus are merged;384 SelectedExecution passed bounded peer review and is
-  integrating current main.183 Agent377 and181 App442 are merged. Parent owns
+  MessageBus,384 SelectedExecution and387 attempt stores are merged.
+  183 Agent377 and181 App442 are merged. Parent owns
   the next matched installation; these are not yet in the live19e5/262e pair.
-  Dalton continues HistoryViews, Wegener387 attempt stores, Boyle386 process
+  Dalton continues HistoryViews, Wegener continues InputDrain wake lifetime, Boyle386 process
   custody, Carver channel-history/painted ACK, Noether185 CommsSidebar and
   Tesla184/core388 witnessed loaded-history/terminal latency. All retain their
   independent whole-surface closure and actual affected-path gates. Parent owns
   full plan reconciliation and paired shipping.
+- Boyle386 closes explicit parented/observed process custody: optional-Popen
+  dispatch and inherited nullable cleanup deleted; canonical gated spawn and
+  all callers migrated. Actual installed native commit/UNKNOWN, owner retirement
+  and saved ACP reply/restart receipts are in evidence/process-custody.
+  Parent is integrating386 normally; this is not an activation claim.
 - Workspace156 mapping was superseded by160(+163 proof); first-open153,154 and345
   cutover were reported complete. Later Toad167 is in the parent's paired test
   above. The historical T4 and UI rows below are not fresh outstanding assignments;

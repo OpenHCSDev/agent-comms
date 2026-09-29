@@ -35,22 +35,17 @@ def test_every_spawn_has_its_own_process_group() -> None:
     assert "bind_and_resume" in ast.unparse(declarations["WindowsLaunch"])
 
 
-def test_detached_control_has_no_bare_pid_api() -> None:
-    tree = ast.parse(Path(child_process.__file__).read_text())
-    detached = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "DetachedProcess"
+def test_process_custody_has_no_bare_pid_or_optional_parent_api() -> None:
+    import inspect
+    from typing import get_type_hints
+
+    for owner in (child_process.ParentedProcess, child_process.ObservedProcess):
+        assert get_type_hints(owner.__init__)["identity"] is child_process.ProcessIdentity
+        assert "pid" not in inspect.signature(owner).parameters
+    assert get_type_hints(child_process.ParentedProcess.__init__)["process"] == (
+        child_process.subprocess.Popen[bytes]
     )
-    for method in detached.body:
-        if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            assert all(argument.arg != "pid" for argument in method.args.args)
-    attach = next(
-        method
-        for method in detached.body
-        if isinstance(method, ast.FunctionDef) and method.name == "attach"
-    )
-    assert ast.unparse(attach.args.args[1].annotation) == "ProcessIdentity"
+    assert "process" not in inspect.signature(child_process.ObservedProcess).parameters
 
 
 def test_s13_callers_cannot_reintroduce_local_supervision() -> None:

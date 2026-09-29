@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import DetachedProcess
+from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import socket_path
@@ -55,11 +55,11 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         current = comms.registry.require("worker")
         if current.process_alive:
             assert current.process_identity is not None
-            DetachedProcess.attach(current.process_identity).stop_sync()
+            ObservedProcess(current.process_identity).stop_sync()
 
 
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
-    child = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
         comms = Comms(tmp_path)
         comms.registry.declare(
@@ -82,7 +82,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
 
 def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None:
     children = [
-        DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+        ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
         for _ in range(2)
     ]
     try:
@@ -110,7 +110,7 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goal_waits import GoalWaits
 
-    child = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
         comms = Comms(tmp_path)
         owner = Thread("owner", frozenset(), str(tmp_path))
@@ -162,4 +162,4 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         assert owner.session_file is None
     finally:
         if owner.process_alive:
-            DetachedProcess.attach(owner.process_identity).stop_sync()
+            ObservedProcess(owner.process_identity).stop_sync()

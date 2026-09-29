@@ -14,7 +14,7 @@ from agent_comms.acp_extension import (
     TurnSettledUpdate,
     decode_updates,
 )
-from agent_comms.child_process import DetachedProcess, ProcessIdentity
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_result import CommittedCompactionResult, CompactionResult
 from agent_comms.field_codec import FieldCodec
@@ -32,7 +32,7 @@ def runtime_processes():
     try:
         for _ in range(2):
             children.append(
-                DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+                ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
             )
         yield tuple(child.identity for child in children)
     finally:
