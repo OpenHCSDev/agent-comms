@@ -21,3 +21,5 @@ Isolated persistent worktree /home/ts/wt/comms-preflight-feedback-sol-20260929 f
 - Earlier obsolete PersistentPiSession.proc fixture corrected to actual custody child; earlier marker/path harness REDs retained. Terminal prior Error is intentionally corrected from reserved/unknown to durable not-sent; unchanged terminal/exception feedback still once. Final focused terminal cases recorded separately.
 
 Next: parent review and affected live-entry gate; backend/watchdog startup latency remains parent-owned and unchanged. No paid calls or live mutations performed.
+
+Final terminal correction cases: 3 PASS/6 deselected in 35.28s (`terminal-corrected.log`), after old already-collected text-only assertion RED. Full terminal run had 8 other cases PASS; only that replaced assertion failed. No unchanged broad rerun. Final production delta deletes 32 old lines across 8 files.
