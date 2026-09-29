@@ -1,0 +1,35 @@
+{
+  "process_refs": [],
+  "unreadable_user_process_details": [
+    {
+      "pid": 1786010,
+      "name": "systemd"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    },
+    {
+      "pid": 3699396,
+      "name": "fusermount3"
+    }
+  ],
+  "removed": [
+    {
+      "path": ".artifacts/optional-awareness-identity/wire-first",
+      "bytes": 7234935
+    },
+    {
+      "path": ".artifacts/optional-awareness-identity/wire-journey",
+      "bytes": 995832
+    },
+    {
+      "path": ".artifacts/optional-awareness-identity/wire-corrected",
+      "bytes": 498641
+    },
+    {
+      "path": ".artifacts/optional-awareness-identity/wire-budget",
+      "bytes": 852101
+    }
+  ]
+}
