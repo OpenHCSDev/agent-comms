@@ -349,7 +349,10 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     assert reconnect_cursor.observation.cursor.input_id == current.observation.cursor.input_id
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            len(NativeRuntimeInput.select(store.session._connection, where="session_id IS NOT NULL")) == 1
+            len(
+                NativeRuntimeInput.select(store.session._connection, where="session_id IS NOT NULL")
+            )
+            == 1
         )
         assert (
             store.session._connection.execute(
@@ -487,24 +490,24 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     for _ in range(3):
         loaded = cursor_envelope(agent.sessions.metadata("beta"))
         assert loaded.same_observation(updates[-1])
-        await agent._refresh_private_cursor("beta")
+        await agent.cursors.refresh("beta", "beta")
         assert len(updates) == before, "Unchanged trusted reads republished the same cursor"
     with _store_lock(comms.root / "wire"):
-        await agent._publish_private_cursor("beta", "beta")
-    await agent._publish_private_cursor("beta", "beta")
+        await agent.cursors.publish("beta", "beta")
+    await agent.cursors.publish("beta", "beta")
     assert len(updates) == before, "Periodic contention forgot unchanged announced authority"
     with _store_lock(comms.root / "wire"):
         # This is an actual contended flock in the canonical read path, not a
         # mocked error. A new attachment cannot claim an unread observation.
         loaded = next(
             update.envelope
-            for update in agent._session_runtime_metadata("beta", "beta")
+            for update in agent.cursors.trusted_metadata("beta", "beta")
             if isinstance(update, CursorAdvancedUpdate)
         )
         assert loaded.status == "unavailable"
-        await agent._publish_private_cursor("beta", "beta")
+        await agent.cursors.publish("beta", "beta")
     assert len(updates) == before
-    await agent._publish_private_cursor("beta", "beta")
+    await agent.cursors.publish("beta", "beta")
     # The trusted load invalidates a different announced observation, so the
     # recovered proof must still publish after the lock clears.
     assert len(updates) == before + 1
@@ -512,12 +515,12 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert updates[-1].revision > loaded.revision
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    await agent._publish_private_cursor("beta", "beta")
+    await agent.cursors.publish("beta", "beta")
     assert updates[-1].status == "unavailable"
     assert updates[-1].scope == loaded.scope
     before = len(updates)
-    await agent._refresh_private_cursor("beta")
-    await agent._refresh_private_cursor("beta")
+    await agent.cursors.refresh("beta", "beta")
+    await agent.cursors.refresh("beta", "beta")
     assert len(updates) == before, "Unchanged unavailable observation was republished"
     assert len(calls) == 1  # Observation never initiates or replays an input.
 
@@ -531,7 +534,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
             updates.append(cursor.envelope)
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    await agent._publish_private_cursor("beta", "beta")
+    await agent.cursors.publish("beta", "beta")
     scope = updates[-1].scope
 
     def replacement_during_read(*args, **kwargs):
@@ -539,8 +542,10 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
         comms.registry.heartbeat("beta")
         raise BlockingIOError("writer holds the observation lock")
 
-    monkeypatch.setattr("agent_comms.acp.NativeSourceCursor.read", replacement_during_read)
-    await agent._publish_private_cursor("beta", "beta")
+    monkeypatch.setattr(
+        "agent_comms.cursor_publication.NativeSourceCursor.read", replacement_during_read
+    )
+    await agent.cursors.publish("beta", "beta")
     assert updates[-1].status == "unavailable"
     assert updates[-1].scope.admission_generation > scope.admission_generation
 
@@ -714,7 +719,9 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
         await agent.inputs.drain_inbox("beta")
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
-            store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            store.session._connection.execute(
+                "SELECT COUNT(*) FROM claim_batch_receipts"
+            ).fetchone()[0]
             == 0
         )
     assert calls == []
