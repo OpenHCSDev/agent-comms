@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .channels import Channel
     from .messages import Message
 
 
@@ -166,3 +167,16 @@ class ChannelActivity:
                 else self.last_user_input
             ),
         )
+
+    @classmethod
+    def for_views(cls, channels: Mapping[str, Channel],
+                  by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
+        """Combine target-owned clocks using each declaration's history membership."""
+        result = {}
+        for name, channel in channels.items():
+            targets = channel.history_targets
+            clocks = (tuple(by_target.values()) if targets is None
+                      else tuple(by_target.get(target, cls()) for target in targets))
+            result[name] = cls(max((item.last_message for item in clocks), default=0),
+                               max((item.last_user_input for item in clocks), default=0))
+        return result

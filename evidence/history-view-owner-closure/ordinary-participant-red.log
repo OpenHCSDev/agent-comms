@@ -1,0 +1,48 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_history_view_declaration.py F                                 [100%]
+
+=================================== FAILURES ===================================
+_ test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-628/test_ordinary_coordination_sna0')
+
+    def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant(tmp_path):
+        from test_coordinated_runtime import _root
+    
+        _path, _root_id, comms, _initial, _people = _root(tmp_path)
+        lease = comms.agents.begin_turn("beta", "ordinary-snapshot-active-participant")
+        try:
+>           snapshot = comms.views.coordination_snapshot()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_history_view_declaration.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:327: in coordination_snapshot
+    ChannelActivity.for_views(channels, self.bus.channel_activity()),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.bus_activity_index.ChannelActivity'>
+channels = (ChannelView(channel=Channel(name='#any', tags=frozenset(), order=<ThreadSort.CREATED: 'created_at'>, created_at=0.0, ...w=None), members=('beta', 'alpha'), last_activity=1790681172.0379314, last_user_input=0.0, pinned_members=frozenset()))
+by_target = {'#team': ChannelActivity(last_message=1790681172.0084004, last_user_input=0.0)}
+
+    @classmethod
+    def for_views(cls, channels: Mapping[str, Channel],
+                  by_target: Mapping[str, ChannelActivity]) -> Mapping[str, ChannelActivity]:
+        """Combine target-owned clocks using each declaration's history membership."""
+        result = {}
+>       for name, channel in channels.items():
+                             ^^^^^^^^^^^^^^
+E       AttributeError: 'tuple' object has no attribute 'items'
+
+src/agent_comms/bus_activity_index.py:176: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_history_view_declaration.py::test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant
+============================== 1 failed in 0.29s ===============================
