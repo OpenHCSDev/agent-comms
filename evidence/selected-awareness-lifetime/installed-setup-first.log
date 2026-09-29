@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/evidence/selected-awareness-lifetime/installed-run.py", line 28, in <module>
+    assert not os.environ.get('PYTHONPATH')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
