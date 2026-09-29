@@ -1,0 +1,32 @@
+changed between 942f9824..HEAD (touched files, after minus before)
+
+change in counts (942f9824..HEAD): read these first when code was deleted as well as added
+  type_identity_check           +0
+  long_boolean_chain            +0
+  boolean_chain_terms           +0
+  codec_subclass                +0
+  foreign_absence_probe         +0
+  string_key_subscript          +0
+  literal_key_get               +0
+  string_equality               -6
+  none_identity                 +4
+  isinstance_call               +3
+  attribute_by_name             +0
+  getattr_default               +0
+  broad_except                  +0
+  json_loads                    +0
+  long_function                 +0
+  class_definition             +14
+  abstract_base                 +0
+  enum_class                    +0
+  code lines                   +55
+
+(densities omitted: under 500 net code lines, a ratio of changes to net lines is meaningless)
+
+Top 12 files by weighted debt (type_identity_check x3, long_boolean_chain x5, boolean_chain_terms x1, codec_subclass x3, foreign_absence_probe x1, string_key_subscript x1, literal_key_get x1, attribute_by_name x3):
+       0  src/agent_comms/backend.py  (code lines -59)
+       0  src/agent_comms/config_options.py  (code lines +1)
+       0  src/agent_comms/native_arguments.py  (code lines +127)
+       0  src/agent_comms/native_pi.py  (code lines -13)
+       0  src/agent_comms/session_lifecycle.py  (code lines +0)
+       0  src/agent_comms/turn_runner.py  (code lines -1)

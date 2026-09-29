@@ -55,6 +55,7 @@ def native_rpc_fixture(monkeypatch):
     """
     import os
 
+    from agent_comms.native_arguments import NativeArguments
     from agent_comms.native_pi import NativePiRpcLaunch
 
     original = NativePiRpcLaunch.managed
@@ -72,7 +73,7 @@ def native_rpc_fixture(monkeypatch):
                 session_file=session_file,
                 fork_session=fork_session,
             )
-        args = NativePiRpcLaunch.rpc_arguments(arguments)
+        args = NativeArguments.parse(arguments).rpc()
         if session_file:
             args += ("--fork" if fork_session else "--session", session_file)
         env = dict(os.environ)

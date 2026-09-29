@@ -21,6 +21,7 @@ from . import agent_events as events
 from . import backend
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .native_arguments import NativeArguments
 from .pending_requests import PendingRequests
 from .pi_commands import (
     GetAvailableModels,
@@ -60,7 +61,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision, lock and generation."""
 
-    def __init__(self, agent_bin: str, agent_args: list[str]):
+    def __init__(self, agent_bin: str, agent_args: NativeArguments):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
         self.auth: tuple[int, int] | None = None
@@ -137,7 +138,7 @@ class ModelConfigOption(CatalogConfigOption):
             if value.strip()
         ]
         if not values:
-            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args)
+            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
             SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
@@ -166,7 +167,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
             levels = ["off", "minimal", "low", "medium", "high"]
         else:
             data = await GetAvailableThinkingLevels().discover(
-                self.agent_bin, backend.args_for_model(self.agent_args, thread.model)
+                self.agent_bin, self.agent_args.with_model(thread.model).argv
             )
             levels = data.levels or ["off"]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
@@ -196,7 +197,7 @@ class ConfigOptions:
         self,
         comms: Comms,
         agent_bin: str,
-        agent_args: list[str],
+        agent_args: NativeArguments,
         runtime: RuntimeServer,
         sessions: SessionLifecycle,
         effects: SessionEffects,
@@ -223,7 +224,7 @@ class ConfigOptions:
         selected = thread.model
         if selected is None:
             selected = self.comms.threads.resolve_thread_model(
-                thread.name, backend.configured_model(self.agent_args)
+                thread.name, self.agent_args.model
             )
         if selected is not None and selected != thread.model:
             self.comms.threads.set_thread_model(thread.name, selected)

@@ -1957,17 +1957,6 @@ for line in sys.stdin:
         assert tool_end.ok is False
 
 
-class TestNativeConfiguration:
-    def test_model_arguments_are_read_and_replaced(self):
-        args = ["--provider", "openrouter", "--model", "old/model"]
-        assert backend.configured_model(args) == "openrouter/old/model"
-        assert backend.args_for_model(args, "anthropic/claude-sonnet") == [
-            "--provider",
-            "anthropic",
-            "--model",
-            "claude-sonnet",
-        ]
-
 # Native per-input proof tests retained from the PR#1 parent.
 class TestNativeInputBinding:
     async def test_owner_revoked_after_preflight_never_writes_prompt(self, tmp_path):

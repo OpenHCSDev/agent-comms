@@ -43,6 +43,7 @@ from .goal_presentation import GoalExecution
 from .goals import Goal
 from .input_drain import InputDrain
 from .messages import Message
+from .native_arguments import NativeArguments
 from .routing import ScheduledTurn
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
@@ -103,7 +104,7 @@ class TurnRunner:
         self.adaptive_summary_strategy = adaptive_summary_strategy
         self.agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
         arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
-        self.agent_args = (
+        self.agent_args = NativeArguments.parse(
             agent_args
             if agent_args is not None
             else (shlex.split(arg_env) if arg_env is not None else list(DEFAULT_AGENT_ARGS))
@@ -136,10 +137,8 @@ class TurnRunner:
         self.sessions = sessions
         self.inputs = inputs
 
-    def native_arguments(self, thread: Thread) -> list[str]:
-        return backend.args_for_thinking_level(
-            backend.args_for_model(self.agent_args, thread.model), thread.thinking_level
-        )
+    def native_arguments(self, thread: Thread) -> tuple[str, ...]:
+        return self.agent_args.with_model(thread.model).with_thinking(thread.thinking_level).argv
 
     def native_environment(self, thread: Thread, worktree: str) -> dict[str, str]:
         return {
