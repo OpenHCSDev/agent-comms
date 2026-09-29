@@ -20,16 +20,26 @@ from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
 )
-from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
+from agent_comms.coordination_tables.participants import OwnerGenerations
+from agent_comms.coordination_tables.responses import ResponseObligation
 
+from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .child_process import ProcessIdentity
 from .cohort_schema import (
     COHORT_SCHEMA_VERSION,
+    AwarenessClaimGenerations,
+    ClaimBatchMembers,
+    ClaimBatchReceipts,
+    CohortDeliveryReceipts,
     assert_cohort_schema,
     assert_optional_awareness_schema,
 )
 from .coordination_cohort import _receipt_matches
 from .errors import RelationViolationError
+from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .registration import Registration
 from .store_files import _store_lock
@@ -57,36 +67,126 @@ class _CohortVersion(TypedRow):
 
 
 @dataclass(frozen=True)
-class _SelectedDecision(TypedRow):
-    claim_id: str
-    recipient: str
-    wire_seq: int
-    message_id: str
-    wake_mode: str
-    disposition: str
-    exact_target: str | None
-    sealed: bool | None
-    receipt_message_id: str | None
-    member_claim: str | None
-    delivery_claim: str | None
-    kind: str | None
-    canonical_thread: str | None
-    generation_claim: str | None
-    generation_lookup: str | None
-    generation_thread: str | None
-    accepted_generation: int | None
+class _GenerationProvenance:
+    """The SQL owner's captured generation, not a present-day wake grant."""
+
+    generation: AwarenessClaimGenerations
+
+    def current(self, expected: OwnerGenerations) -> bool:
+        captured = OwnerGenerations(
+            owner_lookup=self.generation.recipient_lookup,
+            owner_thread=self.generation.canonical_thread,
+            generation=self.generation.owner_generation,
+        )
+        if captured.generation < expected.generation:
+            return False
+        if captured != expected:
+            raise ProjectionUnavailableError("captured participant owner changed")
+        return True
 
 
 @dataclass(frozen=True)
-class _OpenObligation(TypedRow):
-    execution_id: str
-    exact_target: str
-    state: str
-    owner_thread: str
-    origin: str
-    linked_claim: str | None
-    accepted_generation: int | None
-    generation_thread: str | None
+class _SelectedDecision(_GenerationProvenance):
+    assignment: WakeAssignment
+    receipt: ClaimBatchReceipts
+
+    @classmethod
+    def capture(
+        cls,
+        assignment: WakeAssignment,
+        receipt: ClaimBatchReceipts,
+        member: ClaimBatchMembers,
+        delivery: CohortDeliveryReceipts,
+        generation: AwarenessClaimGenerations,
+    ) -> _SelectedDecision:
+        if not receipt.sealed or receipt.message_id != assignment.message_id:
+            raise ProjectionUnavailableError("selected source receipt is unsealed or changed")
+        expected_member = ClaimBatchMembers(
+            wire_root_id=receipt.wire_root_id,
+            wire_seq=assignment.wire_seq,
+            ordinal=member.ordinal,
+            claim_id=assignment.assignment_id,
+            recipient_lookup=assignment.recipient_lookup,
+        )
+        if member != expected_member:
+            raise ProjectionUnavailableError("selected source is not the recorded batch member")
+        expected_delivery = CohortDeliveryReceipts(
+            wire_root_id=receipt.wire_root_id,
+            wire_seq=assignment.wire_seq,
+            ordinal=delivery.ordinal,
+            recipient_lookup=assignment.recipient_lookup,
+            canonical_thread=assignment.recipient,
+            kind="selected",
+            claim_id=assignment.assignment_id,
+        )
+        if delivery != expected_delivery:
+            raise ProjectionUnavailableError("selected source delivery changed")
+        expected_generation = AwarenessClaimGenerations(
+            claim_id=assignment.assignment_id,
+            wire_root_id=receipt.wire_root_id,
+            wire_seq=assignment.wire_seq,
+            recipient_lookup=assignment.recipient_lookup,
+            canonical_thread=assignment.recipient,
+            owner_generation=generation.owner_generation,
+        )
+        if generation != expected_generation:
+            raise ProjectionUnavailableError("selected source generation provenance changed")
+        return cls(generation, assignment, receipt)
+
+    @property
+    def candidate(self):
+        return (
+            self.assignment.wire_seq,
+            self.assignment.message_id,
+            self.assignment.lifecycle.mode.declared_name,
+            self.receipt.exact_target,
+        )
+
+    def context(self):
+        return {
+            "source_seq": self.assignment.wire_seq,
+            "message_id": self.assignment.message_id,
+            "claim_id": self.assignment.assignment_id,
+            "wake_mode": self.assignment.lifecycle.mode.declared_name,
+            "disposition": self.assignment.lifecycle.declared_name,
+            "target": self.receipt.exact_target,
+        }
+
+
+@dataclass(frozen=True)
+class _OpenObligation(_GenerationProvenance):
+    obligation: ResponseObligation
+
+    @classmethod
+    def capture(
+        cls,
+        obligation: ResponseObligation,
+        execution: ExecutionRecord,
+        link: ExecutionAssignmentLink,
+        generation: AwarenessClaimGenerations,
+    ) -> _OpenObligation:
+        if execution.origin is not ExecutionOrigin.WIRE:
+            raise ProjectionUnavailableError("open obligation has no wire origin")
+        expected = OwnerGenerations(
+            owner_lookup=execution.owner_lookup,
+            owner_thread=execution.owner_thread,
+            generation=generation.owner_generation,
+        )
+        captured = OwnerGenerations(
+            owner_lookup=generation.recipient_lookup,
+            owner_thread=generation.canonical_thread,
+            generation=generation.owner_generation,
+        )
+        if captured != expected or link.assignment_id != generation.claim_id:
+            raise ProjectionUnavailableError("open obligation has no exact owner provenance")
+        return cls(generation, obligation)
+
+    def context(self):
+        return {
+            "execution_id": self.obligation.execution_id,
+            "target": self.obligation.exact_target,
+            "state": self.obligation.lifecycle.declared_name,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,22 +218,16 @@ class OptionalAwarenessProjection:
     max_text_bytes: int = 16 * 1024
 
     def __post_init__(self) -> None:
-        if (
-            type(self.index) is not WakeCandidateIndex
-            or type(self.after_seq) is not int
-            or self.after_seq < 0
-            or type(self.through_seq) is not int
-            or self.through_seq <= self.after_seq
-            or type(self.expected_participant_generation) is not int
-            or self.expected_participant_generation < 1
-            or type(self.expected_admission_generation) is not int
-            or self.expected_admission_generation < 1
-            or type(self.max_rows) is not int
-            or not 1 <= self.max_rows <= 100
-            or type(self.max_text_bytes) is not int
-            or not 1 <= self.max_text_bytes <= 16 * 1024
-        ):
+        # These are typed internal snapshots. External rows are decoded by
+        # TypedTable/FieldCodec once, where they enter below.
+        if not 0 <= self.after_seq < self.through_seq:
             raise ValueError("optional awareness requires a bounded trusted source window")
+        if min(self.expected_participant_generation, self.expected_admission_generation) < 1:
+            raise ValueError("optional awareness requires positive captured generations")
+        if not 1 <= self.max_rows <= 100:
+            raise ValueError("optional awareness row budget is outside the bounded read")
+        if not 1 <= self.max_text_bytes <= 16 * 1024:
+            raise ValueError("optional awareness text budget is outside the bounded read")
 
     def __call__(
         self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
@@ -154,31 +248,32 @@ class OptionalAwarenessProjection:
             OSError,
             TypeError,
             ValueError,
+            KeyError,
         ) as error:
             return OptionalAwarenessResult("", False, omission_reason=type(error).__name__)
 
     def _build(
         self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
-        if (
-            type(initial) is not CommittedDelivery
-            or type(assignment) is not WakeAssignment
-            or type(owner) is not Thread
+        if owner.process_identity != ProcessIdentity.capture(os.getpid()):
+            raise ProjectionUnavailableError("selected owner is not this process")
+        if not owner.role.executable:
+            raise ProjectionUnavailableError("selected owner is not executable")
+        turn = owner.active_turn
+        if turn is None or turn.admission_generation != self.expected_admission_generation:
+            raise ProjectionUnavailableError("selected owner turn changed")
+        if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
+            stable_thread_lookup(owner.created_at),
+            owner.name,
         ):
-            raise ValueError("optional awareness requires verified typed source identities")
-        if (
-            owner.pid != os.getpid()
-            or not owner.role.executable
-            or owner.active_turn is None
-            or owner.active_turn.admission_generation != self.expected_admission_generation
-            or assignment.recipient != owner.name
-            or assignment.recipient_lookup != stable_thread_lookup(owner.created_at)
-            or assignment.wire_seq != initial.message.seq
-            or assignment.message_id != initial.message.message_id
-            or initial.message.seq <= self.after_seq
-            or initial.message.seq > self.through_seq
+            raise ProjectionUnavailableError("selected recipient changed")
+        if (assignment.wire_seq, assignment.message_id) != (
+            initial.message.seq,
+            initial.message.message_id,
         ):
-            raise ProjectionUnavailableError("selected owner or source window changed")
+            raise ProjectionUnavailableError("selected source changed")
+        if not self.after_seq < initial.message.seq <= self.through_seq:
+            raise ProjectionUnavailableError("selected source is outside the captured window")
         _require_no_private_owner_rename(self.index.bus.log.path.parent)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
@@ -204,28 +299,25 @@ class OptionalAwarenessProjection:
             db.execute("PRAGMA busy_timeout=50")
             db.execute("BEGIN")
             self._verify_schema_and_owner(db, initial, assignment, owner)
-            decisions = self._selected_decisions(db, root_id, lookup, owner.name, page.through_seq)
+            decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
                 (row.source_seq, row.message_id, row.wake_mode, row.target) for row in page.entries
             )
-            accepted = tuple(
-                (row.wire_seq, row.message_id, row.wake_mode, row.exact_target) for row in decisions
-            )
+            accepted = tuple(row.candidate for row in decisions)
             if candidates != accepted:
                 raise ProjectionUnavailableError("candidate rows differ from sealed decisions")
-            obligations = self._open_obligations(db, lookup, owner.name)
-            selected = [
-                row
-                for row in decisions
-                if row.accepted_generation == self.expected_participant_generation
-            ]
-            if not any(row.claim_id == assignment.assignment_id for row in selected):
+            obligations = self._open_obligations(db, lookup)
+            expected = OwnerGenerations(
+                owner_lookup=lookup,
+                owner_thread=owner.name,
+                generation=self.expected_participant_generation,
+            )
+            selected = [row for row in decisions if row.current(expected)]
+            if not any(
+                row.assignment.assignment_id == assignment.assignment_id for row in selected
+            ):
                 raise ProjectionUnavailableError("current selected claim has no owner generation")
-            current_obligations = [
-                row
-                for row in obligations
-                if row.accepted_generation == self.expected_participant_generation
-            ]
+            current_obligations = [row for row in obligations if row.current(expected)]
             historical_omitted = (len(decisions) - len(selected)) + (
                 len(obligations) - len(current_obligations)
             )
@@ -238,25 +330,8 @@ class OptionalAwarenessProjection:
         context = {
             "recipient_lookup": lookup,
             "through_seq": page.through_seq,
-            "selected": [
-                {
-                    "source_seq": row.wire_seq,
-                    "message_id": row.message_id,
-                    "claim_id": row.claim_id,
-                    "wake_mode": row.wake_mode,
-                    "disposition": row.disposition,
-                    "target": row.exact_target,
-                }
-                for row in selected
-            ],
-            "open_obligations": [
-                {
-                    "execution_id": row.execution_id,
-                    "target": row.exact_target,
-                    "state": row.state,
-                }
-                for row in current_obligations
-            ],
+            "selected": [row.context() for row in selected],
+            "open_obligations": [row.context() for row in current_obligations],
         }
         text = json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         if len(text.encode("utf-8")) > self.max_text_bytes:
@@ -268,34 +343,10 @@ class OptionalAwarenessProjection:
         registry = Registration(self.index.bus._registry.store.path)
         with _store_lock(registry.store.path, blocking=False):
             snapshot = registry.store._read_unlocked().snapshot()
-            actual = snapshot.threads.get(owner.name)
-            status = snapshot.statuses.get(owner.name)
-            if (
-                actual is None
-                or status is None
-                or not status.active
-                or snapshot.admission_generations.get(owner.name)
-                != self.expected_admission_generation
-                or (
-                    actual.name,
-                    actual.created_at,
-                    actual.pid,
-                    actual.role,
-                    actual.worktree,
-                    actual.active_turn,
-                    actual.goal,
-                )
-                != (
-                    owner.name,
-                    owner.created_at,
-                    owner.pid,
-                    owner.role,
-                    owner.worktree,
-                    owner.active_turn,
-                    owner.goal,
-                )
-            ):
-                raise ProjectionUnavailableError("current registry owner turn changed")
+            RegistryOwner(
+                thread=owner,
+                admission_generation=self.expected_admission_generation,
+            ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.
         with closing(
@@ -350,80 +401,112 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("current selected claim lost its sealed receipt")
 
     def _selected_decisions(
-        self, db: sqlite3.Connection, root_id: str, lookup: str, owner_name: str, through_seq: int
+        self, db: sqlite3.Connection, root_id: str, lookup: str, through_seq: int
     ) -> list[_SelectedDecision]:
-        rows = _SelectedDecision.read(
-            db.execute(
-                "SELECT c.assignment_id AS claim_id,c.recipient,c.wire_seq,c.message_id,c.wake_mode,"
-                "c.disposition,r.exact_target,r.sealed,r.message_id AS receipt_message_id,"
-                "m.claim_id AS member_claim,"
-                "d.claim_id AS delivery_claim,d.kind,d.canonical_thread,"
-                "ag.claim_id AS generation_claim,ag.recipient_lookup AS generation_lookup,"
-                "ag.canonical_thread AS generation_thread,"
-                "ag.owner_generation AS accepted_generation "
-                "FROM wake_claims c "
-                "LEFT JOIN claim_batch_receipts r ON r.wire_root_id=? AND r.wire_seq=c.wire_seq "
-                "LEFT JOIN claim_batch_members m ON m.wire_root_id=r.wire_root_id "
-                "AND m.wire_seq=r.wire_seq AND m.claim_id=c.assignment_id "
-                "LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
-                "AND d.wire_seq=r.wire_seq AND d.recipient_lookup=c.recipient_lookup "
-                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=c.assignment_id "
-                "AND ag.wire_root_id=r.wire_root_id AND ag.wire_seq=r.wire_seq "
-                "WHERE c.recipient_lookup=? AND c.wire_seq>? AND c.wire_seq<=? "
-                "ORDER BY c.wire_seq LIMIT ?",
-                (root_id, lookup, self.after_seq, through_seq, self.max_rows + 1),
-            )
+        assignments = WakeAssignment.select(
+            db,
+            where="recipient_lookup=? AND wire_seq>? AND wire_seq<=? ORDER BY wire_seq LIMIT ?",
+            parameters=(lookup, self.after_seq, through_seq, self.max_rows + 1),
         )
-        if len(rows) > self.max_rows or any(
-            row.sealed != 1
-            or row.receipt_message_id != row.message_id
-            or row.member_claim != row.claim_id
-            or row.delivery_claim != row.claim_id
-            or row.kind != "selected"
-            or row.canonical_thread != row.recipient
-            or row.generation_claim != row.claim_id
-            or row.generation_lookup != lookup
-            or row.generation_thread != row.recipient
-            or row.accepted_generation is None
-            or row.accepted_generation > self.expected_participant_generation
-            or (
-                row.accepted_generation == self.expected_participant_generation
-                and row.recipient != owner_name
+        if len(assignments) > self.max_rows:
+            raise ProjectionUnavailableError("binding decisions exceed the row budget")
+        if not assignments:
+            return []
+        # Each bounded query decodes the canonical record at the SQLite boundary.
+        # Assignments anchor completeness: a missing joined proof raises KeyError,
+        # omitting the whole supplement rather than silently dropping its source.
+        sequences = tuple(row.wire_seq for row in assignments)
+        claims = tuple(row.assignment_id for row in assignments)
+        marks = ",".join("?" for _ in assignments)
+        receipts = {
+            row.wire_seq: row
+            for row in ClaimBatchReceipts.select(
+                db,
+                where=f"wire_root_id=? AND wire_seq IN ({marks})",
+                parameters=(root_id, *sequences),
             )
-            for row in rows
-        ):
-            raise ProjectionUnavailableError("binding decisions are unsealed or over budget")
-        return rows
+        }
+        members = {
+            row.claim_id: row
+            for row in ClaimBatchMembers.select(
+                db,
+                where=f"claim_id IN ({marks})",
+                parameters=claims,
+            )
+        }
+        deliveries = {
+            row.wire_seq: row
+            for row in CohortDeliveryReceipts.select(
+                db,
+                where=f"wire_root_id=? AND recipient_lookup=? AND wire_seq IN ({marks})",
+                parameters=(root_id, lookup, *sequences),
+            )
+        }
+        generations = {
+            row.claim_id: row
+            for row in AwarenessClaimGenerations.select(
+                db,
+                where=f"claim_id IN ({marks})",
+                parameters=claims,
+            )
+        }
+        return [
+            _SelectedDecision.capture(
+                row,
+                receipts[row.wire_seq],
+                members[row.assignment_id],
+                deliveries[row.wire_seq],
+                generations[row.assignment_id],
+            )
+            for row in assignments
+        ]
 
-    def _open_obligations(
-        self, db: sqlite3.Connection, lookup: str, owner_name: str
-    ) -> list[_OpenObligation]:
-        rows = _OpenObligation.read(
-            db.execute(
-                "SELECT o.execution_id,o.exact_target,o.state,e.owner_thread,e.origin,"
-                "ec.assignment_id AS linked_claim,ag.owner_generation AS accepted_generation,"
-                "ag.canonical_thread AS generation_thread "
-                "FROM obligations o JOIN executions e ON e.execution_id=o.execution_id "
-                "LEFT JOIN execution_claims ec ON ec.execution_id=e.execution_id "
-                "LEFT JOIN awareness_claim_generations ag ON ag.claim_id=ec.assignment_id "
-                "WHERE e.owner_lookup=? AND o.state IN ('pending','publishing','deferred') "
-                "ORDER BY o.created_at_ms,o.execution_id LIMIT ?",
-                (lookup, self.max_rows + 1),
-            )
+    def _open_obligations(self, db: sqlite3.Connection, lookup: str) -> list[_OpenObligation]:
+        obligations = ResponseObligation.select(
+            db,
+            where="execution_id IN (SELECT execution_id FROM executions "
+            "WHERE owner_lookup=?) AND state IN ('pending','publishing','deferred') "
+            "ORDER BY created_at_ms,execution_id LIMIT ?",
+            parameters=(lookup, self.max_rows + 1),
         )
-        if len(rows) > self.max_rows or len({row.execution_id for row in rows}) != len(rows):
-            raise ProjectionUnavailableError("open obligations exceed complete row budget")
-        if any(
-            row.origin != "wire"
-            or row.linked_claim is None
-            or row.accepted_generation is None
-            or row.accepted_generation > self.expected_participant_generation
-            or row.generation_thread != row.owner_thread
-            or (
-                row.accepted_generation == self.expected_participant_generation
-                and row.owner_thread != owner_name
+        if len(obligations) > self.max_rows:
+            raise ProjectionUnavailableError("open obligations exceed the row budget")
+        if not obligations:
+            return []
+        executions = tuple(row.execution_id for row in obligations)
+        marks = ",".join("?" for _ in obligations)
+        owners = {
+            row.execution_id: row
+            for row in ExecutionRecord.select(
+                db,
+                where=f"execution_id IN ({marks})",
+                parameters=executions,
             )
-            for row in rows
-        ):
-            raise ProjectionUnavailableError("open obligation lacks exact owner provenance")
-        return rows
+        }
+        links = ExecutionAssignmentLink.select(
+            db,
+            where=f"execution_id IN ({marks})",
+            parameters=executions,
+        )
+        # A multi-claim execution is not a single exact source obligation.
+        if len({row.execution_id for row in links}) != len(links):
+            raise ProjectionUnavailableError("open obligation has multiple source claims")
+        by_execution = {row.execution_id: row for row in links}
+        claims = tuple(row.assignment_id for row in links)
+        generations = {
+            row.claim_id: row
+            for row in AwarenessClaimGenerations.select(
+                db,
+                where=f"claim_id IN ({','.join('?' for _ in claims)})",
+                parameters=claims,
+            )
+        }
+        return [
+            _OpenObligation.capture(
+                row,
+                owners[row.execution_id],
+                by_execution[row.execution_id],
+                generations[by_execution[row.execution_id].assignment_id],
+            )
+            for row in obligations
+        ]
