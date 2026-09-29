@@ -12,7 +12,7 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — PR381 native owner checkpoint
+## Current remaining mapping — selected lifetime checkpoint
 
 Parent reports361 merged at `d7745d0e` and the paired installed saved-history
 ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
@@ -28,8 +28,22 @@ this document does not promote an activation-in-progress claim to completed.
   [PR365 receipt](../evidence/s14-goal-scheduler/README.md):328 production lines
   deleted,35 chain terms removed; actual installed socket retry/native and selected
   handoff paths passed before parent merge. Boyle371 journal
-  enrollment/publication identities and376 transaction ownership are merged;381 continues native authority/settlement closure; neither slice completes all S14.
-- Current ownership supersedes earlier snapshots: Boyle384 closes SelectedExecution;383 closes Wegener's InputDrain. Both are ready for parent review. Dalton382/182 closes MessageBus and its actual installed idle gate now passes; remaining HistoryViews is his next whole closure. Carver183 closes Agent session lifecycle (627->377), Noether181 closes App actions (750->442) and continues CommsSidebar, Tesla owns final116 producer/terminal-writer latency after180. Wegener owns the next whole GoalAttemptStore/AttemptStore closure; Boyle proceeds to remaining process custody after cross-review. Parent owns paired live deployment and full plan reconciliation.
+  enrollment/publication identities,376 transaction ownership and381 native
+  authority/settlement closure are merged; these do not complete all S14.
+-376 journal transaction custody and381 native witness/CAS/admission ownership are
+  merged (parent main13d92f80). Boyle384 owns the whole SelectedExecution lifetime:
+  selected lease/source, fresh enrollment, triage/full stages, tools, terminal/UNKNOWN
+  settlement and caller deletion. [PR384 receipt](../evidence/q8-selected-execution/README.md)
+  records actual installed native and saved ACP reply journeys; parent owns integration/live.
+- Current ownership supersedes earlier snapshots:383 InputDrain and382/182
+  MessageBus are merged;384 SelectedExecution passed bounded peer review and is
+  integrating current main.183 Agent377 and181 App442 are merged. Parent owns
+  the next matched installation; these are not yet in the live19e5/262e pair.
+  Dalton continues HistoryViews, Wegener387 attempt stores, Boyle386 process
+  custody, Carver channel-history/painted ACK, Noether185 CommsSidebar and
+  Tesla184/core388 witnessed loaded-history/terminal latency. All retain their
+  independent whole-surface closure and actual affected-path gates. Parent owns
+  full plan reconciliation and paired shipping.
 - Workspace156 mapping was superseded by160(+163 proof); first-open153,154 and345
   cutover were reported complete. Later Toad167 is in the parent's paired test
   above. The historical T4 and UI rows below are not fresh outstanding assignments;

@@ -1,0 +1,4 @@
+FRESH_NATIVE: enrollment retained through triage and full, original input completed once
+.FIRST_START_REFUSAL: no provider call, lease released, reserved input never replayed
+.
+2 passed, 4 deselected in 6.96s

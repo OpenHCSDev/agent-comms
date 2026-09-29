@@ -1,0 +1,133 @@
+F
+=================================== FAILURES ===================================
+______ test_two_real_recipient_processes_emit_selected_and_typed_no_wake _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-616/test_two_real_recipient_proces0')
+
+    def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: Path) -> None:
+        with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root, root_id, comms = _wire(base)
+            script = r"""import sys
+    import threading
+    import time
+    from agent_comms import cohort_foreground as f, coordinated_runtime as r
+    from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+    f.Thread = _configured_thread
+    f._trusted_package = _fake_package
+    r._trusted_package = _fake_package
+    from agent_comms.tracked_turn import TrackedTurnSession
+    TrackedTurnSession.execute = _fake_pi([])
+    original_run = f.run_foreground_once
+    async def wait_for_committed_source(*args, ready=None, **kwargs):
+        def registered(thread):
+            ready(thread)
+            if sys.stdin.readline() != "committed\n":
+                raise RuntimeError("parent did not release committed-source barrier")
+        try:
+            return await original_run(*args, ready=registered, **kwargs)
+        except Exception:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            raise
+    f.run_foreground_once = wait_for_committed_source
+    raise SystemExit(f.main(sys.argv[1:]))
+    """
+            env = {
+                **os.environ,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONPATH": os.pathsep.join(
+                    (str(Path(__file__).resolve().parents[1] / "src"), str(Path(__file__).parent))
+                ),
+            }
+            children: dict[str, subprocess.Popen[str]] = {}
+            try:
+                for name in ("alpha", "beta"):
+                    child = subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-c",
+                            script,
+                            "--opt-in",
+                            "--root",
+                            str(root),
+                            "--wire-root-id",
+                            root_id,
+                            "--name",
+                            name,
+                            "--worktree",
+                            str(base),
+                            "--tags",
+                            "team",
+                            "--native-package",
+                            str(tmp_path),
+                            "--wait-seconds",
+                            "1",
+                        ],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                    )
+                    children[name] = child
+                    assert child.stdout is not None
+                    assert select.select([child.stdout], [], [], 8)[0]
+                    assert json.loads(child.stdout.readline())["pid"] == child.pid
+                    assert comms.registry.require(name).pid == child.pid
+                sender = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "agent_comms.cohort_send",
+                        "--opt-in",
+                        "--root",
+                        str(root),
+                        "--wire-root-id",
+                        root_id,
+                        "--from",
+                        "sender",
+                        "--to",
+                        "#team",
+                        "--body",
+                        "@beta Compute 17+25",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                    check=True,
+                    env=env,
+                )
+                assert json.loads(sender.stdout)["wire_seq"] == 1
+                # Both owners are registered and the source is durably committed
+                # before either bounded foreground wait starts. Import/scheduling
+                # latency must not consume alpha's wait while beta is still starting.
+                for child in children.values():
+                    assert child.stdin is not None
+                    child.stdin.write("committed\n")
+                    child.stdin.flush()
+                    child.stdin.close()
+                    child.stdin = None
+                outcomes: dict[str, dict[str, object]] = {}
+                for name, child in children.items():
+                    out, err = child.communicate(timeout=12)
+>                   assert child.returncode == 0, (name, out, err)
+E                   AssertionError: ('alpha', '{"error_type": "TypeError", "root_retained": true}
+E                     ', 'Traceback (most recent call last):
+E                       File "<string...^^^^^^^^^^
+E                         ...<6 lines>...
+E                             )
+E                             ^
+E                         )
+E                         ^
+E                     TypeError: \'NoneType\' object is not callable
+E                     ')
+E                   assert 1 == 0
+E                    +  where 1 = <Popen: returncode: 1 args: ['/home/ts/wt/comms-q8-selected-execution-202609...>.returncode
+
+tests/test_cohort_foreground.py:734: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_cohort_foreground.py::test_two_real_recipient_processes_emit_selected_and_typed_no_wake
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 2.72s

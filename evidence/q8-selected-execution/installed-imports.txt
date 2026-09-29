@@ -1,0 +1,3 @@
+core /home/ts/wt/comms-q8-selected-execution-20260929/.installed/lib/python3.14/site-packages/agent_comms/__init__.py
+selected /home/ts/wt/comms-q8-selected-execution-20260929/.installed/lib/python3.14/site-packages/agent_comms/selected_turn.py
+trusted native /home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-fcadec01235eb0b5/node_modules/@earendil-works/pi-coding-agent/dist/cli.js

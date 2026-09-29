@@ -25,13 +25,14 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.selected_request import SelectedRequest
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
 def unknown_owner(directory, admitted, output, exit_allowed):
     # Reproduce the pre-fix durable UNKNOWN left by the historical worker.
-    runtime.SelectedExecution._uncertain_failure = lambda self, error: None
+    SelectedRequest._uncertain_failure = lambda self, error: None
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     runtime._trusted_package = lambda path: path
     fake, _calls = _fake_model(fail_on=1)
@@ -168,7 +169,9 @@ def test_abandon_refuses_live_native_process(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        session_dir = root / "native-sessions" / store.snapshots.get(execution_id).execution.owner_lookup
+        session_dir = (
+            root / "native-sessions" / store.snapshots.get(execution_id).execution.owner_lookup
+        )
         child = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(30)", "--session-dir", str(session_dir)]
         )
@@ -231,9 +234,7 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
 
 
 @pytest.mark.asyncio
-async def test_real_local_rpc_failure_reaps_child_and_releases_slot(
-    tmp_path, monkeypatch
-):  # noqa: F811
+async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, monkeypatch):  # noqa: F811
     from agent_comms import native_pi
     from agent_comms.durable_turn import DurableTurn
 
@@ -344,8 +345,12 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch): 
         with monkeypatch.context() as interrupted:
             interrupted.setattr(store.attempts, "settle_checked", fail_settlement)
             with pytest.raises(RuntimeError, match="settlement interrupted"):
-                store.attempts.fail_unknown(fence, expected_pointer_revision=before.pointer_revision)
-        assert store.snapshots.get(fence.execution_id) == before  # replay + finality rolled back too.
+                store.attempts.fail_unknown(
+                    fence, expected_pointer_revision=before.pointer_revision
+                )
+        assert (
+            store.snapshots.get(fence.execution_id) == before
+        )  # replay + finality rolled back too.
         after = store.attempts.fail_unknown(
             fence, expected_pointer_revision=before.pointer_revision
         ).value

@@ -36,6 +36,13 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+    def requires_selected_triage(self) -> bool:
+        if self.triage_pending:
+            return True
+        if self.mode.triage:
+            raise IdentityConflict("pending claim wake decision is not executable")
+        return False
+
     def require_engagement(self) -> Engagement:
         raise IdentityConflict("wake assignment is not engaged")
 
