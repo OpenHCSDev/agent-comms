@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
+from .agent_events import AgentEvent, CompactionStart, CompactionSkipped
 from .backend import PersistentPiSession
 from .compaction_journal import CompactionOperation, SelectedSummaryAttempt
 from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
@@ -52,6 +53,13 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
     identity: SelectedAdmissionIdentity
     reason: str
 
+    @property
+    def completion_event(self) -> CompactionSkipped:
+        return CompactionSkipped(
+            reason="adaptive",
+            explanation=f"Selected native compaction skipped: {self.reason}. Original context preserved.",
+        )
+
     async def commit_with(
         self, writer: Callable[[NativeSummary], Awaitable[CompactionOperation]]
     ) -> None:
@@ -82,6 +90,7 @@ async def compact_owner_once(
     pending_input_key: str | None = None,
     settings_paths: tuple[str, ...] | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
+    on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
 ) -> CompactionOperation | None:
     """Exactly one native writer attempt, without input or summary replay.
 
@@ -102,6 +111,8 @@ async def compact_owner_once(
     if prepared_source is None:
         return None
     prepared, source = prepared_source
+    if on_event is not None:
+        await on_event(CompactionStart(reason="adaptive"))
     result = await summarize(prepared)
 
     async def write(summary: NativeSummary) -> CompactionOperation:
@@ -116,6 +127,8 @@ async def compact_owner_once(
             admission.invalidate()
             raise ValueError("Selected summary requires its original-input owner")
         on_admission(admission)
+    if on_event is not None:
+        await on_event(result.completion_event)
     return operation
 
 
