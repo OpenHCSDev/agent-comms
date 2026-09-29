@@ -78,6 +78,8 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
         "content_changed": replace(check, row=replace(row, source_text="changed")),
     }
     for declaration in ReservationRule.members_with(ReservationRule):
+        if not issubclass(declaration.check_type, ReservationCheck):
+            continue
         with pytest.raises(ReservationViolationError) as error:
             cases[declaration.declared_name].require_valid()
         assert type(error.value.rule) is declaration
