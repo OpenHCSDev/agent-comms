@@ -23,6 +23,7 @@ from pathlib import Path
 from .backend import _session_revision
 from .catalog_store import ChannelCatalog
 from .child_process import BoundedRun, TimedOutOutcome
+from .compaction_identity import SelectedCommitReference
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -471,10 +472,9 @@ class OwnerCompactionCommit:
                     turn=TurnId(source.turn_id),
                     pending_input_key=source.pending_input_key,
                 ).require_valid()
-                intent.update(
-                    selectedSummaryOperationId=selected_attempt.operation_id,
-                    selectedSummarySourceDigest=TextDigest.of(selected_attempt.source_json).value,
-                )
+                intent.update(FieldCodec.encode(SelectedCommitReference(
+                    selected_attempt.operation_id, TextDigest.of(selected_attempt.source_json).value,
+                )))
             commit_id = self.journal.begin(
                 witness.session_file, intent, inputs=self.inputs._read_unlocked()
             )
@@ -576,7 +576,7 @@ class OwnerCompactionCommit:
             ):
                 raise CompactionJournalError("Selected native result is unavailable")
             admission = self.journal.link_selected_summary_commit(
-                intent["selectedSummaryOperationId"],
+                SelectedCommitReference.from_intent(intent).operation_id,
                 operation.commit_id,
                 admission=replace(identity, session_revision=revision),
             )

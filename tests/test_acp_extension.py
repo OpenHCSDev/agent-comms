@@ -71,7 +71,7 @@ def test_declared_family_roundtrip_and_strict_boundary():
         ),
         InputDeliveryChangedUpdate("input"),
         CompactionPublishedUpdate(
-            CompactionPublishedMetadata("commit", "entry", "revision", "leaf")
+            CompactionPublishedMetadata(commit_id="commit", entry_id="entry", revision="revision", leaf_id="leaf")
         ),
         McpClientReceiptUpdate(
             "turn", McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())

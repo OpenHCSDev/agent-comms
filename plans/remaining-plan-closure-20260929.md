@@ -12,7 +12,7 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — PR365 source checkpoint
+## Current remaining mapping — PR371 source checkpoint
 
 Parent reports361 merged at `d7745d0e` and the paired installed saved-history
 ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
@@ -22,13 +22,13 @@ this document does not promote an activation-in-progress claim to completed.
 -350/351 admission/response/awareness,353 passive goal failure,354 selected
   dispatch,357 registration boundaries and361 registry lifecycle are merged.
   Their receipts identify deleted authorities and real affected paths.
-- Boyle365 owns goal scheduler/control and queued-input context/handoff closure.
+-365 goal scheduler/control and queued-input context/handoff closure is merged.
   TurnRunner's ledger/origin/projection state and all callers move to the actual
   GoalScheduler owner; the input declaration owns its immutable acceptance context.
   [PR365 receipt](../evidence/s14-goal-scheduler/README.md):328 production lines
   deleted,35 chain terms removed; actual installed socket retry/native and selected
-  handoff paths pass on current main. Ready for parent integration; not a claim
-  that all S14 is finished.
+  handoff paths passed before parent merge. Boyle371 now closes journal
+  enrollment/publication identities below; neither slice completes all S14.
 - Wegener retains current SelectedExecution/coordinated-runtime/startup work.
   Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
   Do not create competing work in those files.
@@ -42,6 +42,16 @@ this document does not promote an activation-in-progress claim to completed.
   No scheduler/source receipt claims exhaustive full-plan completion.
 
 The dated measurements and old PR status rows below are retained as history.
+
+## Compaction journal followthrough — PR371
+
+365 scheduler and369 field representation are merged in main976bad0f. Boyle371
+owns journal enrollment/terminal/publication state and identity closure. [Receipt](../evidence/q13-compaction-journal/README.md)
+records213 production lines deleted,50 chain terms removed, actual native/ACP
+commit and private original-input handoff, plus post-commit correction refusal
+and disconnected UNKNOWN preservation. Current-main installed acceptance65passed,
+2optional skips. Ready for parent review/live installation; native pins unchanged.
+Wegener PiEvent/fresh-native, Tesla366 transcript and parentA2 remain separate.
 
 ## Registry lifecycle followthrough — PR361
 

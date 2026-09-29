@@ -14,6 +14,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.compaction_identity import ReturnedSummaryTerminal
 from agent_comms.compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
@@ -311,11 +312,7 @@ def test_terminal_postcommit_fsync_fault_never_mints_ack(case, monkeypatch, term
     with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
         SelectedSummaryAdmission._from_returned_ack(
             None,
-            journal.path,
-            session,
-            operation_id,
-            saved.state,
-            saved.source_json,
+            ReturnedSummaryTerminal(journal.path, saved),
             identity,
         )
     assert not native_input_admitted(comms.root, session)
@@ -341,11 +338,7 @@ def test_private_status_only_transaction_cannot_issue_admission_ack(case, termin
         with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
             SelectedSummaryAdmission._from_returned_ack(
                 forged,
-                journal.path,
-                session,
-                operation_id,
-                state,
-                saved.source_json,
+                ReturnedSummaryTerminal(journal.path, replace(saved, state=state)),
                 identity,
             )
     with pytest.raises(CompactionJournalError):
@@ -361,11 +354,7 @@ def test_success_without_admission_does_not_create_later_receipt(case):
     with pytest.raises(CompactionJournalError, match="returned terminal fsync ACK"):
         SelectedSummaryAdmission._from_returned_ack(
             None,
-            journal.path,
-            session,
-            operation_id,
-            saved.state,
-            saved.source_json,
+            ReturnedSummaryTerminal(journal.path, saved),
             identity,
         )
     assert not native_input_admitted(comms.root, session)
