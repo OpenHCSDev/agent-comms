@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
 from . import turn_failure as failures
@@ -35,9 +34,13 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_member(cls, wire):
         try:
-            return cls.decode(wire.get("type"))
+            return cls.decode(wire.get("type")).wire_case(wire)
         except ValueError:
             return UnknownPiEvent
+
+    @classmethod
+    def wire_case(cls, wire):
+        return cls
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
@@ -295,12 +298,12 @@ class ExtensionUiChoice(ABC):
     """The controller's decision, constrained to the requesting Pi dialog."""
 
     @abstractmethod
-    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse: ...
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse: ...
 
 
 @dataclass(frozen=True)
 class CancelledUiChoice(ExtensionUiChoice):
-    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse:
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse:
         return ExtensionUiResponse(id=request.id, cancelled=True)
 
 
@@ -308,94 +311,195 @@ class CancelledUiChoice(ExtensionUiChoice):
 class ConfirmedUiChoice(ExtensionUiChoice):
     confirmed: bool
 
-    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse:
-        if request.method == "confirm":
-            return ExtensionUiResponse(id=request.id, confirmed=self.confirmed)
-        return CancelledUiChoice().response(request)
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse:
+        return request.confirm(self.confirmed)
 
 
 @dataclass(frozen=True)
 class ValueUiChoice(ExtensionUiChoice):
     value: str
 
-    def response(self, request: ExtensionUiRequest) -> ExtensionUiResponse:
-        if request.method == "select" and request.options and self.value in request.options:
-            return ExtensionUiResponse(id=request.id, value=self.value)
-        return CancelledUiChoice().response(request)
+    def response(self, request: DialogUiRequest) -> ExtensionUiResponse:
+        return request.select(self.value)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ExtensionUiRequest(PiEvent):
+    """Pi owns the outer type; concrete declarations own its method vocabulary."""
+
     method: str | None = None
     id: str | None = None
+
+    @classmethod
+    def wire_case(cls, wire):
+        method = wire.get("method")
+        return next(
+            (
+                case
+                for case in cls.members_with(cls)
+                if case.method is not None and case.method == method
+            ),
+            cls,
+        )
+
+    def to_wire(self):
+        data = super().to_wire()
+        data.update(type="extension_ui_request", method=self.method)
+        return data
+
+    def require_id(self) -> str:
+        if self.id is None or not 0 < len(self.id) <= 128:
+            raise ValueError("Pi extension UI request lacked a bounded ID.")
+        return self.id
+
+    async def apply(self, session):
+        # Unknown methods never reach a controller or acquire reply authority.
+        try:
+            self.require_id()
+        except ValueError as error:
+            await session.extension_ui.fail(str(error), session)
+        session.skip = True
+        if False:
+            yield
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetStatusUiRequest(ExtensionUiRequest):
+    method: ClassVar[str] = "setStatus"
     status_key: str | None = field(default=None, metadata={"wire_name": "statusKey"})
     status_text: str | None = field(default=None, metadata={"wire_name": "statusText"})
-    title: str | None = None
-    message: str | None = None
-    options: tuple[str, ...] | None = None
-    placeholder: str | None = None
-    default_value: str | None = field(default=None, metadata={"wire_name": "defaultValue"})
 
-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _pi_mcp_live_receipt
-
-        if self.method == "setStatus":
-            if (
-                not session.live_status_seen
-                and (not session.admission.settled)
-                and (not session.stats.requested)
-                and session.require_input_id
-                and session.admission.started
-                and session.native.attestation.identity is not None
-                and (not session.inputs.uncertain)
-            ):
-                session.receipt = _pi_mcp_live_receipt(self, session.original_input_id)
-                if session.receipt is not None:
-                    session.live_status_seen = True
-                    yield events.McpLiveStatus(receipt=session.receipt)
-            session.skip = True
-            return
-        session.request_id = self.id
-        session.method = self.method
-        if session.request_id is None or not session.request_id or len(session.request_id) > 128:
-            session.output.record_failure(
-                failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
-            )
-            await session.native.proc.stop()
-            session.finished = True
-            return
-        if session.method not in {"confirm", "select", "input", "editor"}:
-            session.skip = True
-            return
-        choice: ExtensionUiChoice = CancelledUiChoice()
-        if (
-            session.request_id not in session.ui_seen
-            and len(session.ui_seen) < 64
-            and (session.ui_request is not None)
-            and session.admission.started
-            and session.native.attestation.identity is not None
-            and (not session.inputs.uncertain)
-        ):
-            session.ui_seen.add(session.request_id)
-            with suppress(Exception):
-                choice = await asyncio.wait_for(session.ui_request(self), timeout=15)
-        response = choice.response(self)
-        try:
-            if session.native.proc.stdin is None or session.native.proc.returncode is not None:
-                raise BrokenPipeError
-            session.native.proc.stdin.write(session.native.reader.encode(response))
-            await asyncio.wait_for(session.native.proc.stdin.drain(), timeout=2)
-        except (BrokenPipeError, ConnectionResetError, TimeoutError):
-            session.output.record_failure(
-                failures.ExtensionUiFailed(
-                    "Pi extension UI response could not reach the requesting child."
-                )
-            )
-            await session.native.proc.stop()
-            session.finished = True
-            return
+    async def apply(self, session):
+        if self.status_key == "pi-mcp/live-v1":
+            receipt = session.extension_ui.observe(self.status_text, session)
+            if receipt is not None:
+                yield events.McpLiveStatus(receipt=receipt)
         session.skip = True
-        return
+
+
+@dataclass(frozen=True, kw_only=True)
+class DialogUiRequest(ExtensionUiRequest):
+    title: str | None = None
+
+    def confirm(self, value: bool) -> ExtensionUiResponse:
+        return CancelledUiChoice().response(self)
+
+    def select(self, value: str) -> ExtensionUiResponse:
+        return CancelledUiChoice().response(self)
+
+    def permission(self, turn_id: str):
+        return None
+
+    def choice(self, option_id: str) -> ExtensionUiChoice:
+        return CancelledUiChoice()
+
+    async def apply(self, session):
+        await session.extension_ui.answer(self, session)
+        session.skip = True
+        if False:
+            yield
+
+
+class PermissionUiRequest(DialogUiRequest):
+    @abstractmethod
+    def permission_body(self) -> str: ...
+
+    @abstractmethod
+    def permission_options(self): ...
+
+    def permission(self, turn_id: str):
+        from acp.schema import ContentToolCallContent, TextContentBlock, ToolCallUpdate
+
+        if self.title is None or not 0 < len(self.title) <= 160:
+            return None
+        try:
+            body, options = self.permission_body(), self.permission_options()
+        except ValueError:
+            return None
+        return (
+            ToolCallUpdate(
+                tool_call_id=f"pi-ui-{turn_id}-{self.id}",
+                kind="other",
+                title=self.title,
+                content=[
+                    ContentToolCallContent(
+                        type="content",
+                        content=TextContentBlock(type="text", text=body),
+                    )
+                ],
+            ),
+            options,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfirmUiRequest(PermissionUiRequest):
+    method: ClassVar[str] = "confirm"
+    message: str | None = None
+
+    def confirm(self, value: bool) -> ExtensionUiResponse:
+        return ExtensionUiResponse(id=self.id, confirmed=value)
+
+    def permission_body(self) -> str:
+        if self.message is None or len(self.message) > 8192:
+            raise ValueError("Pi confirmation message is unavailable")
+        return self.message
+
+    def permission_options(self):
+        from acp.schema import PermissionOption
+
+        return [
+            PermissionOption(option_id="allow-once", name="Allow once", kind="allow_once"),
+            PermissionOption(option_id="deny", name="Deny", kind="reject_once"),
+        ]
+
+    def choice(self, option_id: str) -> ExtensionUiChoice:
+        return ConfirmedUiChoice(option_id == "allow-once")
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectUiRequest(PermissionUiRequest):
+    method: ClassVar[str] = "select"
+    options: tuple[str, ...] | None = None
+
+    def select(self, value: str) -> ExtensionUiResponse:
+        if self.options and value in self.options:
+            return ExtensionUiResponse(id=self.id, value=value)
+        return CancelledUiChoice().response(self)
+
+    def permission_body(self) -> str:
+        return "Select one Pi extension option for this turn only."
+
+    def choices(self) -> dict[str, str]:
+        if self.options is None or not 1 <= len(self.options) <= 8:
+            raise ValueError("Pi selection options are unavailable")
+        if any(not item or len(item) > 100 for item in self.options):
+            raise ValueError("Pi selection option is invalid")
+        return {f"choice-{index}": value for index, value in enumerate(self.options)}
+
+    def permission_options(self):
+        from acp.schema import PermissionOption
+
+        return [
+            PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
+            for key, value in self.choices().items()
+        ] + [PermissionOption(option_id="deny", name="Cancel", kind="reject_once")]
+
+    def choice(self, option_id: str) -> ExtensionUiChoice:
+        value = self.choices().get(option_id)
+        return CancelledUiChoice() if value is None else ValueUiChoice(value)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputUiRequest(DialogUiRequest):
+    method: ClassVar[str] = "input"
+    placeholder: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class EditorUiRequest(DialogUiRequest):
+    method: ClassVar[str] = "editor"
+    default_value: str | None = field(default=None, metadata={"wire_name": "defaultValue"})
 
 
 @dataclass(frozen=True, kw_only=True)

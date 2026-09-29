@@ -93,7 +93,7 @@ send = lambda row: print(json.dumps(row), flush=True)
 state = json.loads(sys.stdin.readline())
 send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
       "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
-                "sessionId": "fixture-pi-session"}}}})
+                "sessionId": "fixture-pi-session", "sessionFile": "/fixture/one.jsonl"}}}})
 prompt = json.loads(sys.stdin.readline())
 send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
@@ -150,9 +150,7 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
     session_id = "project"
     turn = "turn-1"
     agent.turns.active_turns[session_id] = turn
-    request = pi.ExtensionUiRequest(
-        id="ui-1", method="confirm", title="Confirm", message="One action"
-    )
+    request = pi.ConfirmUiRequest(id="ui-1", title="Confirm", message="One action")
 
     class DirectController:
         async def request_permission(self, **kwargs):
@@ -224,30 +222,24 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
         ],
     }
 
-    def wire_claim(claim):
-        from agent_comms.pi_events import ExtensionUiRequest
-
-        return ExtensionUiRequest(
-            method="setStatus", status_key="pi-mcp/live-v1", status_text=claim
-        )
-
-    assert backend._pi_mcp_live_receipt(
-        wire_claim(json.dumps(valid)), input_id
-    ) == FieldCodec.decode(McpLiveReceipt, valid)
-    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), "b" * 32) is None
+    assert McpLiveReceipt.from_status(json.dumps(valid), input_id) == FieldCodec.decode(
+        McpLiveReceipt,
+        valid,
+    )
+    assert McpLiveReceipt.from_status(json.dumps(valid), "b" * 32) is None
     assert (
-        backend._pi_mcp_live_receipt(
-            wire_claim(json.dumps(valid).replace('"version": 1', '"version": 1, "version": 1')),
+        McpLiveReceipt.from_status(
+            json.dumps(valid).replace('"version": 1', '"version": 1, "version": 1'),
             input_id,
         )
         is None
     )
     valid["servers"][0]["calls"] = "automatic"
     valid["servers"][0]["state"] = "denied"
-    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) is None
+    assert McpLiveReceipt.from_status(json.dumps(valid), input_id) is None
     valid["servers"][0]["calls"] = "unavailable"
     valid["servers"][0]["id"] = "\x1b[2J"
-    assert backend._pi_mcp_live_receipt(wire_claim(json.dumps(valid)), input_id) is None
+    assert McpLiveReceipt.from_status(json.dumps(valid), input_id) is None
 
 
 async def test_package_live_receipt_after_settlement_is_not_reprojected(tmp_path):
@@ -341,9 +333,8 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
             proxies.append(proxy)
         assert proxies[0]._controller_token != proxies[1]._controller_token
         assert "controllerToken" not in owner.sessions.metadata(session_id)["agentComms"]
-        request = pi.ExtensionUiRequest(
+        request = pi.ConfirmUiRequest(
             id="only-one-child",
-            method="confirm",
             title="Approve once?",
             message="Exactly this request",
         )

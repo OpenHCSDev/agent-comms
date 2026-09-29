@@ -29,11 +29,9 @@ from typing import Any, ClassVar
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
-from . import pi_payloads
 from . import turn_failure as failures
 from .child_process import TimedOutOutcome
 from .diagnostics import FailureReason
-from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError, SavedSessionReopenError
@@ -51,6 +49,7 @@ from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
 from .turn_admission import UnacknowledgedPrompt
 from .turn_inputs import InputForwarding
+from .extension_ui import ExtensionUiSession
 from .turn_output import TurnOutput
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
@@ -77,40 +76,6 @@ RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
-
-
-def _unique_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate live-status field")
-        result[key] = value
-    return result
-
-
-def _pi_mcp_live_receipt(
-    payload: pi.ExtensionUiRequest, input_id: str
-) -> pi_payloads.McpLiveReceipt | None:
-    """Project only a bounded package claim from the same Pi child and native input.
-
-    This is observed live status, never MCP approval or call authorization. A
-    same-user Pi extension may mimic an extension UI status; this is not a
-    cryptographic attestation of the package against other local extensions.
-    """
-    if payload.method != "setStatus" or payload.status_key != "pi-mcp/live-v1":
-        return None
-    text = payload.status_text
-    if text is None or len(text) > 8192:
-        return None
-    try:
-        data = json.loads(text, object_pairs_hook=_unique_json_pairs)
-    except (ValueError, TypeError):
-        return None
-    try:
-        receipt = FieldCodec.decode(pi_payloads.McpLiveReceipt, data)
-    except (TypeError, ValueError):
-        return None
-    return receipt if receipt.input_id == input_id else None
 
 
 _FileRevision = tuple[int, int, int, int, int]
@@ -254,7 +219,7 @@ async def stream_agent_events(
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
-    ui_request: Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+    ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend and yield events. Always ends with a ``done`` event.
 
@@ -360,9 +325,7 @@ class TurnSession:
         ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
-        ui_request: (
-            Callable[[pi.ExtensionUiRequest], Awaitable[pi.ExtensionUiChoice]] | None
-        ) = None,
+        ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
     ):
         self.launch = launch
@@ -383,7 +346,7 @@ class TurnSession:
         self.native_session = (
             persistent_session if persistent_session is not None else PersistentPiSession()
         )
-        self.ui_request = ui_request
+        self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup
         self.inputs = InputForwarding(steering_queue)
         self.steering_task: asyncio.Task[None] | None = None
@@ -391,6 +354,12 @@ class TurnSession:
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
+
+    def permits_live_receipt(self) -> bool:
+        """Only tracked, live input may publish an informational package receipt."""
+        if self.stats.requested:
+            return False
+        return self.require_input_id and self.admission.permits_extension_ui(self)
 
     async def stop_forwarding(self) -> None:
         if self.steering_task is not None:
@@ -653,7 +622,6 @@ class TurnSession:
         self.model_name: str | None = None
         self.session_name: str | None = None
         self.active_session_file = self.session_file
-        self.live_status_seen = False
         self.settlement_count = 0
         self.native.reader.pending.cancel_all()
         self.native.reader.pending.add(
@@ -671,7 +639,6 @@ class TurnSession:
         self.watchdog.reading(self.require_input_id)
         self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
-        self.ui_seen: set[str] = set()
         if False:
             yield
 

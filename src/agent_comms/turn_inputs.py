@@ -40,6 +40,11 @@ class InputForwarding:
     uncertain: bool = False
 
     @property
+    def permits_extension_ui(self) -> bool:
+        """Uncertain input delivery cannot grant a fresh extension interaction."""
+        return not self.uncertain
+
+    @property
     def unresolved(self) -> bool:
         return bool(self.pending) or (self.queue is not None and not self.queue.empty())
 

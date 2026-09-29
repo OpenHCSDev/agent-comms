@@ -796,6 +796,24 @@ class McpLiveReceipt:
     lifetime: Literal["turn"]
     servers: tuple[McpServerReceipt, ...]
 
+    @classmethod
+    def from_status(cls, text: str | None, input_id: str) -> McpLiveReceipt | None:
+        """Decode the package's external status claim once at its boundary.
+
+        Same-user extensions can imitate this claim. It is never a package
+        attestation or permission, even when the current input identity matches.
+        """
+        import json
+        from .pi_rpc import unique_fields
+
+        if text is None or len(text) > 8192:
+            return None
+        try:
+            receipt = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
+        except (TypeError, ValueError):
+            return None
+        return receipt if receipt.input_id == input_id else None
+
     def __post_init__(self):
         if re.fullmatch(r"[a-f0-9]{32}", self.input_id) is None:
             raise ValueError("Invalid external MCP input identity")

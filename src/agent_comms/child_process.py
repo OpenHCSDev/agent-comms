@@ -858,6 +858,13 @@ class AttachedChild(ChildProcess):
                 raise
         return child
 
+    async def write(self, data: bytes) -> None:
+        """Write to this still-running child's input and observe transport backpressure."""
+        if self.stdin is None or self.returncode is not None:
+            raise BrokenPipeError
+        self.stdin.write(data)
+        await self.stdin.drain()
+
     @property
     def returncode(self) -> int | None:
         return self.process.returncode

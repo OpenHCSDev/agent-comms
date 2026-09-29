@@ -29,6 +29,9 @@ class PromptAdmission(ABC):
     def settle(self, event: AgentSettled) -> PromptAdmission:
         return self
 
+    def permits_extension_ui(self, session: TurnSession) -> bool:
+        return False
+
     def permits_retention(self, session: TurnSession) -> bool:
         return False
 
@@ -56,6 +59,9 @@ class StartedPrompt(AcknowledgedPrompt):
     started = True
     awaiting_start = False
 
+    def permits_extension_ui(self, session):
+        return session.native.attestation.admits_extension_input(session.inputs)
+
     def settle(self, event):
         return SettledPrompt(self.response, self.message, event)
 
@@ -64,6 +70,9 @@ class StartedPrompt(AcknowledgedPrompt):
 class SettledPrompt(StartedPrompt):
     event: AgentSettled
     settled = True
+
+    def permits_extension_ui(self, session):
+        return False
 
     def permits_retention(self, session):
         return (

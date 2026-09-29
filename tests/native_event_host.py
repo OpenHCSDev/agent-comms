@@ -11,7 +11,14 @@ from agent_comms.native_pi import NativePiRpcLaunch
 
 
 def install_event_host(
-    monkeypatch, launcher, origin, *, delay_settlement=None, comms_tools=False, native_settings=None
+    monkeypatch,
+    launcher,
+    origin,
+    *,
+    delay_settlement=None,
+    comms_tools=False,
+    native_settings=None,
+    ui_probe=None,
 ):
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     verify_native_package(package)
@@ -39,6 +46,8 @@ def install_event_host(
             env["S1_NATIVE_SETTINGS"] = json.dumps(native_settings)
         if delay_settlement is not None:
             env["S1_DELAY_SETTLEMENT"] = str(delay_settlement)
+        if ui_probe is not None:
+            env["S1_UI_PROBE"] = str(ui_probe)
         if comms_tools:
             env["S1_COMMS_TOOLS"] = "1"
         options = launch.argv[launch.argv.index(str(package / "dist/cli.js")) + 1 :]

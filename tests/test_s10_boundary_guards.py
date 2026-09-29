@@ -83,7 +83,49 @@ def test_native_tool_projection_has_no_backend_dispatch_or_session_scratch():
     )
     tree = ast.parse(inspect.getsource(pi_events.ToolExecutionStart))
     assert not any(
-        isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
-        and isinstance(node.value, ast.Name) and node.value.id == "session"
+        isinstance(node, ast.Attribute)
+        and isinstance(node.ctx, ast.Store)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "session"
         for node in ast.walk(tree)
     )
+
+
+def test_extension_ui_new_case_uses_declared_dispatch_and_shared_reply_behavior():
+    from agent_comms.pi_events import ConfirmUiRequest, ConfirmedUiChoice, PiEvent, ValueUiChoice
+
+    class ReviewUiRequest(ConfirmUiRequest):
+        method = "reviewFixture"
+
+    try:
+        wire = {
+            "type": "extension_ui_request",
+            "method": "reviewFixture",
+            "id": "r1",
+            "title": "Review",
+            "message": "Once",
+        }
+        request = PiEvent.from_wire(wire)
+        assert type(request) is ReviewUiRequest
+        assert request.to_wire() == wire
+        assert ConfirmedUiChoice(True).response(request).confirmed is True
+        assert ValueUiChoice("unrelated").response(request).cancelled is True
+        assert request.permission("turn")[0].title == "Review"
+    finally:
+        del PiEvent.__registry__[ReviewUiRequest.declared_name]
+
+
+def test_extension_ui_does_not_restore_session_scratch_or_method_switches():
+    package = Path(pi_events.__file__).parent
+    retired = {"live_status_seen", "ui_seen", "request_id", "receipt"}
+    for name in ("backend.py", "pi_events.py"):
+        tree = ast.parse((package / name).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store):
+                if isinstance(node.value, ast.Name) and node.value.id in {"self", "session"}:
+                    assert node.attr not in retired, (name, ast.unparse(node))
+    from agent_comms.turn_runner import TurnRunner
+
+    source = inspect.getsource(TurnRunner.extension_ui_permission)
+    assert "request.method" not in source
+    assert "method ==" not in source
