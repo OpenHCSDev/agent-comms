@@ -97,6 +97,17 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
+    @classmethod
+    def wire_tag(cls) -> object:
+        """External discriminator owned by the declaration; normally its name."""
+        return cls.declared_name
+
+    @classmethod
+    def decode_wire_tag(cls, value: object) -> type[Self]:
+        if not isinstance(value, str):
+            raise ValueError(f"Expected a string family {cls.family_discriminator}.")
+        return cls.decode(value)
+
     def __init_subclass__(
         cls,
         *,

@@ -13,9 +13,10 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
+from agent_comms.compaction_result import CommittedCompactionResult
 from agent_comms.manual_compaction_bridge import compact_context
+from delivery_owner_fixture import canonical_agent
 
 
 def _history(session: Path, project: Path) -> None:
@@ -216,7 +217,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         session = root / "saved.jsonl"
         _history(session, project)
         comms = wire(root / "wire")
-        owner = CommsAgent(
+        owner = canonical_agent(
             comms,
             agent_bin=native,
             agent_args=[
@@ -229,6 +230,10 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             ],
             runtime_enabled=False,
             auto_wake=False,
+        )
+        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
+        monkeypatch.setenv(
+            "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner._private_nk_native_package)
         )
         updates = []
 
@@ -271,7 +276,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[2]["messages"])
             release_summary.set()
             result = await asyncio.wait_for(compact_task, 20)
-            assert result["ok"] is True, result
+            assert isinstance(result, CommittedCompactionResult), result
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
