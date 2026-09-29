@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -11,7 +12,7 @@ from uuid import uuid4
 from acp import RequestError
 
 from . import backend
-from .channel_targets import is_channel_target
+from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
 from .messages import Message
 from .owned_send_admission import OwnedSendAdmission
@@ -26,7 +27,13 @@ from .turn_goal_permission import (
     InactiveGoalPermission,
     OwnerGoalPermission,
 )
-from .turn_input_source import DependencyOriginalInput, OwnerOriginalInput, RoutedOriginalInput
+from .turn_input_source import (
+    CapturedInputDependency,
+    DependencyOriginalInput,
+    NoInputDependency,
+    OwnerOriginalInput,
+    RoutedOriginalInput,
+)
 from .turn_progress import TurnProgress
 
 if TYPE_CHECKING:
@@ -154,25 +161,12 @@ class OwnedTurn:
         self.runner.inputs.steering_input_keys.setdefault(self.session_id, {})
         self.runner.inputs.steering_goal_ids.setdefault(self.session_id, {})
 
-        self.channel_batch = (
-            len(self.origins) > 1
-            and len({origin.seq for origin in self.origins}) == len(self.origins)
-            and all(origin.seq > 0 and is_channel_target(origin.target) for origin in self.origins)
-            and self.original_keys
-            == tuple(
-                self.runner.inputs.dispositions.bus_key(origin, self.thread)
-                for origin in self.origins
-            )
-            # The durable admission owns the exact prompt, including the
-            # names resolved at admission. Re-deriving it here can drift if
-            # a recipient was renamed before or after inbox draining.
-            and (
-                admitted_texts := self.runner.inputs.dispositions.read().source_texts(
-                    self.original_keys
-                )
-            )
-            is not None
-            and self.task == "\n\n".join(admitted_texts)
+        self.batch = InputBatch.capture(
+            self.origins,
+            self.original_keys,
+            self.task,
+            self.thread,
+            self.runner.inputs.dispositions,
         )
 
     def prepare_prompt(self):
@@ -250,6 +244,32 @@ class OwnedTurn:
             self.runner.inputs.turn_original_input_keys[self.session_id] = tuple(self.original_keys)
             self.runner.inputs.turn_input_text[self.session_id] = self.original_display or self.task
 
+        if self.original_owner_input:
+            permission = OwnerGoalPermission(self.goal)
+        elif self.goal is not None and self.goal.state.active:
+            permission = ContinuationGoalPermission(self.goal)
+        else:
+            permission = InactiveGoalPermission()
+        if self.original_owner_input:
+            source_type = OwnerOriginalInput
+        elif self.dependency_wait_id is not None:
+            source_type = DependencyOriginalInput
+        else:
+            source_type = RoutedOriginalInput
+        self.original = source_type(
+            keys=self.original_keys,
+            accepted_id=self.accepted_input_id,
+            goal_permission=permission,
+            prompt=self.task,
+            original_display=self.original_display,
+            origins=self.origins,
+            dependency=(
+                CapturedInputDependency(self.dependency_wait_id, self.direct_origins)
+                if self.dependency_wait_id is not None
+                else NoInputDependency()
+            ),
+            batch=self.batch,
+        )
         self.progress = TurnProgress(
             comms=self.runner.comms,
             sessions=self.runner.sessions,
@@ -297,12 +317,8 @@ class OwnedTurn:
         # the keyed metadata remains pending; never invent a bus recipient.
         await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
         self.task += self.runner.comms.bus.awareness_prompt(self.thread)
-        if (
-            self.runner.adaptive_compaction_enabled
-            and self.original_owner_input
-            and len(self.original_keys) == 1
-            and self.thread.session_file is not None
-        ):
+        pending_key = self.original.compaction_key(self.thread.session_file)
+        if self.runner.adaptive_compaction_enabled and pending_key is not None:
             from .owner_compaction_adaptive import maybe_compact_owner_turn
 
             def admit_original(admission: SelectedSummaryAdmission) -> None:
@@ -320,7 +336,7 @@ class OwnedTurn:
                     self.thread_name,
                     self.turn_id,
                     selected_info,
-                    self.original_keys[0],
+                    pending_key,
                     self.runner.persistent_backends.setdefault(
                         self.session_id, backend.PersistentPiSession()
                     ),
@@ -357,18 +373,6 @@ class OwnedTurn:
         self.image_options: dict[str, Any] = {"images": self.images} if self.images else {}
 
     async def stream(self):
-        if self.original_owner_input:
-            permission = OwnerGoalPermission(self.goal)
-        elif self.goal is not None and self.goal.state.active:
-            permission = ContinuationGoalPermission(self.goal)
-        else:
-            permission = InactiveGoalPermission()
-        if self.original_owner_input:
-            source_type = OwnerOriginalInput
-        elif self.dependency_wait_id is not None:
-            source_type = DependencyOriginalInput
-        else:
-            source_type = RoutedOriginalInput
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
@@ -378,17 +382,7 @@ class OwnedTurn:
             turn=TurnId(self.turn_id),
             admission=self.turn_admission,
             goal_permit=self.goal_permit,
-            original=source_type(
-                keys=self.original_keys,
-                accepted_id=self.accepted_input_id,
-                goal_permission=permission,
-                prompt=self.task,
-                original_display=self.original_display,
-                origins=self.origins,
-                direct_origins=self.direct_origins,
-                dependency_wait_id=self.dependency_wait_id,
-                channel_batch=self.channel_batch,
-            ),
+            original=replace(self.original, prompt=self.task),
         )
         async for event in backend.stream_agent_events(
             self.runner.agent_bin,
