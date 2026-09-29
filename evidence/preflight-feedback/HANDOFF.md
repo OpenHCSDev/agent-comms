@@ -23,3 +23,7 @@ Isolated persistent worktree /home/ts/wt/comms-preflight-feedback-sol-20260929 f
 Next: parent review and affected live-entry gate; backend/watchdog startup latency remains parent-owned and unchanged. No paid calls or live mutations performed.
 
 Final terminal correction cases: 3 PASS/6 deselected in 35.28s (`terminal-corrected.log`), after old already-collected text-only assertion RED. Full terminal run had 8 other cases PASS; only that replaced assertion failed. No unchanged broad rerun. Final production delta deletes 32 old lines across 8 files.
+
+## Reviewed post-dispatch correction
+
+Removed unconditional "The prompt was not sent" from InputIdUnavailable diagnostic enrichment: this failure also represents partial native writes after capability attestation. Enrichment preserves original failure text plus stderr only; the existing durable ACP input_state owns delivery feedback. Focused real-store check binds a reservation to BoundUnknownInput/SentInput, records post-dispatch BrokenPipe diagnostics, settles terminal batch, and proves no transition/no false not-sent claim; unknown feedback remains truthful. 4 focused checks PASS/0.05s (`post-dispatch-correction.log`). Prior actual installed UI preflight receipt remains applicable; no unchanged native matrix rerun.

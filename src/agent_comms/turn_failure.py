@@ -30,7 +30,7 @@ class TurnFailure(DeclaredFamily):
 
 class InputIdUnavailable(TurnFailure):
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
-        return type(self)(self.text + "\nThe prompt was not sent. Backend startup reported:\n" + stderr)
+        return type(self)(self.text + "\nBackend startup reported:\n" + stderr)
 
     code = FailureReason.INPUT_ID_UNAVAILABLE
     precedence = 100
