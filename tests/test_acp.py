@@ -545,7 +545,9 @@ class TestAgentTurn:
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, goal)
         await agent.turns.run_agent_turn("proj", "proj", "work")
-        failures = [fact for update in sent for fact in facts(update.field_meta, RequestFailedUpdate)]
+        failures = [
+            fact for update in sent for fact in facts(update.field_meta, RequestFailedUpdate)
+        ]
         assert len(failures) == 1 and failures[0].failure.detail == message
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.state.declared_name == "blocked"
@@ -831,10 +833,13 @@ class TestAgentTurn:
             if superseding is None:
                 superseding = wire(wired.root).goals.update_goal(
                     name,
-                    SetGoalAction(text="New objective")
-                    if transition is SetGoalAction
-                    else transition(
-                        expect=GoalPrecondition(goal_id=original.id), progress="explicit decision"
+                    (
+                        SetGoalAction(text="New objective")
+                        if transition is SetGoalAction
+                        else transition(
+                            expect=GoalPrecondition(goal_id=original.id),
+                            progress="explicit decision",
+                        )
                     ),
                 )
             return original_block(name, **kwargs)
@@ -1352,7 +1357,9 @@ class TestAgentTurn:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         monkeypatch.setattr("agent_comms.backend.terminate_task_process", terminate)
-        monkeypatch.setattr(agent.turns.goals.goal_store, "record_provider_usage", fail_usage)
+        from agent_comms.goal_attempts import LaunchPermit
+
+        monkeypatch.setattr(LaunchPermit, "record_provider_usage", fail_usage)
         with pytest.raises(StorageUncertainError):
             await agent.turns.run_agent_turn("proj", "proj", "continue")
         assert terminated
@@ -1434,9 +1441,9 @@ class TestWireProtocol:
                     deadline = _time.monotonic() + 30
                     while True:
                         if b"\n" not in pending:
-                            assert selector.select(max(0, deadline - _time.monotonic())), (
-                                "ACP timeout"
-                            )
+                            assert selector.select(
+                                max(0, deadline - _time.monotonic())
+                            ), "ACP timeout"
                             chunk = os.read(proc.stdout.fileno(), 65536)
                             assert chunk, "ACP closed before response"
                             pending += chunk

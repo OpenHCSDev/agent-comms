@@ -336,6 +336,19 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
 class LaunchPermit:
     reservation: Reservation
 
+    def is_claimed(self, store: GoalAttemptStore) -> bool:
+        attempt = self.reservation
+        return attempt.readback(
+            store,
+            ClaimedAttempt(),
+            Generation(
+                attempt.goal_id,
+                attempt.generation,
+                ReservedGeneration(),
+                attempt.attempt_id,
+            ),
+        )
+
     def record_verified_progress(
         self, store: GoalAttemptStore, progress_witness: str
     ) -> Generation:

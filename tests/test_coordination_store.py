@@ -1623,7 +1623,11 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
         assert db.participants.get("other").display_name == "Other"
 
 
-@pytest.mark.parametrize("invalid", ["false", 0, 1, None], ids=["string", "zero", "one", "none"])
+@pytest.mark.parametrize(
+    "invalid",
+    ["false", 0, 1, None, PromptStartingAttempt(60000)],
+    ids=["string", "zero", "one", "none", "live-phase"],
+)
 def test_nonterminal_settlement_cannot_silence_wire(db_path: Path, invalid: object) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
