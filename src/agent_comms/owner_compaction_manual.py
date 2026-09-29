@@ -132,6 +132,8 @@ async def compact_manual_owner(
             expected_package=Path(package),
             tokens_before=prepared.tokens_before,
             custom_instructions=instructions.strip() if instructions else None,
+            on_event=lambda event: runner.effects._emit_event(session_id, event),
+            reason="manual",
         )
         summary = result.manual_summary(bridge.journal)
         current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)

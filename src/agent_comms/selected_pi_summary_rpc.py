@@ -88,6 +88,7 @@ class SelectedSummarySlot:
         future_queue: FutureInputQueue | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
+        reason: str = "adaptive",
     ) -> SelectedSummaryData:
         """Reserve durably, exchange once, and leave settlement to the owner.
 
@@ -155,8 +156,13 @@ class SelectedSummarySlot:
                     if event.sequence > sequence:
                         sequence = event.sequence
                         deadline = loop.time() + idle_timeout_seconds
-                        if on_event is not None:
-                            await on_event(CompactionSummaryProgress(reason="adaptive"))
+                        # Thinking deltas extend native liveness, but only text
+                        # and measured source work change the presentation.
+                        if on_event is not None and (event.text or event.source is not None):
+                            await on_event(CompactionSummaryProgress(
+                                reason=reason, operation_id=operation,
+                                text=event.text, source=event.source,
+                            ))
                 result = _summary_response(raw, request, tokens_before)
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
