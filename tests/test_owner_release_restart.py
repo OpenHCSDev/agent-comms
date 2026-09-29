@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import DetachedProcess
+from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 
@@ -52,7 +52,7 @@ while True: time.sleep(0.01)
         "PI_WORKTREE": str(tmp_path),
         "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
     }
-    child = DetachedProcess.launch((sys.executable, str(script)), env=env)
+    child = ParentedProcess.launch((sys.executable, str(script)), env=env)
     comms = Comms(root)
     try:
         wait_for(root / "ready")
@@ -68,7 +68,7 @@ while True: time.sleep(0.01)
             and current.process_alive
             and current.process_identity != child.identity
         ):
-            DetachedProcess.attach(current.process_identity).stop_sync()
+            ObservedProcess(current.process_identity).stop_sync()
 
 
 @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])

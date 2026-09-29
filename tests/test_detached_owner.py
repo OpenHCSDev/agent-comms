@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsClient
-from agent_comms.child_process import DetachedProcess
+from agent_comms.child_process import ParentedProcess
 from agent_comms.comms import wire
 from compaction_loopback import LoopbackProvider
 
@@ -50,12 +50,12 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/fake-compact")
     monkeypatch.setenv("PI_OFFLINE", "1")
     owner_output = (tmp_path / "owner-output.log").open("wb")
-    launch = DetachedProcess.launch
+    launch = ParentedProcess.launch
 
     def logged_launch(*args, **kwargs):
         return launch(*args, **{**kwargs, "output": owner_output})
 
-    monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
+    monkeypatch.setattr(ParentedProcess, "launch", logged_launch)
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)

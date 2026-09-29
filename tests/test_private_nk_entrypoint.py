@@ -20,7 +20,7 @@ from agent_comms import (
     worker,
 )
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.child_process import DetachedProcess, ProcessIdentity
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
@@ -170,9 +170,9 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
             "resumable", frozenset(), str(tmp_path), process_identity=None, session_file=str(saved)
         )
     )
-    launched: list[DetachedProcess] = []
+    launched: list[ParentedProcess] = []
     captured: list[dict[str, str]] = []
-    launch = DetachedProcess.launch
+    launch = ParentedProcess.launch
 
     def provider_free_child(_argv, **kwargs):
         captured.append(kwargs["env"])
@@ -180,7 +180,7 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
         launched.append(child)
         return child
 
-    monkeypatch.setattr(DetachedProcess, "launch", provider_free_child)
+    monkeypatch.setattr(ParentedProcess, "launch", provider_free_child)
     try:
         result = comms.owners.start("resumable")
         assert result.pid == launched[0].pid
@@ -459,7 +459,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
         assert wire(env["AGENT_COMMS_ROOT"]).root == physical
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(DetachedProcess, "launch", intercept)
+    monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [str(physical)]
@@ -484,7 +484,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
         seen.append((env["AGENT_COMMS_ROOT"], env[ROOT_ID_ENV], env[PACKAGE_ENV]))
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(DetachedProcess, "launch", intercept)
+    monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
     assert seen == [(str(root), root_id, str(tmp_path))]
@@ -515,7 +515,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
             assert participant.committed and participant.owner_thread == "late-owner"
         raise StopBeforeSpawnError
 
-    monkeypatch.setattr(DetachedProcess, "launch", intercept)
+    monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
         comms.owners.start("late-owner", agent_bin="pi")
     with Coordination(str(root / "coordination.sqlite3")) as store:
