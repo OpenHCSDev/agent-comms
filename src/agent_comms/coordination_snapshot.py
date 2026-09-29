@@ -10,7 +10,6 @@ from agent_comms.coordination_errors import (
     StaleFence,
     RecoveryBlocked,
     PublicationUncertain,
-    IdentityConflict,
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
@@ -297,8 +296,8 @@ class RecoverySnapshot:
         )
 
     def require_nonpublication_response(self) -> None:
-        if self.obligation is not None and not self.obligation.lifecycle.retryable:
-            raise IdentityConflict("wire completion requires nonpublication obligation")
+        if self.obligation is not None:
+            self.obligation.lifecycle.require_nonpublication()
 
     @property
     def retry_authorized(self) -> bool:

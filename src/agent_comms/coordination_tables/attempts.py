@@ -346,18 +346,23 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
     side_effects_possible: bool = dataclass_field(metadata={"sql": Column()})
     revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
 
+    def require_successor(self, after: ReplayAssessments) -> None:
+        accumulated = replace(
+            after,
+            facts=self.facts | after.facts,
+            replay_safe=self.replay_safe and after.replay_safe,
+            side_effects_possible=self.side_effects_possible or after.side_effects_possible,
+        )
+        if accumulated != after:
+            raise IdentityConflict("replay facts cannot be erased")
+
     def record(self, db, before: ReplayAssessments | None) -> bool:
         """Persist monotonic replay evidence inside the checked transaction."""
 
         if before is not None:
             if replace(before, revision=self.revision) == self:
                 return False
-            if (
-                (before.facts | self.facts) != self.facts
-                or (not before.replay_safe and self.replay_safe)
-                or (before.side_effects_possible and not self.side_effects_possible)
-            ):
-                raise IdentityConflict("replay facts cannot be erased")
+            before.require_successor(self)
             ReplayAssessments.update(
                 db,
                 where="execution_id=?",

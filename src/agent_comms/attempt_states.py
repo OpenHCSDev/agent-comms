@@ -44,6 +44,9 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
             self.process_dead or process_dead,
         )
 
+    def require_silent_completion(self) -> None:
+        raise IdentityConflict("silent completion requires settling phase")
+
     def renewed(self, expiry: int):
         if self.process_dead:
             raise RecoveryBlocked("a dead Pi RPC subprocess cannot renew its live lease")
@@ -176,6 +179,9 @@ class CompactionAttempt(LiveAttempt):
 
 
 class SettlingAttempt(LiveAttempt):
+    def require_silent_completion(self) -> None:
+        pass
+
     settling = True
 
     @property
@@ -234,8 +240,7 @@ class SucceededAttempt(TerminalAttempt):
         from .execution_states import CompletedExecution
         from .obligation_states import SilentResponse
 
-        if not attempt.lifecycle.settling:
-            raise IdentityConflict("silent completion requires settling phase")
+        attempt.lifecycle.require_silent_completion()
         snapshot.require_nonpublication_response()
         return CompletedExecution(attempt.attempt_ordinal), SilentResponse()
 
