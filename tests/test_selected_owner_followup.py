@@ -224,7 +224,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         elif change == "missing_key":
             agent.inputs.steering_input_keys["beta"].pop(execution.accepted_input_id)
         elif change == "foreign_key":
-            execution.original_keys = ("acp:historical-uncertain",)
+            execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
         expected.update(
             goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
         )

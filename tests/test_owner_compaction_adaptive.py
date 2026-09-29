@@ -12,7 +12,6 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from delivery_owner_fixture import canonical_agent
 from agent_comms.backend import PersistentPiSession
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -29,6 +28,7 @@ from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(
@@ -354,7 +354,7 @@ async def test_acp_owner_turn_compacts_then_sends_original_once(
     private.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(private)
     store.create_goal("goal-acp")
-    agent.turns.goal_store = store
+    agent.turns.goals.goal_store = store
     goal_before = comms.registry.require("proj").goal
     grant_before = store.snapshot("goal-acp")
     admission = comms.registry.snapshot().admission_generations["proj"]
