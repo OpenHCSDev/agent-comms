@@ -1,0 +1,95 @@
+...........F....FF..............                                         [100%]
+=================================== FAILURES ===================================
+________ test_fresh_gen2_selected_and_old_pending_obligation_are_scoped ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/focused/test_fresh_gen2_selected_and_o0')
+
+    def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Path) -> None:
+        comms, store, index, root_id = _root(tmp_path)
+        try:
+            old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
+            store.executions.create(
+                "old-reply",
+                ExecutionOrigin.WIRE,
+                old_claim.recipient_lookup,
+                "member000",
+                1,
+                assignment_ids=(old_claim.assignment_id,),
+                exact_target="sender",
+            )
+            store.participants.advance_generation(
+                old_claim.recipient_lookup, "member000", expected_generation=1
+            )
+            current, assignment = _accepted(comms, store, root_id, "member000", "new pending")
+            index.maintain(rebuild=True)
+            owner = _owner(comms, "member000")
+            result = _projection(index, store, owner, 0, current.message.seq)(
+                current, assignment, owner
+            )
+            assert result.complete and result.omitted_count == 2
+            context = result.context()
+            assert [row["claim_id"] for row in context["selected"]] == [assignment.assignment_id]
+            assert context["open_obligations"] == []
+>           assert old_claim.assignment_id not in result.text and "old-reply" not in result.text
+                                                  ^^^^^^^^^^^
+E           AttributeError: 'CompleteAwareness' object has no attribute 'text'
+
+tests/test_optional_awareness_projection.py:415: AttributeError
+_____ test_normal_rename_does_not_inject_old_selected_claim_into_new_owner _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/focused/test_normal_rename_does_not_in0')
+
+    def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
+        tmp_path: Path,
+    ) -> None:
+        comms, store, index, root_id = _root(tmp_path)
+        try:
+            old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
+            comms.threads._rename_thread("member000", "gamma")
+            current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
+            current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
+            receipt = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
+            assert len(receipt.assignments) == 1
+            current_claim = receipt.assignments[0]
+            index.maintain(rebuild=True)
+            owner = _owner(comms, "gamma")
+            result = _projection(index, store, owner, 0, current.message.seq)(
+                current, current_claim, owner
+            )
+            assert old_claim.recipient == "member000" and current_claim.recipient == "gamma"
+            assert old.message.seq < current.message.seq
+            assert result.complete and result.omitted_count == 1
+            selected = result.context()["selected"]
+            assert [row["claim_id"] for row in selected] == [current_claim.assignment_id]
+>           assert old_claim.assignment_id not in result.text
+                                                  ^^^^^^^^^^^
+E           AttributeError: 'CompleteAwareness' object has no attribute 'text'
+
+tests/test_optional_awareness_projection.py:545: AttributeError
+___________ test_other_owner_decision_never_enters_selected_context ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/focused/test_other_owner_decision_neve0')
+
+    def test_other_owner_decision_never_enters_selected_context(tmp_path: Path) -> None:
+        comms, store, index, root_id = _root(tmp_path)
+        try:
+            _accepted(comms, store, root_id, "member001", "foreign-owner-message")
+            initial, assignment = _accepted(comms, store, root_id, "member000", "ours")
+            index.maintain(rebuild=True)
+            owner = _owner(comms, "member000")
+            result = _projection(index, store, owner, 0, initial.message.seq)(
+                initial, assignment, owner
+            )
+            assert result.complete
+            context = result.context()
+            assert [row["source_seq"] for row in context["selected"]] == [initial.message.seq]
+>           assert "foreign-owner-message" not in result.text
+                                                  ^^^^^^^^^^^
+E           AttributeError: 'CompleteAwareness' object has no attribute 'text'
+
+tests/test_optional_awareness_projection.py:563: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_optional_awareness_projection.py::test_fresh_gen2_selected_and_old_pending_obligation_are_scoped
+FAILED tests/test_optional_awareness_projection.py::test_normal_rename_does_not_inject_old_selected_claim_into_new_owner
+FAILED tests/test_optional_awareness_projection.py::test_other_owner_decision_never_enters_selected_context
+3 failed, 29 passed, 54 deselected in 34.27s

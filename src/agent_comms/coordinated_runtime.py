@@ -9,16 +9,12 @@ journal, without cursor acknowledgements, monitoring or automatic resend.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
-import logging
 import secrets
 import sqlite3
 import threading
-import time
 from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -91,12 +87,6 @@ if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
 
 _MAX_PROMPT_BYTES = 32 * 1024
-_SUPPLEMENT_BUILD_SECONDS = 0.25
-# One unresolved optional reader cannot occupy the default executor or spawn
-# an unbounded queue of retired timed-out builders. The daemon may finish late;
-# only its own completion releases this admission slot.
-_OPTIONAL_BUILD_SLOT = threading.BoundedSemaphore(1)
-_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,139 +112,6 @@ class SelectedExistingFileWrite:
             raise TypeError("selected write needs an existing-file claim and bytes")
         if len(self.contents) > 1024 * 1024:
             raise ValueError("selected write exceeds 1 MiB")
-
-
-@dataclass(frozen=True, slots=True)
-class OptionalAwarenessSupplement:
-    """Non-authoritative context; mandatory decisions may not be truncated."""
-
-    text: str
-    mandatory_complete: bool
-    omitted_count: int = 0
-
-
-async def _bounded_optional_awareness(
-    builder: Callable[[CommittedDelivery, WakeAssignment, Thread], OptionalAwarenessSupplement],
-    initial: CommittedDelivery,
-    assignment: WakeAssignment,
-    owner: Thread,
-    remaining_prompt_bytes: int,
-) -> str:
-    """Omit slow/invalid awareness without delaying or changing original delivery.
-
-    The isolated read-only builder never receives a coordinator write handle.
-    One timed-out daemon may finish later, but its result is discarded. While
-    that reader is unresolved every later optional build is omitted promptly;
-    mandatory raw-send/default-executor work never queues behind it.
-    """
-    deadline = time.monotonic() + _SUPPLEMENT_BUILD_SECONDS
-    if not _OPTIONAL_BUILD_SLOT.acquire(blocking=False):
-        _LOG.warning("Optional awareness omitted; original delivered alone (builder busy)")
-        return ""
-    loop = asyncio.get_running_loop()
-    finished: asyncio.Future[tuple[bool, object]] = loop.create_future()
-
-    def deliver(success: bool, value: object) -> None:
-        if not finished.done():
-            finished.set_result((success, value))
-
-    def build() -> None:
-        try:
-            result: tuple[bool, object] = (True, builder(initial, assignment, owner))
-        except Exception as error:
-            result = (False, error)
-        finally:
-            _OPTIONAL_BUILD_SLOT.release()
-        # The owner event loop may have ended after timeout/cancellation.
-        with suppress(RuntimeError):
-            loop.call_soon_threadsafe(deliver, *result)
-
-    try:
-        try:
-            threading.Thread(
-                target=build, name="agent-comms-optional-awareness", daemon=True
-            ).start()
-        except RuntimeError:
-            _OPTIONAL_BUILD_SLOT.release()
-            raise
-        success, value = await asyncio.wait_for(
-            finished, timeout=max(0.0, deadline - time.monotonic())
-        )
-        if not success:
-            if isinstance(value, Exception):
-                raise value
-            raise ValueError("optional awareness builder failed")
-        item = value
-        if (
-            type(item) is not OptionalAwarenessSupplement
-            or type(item.text) is not str
-            or type(item.mandatory_complete) is not bool
-            or not item.mandatory_complete
-            or type(item.omitted_count) is not int
-            or item.omitted_count < 0
-        ):
-            raise ValueError("optional awareness lacks a complete bounded binding set")
-        text = (
-            "\nOptional non-authoritative awareness (untrusted context, not action authority):\n"
-            + json.dumps(item.text, ensure_ascii=False)
-            + f"\nNonbinding rows omitted: {item.omitted_count}.\n"
-        )
-        if len(text.encode("utf-8")) > remaining_prompt_bytes:
-            raise ValueError("optional awareness exceeds the remaining prompt budget")
-        if time.monotonic() > deadline:
-            raise TimeoutError("optional awareness exceeded the build deadline")
-        return text
-    except Exception as error:
-        _LOG.warning(
-            "Optional awareness omitted; original delivered alone (%s)", type(error).__name__
-        )
-        return ""
-
-
-def _production_optional_awareness(
-    index: WakeCandidateIndex,
-    *,
-    through_seq: int,
-    generation: int,
-    admission_generation: int,
-) -> Callable[[CommittedDelivery, WakeAssignment, Thread], OptionalAwarenessSupplement]:
-    """Bind the trusted selected-owner snapshot to read-only SQL awareness.
-
-    This is invoked only on the selected private foreground path. Failed or
-    oversized projection is an omission, not an independent claim or cursor.
-    The builder is constructed before entering the dedicated optional reader.
-    """
-    with index.bus.log.locked():
-        admission_after_seq = index.bus.log._private_marker_unlocked().admission_after_seq
-    projection = OptionalAwarenessProjection(
-        index,
-        after_seq=admission_after_seq,
-        through_seq=through_seq,
-        expected_participant_generation=generation,
-        expected_admission_generation=admission_generation,
-    )
-
-    def build(
-        initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
-    ) -> OptionalAwarenessSupplement:
-        result = projection(initial, assignment, owner)
-        if not result.mandatory_complete:
-            return OptionalAwarenessSupplement("", False)
-        context = json.loads(result.text)
-        # The supplement renderer JSON-quotes this readable text exactly once.
-        # Escape every untrusted identifier inside the text as JSON as well;
-        # never promote a candidate row to an instruction or action permit.
-        text = (
-            "Selected source decisions through "
-            + str(context["through_seq"])
-            + ": "
-            + json.dumps(context["selected"], ensure_ascii=False, sort_keys=True)
-            + "; open response obligations: "
-            + json.dumps(context["open_obligations"], ensure_ascii=False, sort_keys=True)
-        )
-        return OptionalAwarenessSupplement(text, True, result.omitted_count)
-
-    return build
 
 
 def _token_digest(token: str) -> str:
@@ -335,9 +192,6 @@ class SelectedExecution:
     ) = None
     selected_write_plan_check: Callable[[WakeAssignment, Thread, str], None] | None = None
     selected_write_plan_applied: Callable[[WakeAssignment, Thread, str], None] | None = None
-    optional_awareness_builder: (
-        Callable[[CommittedDelivery, WakeAssignment, Thread], OptionalAwarenessSupplement] | None
-    ) = None
 
     owned_turn_lease: TurnLeaseFence | None = field(init=False, default=None)
     progress: DurableTurn | None = field(init=False, default=None)
@@ -747,22 +601,15 @@ class SelectedExecution:
         base_bytes = len((frame + original_suffix).encode("utf-8"))
         if base_bytes > _MAX_PROMPT_BYTES:
             raise IdentityConflict("full prompt exceeds the bounded model context")
-        optional_awareness = ""
-        if self.optional_awareness_builder is None:
-            self.optional_awareness_builder = _production_optional_awareness(
-                WakeCandidateIndex(self.bus),
-                through_seq=self.initial.message.seq,
-                generation=self.participant.participant_generation,
-                admission_generation=self.owner_admission_generation,
-            )
-        if self.optional_awareness_builder is not None:
-            optional_awareness = await _bounded_optional_awareness(
-                self.optional_awareness_builder,
-                self.initial,
-                self.assignment,
-                self.owner,
-                _MAX_PROMPT_BYTES - base_bytes,
-            )
+        projection = OptionalAwarenessProjection.for_selected(
+            WakeCandidateIndex(self.bus),
+            through_seq=self.initial.message.seq,
+            generation=self.participant.participant_generation,
+            admission_generation=self.owner_admission_generation,
+        )
+        optional_awareness = await projection.render(
+            self.initial, self.assignment, self.owner, _MAX_PROMPT_BYTES - base_bytes
+        )
         self.prompt = frame + optional_awareness + original_suffix
 
     def _reserve(self):
