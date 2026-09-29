@@ -26,6 +26,9 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal, PausedGoal
 from .messages import MessageType
+from .restart_queue import cancel as cancel_restart
+from .restart_queue import enqueue as enqueue_restart
+from .restart_queue import status as restart_status
 from .thread_management import ForkSpec
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -400,11 +403,13 @@ class CommsSetProjectTool(ToolRequest):
         return {
             **asdict(result),
             "instruction": (
-                "Project saved. End this turn now; the runtime automatically resumes this same "
-                "conversation in the new project with refreshed tools and context."
-            )
-            if result.changed
-            else "This is already your project directory.",
+                (
+                    "Project saved. End this turn now; the runtime automatically resumes this same "
+                    "conversation in the new project with refreshed tools and context."
+                )
+                if result.changed
+                else "This is already your project directory."
+            ),
         }
 
 
@@ -747,6 +752,43 @@ class CommsStartTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsQueueRestartTool(ToolRequest):
+    label = "Queue Idle Owner Restart"
+    description = (
+        "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
+        "turn. A changed owner or uncertain attempt is never retried automatically. "
+        "Restarts in the current installed runtime; does not deploy another runtime."
+    )
+    context = "thread"
+    action_label = "Queue idle restart"
+    action_order = 22
+    name: str = tool_field("Live agent thread", binding=SubjectBinding)
+
+    def apply(self, comms: Comms) -> JsonObject:
+        return {"restart": enqueue_restart(comms, self.name)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsRestartQueueTool(ToolRequest):
+    label = "Restart Queue Status"
+    description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
+    name: str = tool_field("Agent thread")
+
+    def apply(self, comms: Comms) -> JsonObject:
+        return {"restarts": restart_status(comms, self.name)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCancelRestartTool(ToolRequest):
+    label = "Cancel Queued Restart"
+    description = "Cancel pending restarts for a thread; cannot undo an attempted restart."
+    name: str = tool_field("Agent thread")
+
+    def apply(self, comms: Comms) -> JsonObject:
+        return {"cancelled": cancel_restart(comms, self.name)}
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsArchiveTool(ToolRequest):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
@@ -827,9 +869,7 @@ class CommsAckTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         target = self.target
-        acknowledged = comms.messaging.acknowledge(
-            self.thread, target
-        )
+        acknowledged = comms.messaging.acknowledge(self.thread, target)
         return {"acknowledged": acknowledged}
 
 

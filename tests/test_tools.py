@@ -70,6 +70,7 @@ class TestToolCatalog:
             "comms_fork",
             "comms_stop",
             "comms_start",
+            "comms_queue_restart",
             "comms_archive",
             "comms_ack",
         ]
