@@ -1,0 +1,289 @@
+........................F......FF.................................FF.... [ 77%]
+.........ss..........                                                    [100%]
+=================================== FAILURES ===================================
+___________ test_link_requires_exact_committed_native_intent_binding ___________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fc2238533f0>, '/tmp/pytest-of-ts/pytest-584/test_link_...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_link_requires_exact_committed_native_intent_binding(reserved):
+        journal, session, source = reserved
+        wrong = journal.operations.begin(
+            session,
+            {"selectedSummaryOperationId": "0" * 32},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+        journal.operations.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
+        operation_id = journal.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="Exact committed"):
+            journal.summaries.link_commit(operation_id, wrong)
+        commit_id = journal.operations.begin(
+            session,
+            {"selectedSummaryOperationId": operation_id},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+>       with pytest.raises(CompactionJournalError, match="Exact committed"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'Exact committed'
+E         Actual message: 'Native compaction operation 2ee5823ec50247f39e90edf2ab83f7f1 is intent; reconcile exact ID before any new input'
+
+tests/test_selected_summary_journal.py:256: AssertionError
+_____ test_terminal_postcommit_fsync_unknown_blocks_across_reopen[linked] ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fc2234ff3f0>, '/tmp/pytest-of-ts/pytest-584/test_termi...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc2234fde10>
+terminal = 'linked'
+
+    @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+    def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkeypatch, terminal):
+        journal, session, source = reserved
+        operation_id = journal.summaries.reserve(session, source, operation_id="a" * 32)
+        if terminal == "linked":
+            commit_id = journal.operations.begin(
+                session,
+                {"selectedSummaryOperationId": operation_id},
+                inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            )
+            journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
+        original_fsync = os.fsync
+    
+        def deny_fsync(_fd):
+            raise OSError("post-COMMIT directory fsync denied")
+    
+        monkeypatch.setattr(os, "fsync", deny_fsync)
+        with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+            if terminal == "linked":
+                journal.summaries.link_commit(operation_id, commit_id)
+            else:
+                journal.summaries.decline_prestart(operation_id, "split_turn")
+        # Even a second fsync failure in the final-send read must fail closed.
+        assert not native_input_admitted(journal.path.parent, session)
+        monkeypatch.setattr(os, "fsync", original_fsync)
+        assert journal.summaries.get(operation_id).state.declared_name == terminal
+        assert not native_input_admitted(journal.path.parent, session)
+        reopened = CompactionJournal(journal.path)
+        assert reopened.summaries.blocking(session) == (reopened.summaries.get(operation_id),)
+        assert not native_input_admitted(journal.path.parent, session)
+        fresh = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; from pathlib import Path; "
+                "from agent_comms.compaction_send_admission import native_input_admitted; "
+                "print(native_input_admitted(Path(sys.argv[1]),sys.argv[2]))",
+                str(journal.path.parent),
+                session,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        assert fresh.stdout.strip() == "False"
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            reopened.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+>           reopened.begin(
+            ^^^^^^^^^^^^^^
+                session,
+                {},
+                inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+            )
+E           AttributeError: 'CompactionJournal' object has no attribute 'begin'
+
+tests/test_selected_summary_journal.py:432: AttributeError
+_ test_terminal_postcommit_fsync_unknown_blocks_across_reopen[declined-prestart] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fc2234ffaf0>, '/tmp/pytest-of-ts/pytest-584/test_termi...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc2234ff850>
+terminal = 'declined-prestart'
+
+    @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+    def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkeypatch, terminal):
+        journal, session, source = reserved
+        operation_id = journal.summaries.reserve(session, source, operation_id="a" * 32)
+        if terminal == "linked":
+            commit_id = journal.operations.begin(
+                session,
+                {"selectedSummaryOperationId": operation_id},
+                inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            )
+            journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
+        original_fsync = os.fsync
+    
+        def deny_fsync(_fd):
+            raise OSError("post-COMMIT directory fsync denied")
+    
+        monkeypatch.setattr(os, "fsync", deny_fsync)
+        with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+            if terminal == "linked":
+                journal.summaries.link_commit(operation_id, commit_id)
+            else:
+                journal.summaries.decline_prestart(operation_id, "split_turn")
+        # Even a second fsync failure in the final-send read must fail closed.
+        assert not native_input_admitted(journal.path.parent, session)
+        monkeypatch.setattr(os, "fsync", original_fsync)
+        assert journal.summaries.get(operation_id).state.declared_name == terminal
+        assert not native_input_admitted(journal.path.parent, session)
+        reopened = CompactionJournal(journal.path)
+        assert reopened.summaries.blocking(session) == (reopened.summaries.get(operation_id),)
+        assert not native_input_admitted(journal.path.parent, session)
+        fresh = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; from pathlib import Path; "
+                "from agent_comms.compaction_send_admission import native_input_admitted; "
+                "print(native_input_admitted(Path(sys.argv[1]),sys.argv[2]))",
+                str(journal.path.parent),
+                session,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        assert fresh.stdout.strip() == "False"
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            reopened.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+>           reopened.begin(
+            ^^^^^^^^^^^^^^
+                session,
+                {},
+                inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+            )
+E           AttributeError: 'CompactionJournal' object has no attribute 'begin'
+
+tests/test_selected_summary_journal.py:432: AttributeError
+_ test_native_start_retires_barrier_without_erasing_history_or_replaying_original[linked] _
+
+case = (<agent_comms.comms.Comms object at 0x7fc2238e7c50>, '/tmp/pytest-of-ts/pytest-584/test_native_start_retires_barr0/ses...71a4bb355e80c7782f5842998')), session_revision=((39, 717167, 3, 1790673303191238820, 1790673303191238820), None)), ...)
+terminal = 'linked'
+
+    @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+    def test_native_start_retires_barrier_without_erasing_history_or_replaying_original(case, terminal):
+        comms, session, journal, operation_id, dispositions, identity, text = case
+        if terminal == "linked":
+            source = journal.summaries.get(operation_id).source_json
+            commit_id = journal.operations.begin(
+                session,
+                {
+                    "selectedSummaryOperationId": operation_id,
+                    "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
+                },
+                inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            )
+            journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+            token = journal.summaries.link_commit(operation_id, commit_id, admission=identity)
+        else:
+            token = journal.summaries.decline_prestart(
+                operation_id, "unsupported", admission=identity
+            )
+        assert _assignment(case, token)
+        assert not native_input_admitted(comms.root, session), "bound UNKNOWN is not native start"
+        assert dispositions.started(
+            identity.source.ingress_key, turn_id="turn", native_id="b" * 32, text=text
+        )
+        reopened = CompactionJournal(journal.path)
+        assert native_input_admitted(comms.root, session)
+        assert reopened.summaries.blocking(session) == ()
+        assert reopened.summaries.get(operation_id).state.declared_name == terminal
+        assert not _assignment(case, token), "native start cannot replenish a consumed token"
+        with reopened.private_inputs.send_fence(Path(session)):
+            pass
+        with pytest.raises(ValueError, match="already_sent"):
+            reopened.summaries.reserve(session, _source(identity))
+        next_identity = admission_identity(
+            session, text="Next original", key="acp:next", turn="next-turn"
+        )
+        assert dispositions.record(
+            next_identity.source.ingress_key,
+            seq=None,
+            owner=next_identity.source.incarnation.name,
+            admission=next_identity.source.admission_generation,
+            target=next_identity.source.incarnation.name,
+            text="Next original",
+        )
+        next_id = reopened.summaries.reserve(session, _source(next_identity))
+        assert [row.operation_id for row in reopened.summaries.blocking(session)] == [next_id]
+        # A subsequent writer can bind ONLY the new reservation, despite historical
+        # terminal rows remaining in the same table for audit and ID uniqueness.
+>       reopened.begin(
+        ^^^^^^^^^^^^^^
+            session,
+            {"selectedSummaryOperationId": next_id},
+            inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+        )
+E       AttributeError: 'CompactionJournal' object has no attribute 'begin'
+
+tests/test_selected_summary_admission.py:487: AttributeError
+_ test_native_start_retires_barrier_without_erasing_history_or_replaying_original[declined-prestart] _
+
+case = (<agent_comms.comms.Comms object at 0x7fc222ab4110>, '/tmp/pytest-of-ts/pytest-584/test_native_start_retires_barr1/ses...71a4bb355e80c7782f5842998')), session_revision=((39, 717185, 3, 1790673303246564927, 1790673303246564927), None)), ...)
+terminal = 'declined-prestart'
+
+    @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
+    def test_native_start_retires_barrier_without_erasing_history_or_replaying_original(case, terminal):
+        comms, session, journal, operation_id, dispositions, identity, text = case
+        if terminal == "linked":
+            source = journal.summaries.get(operation_id).source_json
+            commit_id = journal.operations.begin(
+                session,
+                {
+                    "selectedSummaryOperationId": operation_id,
+                    "selectedSummarySourceDigest": hashlib.sha256(source.encode()).hexdigest(),
+                },
+                inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            )
+            journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "committed"})
+            token = journal.summaries.link_commit(operation_id, commit_id, admission=identity)
+        else:
+            token = journal.summaries.decline_prestart(
+                operation_id, "unsupported", admission=identity
+            )
+        assert _assignment(case, token)
+        assert not native_input_admitted(comms.root, session), "bound UNKNOWN is not native start"
+        assert dispositions.started(
+            identity.source.ingress_key, turn_id="turn", native_id="b" * 32, text=text
+        )
+        reopened = CompactionJournal(journal.path)
+        assert native_input_admitted(comms.root, session)
+        assert reopened.summaries.blocking(session) == ()
+        assert reopened.summaries.get(operation_id).state.declared_name == terminal
+        assert not _assignment(case, token), "native start cannot replenish a consumed token"
+        with reopened.private_inputs.send_fence(Path(session)):
+            pass
+        with pytest.raises(ValueError, match="already_sent"):
+            reopened.summaries.reserve(session, _source(identity))
+        next_identity = admission_identity(
+            session, text="Next original", key="acp:next", turn="next-turn"
+        )
+        assert dispositions.record(
+            next_identity.source.ingress_key,
+            seq=None,
+            owner=next_identity.source.incarnation.name,
+            admission=next_identity.source.admission_generation,
+            target=next_identity.source.incarnation.name,
+            text="Next original",
+        )
+        next_id = reopened.summaries.reserve(session, _source(next_identity))
+        assert [row.operation_id for row in reopened.summaries.blocking(session)] == [next_id]
+        # A subsequent writer can bind ONLY the new reservation, despite historical
+        # terminal rows remaining in the same table for audit and ID uniqueness.
+>       reopened.begin(
+        ^^^^^^^^^^^^^^
+            session,
+            {"selectedSummaryOperationId": next_id},
+            inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
+        )
+E       AttributeError: 'CompactionJournal' object has no attribute 'begin'
+
+tests/test_selected_summary_admission.py:487: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_journal.py::test_link_requires_exact_committed_native_intent_binding
+FAILED tests/test_selected_summary_journal.py::test_terminal_postcommit_fsync_unknown_blocks_across_reopen[linked]
+FAILED tests/test_selected_summary_journal.py::test_terminal_postcommit_fsync_unknown_blocks_across_reopen[declined-prestart]
+FAILED tests/test_selected_summary_admission.py::test_native_start_retires_barrier_without_erasing_history_or_replaying_original[linked]
+FAILED tests/test_selected_summary_admission.py::test_native_start_retires_barrier_without_erasing_history_or_replaying_original[declined-prestart]
+5 failed, 86 passed, 2 skipped in 5.84s

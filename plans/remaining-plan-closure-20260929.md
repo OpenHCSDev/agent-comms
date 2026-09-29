@@ -62,8 +62,9 @@ acknowledgement now have their own transaction APIs; the former journal methods
 and all production/test callers are deleted. One canonical database owns schema,
 locking and commit/fsync. Repeated exclusion queries, the enrollment table roster,
 and selected transition SQL collapse onto declared table/lifecycle owners.
-[PR376 receipt](../evidence/q8-journal-transactions/README.md) tracks exact installed
-native/ACP and failure evidence. Parent owns merge/default installation. This is
+[PR376 receipt](../evidence/q8-journal-transactions/README.md):991 production lines
+replaced/deleted,206 class excess removed,94 focused cases and final2 actual
+installed native/ACP cases pass; source8ac16539 is ready. Failed receipts retained. Parent owns merge/default installation. This is
 whole journal role closure, not a claim that all Q8/history/T4 work is complete.
 
 ## Registry lifecycle followthrough — PR361

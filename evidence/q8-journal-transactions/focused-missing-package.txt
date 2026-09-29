@@ -1,0 +1,334 @@
+........................................................................ [ 67%]
+.........ss........FEEEEEEEEEEEE...                                      [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_local_delivery_requires_existing_owner_and_attached_transport _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_local_delivery_requires_e0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...': 'tests/test_compaction_publication.py::test_local_delivery_requires_existing_owner_and_attached_transport (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_pending_metadata_projects_before_next_owner_input_send _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_pending_metadata_projects0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...NT_TEST': 'tests/test_compaction_publication.py::test_pending_metadata_projects_before_next_owner_input_send (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_session_rebinding_during_actual_handoff_refuses_before_delivery _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_session_rebinding_during_0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'... 'tests/test_compaction_publication.py::test_session_rebinding_during_actual_handoff_refuses_before_delivery (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_client_only_rebind_before_actual_transport_denies_wrong_client _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_client_only_rebind_before0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...: 'tests/test_compaction_publication.py::test_client_only_rebind_before_actual_transport_denies_wrong_client (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_socket_incarnation_swap_b0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...ompaction_publication.py::test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_socket_incarnation_swap_a0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...: 'tests/test_compaction_publication.py::test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_after_delivery_changed_acp_binding_never_marks_old_commit _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_after_delivery_changed_ac0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...TEST': 'tests/test_compaction_publication.py::test_after_delivery_changed_acp_binding_never_marks_old_commit (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_stalled_local_client_releases_identity_only_after_transport_cleanup[deadline-False] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_stalled_local_client_rele0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...ion_publication.py::test_stalled_local_client_releases_identity_only_after_transport_cleanup[deadline-False] (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_stalled_local_client_releases_identity_only_after_transport_cleanup[cancel-False] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_stalled_local_client_rele1')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...ction_publication.py::test_stalled_local_client_releases_identity_only_after_transport_cleanup[cancel-False] (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_stalled_local_client_releases_identity_only_after_transport_cleanup[deadline-True] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_stalled_local_client_rele2')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...tion_publication.py::test_stalled_local_client_releases_identity_only_after_transport_cleanup[deadline-True] (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_cross_process_identity_rebind_is_denied_during_projection_fence _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_cross_process_identity_re0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'... 'tests/test_compaction_publication.py::test_cross_process_identity_rebind_is_denied_during_projection_fence (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_uncertain_local_delivery_remains_pending_until_exact_reprojection _
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_uncertain_local_delivery_0')
+
+    @pytest.fixture
+    def owner(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_publication.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...tests/test_compaction_publication.py::test_uncertain_local_delivery_remains_pending_until_exact_reprojection (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=================================== FAILURES ===================================
+____ test_acp_original_send_denied_before_input_bind_with_unresolved_commit ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused/test_acp_original_send_denied_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e1c53ce50>
+
+    @pytest.mark.asyncio
+    async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit(
+        tmp_path, monkeypatch
+    ):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_send_admission.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...sts/test_compaction_send_admission.py::test_acp_original_send_denied_before_input_bind_with_unresolved_commit (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_compaction_send_admission.py::test_acp_original_send_denied_before_input_bind_with_unresolved_commit
+ERROR tests/test_compaction_publication.py::test_local_delivery_requires_existing_owner_and_attached_transport
+ERROR tests/test_compaction_publication.py::test_pending_metadata_projects_before_next_owner_input_send
+ERROR tests/test_compaction_publication.py::test_session_rebinding_during_actual_handoff_refuses_before_delivery
+ERROR tests/test_compaction_publication.py::test_client_only_rebind_before_actual_transport_denies_wrong_client
+ERROR tests/test_compaction_publication.py::test_socket_incarnation_swap_before_transport_never_sends_old_commit_to_new_socket
+ERROR tests/test_compaction_publication.py::test_socket_incarnation_swap_after_delivery_keeps_exact_row_pending
+ERROR tests/test_compaction_publication.py::test_after_delivery_changed_acp_binding_never_marks_old_commit
+ERROR tests/test_compaction_publication.py::test_stalled_local_client_releases_identity_only_after_transport_cleanup[deadline-False]
+ERROR tests/test_compaction_publication.py::test_stalled_local_client_releases_identity_only_after_transport_cleanup[cancel-False]
+ERROR tests/test_compaction_publication.py::test_stalled_local_client_releases_identity_only_after_transport_cleanup[deadline-True]
+ERROR tests/test_compaction_publication.py::test_cross_process_identity_rebind_is_denied_during_projection_fence
+ERROR tests/test_compaction_publication.py::test_uncertain_local_delivery_remains_pending_until_exact_reprojection
+1 failed, 92 passed, 2 skipped, 12 errors in 9.46s
