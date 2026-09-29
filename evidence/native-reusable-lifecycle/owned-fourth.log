@@ -1,0 +1,29 @@
+...native_tool_output [AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-reusable-lifecycle/owned-fourth/test_actual_native_tool_failur0/sessions/enrolled-c4bdfe1962b04d9a84e3114847a74535.jsonl', context_used=None, context_size=2000000, thinking_level='off'), InputStarted(id=None), ProviderUsage(response_id='1', usage=PiUsage(input=0, output=0, cache_read=0, cache_write=0, total_tokens=0, cost=PiCost(input=0, output=0, cache_read=0, cache_write=0, total=0), reasoning=None, cache_write_1h=None)), ToolStart(id='unavailable-tool', name='unavailable_tool', title='Unavailable Tool', args={}), ToolEnd(id='unavailable-tool', name='unavailable_tool', ok=False, output='Tool unavailable_tool not found', diff=None), Chunk(text='Native response lifecycle.'), ProviderUsage(response_id='2', usage=PiUsage(input=0, output=0, cache_read=0, cache_write=0, total_tokens=0, cost=PiCost(input=0, output=0, cache_read=0, cache_write=0, total=0), reasoning=None, cache_write_1h=None)), AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-reusable-lifecycle/owned-fourth/test_actual_native_tool_failur0/sessions/enrolled-c4bdfe1962b04d9a84e3114847a74535.jsonl', context_used=None, context_size=2000000, thinking_level='off'), AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-reusable-lifecycle/owned-fourth/test_actual_native_tool_failur0/sessions/enrolled-c4bdfe1962b04d9a84e3114847a74535.jsonl', context_used=31, context_size=2000000, thinking_level=None), StreamSettled(), Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})]
+.F
+=================================== FAILURES ===================================
+_______ test_actual_native_retained_image_failure_redacts_provider_text ________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f6f5b130fc0>
+
+    async def test_actual_native_retained_image_failure_redacts_provider_text(native_backend):
+        owner = native_backend
+        model_file = owner.config / "models.json"
+        config = json.loads(model_file.read_text())
+        config["providers"]["response-local"]["models"][0]["input"] = ["text", "image"]
+        model_file.write_text(json.dumps(config))
+        image = ImageInput(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZ1kAAAAASUVORK5CYII=",
+            "image/png",
+        )
+        first = await owner.run("Inspect this diagnostic image", images=(image,))
+        assert first[-1].ok, first[-1]
+        retained = owner.persistent.custody.child.proc
+>       assert retained is not None and owner.persistent.sensitive_diagnostics
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PersistentPiSession' object has no attribute 'sensitive_diagnostics'
+
+tests/test_backend_native_output.py:133: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_backend_native_output.py::test_actual_native_retained_image_failure_redacts_provider_text
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 4 passed in 17.99s

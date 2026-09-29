@@ -245,12 +245,12 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             await owner.new_session(str(project))
             comms.threads.attach_session("worker", str(session))
             await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "WARMUP"), 20)
-            retained = owner.turns.persistent_backends["worker"].proc
+            retained = owner.turns.persistent_backends["worker"].custody.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(
                 updates, indent=2
             )
             await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "REUSE"), 20)
-            assert owner.turns.persistent_backends["worker"].proc is retained
+            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
             assert retained.returncode is None
             assert len(requests) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[-1]["messages"])
@@ -272,7 +272,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert entered, "Native compaction did not reach localhost summary"
             # The selected retained owner supplies summary before the commit replaces it.
             assert retained.returncode is None
-            assert owner.turns.persistent_backends["worker"].proc is retained
+            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
             assert session.read_bytes() == before
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[2]["messages"])
             release_summary.set()
@@ -309,7 +309,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert any(isinstance(fact, TranscriptChangedUpdate) for fact in facts)
             assert not attachment.turns.persistent_backends
             assert retained.returncode is not None
-            assert owner.turns.persistent_backends["worker"].proc is None
+            assert not owner.turns.persistent_backends["worker"].available
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
@@ -324,7 +324,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             await asyncio.wait_for(
                 owner.inputs.run_owned_input("worker", "worker", "AFTER_COMPACT"), 20
             )
-            resumed = owner.turns.persistent_backends["worker"].proc
+            resumed = owner.turns.persistent_backends["worker"].custody.idle().child.proc
             assert resumed is not None and resumed.returncode is None
             assert resumed.pid != retained.pid
             assert len(requests) == 4

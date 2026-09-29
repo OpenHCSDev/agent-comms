@@ -13,11 +13,12 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_custody import PiSessionChild
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.pi_rpc import PiRpcChannel
@@ -27,6 +28,7 @@ from agent_comms.selected_pi_summary_rpc import (
     SelectedSummaryFailed,
     SelectedSummarySlot,
 )
+from retained_native_fixture import retained_native_host
 from selected_summary_cases import manual_source
 
 
@@ -196,12 +198,12 @@ async def native_failure_owner(tmp_path, status):
         "--session",
         str(session),
     )
-    children = []
+    children = {}
 
     async def launch():
         child = await AttachedChild.start(command, cwd=str(tmp_path), env=env)
-        children.append(child)
-        errors = asyncio.create_task(child.stderr.read())
+        errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+        children[child] = errors
         reader = PiRpcChannel(child.stdout)
 
         async def exchange(command):
@@ -210,7 +212,7 @@ async def native_failure_owner(tmp_path, status):
             async with asyncio.timeout(20):
                 while True:
                     raw = await reader.readline()
-                    assert raw, (await errors).decode()
+                    assert raw, await errors
                     event = json.loads(raw)
                     assert event.get("type") not in (
                         "input_committed",
@@ -224,28 +226,28 @@ async def native_failure_owner(tmp_path, status):
         _, state = await exchange(dict(type="get_state", id="state"))
         assert state["success"] and state["data"]["sessionId"] == session_id
         assert not state["data"]["isStreaming"] and not state["data"]["isCompacting"]
-        return child, reader, exchange
+        return child, reader, exchange, errors
 
     try:
         yield package, session, original, preparation, selected, settings, requests, started, launch
     finally:
         release.set()
-        for child in children:
+        for child, errors in children.items():
             if child.returncode is None:
                 await child.stop()
             await child.wait()
+            await errors
         server.shutdown()
         server.server_close()
 
 
-def selected_owner(child, reader, package, session, preparation):
-    persistent = PersistentPiSession()
-    persistent.proc, persistent.reader = child, reader
-    persistent.session_file, persistent.session_id = str(session), preparation.witness.session_id
-    persistent.revision = _session_revision(str(session))
-    persistent.launch_key = (
+def selected_owner(child, reader, package, session, preparation, errors):
+    persistent = retained_native_host(
+        child,
         NativePiRpcLaunch(("node",), package, {}, session.parent, session, package),
-        (0, 0),
+        NativeSessionIdentity(preparation.witness.session_id, str(session)),
+        reader=reader,
+        stderr_task=errors,
     )
     return (
         persistent,
@@ -258,8 +260,10 @@ def selected_owner(child, reader, package, session, preparation):
 async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_path, status):
     async with native_failure_owner(tmp_path, status) as fixture:
         package, session, original, preparation, selected, settings, calls, _, launch = fixture
-        child, reader, exchange = await launch()
-        persistent, journal, slot = selected_owner(child, reader, package, session, preparation)
+        child, reader, exchange, errors = await launch()
+        persistent, journal, slot = selected_owner(
+            child, reader, package, session, preparation, errors
+        )
         with pytest.raises(
             SelectedSummaryFailed, match="Local selected summary refused"
         ) as failure:
@@ -281,7 +285,7 @@ async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_pat
         assert state.terminal and state.settled_without_original
         assert not state.original_eligible
         assert not journal.blocking_selected_summary(str(session))
-        assert persistent.reopen_required is None and child.returncode is None
+        assert persistent.custody.idle().current and child.returncode is None
         assert len(calls) == 2, "two map chunks, no retries"
         assert len({json.dumps(call["messages"]) for call in calls}) == 2
         assert "SAVED_HISTORY_0" in json.dumps(calls[0])
@@ -291,7 +295,7 @@ async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_pat
         child.stdin.close()
         async with asyncio.timeout(10):
             await child.wait()
-        _, _, reopened = await launch()
+        _, _, reopened, _ = await launch()
         _, history = await reopened(dict(type="get_messages", id="reopened-history"))
         assert len(history["data"]["messages"]) == 20
         assert session.read_bytes() == original
@@ -303,8 +307,10 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
         package, session, original, preparation, selected, settings, calls, started, launch = (
             fixture
         )
-        child, reader, _ = await launch()
-        persistent, journal, slot = selected_owner(child, reader, package, session, preparation)
+        child, reader, _, errors = await launch()
+        persistent, journal, slot = selected_owner(
+            child, reader, package, session, preparation, errors
+        )
         task = asyncio.create_task(
             slot.run_selected_summary(
                 persistent,

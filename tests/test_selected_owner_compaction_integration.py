@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.backend import PersistentPiSession, _session_revision
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -19,13 +18,14 @@ from agent_comms.goals import Goal
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
-from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from retained_native_fixture import retained_native_host
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Normal prepared native bundle required")
@@ -146,21 +146,16 @@ async def owner_fixture(
         ("node", str(repo / "stack/test-native-selected-owner-host.mjs")),
         env=dict(os.environ, PR95_OWNER_FIXTURE_ROOT=str(tmp_path), TMPDIR=str(tmp_path)),
     )
-    persistent = PersistentPiSession()
-    persistent.proc = child
     try:
         async with asyncio.timeout(5):
             line = await child.stderr.readline()
         assert line.startswith(b"{"), line.decode()
         fixture = json.loads(line)
         file = fixture["sessionFile"]
-        persistent.reader = PiRpcChannel(child.stdout)
-        persistent.session_file = file
-        persistent.session_id = fixture["sessionId"]
-        persistent.revision = _session_revision(file)
-        persistent.launch_key = (
+        persistent = retained_native_host(
+            child,
             NativePiRpcLaunch(("node",), tmp_path, {}, Path(file).parent, Path(file), package),
-            (0, 0),
+            NativeSessionIdentity(fixture["sessionId"], file),
         )
         registry = Registration(tmp_path / "registry.json")
         registry.register(
@@ -248,7 +243,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in entries) == 1
         assert len(journal.pending_publications(file)) == 1
-        assert persistent.proc is None and persistent.reopen_required == file
+        assert not persistent.available and persistent.custody.session_file == file
         assert not native_input_admitted(tmp_path, file)
         token = admitted[0]
         assert inputs.read().lookup("acp:original").accepts_reservation
@@ -468,8 +463,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             )
             assert "proj" not in agent.inputs.selected_summary_admissions
             if not correction:
-                assert persistent.reopen_required is None
-                assert persistent.proc is not None
+                assert persistent.custody.idle().current
+                assert persistent.available
                 native_id = dispositions.read().rows.get(original_key).native_id
                 assert native_id
                 user_entries = [
@@ -557,7 +552,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 )
                 assert journal.blocking_selected_summary(file) == ()
                 assert native_input_admitted(root, file)
-                assert persistent.reopen_required is None and persistent.proc is not None
+                assert persistent.custody.idle().current and persistent.available
                 final_entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
                 assert sum(row["type"] == "compaction" for row in final_entries) == (
                     0 if clean_decline else 2
@@ -652,7 +647,7 @@ async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
             on_admission=lambda _: pytest.fail("Disabled admission"),
         )
         assert Path(file).read_bytes() == before
-        assert persistent.proc is not None
+        assert persistent.available
         assert not (tmp_path / "compaction-commits.sqlite3").exists()
         assert inputs.read().lookup("acp:original").accepts_reservation
 
@@ -756,7 +751,7 @@ async def test_disconnected_selected_summary_stays_unknown_without_original_repl
                     await asyncio.sleep(0.01)
                 # The actual selected request reached the provider. Kill its
                 # native process before any response can attest an outcome.
-                await persistent.proc.stop()
+                await persistent.custody.child.proc.stop()
                 with pytest.raises(SelectedChildUnknown):
                     await operation
             journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
@@ -768,7 +763,7 @@ async def test_disconnected_selected_summary_stays_unknown_without_original_repl
             assert not inputs.read().lookup("acp:original").has_native_binding
             assert not native_input_admitted(tmp_path, file)
             assert Path(file).read_bytes() == before
-            assert persistent.proc is None and persistent.reopen_required == file
+            assert not persistent.available and persistent.custody.session_file == file
             requests = json.loads((tmp_path / "provider-requests.json").read_text())
             assert len(requests) == 1
         finally:
