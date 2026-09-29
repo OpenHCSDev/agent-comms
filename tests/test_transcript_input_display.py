@@ -6,6 +6,7 @@ import sqlite3
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.pi_payloads import PiMessage
@@ -108,20 +109,20 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     updates = []
 
     class Client:
-        transcript_snapshots = True
-
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
     try:
         await agent.sessions.transcript.replay("worker", "worker", client=Client())
-        events = updates[0].field_meta["agentComms"]["transcript"]
-        assert [event["text"] for event in events if event["kind"] == "context"] == [
+        facts = decode_updates(updates[0].field_meta)
+        snapshot, = (fact for fact in facts if isinstance(fact, TranscriptSnapshotUpdate))
+        events = snapshot.page.events
+        assert [event.text for event in events if event.declared_name == "context"] == [
             GOAL_PROMPT,
             "User follow-up:\ntest2",
         ]
         assert [
-            (event["kind"], event["text"]) for event in events if event["kind"] != "context"
+            (event.declared_name, event.text) for event in events if event.declared_name != "context"
         ] == [
             ("user", "test2"),
             ("assistant", "Done reading"),
