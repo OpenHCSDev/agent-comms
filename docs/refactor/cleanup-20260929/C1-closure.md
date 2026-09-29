@@ -2,7 +2,7 @@
 
 Owner: C1 worker. Draft Core PR [417](https://github.com/OpenHCSDev/agent-comms/pull/417).
 Persistent worktree: `/home/ts/wt/comms-cleanup-c1-pi-vocabulary-20260929`.
-Scope: every C1 requirement and the C0 site rows assigned to C1. Current main was integrated normally; the dirty live checkout is untouched.
+Scope: every C1 requirement and the C0 site rows assigned to C1. Current main including PR416 was integrated normally; the dirty live checkout is untouched.
 
 ## Requirement receipt
 
@@ -28,9 +28,9 @@ No C1 type needs custom `WireValue`: existing field metadata and declared famili
 
 ## Deletion and ownership accounting
 
-Relative to integrated current main `350b14a9`: **501 production lines deleted across 25 changed production files**, with 1,085 added declaration/effect lines. This is deletion of replaced dispatch and ownership code, not a claim of net line reduction. `git diff origin/main --numstat -- src/agent_comms` is the exact file-by-file receipt. Recompute if main changes before integration.
+Relative to integrated current main `ab3397a6`: **501 production lines deleted across 25 changed production files**, with 1,085 added declaration/effect lines. This is deletion of replaced dispatch and ownership code, not a claim of net line reduction. `git diff origin/main --numstat -- src/agent_comms` is the exact file-by-file receipt. Recompute if main changes before integration.
 
-Final committed package-ratchet result against `350b14a9`: 10 fewer string-dispatch subjects / 36 fewer arms; 2 fewer type-switch subjects / 7 fewer arms; 42 fewer foreign absence probes, with no increased measure. All measured deltas are nonpositive. This is a syntactic debt measurement, not live acceptance.
+Final committed package-ratchet result against `ab3397a6`: 10 fewer string-dispatch subjects / 36 fewer arms; 2 fewer type-switch subjects / 7 fewer arms; 42 fewer foreign absence probes, with no increased measure. All measured deltas are nonpositive. This is a syntactic debt measurement, not live acceptance.
 
 ## Coordination and resources
 
@@ -67,3 +67,15 @@ Owned scratch: `/home/ts/.cache/agent-scratch/comms-cleanup-c1-pi-vocabulary-202
 | `src/agent_comms/turn_inputs.py` | 7 | 6 |
 | `src/agent_comms/turn_runner.py` | 2 | 1 |
 | `src/agent_comms/turn_usage.py` | 4 | 0 |
+
+## PR416 integration checkpoint
+
+Merged normally as `7e593e0a`. The sole conflict was the selected summary method signature: both PR416's `reason` argument and C1's `SelectedSummaryData` return were retained. Source/text progress callbacks and the case-owned terminal/settlement methods remain intact. The candidate was rebuilt noneditably; product imports resolve to the owned installed environment's site-packages with PYTHONPATH removed. The same 96 focused cases passed against that installed artifact in 2.78s.
+
+Native package for serial acceptance: `/home/ts/wt/comms-post-cancel-session-custody-20260929/stack/.pi-native-7817b54ec2534555/node_modules/@earendil-works/pi-coding-agent`. Arendt owns the priority native/UI slot and was contacted directly. Parent controls the old-owner cutover; this worker does not attach or mutate live owners.
+
+## Installed native acceptance correction
+
+First serial installed/native run: 9 passed, 15 failed in 154.07s across 24 cases. Real queued/reopen, provider failure, disconnect/noReplay and native catalog cases passed. Every failure came from C1's adaptive result methods importing SelectedNativeSummary or SelectedSummaryDecline from the wrong module. Those imports now point to their existing declarations in owner_compaction_runtime; no declaration was duplicated or relocated. The installed candidate was rebuilt, and only the 15 affected continuous ACP/goal cases are rerunning. Initial failure evidence is retained in owned scratch; no readiness claim relies on that failing run.
+
+ACP/native argument test expectations now assert the typed ThinkingLevel declaration internally while keeping the scalar wire assertions unchanged. The first supplementary ACP/config run omitted its required native-package environment, causing fixture setup failures; it is not a product result and will be rerun with the exact package pin serially.

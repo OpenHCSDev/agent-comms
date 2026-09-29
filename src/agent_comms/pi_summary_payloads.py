@@ -164,7 +164,7 @@ class SummaryDeclinedData(SelectedSummaryData, declared_name="summary_declined")
         raise ValueError(f"Selected Pi declined manual summary ({self.reason})")
 
     def adaptive_summary(self, journal, identity):
-        from .owner_compaction_provider import SelectedSummaryDecline
+        from .owner_compaction_runtime import SelectedSummaryDecline
         from .owner_compaction_settings import PiSettingsEvidenceError
 
         if self.reason in {"split_turn", "unsupported"}:
@@ -243,7 +243,7 @@ class SummarySummarizedData(WitnessedSummaryData, declared_name="summary_summari
         )
 
     def adaptive_summary(self, journal, identity):
-        from .owner_compaction_provider import SelectedNativeSummary
+        from .owner_compaction_runtime import SelectedNativeSummary
 
         return SelectedNativeSummary(
             self.result.summary,
