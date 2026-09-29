@@ -1,0 +1,58 @@
+{
+  "source_bytes": 41333152,
+  "model": "openai-codex/gpt-6-sol",
+  "thinking": "high",
+  "prompts_sent": 0,
+  "attempts": [
+    {
+      "ordinal": 0,
+      "passed": false,
+      "error": "NativePiUnavailable: Pi native input-ID capability preflight timed out (phase=await_get_state, elapsed_ms=14018, wait_ms=14001, budget_ms=13000, spawn_ms=17, session_bytes=41333135).",
+      "diagnostic": {
+        "elapsed_ms": 14018,
+        "wait_ms": 14001,
+        "spawn_ms": 17,
+        "budget_ms": 13000,
+        "session_bytes": 41333135
+      },
+      "native_stderr": "Warning: Model \"gpt-6-sol\" not found for provider \"openai-codex\". Using custom model id.\n\n--- Startup Timings: main ---\n  parseArgs: 3ms\n  runMigrations: 1ms\n  createSessionManager: 363ms\n  createRuntime: 0ms\n  createAgentSessionRuntime: 157ms\n  readPipedStdin: 0ms\n  prepareInitialMessage: 0ms\n  initTheme: 2ms\n  resolveModelScope: 0ms\n  createAgentSession: 1ms\n  TOTAL: 527ms\n-----------------------------\n\n\n--- Startup Timings: extensions ---\n  <inline:llama.cpp> factory: 2ms\n  TOTAL: 2ms\n-----------------------------------",
+      "elapsed": 14.13,
+      "marks": [
+        {
+          "phase": "get_state_written",
+          "at": 0.017541545996209607
+        },
+        {
+          "phase": "read_enter",
+          "at": 14.017679159005638
+        },
+        {
+          "phase": "read_exit",
+          "at": 14.079577950993553,
+          "bytes": 0
+        }
+      ],
+      "samples": [
+        {
+          "elapsed": 14.018,
+          "loop_gap": 14.016,
+          "pid": 4177175,
+          "stat": "4177175 (pi) S 4177117 4177175 4177175 0 -1 4194304 42281 0 0 0 175 30 0 0 20 0 27 0 14311527 10910752768 52423 18446744073709551615 94269686308864 94269720731681 140724336025488 0 0 0 0 4096 1937829431 0 0 0 17 3 0 0 0 0 0 94269745989808 94269746859268 94270811602944 140724336034811 140724336035658 140724336035658 140724336041962 0\n",
+          "wait": "do_epoll_wait"
+        },
+        {
+          "elapsed": 14.079,
+          "loop_gap": 0.062,
+          "pid": 4177175
+        },
+        {
+          "elapsed": 14.13,
+          "loop_gap": 0.05,
+          "pid": 4177175
+        }
+      ]
+    }
+  ],
+  "fork_bytes": 41333135,
+  "original_history_stat_unchanged": true
+}
