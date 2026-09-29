@@ -52,6 +52,17 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
             pointers = addressed_source_pointers_unlocked(case.bus.log, marker, lookup)
         assert [p.seq for p in pointers] == [response.seq]
         assert str(response.seq) in case.bus.awareness_prompt(sender)
+        # Optional scheduling hints consume the same canonical reply declaration.
+        from agent_comms.wake_candidate_index import WakeCandidateIndex
+
+        candidates = WakeCandidateIndex(case.bus)
+        assert candidates.maintain(rebuild=True)
+        page = candidates.page(
+            root_id=case.root_id, recipient_lookup=lookup, after_seq=0,
+            required_through_seq=response.seq,
+        )
+        assert [entry.source_seq for entry in page.entries] == [response.seq]
+        assert page.entries[0].wake_mode == "bounded_triage"
         # Repeating the publisher/recipient poll does not duplicate the row or K.
         publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
         _accept_visible_deliveries(
@@ -74,11 +85,16 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
         ("unexpected", "not permitted"),
     ],
 )
-def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, value):
+@pytest.mark.parametrize("reader", ["full", "certified"])
+def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, value, reader):
     import json
 
+    from agent_comms.bus_publication import validate_delivery_record
     from agent_comms.errors import RelationViolationError
-    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+    from agent_comms.private_bus_checkpoint import (
+        certified_delivery_page_unlocked,
+        install_private_bus_checkpoint,
+    )
 
     case = _ready(tmp_path, direct=True)
     try:
@@ -89,7 +105,22 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         marker = case.bus.log._private_marker_unlocked()
         rows = [json.loads(line) for line in case.bus.log.path.read_bytes().splitlines()]
         rows[-1]["_agent_comms_private_v1"]["response"][field] = value
+        # The semantic decoder shared by both readers rejects each invalid receipt.
+        with pytest.raises((ValueError, TypeError)):
+            validate_delivery_record(rows[-1], case.root_id)
         case.bus.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        if reader == "certified":
+            # A real certified index refuses tampered bytes at its earlier prefix
+            # fence. Do not forge a certificate just to reach the decoder again.
+            checkpoint = case.comms.root / "private_bus_checkpoint.sqlite3"
+            saved_index = checkpoint.read_bytes()
+            sender = case.comms.registry.require("sender")
+            with pytest.raises(RelationViolationError):
+                certified_delivery_page_unlocked(
+                    case.bus.log, marker, stable_thread_lookup(sender.created_at)
+                )
+            assert checkpoint.read_bytes() == saved_index
+            return
         # Explicit cold certification must reject a corrupt candidate rather
         # than trusting a stale index or accepting a merely well-shaped receipt.
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
@@ -132,5 +163,29 @@ def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises(RelationViolationError, match="Malformed public bus row"):
             install_private_bus_checkpoint(case.bus.log)
+    finally:
+        case.close()
+
+
+@pytest.mark.parametrize("kind", [None, "unknown_delivery"])
+def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
+    import json
+
+    from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, validate_delivery_record
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        prepare_fenced_response(
+            case.store, case.bus, case.fence, "answer", owner_witness=case.witness
+        )
+        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        record = json.loads(case.bus.log.path.read_bytes().splitlines()[-1])
+        private = record[PRIVATE_WIRE_FIELD]
+        if kind is None:
+            del private["kind"]
+        else:
+            private["kind"] = kind
+        with pytest.raises(ValueError):
+            validate_delivery_record(record, case.root_id)
     finally:
         case.close()

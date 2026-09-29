@@ -16,7 +16,6 @@ from agent_comms.bus_publication import (
     stable_thread_lookup,
 )
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_tables.publications import canonical_publication_key
@@ -44,7 +43,7 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
 def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
         comms.threads.register(
@@ -109,7 +108,6 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
     # Bus projection is only a candidate: coordinator has not sealed ANY wake.
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        install_private_cohort_schema(store)
         for name in ("Alice", "Bob"):
             store.participants.register(lookup[name], name, name, committed=True)
         assert sealed_cohort_assignments(store, lookup["Alice"]) == ()
@@ -244,7 +242,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus)
-    with pytest.raises(ProjectionUnavailableError, match="malformed candidate response"):
+    with pytest.raises(ProjectionUnavailableError, match="candidate index maintenance unavailable"):
         index.maintain(rebuild=True)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
@@ -253,16 +251,18 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
             after_seq=0,
             required_through_seq=messages[2].seq,
         )
-    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
+    with pytest.raises(
+        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+    ):
         comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
 
 
 @pytest.mark.parametrize(
     ("corrupt", "expected"),
     [
-        ("wire_root_id", "foreign private response root"),
-        ("envelope_digest", "private response envelope mismatch"),
-        ("publication_key", "malformed candidate response receipt"),
+        ("wire_root_id", "another wire root"),
+        ("envelope_digest", "envelope digest differs"),
+        ("publication_key", "execution/route"),
     ],
 )
 def test_response_identity_must_match_private_bus_before_later_candidate(
@@ -274,19 +274,14 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
         for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
-    public = {key: value for key, value in rows[1].items() if key != PRIVATE_WIRE_FIELD}
-    response = {
-        "wire_root_id": root_id,
-        "execution_id": "one-execution",
-        "publication_key": canonical_publication_key("one-execution", "Alice"),
-        "envelope_digest": public_envelope_digest(public),
-    }
+    rows[1] = _as_response(rows[1], root_id, "one-execution")
+    response = rows[1][PRIVATE_WIRE_FIELD]["response"]
     response[corrupt] = "0" * 64 if corrupt == "envelope_digest" else "wrong"
-    rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": response}
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus)
-    with pytest.raises(ProjectionUnavailableError, match=expected):
+    with pytest.raises(ProjectionUnavailableError) as failure:
         index.maintain(rebuild=True)
+    assert expected in str(failure.value.__cause__)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
             root_id=root_id,
@@ -294,7 +289,9 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
             after_seq=0,
             required_through_seq=messages[2].seq,
         )
-    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
+    with pytest.raises(
+        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+    ):
         comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
 
 
@@ -308,17 +305,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
         for number in (1, 2, 3, 4)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
-    for row in rows[1:3]:
-        public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
-        row[PRIVATE_WIRE_FIELD] = {
-            "version": 1,
-            "response": {
-                "wire_root_id": root_id,
-                "execution_id": "duplicate-execution",
-                "publication_key": canonical_publication_key("duplicate-execution", "Alice"),
-                "envelope_digest": public_envelope_digest(public),
-            },
-        }
+    rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus)
     if first_batch_rows == 4:
@@ -341,7 +328,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
         after_seq=0,
         required_through_seq=messages[1].seq,
     )
-    assert [candidate.source_seq for candidate in first.entries] == [messages[0].seq]
+    assert [candidate.source_seq for candidate in first.entries] == [m.seq for m in messages[:2]]
     with sqlite3.connect(index.path) as db:
         checkpoint = db.execute("SELECT * FROM candidate_checkpoint").fetchall()
         recipients = db.execute("SELECT * FROM candidate").fetchall()
@@ -361,7 +348,9 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             after_seq=0,
             required_through_seq=messages[3].seq,
         )
-    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
+    with pytest.raises(
+        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+    ):
         comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
 
 
@@ -409,3 +398,30 @@ def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) ->
         )
         == 1
     )
+
+
+def _as_response(row, root_id, execution_id):
+    """Build current declared response shape for raw-writer corruption tests."""
+    from agent_comms.bus_publication import initial_sideband, validate_delivery_record
+    from agent_comms.delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.wake import ControlClassification
+
+    delivery = validate_delivery_record(row, root_id)
+    public = delivery.message.to_wire()
+    policy = ResponseDeliveryPolicy(
+        version=1,
+        initial=initial_sideband(
+            root_id, delivery.message, delivery.audience,
+            ResponseDeliveryPolicy.resolve(
+                delivery.message, delivery.audience, ControlClassification.ORDINARY
+            ),
+            control=ControlClassification.ORDINARY.value,
+        ),
+        response=KeyedResponseReceipt(
+            root_id, execution_id,
+            canonical_publication_key(execution_id, delivery.message.target),
+            public_envelope_digest(public),
+        ),
+    )
+    return {**public, PRIVATE_WIRE_FIELD: FieldCodec.encode(policy)}
