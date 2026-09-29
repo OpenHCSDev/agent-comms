@@ -423,7 +423,7 @@ class InputDrain(FutureInputQueue):
             controller = self.runtime.controller.get()
             if controller is UNBOUND_CONTROLLER:
                 controller = self.sessions.client
-            item = QueuedInput.capture(
+            item, owner = QueuedInput.capture(
                 self,
                 self.sessions.require(session_id),
                 text=display_text,
@@ -432,7 +432,6 @@ class InputDrain(FutureInputQueue):
                 images=images,
                 controller=controller,
             )
-            owner = self.comms.registry.require(self.sessions.require(session_id))
             item = request.accepted(item, self.dispositions.read().lookup(item.key), owner)
             self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
             self.turn_input_keys.setdefault(session_id, set()).add(item.key)
@@ -586,7 +585,7 @@ class InputDrain(FutureInputQueue):
         display_text: str | None = None,
     ) -> None:
         with _store_lock(self.comms._wire_lock_path):
-            item = InitialInput.capture(
+            item, _owner = InitialInput.capture(
                 self,
                 thread_name,
                 text=display_text or task,

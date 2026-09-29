@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 
+class InputHandoffRefused(RelationViolationError):
+    """Captured acceptance was refused before any native turn was dispatched."""
+
+
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
     owner: OwnerIdentity
@@ -93,7 +97,7 @@ class QueuedInput:
         echo: bool,
         images: tuple[ImageInput, ...],
         controller: Any,
-    ) -> QueuedInput:
+    ) -> tuple[QueuedInput, Thread]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
         canonical = snapshot.aliases.get(name, name)
@@ -121,7 +125,7 @@ class QueuedInput:
             text=item.text,
         ):
             raise RelationViolationError("Input reservation already exists")
-        return item
+        return item, owner
 
     def bind_turn(
         self, owner: Thread, admission: int, wait: GoalWait | None, turn_id: str
@@ -141,17 +145,20 @@ class QueuedInput:
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
         """Transfer this live acceptance under current authority; never recover disk work."""
         inputs = turns.inputs
-        with _store_lock(inputs.comms._wire_lock_path):
-            self.require_live_source(inputs, session_id)
-            snapshot = inputs.comms.registry.snapshot()
-            canonical = snapshot.aliases.get(name, name)
-            self.require_handoff(
-                snapshot,
-                canonical,
-                inputs.comms.goals.goal_wait(canonical),
-                inputs.dispositions.read().lookup(self.key),
-                self.input_id,
-            )
+        try:
+            with _store_lock(inputs.comms._wire_lock_path):
+                self.require_live_source(inputs, session_id)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+                self.require_handoff(
+                    snapshot,
+                    canonical,
+                    inputs.comms.goals.goal_wait(canonical),
+                    inputs.dispositions.read().lookup(self.key),
+                    self.input_id,
+                )
+        except RelationViolationError as error:
+            raise InputHandoffRefused(str(error)) from error
         await turns.run_agent_turn(
             session_id,
             canonical,

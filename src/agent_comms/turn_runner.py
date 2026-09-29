@@ -13,13 +13,13 @@ from acp.schema import (
     RequestPermissionResponse,
 )
 
+from .queued_input import InputHandoffRefused
 from . import agent_events as events
 from . import backend
 from . import pi_events as pi
 from .acp_failure import ACPFailure
 from .channel_targets import BuiltinChannel
 from .comms import Comms
-from .errors import RelationViolationError
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -36,7 +36,6 @@ from .runtime import (
 )
 from .runtime_info import AgentRuntimeInfo
 from .session_lifecycle import SessionLifecycle
-from .store_files import _store_lock
 from .threads import Thread
 from .transcript_updates import StartedTranscriptUpdate
 from .turn_effects import TurnEffects
@@ -451,7 +450,7 @@ class TurnRunner:
                         continue
                     try:
                         await item.dispatch(self, session_id, execution.owner_name)
-                    except RelationViolationError:
+                    except InputHandoffRefused:
                         await self.inputs.input_refused(session_id, input_id)
                         continue
                     break  # The existing native forwarder consumes the remaining live inbox.

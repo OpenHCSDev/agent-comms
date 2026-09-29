@@ -9,6 +9,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (
+    InputDeliveryChangedUpdate,
+    QueuePromptRequest,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
@@ -79,14 +85,17 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             response = await agent.prompt(
                 "proj",
                 [{"type": "text", "text": "Fresh followup"}],
-                agentComms={"delivery": "queue", "deferDisplay": True},
+                field_meta=encode_request(QueuePromptRequest(defer_display=True)),
             )
-            receipt = response.field_meta["agentComms"]["inputDisposition"]
-            assert receipt["status"] == "accepted_not_started"
-            key = "acp:" + receipt["inputId"]
+            receipt = next(
+                update
+                for update in decode_updates(response.field_meta)
+                if isinstance(update, InputDeliveryChangedUpdate)
+            )
+            key = "acp:" + receipt.input_id
             accepted.append(key)
             row = agent.inputs.dispositions.read().rows.get(key)
-            assert row.native_id is None and row.declared_name == "unknown"
+            assert not row.has_native_binding and row.accepts_reservation
             if foreign:
                 for name in ("foreign", "another"):
                     comms.threads.register(Thread(name, frozenset(), str(project)))
@@ -114,9 +123,12 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
                 launch,
                 argv=(
                     "node",
-                    str(Path(__file__).resolve().parents[1]
-                        / "stack/test-native-selected-owner-host.mjs"),
-                    "--session", launch.session_file,
+                    str(
+                        Path(__file__).resolve().parents[1]
+                        / "stack/test-native-selected-owner-host.mjs"
+                    ),
+                    "--session",
+                    launch.session_file,
                 ),
                 env=dict(launch.env, PR95_OWNER_FIXTURE_ROOT=str(tmp_path)),
             )
@@ -152,6 +164,6 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             assert compact[0] < positions[0] < positions[1]
             assert not agent.inputs.queued_inputs.get("proj")
             if foreign:
-                assert rows["acp:foreign"].declared_name == "unknown"
+                assert rows["acp:foreign"].declared_name == "reserved"
         finally:
             await agent.shutdown()

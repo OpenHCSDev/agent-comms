@@ -10,6 +10,14 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (
+    InputDeliveryChangedUpdate,
+    QueuePromptRequest,
+    SteerPromptRequest,
+    SendNowRequest,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
@@ -71,15 +79,18 @@ async def owner(tmp_path, monkeypatch):
     await agent.shutdown()
 
 
-async def queue(agent, text="future", delivery="queue"):
+async def queue(agent, text="future", request=QueuePromptRequest(defer_display=True)):
     response = await agent.prompt(
         "owner",
         [{"type": "text", "text": text}],
-        agentComms={"delivery": delivery, "deferDisplay": True},
+        field_meta=encode_request(request),
     )
-    public = response.field_meta["agentComms"]["inputDisposition"]
-    assert public["status"] == "accepted_not_started"
-    key = "acp:" + public["inputId"]
+    public = next(
+        update
+        for update in decode_updates(response.field_meta)
+        if isinstance(update, InputDeliveryChangedUpdate)
+    )
+    key = "acp:" + public.input_id
     assert (
         InputDispositions(agent._comms.root / InputDispositions.filename)
         .read()
@@ -139,11 +150,11 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
     agent, current, admission_generation, bridge, witness, source = owner
     key = await queue(agent)
     if change == "steer":
-        await queue(agent, delivery="steer")
+        await queue(agent, request=SteerPromptRequest(defer_display=True))
     elif change == "clear":
         await agent.inputs.clear_queued_inputs("owner")
     elif change == "promote":
-        await agent.prompt("owner", [], agentComms={"sendNow": True})
+        await agent.prompt("owner", [], field_meta=encode_request(SendNowRequest()))
     elif change == "shutdown":
         await agent.inputs.stop_wakes()
     elif change == "lost_owner":
