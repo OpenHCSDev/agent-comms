@@ -6,6 +6,7 @@ import os
 from dataclasses import replace
 
 import pytest
+from acp import RequestError
 from acp.agent.router import build_agent_router
 
 from agent_comms.comms import Comms
@@ -18,6 +19,7 @@ from agent_comms.agent_events import CompactionStart, CompactionEnd
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import LinkedSummary, CommittedOperation
+from agent_comms.acp_failure import PromptFailureReceipt
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 from agent_comms.goal_failure_observation import read_failed_turn_projection
@@ -216,9 +218,14 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             # Direct user inputs intentionally do not spend a goal grant.
             # Run the normal autonomous owner entrypoint against the same loaded
             # session; the real backend, input journal and settlement remain live.
-            await agent.turns.run_agent_turn(
-                sid, sid, "One new failed goal input", autonomous_goal=True
+            with pytest.raises(RequestError) as error:
+                await agent.turns.run_agent_turn(
+                    sid, sid, "One new failed goal input", autonomous_goal=True
+                )
+            receipt = PromptFailureReceipt.from_error(
+                error.value.code, str(error.value), error.value.data
             )
+            assert receipt.notification_published
             assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
             assert len(native.saved_inputs()) == 3
             assert native.saved_inputs()[-1]["content"][0]["text"].endswith("One new failed goal input")

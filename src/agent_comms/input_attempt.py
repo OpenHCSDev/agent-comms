@@ -259,9 +259,7 @@ class StartedInput(SentInput):
         original_digest: TextDigest,
     ) -> bool:
         return (
-            self.sequence is None
-            and self.target == owner.name
-            and self.matches_owner(owner)
+            self.matches_owner(owner)
             and self.matches_admission(admission)
             and self.turn_id == turn.value
             and self.sent_digest == sent_digest
