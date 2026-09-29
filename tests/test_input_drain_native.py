@@ -32,7 +32,7 @@ pytestmark = pytest.mark.skipif(
 async def test_actual_acp_queued_during_summary_runs_once_after_original(
     tmp_path, monkeypatch, foreign
 ):
-    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+    async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
         persistent,
         registry,
         inputs,
