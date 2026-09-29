@@ -112,3 +112,11 @@ No external provider calls or live message replay are required.
 Owned test roots, scratch/NRA cache and virtualenv removed after all workers exited;
 red/green receipts and the complete source branch preserved.
 
+
+## PR300 caller closure
+
+Integrated main through e1115526 (including300) without conflicts. Migrated both
+new S3 fixture snapshot calls to Coordination.snapshots.get. No aliases or old
+root APIs restored. Installed a fresh wheel of the integrated branch.
+`main300-family-sqlite.log` records the new S3 declaration-family legality suite
+plus existing coordination/store/response/nominal and ownership guards.
