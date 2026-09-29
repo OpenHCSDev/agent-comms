@@ -27,6 +27,9 @@ class PiSessionChild:
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
 
+    async def reply_ui(self, response) -> None:
+        await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
+
     @classmethod
     async def start(cls, key, expected):
         launch, _ = key

@@ -1,6 +1,6 @@
 // Test-only SDK/RPC host for inline reactions excluded by the immutable CLI.
 // Uses the caller's verified bundle; never patches or copies that package.
-import { existsSync } from 'node:fs';
+import { existsSync, appendFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -35,6 +35,25 @@ if (process.env.S1_DELAY_SETTLEMENT) {
           await new Promise(resolve => setTimeout(resolve, 10));
         }
       }
+    });
+  });
+}
+// Emit through the actual pinned extension UI implementation and RPC transport.
+if (process.env.S1_UI_PROBE) {
+  extensions.push((api) => {
+    api.on('message_end', async (event, ctx) => {
+      if (event.message.role !== 'user') return;
+      const receipt = {version: 1, source: 'pi-mcp-client', inputId: event.message.inputId,
+        state: 'running', lifetime: 'turn', servers: []};
+      ctx.ui.setStatus('pi-mcp/live-v1', JSON.stringify({...receipt, inputId: '0'.repeat(32)}));
+      ctx.ui.setStatus('pi-mcp/live-v1', JSON.stringify(receipt));
+      ctx.ui.setStatus('pi-mcp/live-v1', JSON.stringify(receipt));
+      const confirmed = await ctx.ui.confirm('Confirm native operation', 'This turn only');
+      const selected = await ctx.ui.select('Choose native option', ['one', 'two']);
+      const input = await ctx.ui.input('Unsupported input');
+      const edited = await ctx.ui.editor('Unsupported editor', 'original');
+      appendFileSync(process.env.S1_UI_PROBE, JSON.stringify({inputId: event.message.inputId,
+        confirmed, selected: selected ?? null, input: input ?? null, edited: edited ?? null}) + '\n');
     });
   });
 }

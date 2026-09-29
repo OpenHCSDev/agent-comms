@@ -19,13 +19,13 @@ from typing import TYPE_CHECKING, NoReturn
 
 from .backend import _session_revision
 from .child_process import ProcessIdentity
+from .compaction_identity import JournalCustody, ReturnedSummaryTerminal
 from .compaction_journal import (
     CompactionJournal,
     CompactionJournalError,
     SelectedSummarySource,
     _consume_selected_ack,
 )
-from .compaction_states import SummaryState
 from .field_codec import FieldCodec
 from .reservation_rules import ReservationViolationError
 from .selected_source import SelectedAdmissionSource, SessionRevision
@@ -45,42 +45,36 @@ class SelectedAdmissionIdentity:
         return self.source == source.source
 
 
+    def require_live_input(self, session: str, text: str) -> None:
+        self.require_current_revision(session)
+        if not self.source.input_digest.matches(text):
+            raise CompactionJournalError("Selected input text changed")
+
+    def require_current_revision(self, session: str) -> None:
+        if self.source.owner != ProcessIdentity.capture(os.getpid()):
+            raise CompactionJournalError("Selected input process incarnation changed")
+        if self.session_revision is None or _session_revision(session) != self.session_revision:
+            raise CompactionJournalError("Selected native source revision changed")
+
+    def require_current(self, source: SelectedSummarySource, session: str) -> None:
+        if not self.matches_source(source):
+            raise CompactionJournalError("Selected acknowledgment source changed")
+        self.require_current_revision(session)
+
+
 class SelectedSummaryAdmission:
     """One-use, unpicklable owner-process capability; no replay after fault."""
 
-    __slots__ = (
-        "_path",
-        "_session",
-        "_operation_id",
-        "_state",
-        "_source_json",
-        "_identity",
-        "_process_pid",
-        "_journal_inode",
-        "_used",
-    )
+    __slots__ = ("_terminal", "_identity", "_custody", "_used")
 
     def __init__(
-        self,
-        key: object,
-        path: Path,
-        session: str,
-        operation_id: str,
-        state: SummaryState,
-        source_json: str,
-        identity: SelectedAdmissionIdentity,
+        self, key: object, terminal: ReturnedSummaryTerminal, identity: SelectedAdmissionIdentity,
     ) -> None:
         if key is not _MINT:
             raise TypeError("Selected admission cannot be constructed by a caller")
-        self._path = path
-        self._session = session
-        self._operation_id = operation_id
-        self._state = state
-        self._source_json = source_json
+        self._terminal = terminal
         self._identity = identity
-        self._process_pid = os.getpid()
-        stat = path.stat()
-        self._journal_inode = (stat.st_dev, stat.st_ino)
+        self._custody = JournalCustody.capture(terminal.path)
         self._used = False
 
     def __reduce__(self) -> NoReturn:
@@ -88,32 +82,18 @@ class SelectedSummaryAdmission:
 
     @classmethod
     def _from_returned_ack(
-        cls,
-        receipt: object,
-        path: Path,
-        session: str,
-        operation_id: str,
-        state: SummaryState,
-        source_json: str,
-        identity: SelectedAdmissionIdentity,
+        cls, receipt: object, terminal: ReturnedSummaryTerminal, identity: SelectedAdmissionIdentity,
     ) -> SelectedSummaryAdmission:
-        scope = (str(path), session, operation_id, state, source_json)
-        if not _consume_selected_ack(receipt, scope):
+        if not _consume_selected_ack(receipt, terminal):
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
-            source = FieldCodec.decode(SelectedSummarySource, json.loads(source_json))
-            valid = (
-                identity.matches_source(source)
-                and identity.source.owner == ProcessIdentity.capture(os.getpid())
-                and identity.session_revision is not None
-                and _session_revision(session) == identity.session_revision
-                and state.original_eligible
-            )
-        except (TypeError, ValueError, OSError):
-            valid = False
-        if not valid:
-            raise CompactionJournalError("Selected acknowledgment identity or source changed")
-        return cls(_MINT, path, session, operation_id, state, source_json, identity)
+            attempt = terminal.attempt
+            source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+            identity.require_current(source, attempt.session_file)
+            attempt.state.require_original_admission()
+        except (TypeError, ValueError, OSError) as error:
+            raise CompactionJournalError("Selected acknowledgment identity or source changed") from error
+        return cls(_MINT, terminal, identity)
 
     def invalidate(self) -> None:
         """Burn a stale owner/turn attempt before a future authority ABA."""
@@ -139,35 +119,16 @@ class SelectedSummaryAdmission:
             return False
         self._used = True
         try:
-            if (
-                os.getpid() != self._process_pid
-                or identity != self._identity
-                or identity.source.owner != ProcessIdentity.capture(os.getpid())
-                or Path(session_file).resolve(strict=True) != Path(self._session)
-                or wire_root / "compaction-commits.sqlite3" != self._path
-                or (
-                    (stat := self._path.stat()).st_dev,
-                    stat.st_ino,
-                )
-                != self._journal_inode
-                or _session_revision(session_file) != identity.session_revision
-                or not identity.source.input_digest.matches(sent_text)
-            ):
+            if JournalCustody.capture(wire_root / "compaction-commits.sqlite3") != self._custody:
                 return False
-            journal = CompactionJournal(self._path)
-            attempt = journal.selected_summary(self._operation_id)
-            if (
-                attempt.session_file != self._session
-                or attempt.state != self._state
-                or attempt.source_json != self._source_json
-                or len(journal.blocking_selected_summary(session_file)) != 1
-                or journal.unresolved(session_file)
-            ):
+            if identity != self._identity:
                 return False
-            if not self._state.verifies_original(
-                journal, self._session, self._operation_id, self._source_json
-            ):
+            attempt = self._terminal.attempt
+            if str(Path(session_file).resolve(strict=True)) != attempt.session_file:
                 return False
+            identity.require_live_input(session_file, sent_text)
+            journal = CompactionJournal(self._terminal.path)
+            journal.require_original_admission(attempt)
             identity.source.reservation_check(
                 identity.source.reserved_revision, dispositions.read()
             ).require_valid()
