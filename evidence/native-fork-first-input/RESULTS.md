@@ -1,0 +1,167 @@
+# Under-budget physical parent / normal fork first-input regression
+
+Owner correction governs: original user parent was24%full; first fork input must
+answer without compaction. Total journal bytes are NOT context tokens. No forced
+compaction, inflated cap, hand-seeded pending DB, fake native events or live threads.
+
+Draft scope: actual native physical parent created using existing native_backend
+loopback provider; normal32768 budget chosen before parent starts. Actual native
+GetState/GetSessionStats: two messages,4388tokens/32768, selected response-local/fixture,
+physical session identity captured in underbudget-diagnostic.log. Parent contents
+are actual Pi-written bytes. Next is normal ThreadManagement.fork + attached ACP send.
+
+Current RED is an EARLIER actual production CLI fork caller defect, not the reported
+live budget failure: nonempty ForkSpec.task flows into worker PI_PROMPT; real worker
+private_nk_from_environment refuses 'private N/K owner cannot start with an unbound
+prompt' and exits before attachment/firstsend. Exact stderr captured by forwarding
+real DetachedProcess output to own file, not substituting process/model execution.
+Boyle informed directly and asked which authoritative Toad fork API applies.
+
+First-send budget classification/native branch preservation/no replay assertions
+remain UNEXECUTED because attachment fails. No GREEN or live bug fix claim.
+Initial red.log used an artificial budget reduction and was superseded by owner
+correction; retained as rejected historical fixture attempt, never acceptance.
+Earlier underbudget attempts lacked stderr capture; diagnostic receipt explains them.
+
+Expected closure: actual selected parent+child branch leaf/model/effective budget and
+usage corroborated, ordinary firstsend answers, zero compaction, parent unchanged,
+child physical session preserved, original at most once, truthful refusal if any and
+no UNKNOWN replay. Child selected-leaf evidence still requires authoritative route.
+Boyle owns CORE fixes, Carver first-fork paint. No product/live edits here.
+
+## Matched candidate250da7, normal24% physical parent
+
+Candidate250da7f929e93751696fda8d5c19c7b26bdb69bf merged and noneditable installed;
+matched complete native candidate at Boyle's .native-candidate. Source actual
+GetSessionStats7888/32768=24.07%, two messages, physical session and selected model
+captured in candidate.log. No inflated budget or post-parent model reduction.
+Normal fork creates captured child history now, but still passes nonempty task via
+PI_PROMPT and real worker refuses before ACP attachment. This is actual normal
+fork RED on candidate, not proof of selected first-send budget behavior yet.
+Boyle339 notified with exact retained stderr; Carver confirms same Toad ForkAction
+surface. Must fix caller without bypassing startup guard. Parent unchanged; user
+UNKNOWN untouched. First-send/no compaction/answer/no replay and child usage/leaf
+proof remain unexecuted behind this concrete caller defect.
+
+Latest live owner clarification: parent now35% (previous24%); greeting after forced
+hidden compaction is NOT a fork pass. Regression firstsend is bounded20seconds
+on local fixture and records measured latency, requires no ACP compaction phase or
+commit fact, zero physical compaction entries, exactlyparent+answer provider calls.
+These assertions remain pending real worker startup correction; no false GREEN.
+Live ACP log00_16_47 inspected read-only; never reused as test native session.
+
+## Independent ordinary cold-restoration RED/GREEN
+
+Deleted 16 superseded test/helper lines; shared typed case declarations now own
+ordinary/fork setup and assertions, membership derived from DeclaredFamily.
+The loopback provider retains real HTTP request bodies to prove preserved context.
+No production edits, native event stubs, pending database seeds or live changes.
+
+Exact installed core340 1f6bc389 + matched native candidate: PASS 1 test in12.30s;
+first ACP answer5.4644s. Physical native parent:21013/32768tokens (64.13%),
+actual reserve2048 => effective30720; serialized selected messages84664bytes
+exceed old mistaken23040byte threshold. Actual native decision trigger=False.
+First provider answer request retains physical parent context and new input.
+No ACP compaction start/commit/publication, no physical compaction entry, exactly
+two provider calls (parent+answer), original input once, history retained, cleanup.
+Final declaration-family version PASS1test12.42s, first answer5.5577s.
+
+Exact old core3f06022f + pinned5fde SAME ordinary test: RED1test16.80s,
+first answer11.1585s then CompactionPublishedUpdate rejected. Successful reply
+after hidden compaction is expressly a failure. Receipts core340-ordinary.log,
+ordinary-oldpin-red.log and owner-family-ordinary.log preserve actual facts.
+
+Exact current refactor-audit.skill archive reread: SKILL, patterns README,
+identity/over-time/agent-defaults, principles13/14. IDEN-3 canonical foreign
+absence measure stays3->3 and0->0; IMPL-14 chain terms0->0 both files.
+No class crosses500; no godclass growth. IMPL-1/MEMB-1 case behavior and
+family-derived membership; BOUND-1 existing native RPC decoding; TIME-9 no
+codec subclass/adapter; AGENT-8 actual existing native fixture/tool path.
+Fork proof still requires latest339 startup correction; no blanket fork/branch
+or live deployment certification from this ordinary receipt.
+
+## Latest339 fda6e4be independent family execution
+
+Noneditable installed merged339 fda6e4be, matched native package; actual ordinary
+case passes again (first answer5.844s). Actual24.07% parent normal fork now starts.
+Combined result1pass/1fail20.96s: after ACP prompt returns, child native history
+contains ZERO hey Boss user entries, violating original-input exactly-once assertion.
+No compaction fact/entry was observed before this failure. Earlier fork-startup
+refusal is corrected; this is a new meaningful first-send/history failure, notGREEN.
+See latest339-family.log and latest339-install.log. Boyle sole production owner
+informed; no retry, live changes or input replay performed.
+
+## Installed9251 host-loader refusal and actionable acceptance
+
+Deleted2 uninformative test lines; replaced with actual ACP response, provider
+request count/byte sizes, native parent result and owner runtime trace.
+Early assertions now reject declared RequestFailedUpdate/InputFailedUpdate and
+print existing failure feedback/disposition before original exactly-once checks.
+All original history/no-compaction/provider-context/no-replay assertions remain.
+No production/runtime launcher changes. Synced current main9251b823.
+
+Parent independently reproduced both ordinary/fork failures on staged9251/4230:
+ACP returns ~0.01s, no hey Boss journal entry. Actual142 painted-path likewise
+failed. Parent actual ACP log names missinglibada.so.3. Own fresh actualphysical
+parent native preflight on same package failed with the identical hostloader
+diagnostic and exit127 before sending input (main9251-diagnostic.log). Host
+/usr/bin/node also directly fails loadinglibada.so.3; host installedlibada.so.4.
+This is environment refusal, not evidence authorizing a new corepatch. Earlier
+latest339 fork zero-input result must not be labeled proven coreinputloss: it
+did not yet inspect the declared failure update. That gap is corrected here.
+
+Ruff passes; canonical IDEN-3 foreignabsence3->3, IMPL-14 chainterms0->0.
+Actual final healthy-runtime provider/native family proof remains pending parent
+hostruntime repair; no GREEN, no replay, no userattempt reset.
+
+## Upgrade interval: first-input contract correction (not executed native)
+
+Deleted12 test lines, including redundant post-wait failure checks and the
+incorrect unconditional second ACP submission. Source trace: normal
+ThreadManagement._fork_unlocked records spec.prompt/spec.task, then worker
+run_startup_input dispatches that one journaled owner input. A concurrent ACP
+prompt uses accept_followup, whose end_turn explicitly means local acceptance.
+
+Fork case now supplies hey Boss through normal ForkSpec.task and sends NO
+additional ACP prompt; ordinary case submits hey Boss through attached ACP.
+Each existing case owns its first-input behavior. Shared bounded20s acceptance
+waits for an actual native assistant FIRST_OWNER_ANSWER, rejects typed failures
+while waiting, then preserves exactly-one userinput,2 actual provider calls,
+retained parent request context, no native/ACP compaction and no replay checks.
+Timer includes owner launch/attach, not merely the fast queue acknowledgement.
+Fresh provider answer marker differs from the retained parent assistant answer.
+
+Non-Node checks only during owner OS upgrade: Ruff passes, both family cases
+collect successfully; canonical foreignabsence3->3 and chainterms0->0. Small
+correct owners24lines maximum, no500threshold crossing/godclass growth.
+Full actual native/provider behavior is UNEXECUTED for this correction pending
+healthy host; do not treat collection/static measures as runtime acceptance.
+No OS/live/provider changes and no repeated native runs during upgrade.
+
+## Healthy host, complete current fixture: actual final acceptance
+
+Currentc9c1 test plus its REQUIRED updated tests/compaction_loopback.py executed
+on noneditable installed main9251 core, complete native4230 package, healthy
+hostNode26.10.0. PYTHONPATH=tests only; agent_comms imported from own.venv
+site-packages (not source root). Actual Pi children/localHTTP provider/installed
+RuntimeServer+CommsClient used; no mocked endpoint/nativeevents or live sessions.
+
+PASS2tests26.48s. Ordinary actualfirst answer7.1781s; fork normaljournaled
+startupfirst answer9.6850s (including ownerlaunch/attach). Physical ordinary
+parent21013/32768tokens, fork7888/32768tokens; actualreserve2048 andtriggerFalse.
+Both require distinct nativeassistant FIRST_OWNER_ANSWER, exactlyone heyBoss
+userinput, exactly2 providercalls, actuallastproviderrequest retaining physical
+parentcontext+newinput, preservedsource/history, no nativecompactionentry,
+noACPcompaction start/commit/publication, no replay after1.2s and childcleanup.
+Receipt: healthy9251-complete-fixture.log. No further code changes in this run.
+
+Parent corrected run failed AFTER actualnative answers with AttributeError
+LoopbackProvider.requests because only testcase copied. Required paired fixture
+is tests/compaction_loopback.py (3added/1deletedline HTTPbodycapture), NOT
+test_backend_native_lifecycle.py. Full repository PR includes both; copy them
+together for isolated external acceptance. Do not weakenprovidercontext proof.
+
+This closes current bounded ordinary/fork firstinput acceptance on realnative
+localprovider path. It does not certify arbitrary hugebranched journals, live
+selectedpaidprovider behavior or independentToadpaint; parent owns separate
+installedUIreceipt and deployment. No host/live changes or userattempt replay.

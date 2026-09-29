@@ -1,0 +1,190 @@
+PHYSICAL_PARENT_STATS SessionStatsData(session_id='bb24d97b84ab403aa45b4b07d38d4060', session_file='/var/tmp/ac-sealed-test-qs2z2wys/sessions/enrolled-bb24d97b84ab403aa45b4b07d38d4060.jsonl', context_usage=PiContextUsage(tokens=21013, context_window=32768))
+PHYSICAL_PARENT_STATE StateData(session_id='bb24d97b84ab403aa45b4b07d38d4060', session_file='/var/tmp/ac-sealed-test-qs2z2wys/sessions/enrolled-bb24d97b84ab403aa45b4b07d38d4060.jsonl', session_name=None, native_input_proof_capability='pi-native-input-v1-live-only', model=PiModel(provider='response-local', id='fixture', name='Local response fixture', context_window=32768), thinking_level='off', message_count=2, pending_message_count=0, is_streaming=False, is_compacting=False)
+ACTUAL_SELECTED_COMPACTION_DECISION PiCompactionDecision(reserve_tokens=2048, keep_recent_tokens=1024, enabled=True, trigger=False)
+TOKEN_BYTE_MISMATCH tokens 21013 effective_tokens 30720 serialized_context_bytes 84664 old_mixed_unit_budget 23040.0
+FIRST_SEND_LATENCY_SECONDS 11.158466220018454
+ACTUAL_WORKER_LOG 
+F
+=================================== FAILURES ===================================
+_ test_underbudget_physical_native_owner_answers_without_compaction[ordinary-63percent] _
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f93a5132660>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f93a517cc30>
+forked = False, repetitions = 2400
+
+    @pytest.mark.parametrize(
+        "forked,repetitions", [(False, 2400), (True, 900)], ids=["ordinary-63percent", "fork-24percent"]
+    )
+    async def test_underbudget_physical_native_owner_answers_without_compaction(
+        native_backend, monkeypatch, forked, repetitions
+    ):
+        native = native_backend
+        # Select a normal bounded model before creating physical parent history.
+        config_path = native.config / "models.json"
+        config = json.loads(config_path.read_text())
+        config["providers"]["response-local"]["models"][0]["contextWindow"] = 32768
+        config_path.write_text(json.dumps(config))
+        (native.config / "settings.json").write_text(
+            json.dumps(
+                {
+                    "compaction": {"enabled": True, "reserveTokens": 2048, "keepRecentTokens": 1024},
+                    "retry": {"enabled": False, "maxRetries": 0},
+                }
+            )
+        )
+        parent_text = "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * repetitions
+        result = await native.run(parent_text)
+        assert result[-1].ok, result[-1]
+        assert native.provider.posts == 1
+        retained = native.persistent.custody.idle()
+    
+        async def probe(command):
+            retained.child.proc.stdin.write(PiRpcChannel.command_bytes(command))
+            await retained.child.proc.stdin.drain()
+            raw = await retained.child.reader.readline()
+            response = PiRpcChannel.decode_record(raw, strict=True)
+            assert response.success
+            return response.data
+    
+        state = await probe(GetState(id="parent-state"))
+        stats = await probe(GetSessionStats(id="parent-stats"))
+        assert stats.context_usage.tokens is not None
+        fraction = stats.context_usage.tokens / state.model.context_window
+        assert (0.20 < fraction < 0.27) if forked else (0.60 < fraction < 0.70)
+        print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
+        assert state.model.context_window == 32768
+        print("PHYSICAL_PARENT_STATE", repr(state), flush=True)
+        decision = await read_selected_compaction_decision(
+            native.persistent,
+            session_file=str(native.session),
+            expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            provider=state.model.provider,
+            model_id=state.model.id,
+            context_window=state.model.context_window,
+        )
+        print("ACTUAL_SELECTED_COMPACTION_DECISION", repr(decision), flush=True)
+        assert decision.enabled
+        assert not decision.trigger
+        original = native.session.read_bytes()
+        source_rows = [json.loads(line) for line in original.splitlines()]
+        selected_messages = [row["message"] for row in source_rows if row["type"] == "message"]
+        serialized_bytes = len(
+            json.dumps(selected_messages, ensure_ascii=False, separators=(",", ":")).encode()
+        )
+        effective_tokens = state.model.context_window - decision.reserve_tokens
+        old_mixed_unit_budget = effective_tokens * 0.75
+        assert stats.context_usage.tokens < effective_tokens
+        assert serialized_bytes > old_mixed_unit_budget
+        print(
+            "TOKEN_BYTE_MISMATCH",
+            "tokens",
+            stats.context_usage.tokens,
+            "effective_tokens",
+            effective_tokens,
+            "serialized_context_bytes",
+            serialized_bytes,
+            "old_mixed_unit_budget",
+            old_mixed_unit_budget,
+            flush=True,
+        )
+    
+        await native.persistent.close()
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+        monkeypatch.setenv(
+            "AGENT_COMMS_AGENT_ARGS", "--offline --no-extensions --no-skills --no-context-files"
+        )
+        monkeypatch.setenv(
+            "PATH", str(Path(os.sys.executable).parent) + os.pathsep + os.environ["PATH"]
+        )
+        comms = Comms(native.root)
+        comms.threads.register(
+            Thread(
+                "physical-parent",
+                frozenset(),
+                str(native.project),
+                session_file=str(native.session),
+                model="response-local/fixture",
+                thinking_level="off",
+            )
+        )
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
+        comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+        attachment = CommsClient(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=package,
+            private_nk_wire_root_id=root_id,
+        )
+        facts = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                facts.extend(decode_updates(kwargs["update"].get("_meta")))
+    
+        attachment.on_connect(Client())
+        child = None
+        launch = DetachedProcess.launch
+        worker_log = native.project / "worker.log"
+        output = worker_log.open("wb")
+    
+        def logged_launch(*args, **kwargs):
+            return launch(*args, output=output, **kwargs)
+    
+        monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
+        try:
+            if forked:
+                child = await asyncio.to_thread(
+                    comms.threads.fork,
+                    ForkSpec(
+                        name="physical-child",
+                        parent="physical-parent",
+                        task="Continue retained architecture",
+                    ),
+                )
+            else:
+                await asyncio.to_thread(comms.owners.start, "physical-parent")
+                child = comms.registry.require("physical-parent")
+            async with asyncio.timeout(15):
+                while True:
+                    try:
+                        await attachment.load_session(cwd=str(native.project), session_id=child.name)
+                        break
+                    except Exception:
+                        if not comms.registry.require(child.name).process_alive:
+                            raise
+                        await asyncio.sleep(0.1)
+            first_send_started = time.monotonic()
+            try:
+                async with asyncio.timeout(20):
+                    await attachment.prompt(
+                        child.name, [TextContentBlock(type="text", text="hey Boss")]
+                    )
+            except Exception as error:
+                rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
+                print(
+                    "FIRST_SEND_ERROR",
+                    repr(error),
+                    "facts",
+                    repr(facts),
+                    "dispositions",
+                    repr(rows),
+                    "provider_calls",
+                    native.provider.posts,
+                    flush=True,
+                )
+                raise
+            latency = time.monotonic() - first_send_started
+            print("FIRST_SEND_LATENCY_SECONDS", latency, flush=True)
+            assert latency < 20
+            assert not any(isinstance(fact, CompactionChangedUpdate) for fact in facts)
+            assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
+>           assert not any(isinstance(fact, CompactionPublishedUpdate) for fact in facts)
+E           assert not True
+E            +  where True = any(<generator object test_underbudget_physical_native_owner_answers_without_compaction.<locals>.<genexpr> at 0x7f93a4576b20>)
+
+tests/test_native_fork_first_input.py:201: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_fork_first_input.py::test_underbudget_physical_native_owner_answers_without_compaction[ordinary-63percent]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 deselected in 16.80s
