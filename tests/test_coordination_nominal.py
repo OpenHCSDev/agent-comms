@@ -21,6 +21,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.recovery_gateway_client import _valid_projection
 from agent_comms.recovery_projection import AvailableRecoveryProjection, ProjectedExecution
+from agent_comms.wake_policy import FullWake
 
 
 def test_state_data_cannot_be_attached_to_wrong_variant():
@@ -321,3 +322,30 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
             assert store.assignment("assignment") == settled
     finally:
         AssignmentState.__registry__.pop("awaiting")
+
+
+def test_original_target_and_receipt_legality_is_owned_by_current_variants():
+    """The three original checks with retired diagnostics now have typed owners."""
+    # Unstarted assignments cannot carry a frozen response target at all.
+    unstarted = FieldCodec.encode(FullPendingAssignment())
+    assert FieldCodec.decode(AssignmentState, unstarted) == FullPendingAssignment()
+    with pytest.raises(ValueError, match="Unknown fields"):
+        FieldCodec.decode(AssignmentState, dict(unstarted, exact_target="requester"))
+
+    # An engagement cannot omit either member of its exact execution binding.
+    engaged = FieldCodec.encode(EngagedAssignment.load(FullWake(), None, "e", "requester"))
+    for field in ("exact_target", "execution_id"):
+        damaged = {**engaged, "decision": dict(engaged["decision"])}
+        del damaged["decision"][field]
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(AssignmentState, damaged)
+
+    # A publication has a complete receipt; non-publication variants have none.
+    published = FieldCodec.encode(PublishedResponse("message", 1))
+    for field in ("message_id", "seq"):
+        damaged = dict(published)
+        del damaged[field]
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(ResponseState, damaged)
+    with pytest.raises(ValueError, match="Unknown fields"):
+        FieldCodec.decode(ResponseState, {**FieldCodec.encode(SilentResponse()), "seq": 1})
