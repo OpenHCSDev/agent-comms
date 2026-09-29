@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import select
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from agent_comms import restart_queue as queue
+from agent_comms.comms import wire
+from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 
 
@@ -120,6 +124,54 @@ def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
         os.read(fd, 65536)
         (directory / "next.json").write_text("queued")
         assert select.select([fd], [], [], 1)[0] == [fd]
+
+
+@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
+async def test_real_queue_replaces_idle_owner_without_provider(tmp_path, monkeypatch):
+    from agent_comms.runtime import socket_path
+
+    package = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+    if not package:
+        pytest.skip("Requires local provider-free Pi test package")
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    session = tmp_path / "session.jsonl"
+    session.write_text("")
+    comms = wire(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    original = comms.owners.ensure_owner("worker", agent_bin="pi")
+
+    async def ready(pid):
+        async with asyncio.timeout(10):
+            while not socket_path(comms.root, pid).exists():
+                assert comms.registry.require("worker").process_alive
+                await asyncio.sleep(0.05)
+
+    try:
+        await ready(original.pid)
+        # Exercise the queue and execution, without starting an unattended
+        # background watcher in the test process.
+        with monkeypatch.context() as patch:
+            patch.setattr(queue.subprocess, "Popen", lambda *a, **k: None)
+            request = queue.enqueue(comms, "worker")
+        assert request["state"] == "pending"
+        await asyncio.to_thread(queue.step, comms)
+        receipt = queue.status(comms, "worker")[0]
+        assert receipt["state"] == "restarted"
+        assert receipt["old_pid"] == original.pid
+        assert receipt["new_pid"] != original.pid
+        await ready(receipt["new_pid"])
+        assert comms.registry.require("worker").session_file == str(session)
+    finally:
+        await asyncio.to_thread(comms.owners.stop, "worker")
+
+
+@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
+def test_watcher_exits_after_last_request_for_runtime_upgrade(tmp_path, monkeypatch):
+    comms, _, _ = fixture(tmp_path, monkeypatch)
+    queue.run(comms)
+    queue.run(comms)  # The first invocation released its lease.
 
 
 @pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")

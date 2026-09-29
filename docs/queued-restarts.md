@@ -15,8 +15,8 @@ mid-attempt, the request remains `attempting`, rather than replaying it.
 
 The queue is private to the wire root at `owner-restart-queue/`. It records no
 credentials, model flags, or session contents. The watcher reads the original
-owner's launch environment from `/proc` after verifying its process/socket and
-preserves it only in memory for the replacement launch. Requests bind to the
+owner's launch environment from `/proc` after checking its exact process identity,
+and preserves it only in memory for the replacement launch. Requests bind to the
 owner's PID, creation time and admission generation. Linux `/proc` and inotify
 are required; other platforms fail closed.
 

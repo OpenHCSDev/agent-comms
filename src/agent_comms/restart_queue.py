@@ -187,10 +187,10 @@ def step(comms: Comms) -> None:
         if record["state"] != "attempting":
             continue
         try:
-            if not comms.owners._is_local_participant(owner, wait=False):
-                raise ValueError("Original owner lacks live socket proof")
+            if not owner.process_alive:
+                raise ValueError("Original owner is no longer alive")
             original = _owner_environment(owner.pid, owner.name, record["interpreter"])
-            if not comms.owners._is_local_participant(owner, wait=False):
+            if not owner.process_alive:
                 raise ValueError("Original owner changed during environment read")
             saved = os.environ.copy()
             try:
@@ -268,6 +268,14 @@ def run(comms: Comms) -> None:
         with _watch(comms.root, directory) as fd:
             while True:
                 step(comms)
+                # Exit after the last pending request, allowing a subsequently
+                # installed runtime to own a new watcher. Release the watcher
+                # lease under the same queue lock used by enqueue: a new
+                # request cannot slip between the empty check and release.
+                with _store_lock(directory / "queue"):
+                    if not any(record["state"] == "pending" for _, record in _records(comms)):
+                        fcntl.flock(lock, fcntl.LOCK_UN)
+                        return
                 select.select([fd], [], [])
                 os.read(fd, 65536)
     finally:
