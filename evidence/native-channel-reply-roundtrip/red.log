@@ -1,0 +1,197 @@
+B actual native request provider_calls 1
+B published actual reply provider_calls 1
+RED: native reply published but sender never automatically received it question 1 reply 2 facts [CursorAdvancedUpdate(envelope=CursorEnvelope(scope=CursorScope(session_id='questioner', wire_root_id='4ee6be39096041ac9879189f29f68a68', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='questioner', created_at=1790650739.90732), generation=3), owner_pid=3196726), revision=6, observation=EmptyCursorObservation()), selected_status=None), CursorAdvancedUpdate(envelope=CursorEnvelope(scope=CursorScope(session_id='questioner', wire_root_id='4ee6be39096041ac9879189f29f68a68', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='questioner', created_at=1790650739.90732), generation=3), owner_pid=3196726), revision=7, observation=VerifiedCursorObservation(cursor=CurrentNativeCursor(wire_root_id='4ee6be39096041ac9879189f29f68a68', recipient_lookup='e7b70093795a63da9eee3b5e568d7c68', owner_thread='questioner', owner_generation=1, owner_admission_generation=3, covered_seq=1, injected_seq=0, input_id=None, assignment_id=None, stage=None, session_id=None, request_generation=None))), selected_status=None), CursorAdvancedUpdate(envelope=CursorEnvelope(scope=CursorScope(session_id='questioner', wire_root_id='4ee6be39096041ac9879189f29f68a68', owner=OwnerIdentity(incarnation=ThreadIncarnation(name='questioner', created_at=1790650739.90732), generation=3), owner_pid=3196726), revision=14, observation=VerifiedCursorObservation(cursor=CurrentNativeCursor(wire_root_id='4ee6be39096041ac9879189f29f68a68', recipient_lookup='e7b70093795a63da9eee3b5e568d7c68', owner_thread='questioner', owner_generation=1, owner_admission_generation=3, covered_seq=1, injected_seq=0, input_id=None, assignment_id=None, stage=None, session_id=None, request_generation=None))), selected_status=None)]
+F
+=================================== FAILURES ===================================
+_______ test_native_channel_reply_automatically_reaches_original_sender ________
+
+predicate = <function test_native_channel_reply_automatically_reaches_original_sender.<locals>.<lambda> at 0x7fb122856f00>
+description = 'A automatically observed native reply'
+
+    )
+    for key, value in {
+        "PI_CODING_AGENT_DIR": str(config),
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
+>       "AGENT_COMMS_AGENT_MODELS": "roundtrip-local/fixture",
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+        "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
+    }.items():
+
+tests/test_native_channel_reply_roundtrip.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.05, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-t9n65pxo')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb123537e10>
+
+    async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch):
+        pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+        if not pin:
+            pytest.skip("Actual immutable native bundle required")
+        package = Path(pin).resolve(strict=True)
+        requests = []
+        failures = []
+    
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                try:
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    assert self.headers["Authorization"] == "Bearer local-only"
+                    requests.append(request)
+                    assert len(requests) <= 2, "Reply observation caused replay or ping-pong"
+                    text = (
+                        '{"decision":"IGNORE"}'
+                        if "bounded triage" in json.dumps(request)
+                        else "ROUNDTRIP_NATIVE_REPLY"
+                    )
+                    chunk = {
+                        "id": f"roundtrip-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "fixture",
+                        "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    body = f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except Exception as error:
+                    failures.append(repr(error))
+                    self.send_error(400, "Local fixture assertion failed")
+    
+            def log_message(self, *_args):
+                pass
+    
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        serving = threading.Thread(target=server.serve_forever, daemon=True)
+        serving.start()
+        config = tmp_path / "config"
+        config.mkdir(mode=0o700)
+        (config / "models.json").write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "roundtrip-local": {
+                            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                            "api": "openai-completions",
+                            "models": [
+                                {
+                                    "id": "fixture",
+                                    "name": "Local roundtrip",
+                                    "contextWindow": 32768,
+                                    "maxTokens": 2048,
+                                }
+                            ],
+                        }
+                    }
+                }
+            )
+        )
+        (config / "auth.json").write_text(
+            json.dumps(
+                {
+                    "roundtrip-local": {
+                        "type": "api_key",
+                        "key": "local-only",
+                    }
+                }
+            )
+        )
+        (config / "settings.json").write_text(
+            json.dumps(
+                {
+                    "compaction": {"enabled": False},
+                    "retry": {"enabled": False, "maxRetries": 0},
+                }
+            )
+        )
+        for key, value in {
+            "PI_CODING_AGENT_DIR": str(config),
+            "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
+            "AGENT_COMMS_AGENT_MODELS": "roundtrip-local/fixture",
+            "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
+        }.items():
+            monkeypatch.setenv(key, value)
+        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_AGENT_ID", "AGENT_COMMS_THREAD"):
+            monkeypatch.delenv(key, raising=False)
+        comms = Comms(tmp_path / "wire")
+        projects = {}
+        for name in ("questioner", "answerer"):
+            project = tmp_path / name
+            project.mkdir()
+            projects[name] = project
+            comms.threads.register(
+                Thread(
+                    name,
+>                   frozenset({"team"}),
+                    str(project),
+                    model="roundtrip-local/fixture",
+                    thinking_level="off",
+                )
+            )
+
+tests/test_native_channel_reply_roundtrip.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_native_channel_reply_roundtrip.py:107: in until
+    for key, value in {
+                   ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fb122908b80>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_native_channel_reply_roundtrip.py::test_native_channel_reply_automatically_reaches_original_sender
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 32.06s
