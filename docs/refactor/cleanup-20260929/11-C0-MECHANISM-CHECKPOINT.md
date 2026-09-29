@@ -27,6 +27,10 @@ encoding. External scalar FieldRepresentation capabilities remain available.
   `/home/ts/.cache/agent-scratch/comms-c0-mechanism-seals-20260929`. Its entrypoint
   receipt records adapter rejection and real CLI register/send/inbox/ack/reopen.
   This is mechanism/entrypoint verification, not a Toad usability claim.
+- After normal integration of current main through Core416/423, the rebuilt
+  wheel passed 31 existing codec and seal checks from its isolated import target.
+  WireValue extends the existing FieldRepresentation dispatch; no parallel
+  value decoder or FieldCodec subclass is introduced.
 
 Scratch owner is parent Codex. Purpose: one wheel, disposable isolated CLI root,
 wheel import target and verification receipt. No selected live root, global
