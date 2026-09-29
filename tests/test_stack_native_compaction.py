@@ -512,6 +512,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             return
         assert kinds.index(ae.InputStarted) < kinds.index(ae.CompactionStart)
         assert kinds.index(ae.CompactionStart) < kinds.index(ae.CompactionEnd)
+        compaction = next(event for event in events if isinstance(event, ae.CompactionEnd))
+        assert compaction.publication_summary == "summary"
         assert events[-1].ok is True
         assert len(calls) > 1
         summary_efforts = (
