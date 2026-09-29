@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 from .routing import TurnRouting
 from .thread_identity import TurnIdentity
@@ -58,6 +58,15 @@ class TurnFence:
     turn_id: str
     admission_generation: int
 
+
+    def renamed(self, name: str) -> TurnFence:
+        """Registry alias resolution changes the name, never incarnation or epochs."""
+        return replace(self, identity=replace(
+            self.identity, incarnation=replace(self.identity.incarnation, name=name)
+        ))
+
+    def can_attest(self, admission: int) -> bool:
+        return self.identity.generation > 0 and self.admission_generation > 0 and self.admission_generation == admission
 
     def matches(self, other: TurnFence) -> bool:
         """Lease and finished observations may describe the same exact turn."""

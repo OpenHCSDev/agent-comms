@@ -32,6 +32,9 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
 
+    def starts_owner(self, nxt: ThreadStatus) -> bool:
+        return not self.active and nxt.active
+
     def changes_owner(self, nxt: ThreadStatus) -> bool:
         return self.active != nxt.active
 

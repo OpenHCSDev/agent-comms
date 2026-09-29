@@ -47,13 +47,13 @@ class Registration:
                 if change.changes_identity
                 else nullcontext()
             ):
-                before = change.previous.goal if change.previous is not None else None
+                before = change.prior_goal
                 history = None
                 intent = None
                 if before != change.thread.goal:
                     history = GoalHistoryStore(self.store.path)
                     intent = history.begin(change.thread.created_at, before, change.thread.goal)
-                edit.document.apply_registration(change)
+                change.apply(edit.document)
                 edit.commit()
                 if history is not None and intent is not None:
                     history.commit(intent)

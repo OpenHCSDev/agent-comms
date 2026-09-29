@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .channel_targets import Tag
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .goals import Goal, GoalRevision
-from .thread_identity import OwnerIdentity, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .thread_identity import (
+    OwnerIdentity,
+    ThreadIncarnation,
+    ThreadPublicationIdentity,
+    ThreadRole,
+    TurnId,
+    TurnIdentity,
+)
 from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence
 
 
@@ -142,6 +149,39 @@ class Thread:
     @property
     def goal_checkpoint(self) -> GoalRevision | None:
         return self.goal.checkpoint if self.goal is not None else None
+
+    @property
+    def has_process(self) -> bool:
+        return self.process_identity is not None
+
+    @property
+    def publication_identity(self) -> ThreadPublicationIdentity:
+        return ThreadPublicationIdentity(
+            self.incarnation, self.process_identity, self.role, self.session_file, self.worktree
+        )
+
+    def without_turn_admission(self) -> Thread:
+        if self.active_turn is None:
+            return self
+        return replace(self, active_turn=replace(self.active_turn, admission_generation=None))
+
+    def preserve_registration_history(self, previous: Thread) -> Thread:
+        """Metadata writers cannot forge channel scope or reset a finished turn."""
+        scope = previous.channel_scope_generation
+        if self.tags != previous.tags:
+            if scope >= (1 << 63) - 1:
+                raise RelationViolationError("Channel scope generation exhausted")
+            scope += 1
+        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
+        if self.turn_generation != previous.turn_generation:
+            result = replace(
+                result, turn_generation=previous.turn_generation,
+                last_finished_turn_id=(
+                    previous.last_finished_turn_id
+                    if self.active_turn == previous.active_turn else None
+                ),
+            )
+        return result
 
     @property
     def incarnation(self) -> ThreadIncarnation:

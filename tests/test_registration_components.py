@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
@@ -25,9 +25,9 @@ def owner(path):
 
 def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
     document = RegistryDocument()
-    document.apply_registration(
-        document.prepare_registration(owner(tmp_path), RunningThreadStatus(), new_owner=False)
-    )
+    document.prepare_registration(
+        owner(tmp_path), RunningThreadStatus(), new_owner=False
+    ).apply(document)
     before = document.snapshot().owner_identity("owner")
     leased, generation = document.lease_turn(document.threads["owner"], "turn", None)
     assert generation == before.generation
