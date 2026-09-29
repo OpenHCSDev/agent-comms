@@ -74,9 +74,10 @@ class MessageNotification:
             root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
         )
         owners = NotificationAssignment.active_owners(registry.snapshot())
-        for assignment in rows:
-            notification = assignment.project(owners)
-            key = (assignment.wire_seq, assignment.message_id)
+        for receipt in rows:
+            notification = receipt.project(owners)
+            source = receipt.assignment.source
+            key = (source.seq, source.message_id)
             if key in result:
                 result[key].append(notification)
         return {key: tuple(rows) for key, rows in result.items()}
@@ -104,10 +105,11 @@ class MessageNotification:
         )
         result = []
         owners = NotificationAssignment.active_owners(registry.snapshot())
-        for assignment in rows:
-            notification = assignment.project(owners)
-            message = log.message_by_id(assignment.message_id)
-            if message is not None and message.seq == assignment.wire_seq:
+        for receipt in rows:
+            notification = receipt.project(owners)
+            source = receipt.assignment.source
+            message = log.message_by_id(source.message_id)
+            if message is not None and message.seq == source.seq:
                 result.append(replace(notification, message=message))
         return tuple(result)
 

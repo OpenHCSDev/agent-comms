@@ -61,3 +61,33 @@ def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participan
     finally:
         comms.agents.finish_turn(lease)
     assert comms.views.coordination_snapshot().participants("#team") == ()
+
+
+def test_joined_declarations_decode_one_sql_snapshot_and_reject_foreign_columns():
+    import sqlite3
+    from dataclasses import dataclass
+
+    import pytest
+
+    from agent_comms.typed_table import TypedRow
+
+    @dataclass(frozen=True)
+    class Label(TypedRow):
+        label: str
+
+    @dataclass(frozen=True)
+    class Ready(TypedRow):
+        ready: bool
+
+    with sqlite3.connect(":memory:") as connection:
+        assert Label.joined(connection.execute("SELECT 'saved' AS label,1 AS ready"), Ready) == [
+            (Label("saved"), Ready(True))
+        ]
+        for query in (
+            "SELECT 'saved' AS label,1 AS label",
+            "SELECT 'saved' AS label",
+            "SELECT 'saved' AS label,1 AS ready,4 AS foreign_field",
+            "SELECT 'saved' AS label,2 AS ready",
+        ):
+            with pytest.raises((TypeError, ValueError)):
+                Label.joined(connection.execute(query), Ready)

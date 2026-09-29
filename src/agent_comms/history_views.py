@@ -344,13 +344,14 @@ class HistoryViews:
             display_activity, display_unread = self.presentation.display_view_metrics(
                 records, scopes, scopes, captured_viewer, viewer_names, bus_revision
             )
+            sent = self.last_sent_timestamps()
             channels = ChannelView.roster(
                 registry,
                 declarations,
                 pins,
                 order,
                 self.agents.all_activity(),
-                self.last_sent_timestamps(),
+                sent,
                 display_activity,
                 show_stopped=show_stopped,
                 show_archived=show_archived,
@@ -366,7 +367,7 @@ class HistoryViews:
                 threads=threads,
                 channels=channels,
                 unread=self.bus.pending_counts(captured_viewer),
-                last_sent=self.last_sent_timestamps(),
+                last_sent=sent,
                 channel_unread=display_unread,
                 channel_order=order,
                 show_stopped=show_stopped,

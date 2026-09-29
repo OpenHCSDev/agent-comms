@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .assignment_states import AssignmentState
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import CurrentExecutions
@@ -20,15 +19,19 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class NotificationAssignment(TypedRow):
-    recipient: str
-    recipient_lookup: str
-    wire_seq: int
-    message_id: str
-    lifecycle: AssignmentState
-    updated_at_ms: int
+class AssignmentActivity(TypedRow):
     triage_inflight: bool
     current_execution_id: str | None
+
+    def blocks(self, assignment: WakeAssignment) -> bool:
+        return (self.current_execution_id is not None
+                and self.current_execution_id != assignment.lifecycle.execution_id)
+
+
+@dataclass(frozen=True)
+class NotificationAssignment:
+    assignment: WakeAssignment
+    activity: AssignmentActivity
 
     @classmethod
     def select(cls, root: Path, predicate: str, parameters: tuple, *, limit: int = 0):
@@ -60,9 +63,9 @@ class NotificationAssignment(TypedRow):
             ]:
                 raise ValueError("Channel notification status has an unsupported schema")
             columns = ",".join(
-                f"w.{name}" for name in cls.columns() if name in WakeAssignment.columns()
+                f"w.{name}" for name in WakeAssignment.columns()
             )
-            return cls.read(
+            rows = WakeAssignment.joined(
                 connection.execute(
                     f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
                     "WHERE n.assignment_id=w.assignment_id "
@@ -74,22 +77,20 @@ class NotificationAssignment(TypedRow):
                     f"WHERE {predicate} ORDER BY w.wire_seq DESC,w.recipient"
                     + (" LIMIT ?" if limit else ""),
                     (*parameters, limit) if limit else parameters,
-                )
+                ), AssignmentActivity,
             )
+            return tuple(cls(assignment, activity) for assignment, activity in rows)
 
     def project(self, owners: Mapping[str, Thread]) -> MessageNotification:
-        owner = owners.get(self.recipient_lookup)
-        return self.lifecycle.notification(
-            self.recipient,
+        owner = owners.get(self.assignment.recipient_lookup)
+        return self.assignment.lifecycle.notification(
+            self.assignment.recipient,
             owner_active=owner is not None,
-            current_turn=owner.turn_started_by(self.updated_at_ms)
+            current_turn=owner.turn_started_by(self.assignment.updated_at_ms)
             if owner is not None
             else False,
-            triage_inflight=self.triage_inflight,
-            blocked_by_prior=(
-                self.current_execution_id is not None
-                and self.current_execution_id != self.lifecycle.execution_id
-            ),
+            triage_inflight=self.activity.triage_inflight,
+            blocked_by_prior=self.activity.blocks(self.assignment),
             prior_turn_active=owner.executing if owner is not None else False,
         )
 
