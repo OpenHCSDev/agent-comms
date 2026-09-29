@@ -1,0 +1,14 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-history-ready-20260928",
+  "previous_links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/bin/agent-comms-nk-foreground"
+  },
+  "state_reset": false,
+  "input_replay": false,
+  "owners_restarted": false,
+  "user_toad_restart_required": true
+}
