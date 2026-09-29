@@ -484,6 +484,11 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert await agent.inputs.drain_inbox("beta") == 1
     assert updates[-1].status == "proven"
     before = len(updates)
+    for _ in range(3):
+        loaded = cursor_envelope(agent.sessions.metadata("beta"))
+        assert loaded.same_observation(updates[-1])
+        await agent._refresh_private_cursor("beta")
+        assert len(updates) == before, "Unchanged trusted reads republished the same cursor"
     with _store_lock(comms.root / "wire"):
         # This is an actual contended flock in the canonical read path, not a
         # mocked error. A new attachment cannot claim an unread observation.
