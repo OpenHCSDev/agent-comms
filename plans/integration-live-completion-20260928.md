@@ -9,7 +9,9 @@ No feature is complete merely because a draft exists or a PR was merged.
 - Automatic channel replies: actual native A question -> B reply reproduces the
   missing return notification. Boyle owns canonical reply admission; Dalton owns
   PR330's real A -> B -> A regression, ACP feedback, awareness and no replay/loop.
-  Initial-only admission and awareness currently exclude keyed responses. Not fixed.
+  Initial-only admission and awareness currently exclude keyed responses. Candidate
+  passes an actual native round trip; strict receipt validation and derived-kind
+  corrections plus history conversion and the final rerun remain before deployment.
 - Toad recursion: user supplied an authentic trace from the installed 9830 runtime:
   ViewportPresentation.prepare calls _refresh_layout while preparing paint, which
   reenters SessionView/Textual layout. Carver owns the urgent root fix and real UI
@@ -17,9 +19,15 @@ No feature is complete merely because a draft exists or a PR was merged.
   Fixed by merged150c2534676: synchronous reflow deleted, native UpdateScroll owns
   it. Final paired installed139x25 growth/resize/tail/reader/session-return passes;
   actual live retained PR95 paint passes at139x25 (38 saved phrase matches).
-- New IndexError: saved terminal trace _compositor.render_segments indexes
-  chops[y] outside its row range. Carver owns Textual investigation; recovered
-  latest OpenCode compaction summary shared locally with Carver/Tesla. Not fixed.
+- IndexError: Textual9 merged b1efffff. Old-scene damage was used to derive spans
+  outside the current frame. Damage now enters the current frame once before
+  crop/spans/chops derive from it. Actual installed shrink renders 25 rows with
+  last span24; real PTY Toad shrink/growth, tail paint and source return pass.
+  All five launchers select runtime-frame-damage-20260928, paired core6bd/Toadc253.
+  Actual retained PR95 small viewport paints 38 saved phrases, no app/delivery error.
+- Separate shutdown crash: authentic 23:30 trace from the older custody runtime
+  reports dictionary mutation while Textual _close_all iterates screen stacks.
+  Carver owns the root fix and actual shutdown proof. Not yet fixed.
 - Comms323 merged658b9a89: turn observation/goal settlement; 494 production lines
   deleted. Comms325 merged6bd8c423: native custody/partial snapshot ownership;
   445 production lines deleted. No stored schema change or compatibility path.
@@ -29,7 +37,7 @@ No feature is complete merely because a draft exists or a PR was merged.
   selected observation/cancellation/strict reopen 1 passed6.59s; actual retained
   owner socket/attached ACP compaction 1 passed23.18s. Initial local-path build
   used a stale cached wheel; explicit uncached rebuild corrected that setup.
-  Stage and live activation verified: runtime-native-custody-terminal-20260928
+  Previous stage and live activation verified: runtime-native-custody-terminal-20260928
   selects core6bd8c423, Toadb5a40ce4, Textualc974/native5fde. All five launchers
   select it; four idle owners restarted preserving settings/native sessions.
   Four fresh ACP attachments pass. Actual installed PR95 saved history paints
@@ -41,6 +49,8 @@ No feature is complete merely because a draft exists or a PR was merged.
   absolute native launcher, causing a reserved/not-sent ACP refusal. Four idle
   owners restarted with the current core's canonical launcher; actual configured
   native GetState handshake passes4/4, no prompt or replay. Failed input stays unsent.
+- Latest 23:29 native request to nra-architecture was received and started before
+  the old TUI crashed. Registry confirms the same active turn. No duplicate send.
 
 PR142 recent-source return and latency acceptance remain Tesla's independent work.
 The full original/round-two refactor goal remains active.
