@@ -1,0 +1,49 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/recorded",
+      "bytes": 172670
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/native",
+      "bytes": 5243103
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/native-final",
+      "bytes": 1825609
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/merged",
+      "bytes": 77958
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/attestation",
+      "bytes": 438948
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/declarations",
+      "bytes": 877688
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/acp-caller",
+      "bytes": 878059
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/acp-caller-final",
+      "bytes": 910104
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/nra-cache",
+      "bytes": 88599268
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/nra-cache-analysis",
+      "bytes": 11312113
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-custody/nra-cache-semantic_descent",
+      "bytes": 39132963
+    }
+  ],
+  "kept": "source branch, passing and failed logs, raw audit JSON and migration recipe. Canonical5fde unchanged."
+}

@@ -36,12 +36,12 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.activity import ActivityState
-from agent_comms.backend import NATIVE_INPUT_CAPABILITY
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
@@ -1518,7 +1518,7 @@ class TestAgentTurnForwarding:
         stub = tmp_path / "pi-stub"
         stub.write_text(
             f"#!{sys.executable}\nimport json, sys\n"
-            + f"capability = {NATIVE_INPUT_CAPABILITY!r}\n"
+            + f"capability = {CAPABILITY!r}\n"
             + "state = json.loads(sys.stdin.readline())  # get_state\n"
             + "print(json.dumps({'type':'response','command':'get_state','id':state['id'],\n"
             + "      'success':True,\n"
