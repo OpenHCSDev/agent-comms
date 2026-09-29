@@ -10,6 +10,8 @@ import pytest
 from acp import RequestError
 
 from agent_comms import agent_events as ae
+from agent_comms.schedule_rules import WakeScheduleCheck
+from agent_comms.queued_input import InputHandoffRefused
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
@@ -22,7 +24,7 @@ async def owner(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+    monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
     updates = []
 
     class Client:
@@ -119,9 +121,8 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        with pytest.raises(RequestError) as refused:
+        with pytest.raises(InputHandoffRefused, match="Queued input acceptance context changed"):
             await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
-        assert refused.value.data == {"reason": "input_authority_changed"}
         assert backend_calls == 0
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved

@@ -34,7 +34,7 @@ from .goals import Goal, GoalRevision
 from .native_input_owner import GoalLaunchOwner
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
-from .schedule_rules import GoalScheduleCheck
+from .schedule_rules import GoalScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
 from .threads import Thread
 
@@ -121,7 +121,7 @@ class GoalScheduler:
             self.inputs.pending_turns.setdefault(session_id, []).append(
                 ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
             )
-            self.inputs.schedule_wake(session_id)
+            WakeScheduleCheck(session_id=session_id, inputs=self.inputs).schedule()
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

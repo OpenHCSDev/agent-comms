@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
+from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
@@ -475,7 +476,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     )
     assert goal is not None
     wakes = []
-    monkeypatch.setattr(agent.inputs, "schedule_wake", wakes.append)
+    monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda check: wakes.append(check.session_id))
     try:
         lease = comms.agents.begin_turn(child, "child-turn")
         comms.goals.update_goal(

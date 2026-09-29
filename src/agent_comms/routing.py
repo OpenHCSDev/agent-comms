@@ -68,6 +68,19 @@ class ScheduledTurn:
     goal_id: str | None = None
     goal_wait_id: str | None = None
 
+    @property
+    def autonomous_goal(self) -> bool:
+        return self.goal_id is not None and self.origin is None
+
+    def require_dependency_wake(self, error: Exception) -> None:
+        """Only dependency launches use standby refusal settlement."""
+        if self.goal_wait_id is None:
+            raise error
+
+    @property
+    def origins(self) -> tuple[Message, ...]:
+        return (self.origin,) if self.origin is not None else ()
+
     @classmethod
     def incoming(
         cls, message: Message, *, aliases: Mapping[str, str] | None = None

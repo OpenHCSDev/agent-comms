@@ -19,6 +19,7 @@ from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
@@ -1124,7 +1125,7 @@ class TestAgentTurn:
 
         agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
 
         class FakeClient:
             async def session_update(self, **kwargs):
@@ -1174,7 +1175,7 @@ class TestAgentTurn:
 
         agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Recover a retry"))
         store = agent.turns.goals.open_goal_store()
