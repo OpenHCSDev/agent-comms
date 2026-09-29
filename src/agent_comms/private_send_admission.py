@@ -7,7 +7,6 @@ raw byte or uncertain commit never becomes a fresh send attempt.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import sqlite3
 import threading
 from collections.abc import Awaitable, Callable, Iterator
@@ -29,6 +28,7 @@ from .native_prompt_send import PromptAdmissionBusy
 from .native_runtime_input import NativeRuntimeInput
 from .native_prompt_binding import bind_expected_prompt
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
 
 if TYPE_CHECKING:
@@ -83,7 +83,7 @@ class PrivateSendAdmission:
         A failed binding leaves the durable reservation intact; construction must
         never roll it back or make another input eligible for automatic replay.
         """
-        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        digest = TextDigest.of(token).value
         input_id = stage.reserve(store, participant, digest)
         bind_expected_prompt(
             store,
