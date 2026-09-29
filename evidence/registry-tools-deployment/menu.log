@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-acp-saved-session-startup-20260928/evidence/registry-tools-deployment/menu_acceptance.py", line 9, in <module>
+    from runtime_fixture import ToadApp
+  File "/home/ts/wt/toad-web-completion-20260928/tests/runtime_fixture.py", line 11, in <module>
+    from toad.app import ToadApp as Application
+  File "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/lib/python3.14/site-packages/toad/app.py", line 4, in <module>
+    from toad.thread_actions import ThreadAction, ThreadActionContext
+  File "/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/lib/python3.14/site-packages/toad/thread_actions.py", line 17, in <module>
+    from agent_comms.tools import TOOLS, ToolDeclaration
+ImportError: cannot import name 'TOOLS' from 'agent_comms.tools' (/home/ts/.local/share/agent-comms/runtime-registry-tools-20260928/lib/python3.14/site-packages/agent_comms/tools.py)

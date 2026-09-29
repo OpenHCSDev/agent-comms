@@ -4,22 +4,37 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core451cc423 (280 wake visibility,283 proof decoding,
-284 canonical native framing, plus277/276/278), Toadb472e487 (128 attention,
-127 T4 and50 browser), Textualc9743801 (8 editor lifetime), native5fde.
-The immutable runtime-native-framing-20260928 is live. Four idle owners restarted;
+Latest installed pair: core4510dddf (289 registry race,287 nominal tools,
+280 wake visibility,283 proof decoding,284 framing), Toad08ee5aa (134 ready-message
+initialization fixing invisible retained native history,132 paired tool
+callers,128 attention,127 T4 and50 browser), Textualc9743801, native5fde.
+The immutable runtime-history-ready-20260928 is live. Core owners retain4510dddf;
+the UI-only134 installation did not restart them. Earlier four idle owners restarted;
 no store reset, session loss or input replay. Restart the user's Toad to load the
 new imports. Combined local checks38 passed; installed native wake/restart and
 feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
 The existing failed return152 remains uncertain and is not retried. NEW live
 diagnostic155 received exact reply156 LIVE_BUS_CONFIG_OK from nra-architecture
 through the actual bus/restarted owner/configured provider, then returned idle.
-Latest pair passes six installed native config/rejection checks and the full
+The preceding pair passed six installed native config/rejection checks and the full
 installed native queue/reattach/DM/channel/stopped-owner UI pilot.
 New shipping batch:11 installed real drain/schema tests,2 mounted warning/recovery
 pilots with the merged framework,2 installed proof/reopen cases, then9 installed
 native cases including a2.1MB record, cancellation and EOF. All pass. All runtime
 stores and durable histories remain intact; executed activation operators deleted.
+Latest shipping batch:39 installed core checks, actual native send/inbox calls,
+installed current Toad context-menu/command-family pilots, and four fresh live
+ACP initialize/load attachments pass. Initial candidate caught a missed current
+Toad import;132 migrates it without aliases. First attachment harness hit its
+own asyncio line limit; reuse of the existing complete-record reader fixes the
+harness, and all four attachments pass. Failed outputs are retained honestly.
+User then reported native history hidden by the loading overlay. ACP attachment
+alone had not tested this boundary. Parent reproduced the actual retained PR95
+native view: history widgets existed, but AgentReady did not initialize its
+Textual Message base.134 replaces the misplaced presentation construction with
+super().__init__. Same installed live-session UI then reaches ready, mounts
+TranscriptHistory and removes loading; Agent.run completes without exception.
+No prompt or history mutation.134 merged and installed; restart existing Toad.
 
 ## Current shipping batch
 
@@ -52,10 +67,11 @@ stores and durable histories remain intact; executed activation operators delete
   User confirms live compaction completed in about2:40 and a later prompt worked.
   One prompt encountered provider WebSocket1011; explicit user retry succeeded.
   Dalton owns clearer typed provider-error feedback. No automatic input replay.
-- [ ] Parent: reconcile source PRs, publish actual live state and cleanup artifacts.
+- [x] Parent: reconcile this shipping batch's source PRs, publish actual live state
+  and cleanup its artifacts.
   Deployment275 merged;262 closed through ancestry;53 closed as implemented by
-  120/125.122 retains only formatting/receipts plus one test expectation, assigned
-  to Carver to preserve in T4 before closing.
+  120/125.122 closed after Carver preserved its final test/receipts in T4.
+  Deployment286 records the current installed pair and cleanup receipts.
 
 ## Actual live failures discovered after activation
 
@@ -116,14 +132,29 @@ stores and durable histories remain intact; executed activation operators delete
   Dalton audit281:19 current guards pass, retired names absent, executed operators
   deleted. Proof decoder283 and fixed RPC ceiling284 now merged and live; old
   decoder/limit deleted. Durable proof format unchanged,148 retained contexts
-  independently verified. Historical benchmarks and universal size requirements
-  remain unproven, not silently marked complete.
-- [ ] Boyle: execute S7 three real pollers at50/100/150 threads, send p50/p99 and
+  independently verified. The historical benchmark is now executed in285;
+  universal size requirements and other unexecuted acceptance remain open.
+- [x] Boyle: execute S7 three real pollers at50/100/150 threads, send p50/p99 and
   actual lock timings, replace obsolete benchmark APIs and retain honest baseline
-  comparison limits; draft285.
-- [ ] Dalton: finish nominal tool request/behavior/catalog ownership in tools.py;
-  remove central handler roster, parameter-kind dispatch and repeated raw decoding.
-- [ ] Wegener: finish tracked native turn lifecycle ownership using existing
+  comparison limits;285 merged. Current1200 and historical600 measured sends
+  persisted once. Five current registry polls failed; these are recorded failures,
+  not successful reads. The full-version timing comparison is not an A8-only
+  causal claim. Disposable benchmark environments and roots were removed.
+- [x] Boyle: fix the real marker inode retirement race found by285, in289.
+  Actual concurrent canonical publication reproduced a retired inode with nlink0;
+  the fix gives marker reading/publication one canonical lock and validates the
+  opened inode. Installed1500 publications/44395 reads passed, as did actual
+  permission/hardlink/symlink rejection. Full S7 rerun:1200 measured sends,
+  7646 polls, zero failures. Merged and installed in the current runtime.
+- [x] Dalton/parent: nominal tool request/behavior/catalog ownership in287,
+  with current Toad caller closure132. Central handler roster, parameter-kind
+  dispatch and repeated raw decoding deleted; production core net113 fewer lines.
+  Paired installed native tools and actual current Toad menu/commands pass.
+- [ ] Boyle: original S3/S7 coordination row/store/schema ownership and complete
+  caller migration; parent has made no coordination production edits.
+- [ ] Dalton: original S1/S2/S3/S4 acceptance gaps and obsolete typed-source
+  fixtures. Wegener's29 reproduced baseline failures handed over for closure.
+- [ ] Wegener: finish tracked native turn lifecycle ownership in288 using existing
   PiEvent/dispatch authorities, deleting manual duplicated event handling.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
   run completed35.94s; its payload lacks detector coverage counts, so it is not
