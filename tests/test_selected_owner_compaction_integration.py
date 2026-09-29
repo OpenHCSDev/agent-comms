@@ -299,6 +299,11 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
     )
 
 
+def assert_request_cause(error, expected_type):
+    """ACP preserves a typed backend cause while owning its public error."""
+    assert isinstance(error.__cause__, expected_type)
+
+
 async def acp_selected_summary_journey(
     tmp_path,
     monkeypatch,
@@ -501,7 +506,7 @@ async def acp_selected_summary_journey(
             if expected_error is not None:
                 with pytest.raises(RequestError) as refused:
                     await turn
-                assert isinstance(refused.value.__cause__, expected_error)
+                assert_request_cause(refused.value, expected_error)
                 original = dispositions.read().lookup(original_key)
                 assert isinstance(original, NotSentInput)
                 assert not original.has_native_binding and not original.has_started
@@ -520,7 +525,7 @@ async def acp_selected_summary_journey(
             if queue_revoked:
                 with pytest.raises(RequestError) as refused:
                     await turn
-                assert isinstance(refused.value.__cause__, RelationViolationError)
+                assert_request_cause(refused.value, RelationViolationError)
                 assert summary_ids == []
                 assert not CompactionJournal(root / "compaction-commits.sqlite3").summaries.history(
                     file
@@ -539,7 +544,7 @@ async def acp_selected_summary_journey(
 
                 with pytest.raises(RequestError) as refused:
                     await turn
-                assert isinstance(refused.value.__cause__, PiSettingsEvidenceError)
+                assert_request_cause(refused.value, PiSettingsEvidenceError)
                 original = dispositions.read().lookup(original_key)
                 assert (
                     original.exists and not original.has_native_binding and not original.has_started
@@ -554,7 +559,7 @@ async def acp_selected_summary_journey(
             if correction:
                 with pytest.raises(RequestError) as refused:
                     await turn
-                assert isinstance(refused.value.__cause__, RelationViolationError)
+                assert_request_cause(refused.value, RelationViolationError)
                 assert isinstance(dispositions.read().lookup(original_key), NotSentInput)
                 assert not dispositions.read().lookup(original_key).has_native_binding
                 assert Path(file).read_bytes() == before
