@@ -57,3 +57,26 @@ An installed artifact and actual source-projection attachment remain required
 before readiness or merge. No default package or live owner was changed here.
 The staged Toad208+202 environment likewise remains inactive while its concrete
 late reader-jump failure is corrected by its owners.
+
+## Installed and staged acceptance
+
+Noneditable Corededa0dec artifact imports resolve exclusively to site-packages.
+The existing real TCP/socket and flock-contention recovery journey passed from
+that installed artifact:1 passed in2.44s, no new input or replay. Actual staged
+`toad-comms agent-comms-ux` on the unchanged active route completed session/load,
+painted32 saved events, and emitted no load error. Exact log:
+`/home/ts/.local/state/toad/logs/Agent_Comms_2026-09-29T19_50_04_949966.txt`.
+The test-owned Toad/ACP processes ended normally; default launchers were not
+changed. This is actual staged attachment, not a claim that the default workers
+already run this code or that unrelated queue/reader bugs are resolved.
+
+Committed package ratchet against7995bc5a: zero increased measures. Production
+lines deleted:150. Added:167, including155 in the state-owning publication
+component. CommsAgent420 / HistoryViews478 both satisfy the original500-line
+threshold. Two transport maps and all retired helper/caller names are removed;
+the original durable native proof, cursor ledger and invocation authority remain
+unchanged. No runtime-store format changes originate in this C4 replacement.
+
+Owned exact baseline extraction removed after saving the failure evidence:
+10,343,888bytes. Installed acceptance env remains parent-owned until activation
+or retirement; its purpose is the staged C4 artifact and source projection.
