@@ -10,6 +10,7 @@ from uuid import uuid4
 from .pending_requests import PendingRequests
 from .pi_commands import PiCommand
 from .pi_events import PiEvent, Response
+from .sealed import Sealed
 
 
 def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -21,7 +22,7 @@ def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-class PiRpcChannel:
+class PiRpcChannel(Sealed):
     """Read whole JSONL records regardless of asyncio's transport buffer limit.
 
     Pi's end-of-turn events may contain many messages in one record. Retain
