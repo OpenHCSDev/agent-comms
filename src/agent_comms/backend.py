@@ -32,7 +32,6 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import pi_payloads
 from . import turn_failure as failures
-from . import turn_phase as phases
 from .child_process import AttachedChild, BoundedRun, TimedOutOutcome
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
@@ -46,6 +45,7 @@ from .store_files import _store_lock
 from .turn_inputs import InputForwarding
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
+from .turn_watchdog import ProgressWatchdog
 
 
 def compaction_summary(value: Any) -> str:
@@ -624,7 +624,9 @@ class TurnSession:
         self.finish_event = finish_event
         self.fork_session = fork_session
         self.images = images
-        self.model_wait_timeout = model_wait_timeout
+        self.watchdog = ProgressWatchdog(
+            model_wait_timeout, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+        )
         self.rpc_abort_grace = rpc_abort_grace
         self.require_input_id = require_input_id
         self.send_boundary = send_boundary
@@ -643,40 +645,6 @@ class TurnSession:
         while chunk := (await self.proc.stderr.read(4096)):
             tail = (tail + chunk)[-16000:]
         return tail.decode(errors="replace").strip()
-
-    async def read_rpc_line(self, timeout: float | None) -> bytes:
-        if self.rejected_signal.is_set():
-            return b"\n"
-        read_task = asyncio.create_task(self.reader.readline())
-        reject_task = asyncio.create_task(self.rejected_signal.wait())
-        finish_task = (
-            asyncio.create_task(self.finish_event.wait())
-            if self.finish_event is not None and (not self.stats.requested)
-            else None
-        )
-        tasks = {read_task, reject_task}
-        if finish_task is not None:
-            tasks.add(finish_task)
-        try:
-            done, _ = await asyncio.wait(
-                tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
-            )
-            if not done:
-                raise TimeoutError
-            if read_task in done:
-                return read_task.result()
-            if finish_task is not None and finish_task in done:
-                read_task.cancel()
-                await asyncio.gather(read_task, return_exceptions=True)
-                if self.require_input_id and (not self.native_capability_confirmed):
-                    return b""
-                await self.stats.request(self)
-            return b"\n"
-        finally:
-            for pending in tasks:
-                if not pending.done():
-                    pending.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def abort_stalled_rpc(self) -> None:
         if self.steering_task is not None:
@@ -706,36 +674,6 @@ class TurnSession:
                 pass
         if self.proc.returncode is None:
             await self.proc.stop()
-
-    def turn_state(
-        self,
-        state: str,
-        reason_code: str,
-        elapsed_ms: int,
-        *,
-        event_phase: str | None = None,
-        attempt: tuple[int | None, int | None] | None = None,
-    ) -> events.TurnState:
-        replay_safe = not (
-            self.prompt_dispatched
-            or self.tool_ever_started
-            or self.output_started
-            or self.inputs.started
-            or self.compaction_started
-        )
-        return events.TurnState(
-            state=state,
-            reason_code=reason_code,
-            elapsed_ms=max(0, elapsed_ms),
-            phase=event_phase or self.phase.declared_name,
-            retryable=replay_safe,
-            replay_safe=replay_safe,
-            side_effects_possible=self.prompt_dispatched
-            or self.tool_ever_started
-            or self.inputs.started
-            or self.compaction_started,
-            attempt={"current": attempt[0], "max": attempt[1]} if attempt is not None else None,
-        )
 
     def context_info(self) -> events.AgentInfo:
         return events.AgentInfo(
@@ -818,41 +756,22 @@ class TurnSession:
             yield self.rejected_commands.pop(0)
         self.rejected_signal.clear()
         try:
-            if self.stats.requested:
-                self.read_timeout: float | None = 5.0
-            elif self.require_input_id and (not self.native_capability_confirmed):
-                self.read_timeout = max(0.0, self.preflight_deadline - self.loop.time())
-            elif self.active_tools or self.model_wait_timeout is None:
-                self.read_timeout = None
-            else:
-                self.read_timeout = max(
-                    0.0, self.last_model_progress + self.model_wait_timeout - self.loop.time()
-                )
-            if (
-                self.prompt_start_deadline is not None
-                and (not self.initial_input_started)
-                and (not self.phase.pauses_input_clock)
-            ):
-                self.start_wait = max(0.0, self.prompt_start_deadline - self.loop.time())
-                self.read_timeout = (
-                    min(self.read_timeout, self.start_wait)
-                    if self.read_timeout is not None
-                    else self.start_wait
-                )
-            self.line = await self.read_rpc_line(self.read_timeout)
+            self.line = await self.watchdog.read(self, self.watchdog.read_timeout(self))
         except TimeoutError:
-            async for event in self.handle_timeout():
+            async for event in self.watchdog.expire(self):
                 yield event
             return
         if not self.line:
             if self.require_input_id and (not self.native_capability_confirmed):
                 self.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.diagnostic = {
-                    "elapsed_ms": round((self.loop.time() - self.launch_started_at) * 1000),
-                    "spawn_ms": self.spawn_ms,
+                    "elapsed_ms": round(
+                        (self.loop.time() - self.watchdog.launch_started_at) * 1000
+                    ),
+                    "spawn_ms": self.watchdog.spawn_ms,
                 }
-                if self.session_bytes is not None:
-                    self.diagnostic["session_bytes"] = self.session_bytes
+                if self.watchdog.session_bytes is not None:
+                    self.diagnostic["session_bytes"] = self.watchdog.session_bytes
                 self.record_failure(
                     failures.InputIdUnavailable(
                         "Pi native input-ID capability preflight ended before attestation."
@@ -934,7 +853,7 @@ class TurnSession:
             await self.input_ready()
 
     async def input_ready(self) -> None:
-        self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
+        self.watchdog.await_input()
         assert self.proc.stdin is not None
         try:
             self.boundary_context = _maintenance_send_boundary(
@@ -1056,15 +975,10 @@ class TurnSession:
             await self.startup.acquire(self.finish_event)
 
     async def spawn_child(self) -> AsyncIterator[events.AgentEvent]:
-        self.launch_started_at = self.loop.time()
-        self.session_bytes: int | None = None
-        if self.session_file:
-            with suppress(OSError):
-                self.session_bytes = Path(self.session_file).stat().st_size
+        self.watchdog.launching(self.loop.time, self.session_file)
         if self.reused:
             assert self.persistent_session is not None and self.persistent_session.proc is not None
             self.proc = self.persistent_session.proc
-            self.spawn_ms = 0
         else:
             try:
                 self.proc = await AttachedChild.start(
@@ -1076,7 +990,7 @@ class TurnSession:
                 yield events.Done(text=f"agent launch failed: {exc}", ok=False)
                 self.finished = True
                 return
-            self.spawn_ms = round((self.loop.time() - self.launch_started_at) * 1000)
+        self.watchdog.spawned(self.reused)
         self.owner = asyncio.current_task()
         if self.owner is not None:
             _ACTIVE_PROCESSES[self.owner] = self.proc
@@ -1136,7 +1050,6 @@ class TurnSession:
         self.initial_session_observed = False
         self.initial_prompt_acknowledged = False
         self.native_capability_confirmed = not self.require_input_id
-        self.prompt_start_deadline: float | None = None
         self.initial_input_started = False
         self.live_status_seen = False
         self.settlement_count = 0
@@ -1158,22 +1071,8 @@ class TurnSession:
                 id=self.prompt_id, input_id=self.original_input_id, message=self.task
             ),
         )
-        self.preflight_wait_started_at = self.loop.time()
-        self.preflight_budget = NATIVE_STARTUP_POLICY.readiness_timeout(
-            self.session_bytes, base_seconds=CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
-        )
-        self.preflight_deadline = self.preflight_wait_started_at + self.preflight_budget
-        if not self.require_input_id:
-            self.prompt_start_deadline = self.loop.time() + PROMPT_START_TIMEOUT_SECONDS
-        self.last_model_progress = self.loop.time()
-        self.phase = phases.PromptAcceptancePhase()
-        self.prompt_accepted = False
+        self.watchdog.reading(self.require_input_id)
         self.active_tools: set[str] = set()
-        self.tool_ever_started = False
-        self.output_started = False
-        self.compaction_started = False
-        self.retry_recovery_pending = False
-        self.retry_recovery_reason = "provider_auto_retry_progress"
         self.started_during_abort: list[str | None] = []
         self.ui_seen: set[str] = set()
         if self.owner is not None:
@@ -1343,67 +1242,3 @@ class TurnSession:
                 **({"exit_code": self.proc.returncode} if self.proc.returncode is not None else {}),
             },
         )
-
-    async def handle_timeout(self) -> AsyncIterator[events.AgentEvent]:
-        if self.require_input_id and (not self.native_capability_confirmed):
-            self.elapsed_ms = round((self.loop.time() - self.launch_started_at) * 1000)
-            self.wait_ms = round((self.loop.time() - self.preflight_wait_started_at) * 1000)
-            self.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
-            self.diagnostic = {
-                "elapsed_ms": self.elapsed_ms,
-                "wait_ms": self.wait_ms,
-                "spawn_ms": self.spawn_ms,
-                "budget_ms": round(self.preflight_budget * 1000),
-            }
-            if self.session_bytes is not None:
-                self.diagnostic["session_bytes"] = self.session_bytes
-            self.session_size = self.session_bytes if self.session_bytes is not None else "unknown"
-            self.record_failure(
-                failures.InputIdUnavailable(
-                    "Pi native input-ID capability preflight timed out "
-                    f"(phase=await_get_state, elapsed_ms={self.elapsed_ms}, "
-                    f"wait_ms={self.wait_ms}, budget_ms={round(self.preflight_budget * 1000)}, "
-                    f"spawn_ms={self.spawn_ms}, session_bytes={self.session_size})."
-                )
-            )
-            await self.proc.stop()
-            self.finished = True
-            return
-        if (
-            self.prompt_start_deadline is not None
-            and (not self.initial_input_started)
-            and (not self.phase.pauses_input_clock)
-        ):
-            self.record_failure(
-                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
-            )
-            await self.proc.stop()
-            self.finished = True
-            return
-        if self.stats.requested:
-            self.finished = True
-            return
-        self.elapsed_ms = round((self.loop.time() - self.last_model_progress) * 1000)
-        self.reason_code, self.stalled_phase = self.phase.stalled(self.prompt_accepted)
-        if self.prompt_accepted:
-            yield self.turn_state(
-                "model_stalled", self.reason_code, self.elapsed_ms, event_phase=self.stalled_phase
-            )
-        yield self.turn_state("aborting", self.reason_code, self.elapsed_ms, event_phase="shutdown")
-        await self.abort_stalled_rpc()
-        for input_id in self.started_during_abort:
-            yield events.InputStarted(id=input_id)
-        self.failed_elapsed_ms = round((self.loop.time() - self.last_model_progress) * 1000)
-        yield self.turn_state(
-            "failed", self.reason_code, self.failed_elapsed_ms, event_phase="shutdown"
-        )
-        self.record_failure(
-            failures.ModelStalled(
-                f"Model produced no RPC progress for {self.model_wait_timeout:g} seconds."
-                if self.prompt_accepted
-                else f"Pi did not accept the prompt within {self.model_wait_timeout:g} seconds."
-            )
-        )
-        self.finished = True
-        self.finished = True
-        return
