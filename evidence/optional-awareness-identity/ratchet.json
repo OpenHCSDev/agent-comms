@@ -1,0 +1,16 @@
+{
+  "root": "src/agent_comms/",
+  "base_revision": "77c2ac671e80018e75e97d9f8c5643cffe1dd39e",
+  "head_revision": "0c4c1a709423e1b5c43e695c05bf1ef8d34a2f12",
+  "paths": [
+    "src/agent_comms/optional_awareness_projection.py"
+  ],
+  "changed_measure_deltas": {
+    "TypeIdentity": -10,
+    "LongBooleanChain": -5,
+    "BooleanChainTerms:src/agent_comms/optional_awareness_projection.py": -46,
+    "ForeignAbsenceProbe:src/agent_comms/optional_awareness_projection.py": -4
+  },
+  "positive_deltas": {},
+  "all_measurements": "ratchet.json.gz"
+}

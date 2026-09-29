@@ -609,3 +609,120 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
         assert [row["source_seq"] for row in context["selected"]] == [101]
     finally:
         store.close()
+
+
+def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete_proof(
+    tmp_path: Path,
+) -> None:
+    """Real frozen wire and SQLite lifecycle; projection cannot create permission."""
+    import time
+
+    from agent_comms.assignment_states import PassiveAssignment
+    from agent_comms.coordination_tables.responses import ResponseObligation
+
+    comms, store, index, root_id = _root(tmp_path)
+    try:
+        initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 act")
+        notice = comms.messaging.send_initial_cohort(
+            "sender", "member000", "Passive retained context", notice=True
+        )
+        passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
+        assert isinstance(passive.lifecycle, PassiveAssignment)
+        assert not passive.lifecycle.engageable and not passive.lifecycle.mode.active
+        observer = stable_thread_lookup(comms.registry.require("member001").created_at)
+        assert not WakeAssignment.select(
+            store.session._connection,
+            where="recipient_lookup=? AND wire_seq=?",
+            parameters=(observer, initial.message.seq),
+        )
+        owner = _owner(comms, "member000")
+        store.executions.create(
+            "wire-awareness-reply",
+            ExecutionOrigin.WIRE,
+            assignment.recipient_lookup,
+            owner.name,
+            1,
+            assignment_ids=(assignment.assignment_id,),
+            exact_target="#team",
+        )
+        assignment = store.assignments.get(assignment.assignment_id)
+        index.maintain(rebuild=True)
+        builder = _projection(index, store, owner, 0, notice.seq)
+        wire_before = comms.bus.log.path.read_bytes()
+        assignments_before = WakeAssignment.select(store.session._connection)
+        obligations_before = ResponseObligation.select(store.session._connection)
+        started = time.monotonic()
+        result = builder(initial, assignment, owner)
+        elapsed = time.monotonic() - started
+        assert result.mandatory_complete, result.omission_reason
+        context = json.loads(result.text)
+        assert {row["claim_id"] for row in context["selected"]} == {
+            assignment.assignment_id,
+            passive.assignment_id,
+        }
+        passive_context = next(
+            row for row in context["selected"] if row["claim_id"] == passive.assignment_id
+        )
+        assert passive_context["wake_mode"] == passive.lifecycle.mode.declared_name
+        assert len(context["open_obligations"]) == 1
+        assert context["open_obligations"][0]["execution_id"] == "wire-awareness-reply"
+        assert WakeAssignment.select(store.session._connection) == assignments_before
+        assert ResponseObligation.select(store.session._connection) == obligations_before
+        assert comms.bus.log.path.read_bytes() == wire_before
+        print(f"actual complete wire projection: {elapsed:.6f}s", flush=True)
+
+        # A reused numeric PID with a different recorded process birth is not
+        # the selected owner, even when every old numeric-PID field agrees.
+        identity = owner.process_identity
+        assert identity is not None
+        replaced_process = replace(
+            owner, process_identity=replace(identity, start_time=identity.start_time + 1)
+        )
+        changed = builder(initial, assignment, replaced_process)
+        assert not changed.mandatory_complete and changed.text == ""
+        assert builder(initial, assignment, owner).mandatory_complete
+
+        # Simulate damaged derived proof, restoring the real schema before read.
+        # The passive row remains a completeness requirement, not an inner-join
+        # casualty silently omitted while the original is called complete.
+        db = store.session._connection
+        trigger = db.execute(
+            "SELECT sql FROM sqlite_master WHERE name='awareness_generation_delete_guard'"
+        ).fetchone()[0]
+        db.execute("DROP TRIGGER awareness_generation_delete_guard")
+        db.execute(
+            "DELETE FROM awareness_claim_generations WHERE claim_id=?", (passive.assignment_id,)
+        )
+        db.execute(trigger)
+        missing = builder(initial, assignment, owner)
+        assert not missing.mandatory_complete and missing.text == ""
+        assert WakeAssignment.select(db) == assignments_before
+        assert ResponseObligation.select(db) == obligations_before
+        assert comms.bus.log.path.read_bytes() == wire_before
+    finally:
+        store.close()
+
+
+def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path) -> None:
+    import time
+
+    comms, store, index, root_id = _root(tmp_path, recipients=1)
+    try:
+        for number in range(100):
+            initial, assignment = _accepted(comms, store, root_id, "member000", f"work {number}")
+        index.maintain(rebuild=True, max_rows=128)
+        owner = _owner(comms, "member000")
+        newest = _projection(index, store, owner, initial.message.seq - 1, initial.message.seq)
+        assert newest(initial, assignment, owner).mandatory_complete
+        all_rows = _projection(index, store, owner, 0, initial.message.seq)
+        started = time.monotonic()
+        bounded = all_rows(initial, assignment, owner)
+        elapsed = time.monotonic() - started
+        # One hundred complete claim descriptions exceed the existing 16KiB
+        # optional text budget; omission must still fit the actual 250ms gate.
+        assert not bounded.mandatory_complete and bounded.text == ""
+        assert bounded.omission_reason == "ProjectionUnavailableError"
+        assert elapsed < 0.250
+        print(f"actual 100-row optional projection: {elapsed:.6f}s", flush=True)
+    finally:
+        store.close()
