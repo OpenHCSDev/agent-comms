@@ -131,6 +131,12 @@ class Thread:
         if self.process_identity != process:
             raise RelationViolationError("live owner is not the current process incarnation")
 
+    def require_process(self) -> ProcessIdentity:
+        self.role.require_executable()
+        if self.process_identity is None:
+            raise RelationViolationError(f"Thread {self.name!r} has no owner process")
+        return self.process_identity
+
     def require_idle(self) -> None:
         if self.active_turn is not None:
             raise RelationViolationError("live owner already has an active turn")
