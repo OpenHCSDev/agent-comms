@@ -135,6 +135,7 @@ def test_missing_or_malformed_commitment_is_not_a_success_marker(package, pin):
 
 
 def test_failed_tree_verification_precedes_journal_creation(package, tmp_path, monkeypatch):
+    from agent_comms import native_compaction_writer as writer
     from agent_comms import owner_compaction_commit as commit
 
     manager = package / "dist/core/session-manager.js"
@@ -144,13 +145,14 @@ def test_failed_tree_verification_precedes_journal_creation(package, tmp_path, m
         native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
     )
     (package / "node_modules/dependency/index.js").write_text("// drift outside manager\n")
-    monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
+    monkeypatch.setattr(writer.shutil, "which", lambda executable: f"/fixture/{executable}")
     with pytest.raises(NativePackageError, match="differs from pinned"):
         commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
     assert not (tmp_path / "compaction-commits.sqlite3").exists()
 
 
 def test_copied_helper_must_match_packaged_resource_before_journal(package, tmp_path, monkeypatch):
+    from agent_comms import native_compaction_writer as writer
     from agent_comms import owner_compaction_commit as commit
 
     helper = package / "dist/agent-comms-compaction-commit-child.mjs"
@@ -159,7 +161,7 @@ def test_copied_helper_must_match_packaged_resource_before_journal(package, tmp_
     native_package.MANIFEST.write_text(
         native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
     )
-    monkeypatch.setattr(commit.shutil, "which", lambda executable: f"/fixture/{executable}")
+    monkeypatch.setattr(writer.shutil, "which", lambda executable: f"/fixture/{executable}")
     with pytest.raises(ValueError, match="differs from packaged resource"):
         commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
     assert not (tmp_path / "compaction-commits.sqlite3").exists()

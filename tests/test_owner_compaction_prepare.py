@@ -680,7 +680,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     persistent = PersistentPiSession()
-    native_call = bridge._call
+    native_call = bridge.native.exchange
     entered = threading.Event()
     release = threading.Event()
     turn_lock = asyncio.Lock()
@@ -700,7 +700,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
         assert release.wait(4), "test did not release native writer"
         return native_call(*args, **kwargs)
 
-    monkeypatch.setattr(bridge, "_call", delayed_native)
+    monkeypatch.setattr(bridge.native, "exchange", delayed_native)
 
     async def synthetic_summary(_metadata):
         return NativeSummary("Synthetic provider-free summary", None, None)

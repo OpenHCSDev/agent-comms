@@ -50,7 +50,7 @@ def test_finished_unbound_input_remains_visible_but_cannot_rebind(tmp_path):
 async def test_interrupted_summary_recovery_requires_unsent_original_and_unchanged_native(
     tmp_path, monkeypatch, bound
 ):
-    async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+    async with owner_fixture(tmp_path, monkeypatch, goal=False) as (
         persistent,
         registry,
         inputs,

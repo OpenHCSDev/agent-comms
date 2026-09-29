@@ -12,7 +12,8 @@ from .pi_summary_payloads import SummaryFiles, SummaryUsage
 
 if TYPE_CHECKING:
     from .compaction_records import CompactionOperation
-    from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
+    from .compaction_source import CompactionSource
+    from .owner_compaction_commit import OwnerCompactionCommit
     from .selected_summary_admission import SelectedSummaryAdmission
     from .threads import Thread
 

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .compaction_journal import CompactionJournal
     from .compaction_records import SelectedSummaryAttempt
     from .input_disposition import InputDocument
+    from .selected_source import SessionRevision
 
 
 
@@ -333,6 +334,10 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
         if self.metadata_digest != expected:
             return UnknownNativeOutcome("native-metadata-mismatch")
         return self
+    def require_saved_revision(self, revision: SessionRevision) -> None:
+        if self.revision != ":".join(map(str, revision[0])):
+            raise CompactionJournalError("Selected native result is unavailable: saved revision changed")
+
     def publication_json(self, commit_id: str) -> str:
         from .field_codec import FieldCodec
 

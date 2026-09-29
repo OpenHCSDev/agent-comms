@@ -115,10 +115,13 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
         if admit_original:
             reference.require_source(attempt.source_json)
 
-    def publication(self) -> CompactionPublication:
+    def committed_outcome(self) -> CommittedNativeOutcome:
         self.state.require_committed(self.commit_id)
+        return FieldCodec.decode(CommittedNativeOutcome, json.loads(self.evidence_json))
+
+    def publication(self) -> CompactionPublication:
         try:
-            committed = FieldCodec.decode(CommittedNativeOutcome, json.loads(self.evidence_json))
+            committed = self.committed_outcome()
         except (ValueError, TypeError) as error:
             raise CompactionJournalError("Exact committed native metadata required") from error
         return CompactionPublication(
@@ -151,6 +154,13 @@ class SelectedSummaryAttempt(
     @property
     def identity(self) -> SummaryOperationIdentity:
         return SummaryOperationIdentity(self.session_file, self.operation_id)
+
+    def require_session(self, session_file: str) -> None:
+        if self.session_file != session_file:
+            raise CompactionJournalError("Selected summary reservation changed before commit")
+
+    def source(self) -> SelectedSource:
+        return FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json)).source
 
     def require_transition(self, target: SummaryState) -> None:
         if not self.state.may_become(target):

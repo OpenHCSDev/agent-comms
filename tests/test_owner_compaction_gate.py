@@ -58,14 +58,13 @@ def attest(
     goal: Goal | None = None,
 ) -> OwnerCompactionAttestation:
     goal = goal or owner.goal
-    return registry.attest_owner_compaction(
-        owner,
-        owner_generation,
-        turn,
-        expected_goal_id=goal.id,
-        expected_goal_revision=goal.revision,
-        **FENCE,
+    receipt = OwnerCompactionAttestation(
+        owner.name, owner_generation, turn, goal.id, goal.revision,
+        **FENCE, registry_revision=None,
     )
+    with registry.guard_owner_compaction(owner, receipt) as (attested, _):
+        return attested
+
 
 
 def test_positive_attestation_echoes_owner_and_fence(tmp_path) -> None:
@@ -160,21 +159,21 @@ def test_non_owner_process_cannot_attest(tmp_path, monkeypatch) -> None:
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"expected_owner_generation": 0},
-        {"expected_owner_generation": True},
-        {"expected_owner_generation": 1.0},
+        {"owner_epoch": 0},
+        {"owner_epoch": True},
+        {"owner_epoch": 1.0},
         {"turn_id": 7},
-        {"expected_goal_revision": False},
-        {"expected_goal_revision": 4.0},
-        {"expected_goal_id": None},
-        {"expected_goal_revision": None},
+        {"goal_revision": False},
+        {"goal_revision": 4.0},
+        {"goal_id": None},
+        {"goal_revision": None},
         {"session_file": 3},
         {"session_leaf": []},
         {"session_revision": True},
         {"turn_id": ""},
         {"turn_id": "t" * 129},
-        {"expected_goal_id": ""},
-        {"expected_goal_revision": -1},
+        {"goal_id": ""},
+        {"goal_revision": -1},
         {"session_file": ""},
         {"session_leaf": ""},
         {"session_revision": ""},
@@ -184,12 +183,14 @@ def test_malformed_expectations_rejected(tmp_path, kwargs) -> None:
     registry, owner, owner_generation = make_registry(tmp_path)
     leased, leased_generation = lease(registry, owner, owner_generation, "turn-1")
     request = {
-        "expected_owner_generation": leased_generation,
+        "thread": leased.name, "registry_revision": None,
+        "owner_epoch": leased_generation,
         "turn_id": "turn-1",
-        "expected_goal_id": "goal-1",
-        "expected_goal_revision": 4,
+        "goal_id": "goal-1",
+        "goal_revision": 4,
         **FENCE,
     }
     request.update(kwargs)
     with pytest.raises(ValueError):
-        registry.attest_owner_compaction(leased, **request)
+        from agent_comms.field_codec import FieldCodec
+        FieldCodec.decode(OwnerCompactionAttestation, request)

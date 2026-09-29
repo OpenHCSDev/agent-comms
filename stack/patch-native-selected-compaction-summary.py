@@ -71,7 +71,7 @@ def main(path: Path) -> None:
                     acSummarySlot !== null || acOtherCommandInFlight !== 0,
                     acSpentSummaryIds, runtimeHost);
                 if (admission.denial)
-                    return success(id, command.type, acSummaryDecline(command.operationId, admission.denial));
+                    return success(id, command.type, acSummaryDecline(command.operationId, admission.denial, session.storedContext));
                 const selectedSession = session;
                 const slot = { operationId: command.operationId, controller: new AbortController(),
                     started: false, done: null };
@@ -90,12 +90,12 @@ def main(path: Path) -> None:
                 if (!slot || slot.operationId !== command.operationId)
                     return success(id, command.type, acSpentSummaryIds.has(command.operationId)
                         ? acSummaryUnknown(command.operationId)
-                        : acSummaryDecline(command.operationId, "unsupported"));
+                        : acSummaryDecline(command.operationId, "unsupported", session.storedContext));
                 slot.controller.abort();
                 await slot.done; // NEVER free the slot before all concurrent chunks join.
                 return success(id, command.type, slot.started
                     ? acSummaryUnknown(command.operationId)
-                    : acSummaryDecline(command.operationId, "cancelled"));
+                    : acSummaryDecline(command.operationId, "cancelled", session.storedContext));
             }
             case "get_state": {''')
     source = replace_once(source,

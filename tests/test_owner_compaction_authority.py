@@ -35,16 +35,12 @@ def owner_guard(root: Path):
     owner, owner_generation = registry.lease_live_turn_with_generation(
         owner, "turn", expected_owner_generation=owner_generation
     )
-    return registry.guard_owner_compaction(
-        owner,
-        owner_generation,
-        "turn",
-        expected_goal_id="g",
-        expected_goal_revision=owner.goal.revision,
-        session_file=str(root / "native.jsonl"),
-        session_leaf="leaf",
-        session_revision="revision",
-    )
+    from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
+    return registry.guard_owner_compaction(owner, OwnerCompactionAttestation(
+        owner.name, owner_generation, "turn", "g", owner.goal.revision,
+        str(root / "native.jsonl"), "leaf", "revision", None,
+    ))
+
 
 
 def line(stream) -> bytes:

@@ -45,6 +45,10 @@ class NativeWitness:
         ):
             raise NativePreparationError("Canonical native path and revision required")
 
+    def require_session(self, canonical: str) -> None:
+        if self.session_file != canonical:
+            raise ValueError("Native witness does not identify owner's canonical session")
+
 
 class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
     family_discriminator = "status"

@@ -12,7 +12,7 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — PR376 transaction checkpoint
+## Current remaining mapping — PR381 native owner checkpoint
 
 Parent reports361 merged at `d7745d0e` and the paired installed saved-history
 ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
@@ -28,7 +28,7 @@ this document does not promote an activation-in-progress claim to completed.
   [PR365 receipt](../evidence/s14-goal-scheduler/README.md):328 production lines
   deleted,35 chain terms removed; actual installed socket retry/native and selected
   handoff paths passed before parent merge. Boyle371 journal
-  enrollment/publication identities are merged;376 continues transaction ownership; neither slice completes all S14.
+  enrollment/publication identities and376 transaction ownership are merged;381 continues native authority/settlement closure; neither slice completes all S14.
 - Wegener retains current SelectedExecution/coordinated-runtime/startup work.
   Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
   Do not create competing work in those files.
@@ -67,6 +67,23 @@ replaced/deleted,206 class excess removed,94 focused cases and final2 actual
 installed native/ACP cases pass; sourcece15a23d integrates main367/375/377 with4 affected checks passed33.81s.
 Failed receipts retained. Parent owns merge/default installation. This is
 whole journal role closure, not a claim that all Q8/history/T4 work is complete.
+
+## Native commit authority and decline admission — PR381
+
+376 merged1832c930. Boyle381 removes the OwnerCompactionCommit godclass's raw
+request dictionaries, duplicate native dispatch/outcome settlement, scalar
+registry attestation API and repeated source/saved-revision interpretation.
+Held boundary/source, native command/transport, journal record and selected
+admission owners carry those responsibilities with complete caller migration.
+Existing native witness/proof format and lock/fsync/no-replay authority remain.
+The urgent installed decline case also belongs here: a cold native context above
+its budget cannot turn an unsupported-summary refusal into original-input
+admission. Existing native context states and strict refused-summary lifecycle
+own that distinction; representative warm/soft-decline and cold/refusal journeys
+are separate. [PR381 receipt](../evidence/q8-native-commit/README.md) records exact
+installed evidence. Parent owns review/install; Wegener378 owns native proof
+index107, which this slice neither implements nor replaces. Other Q8 history
+and native ownership remains under its assigned owners.
 
 ## Registry lifecycle followthrough — PR361
 

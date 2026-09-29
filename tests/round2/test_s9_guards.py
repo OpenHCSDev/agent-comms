@@ -13,6 +13,7 @@ def files():
     return sorted(
         set(ROOT.glob("owner_compaction_*.py"))
         | set(ROOT.glob("compaction_*.py"))
+        | set(ROOT.glob("native_compaction_*.py"))
         | {
             ROOT / name
             for name in (

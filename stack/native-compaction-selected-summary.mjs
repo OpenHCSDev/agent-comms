@@ -67,7 +67,9 @@ function acValidSummaryCancel(value) {
         typeof value.id === "string" && value.id.length > 0 && value.id.length <= 4096 &&
         value.type === "agent_comms_cancel_summary" && value.version === 1 && acSummaryId(value.operationId);
 }
-const acSummaryDecline = (operationId, reason) => ({ version: 1, status: "declined", operationId, reason });
+const acSummaryDecline = (operationId, reason, context) => ({
+    version: 1, status: "declined", operationId, reason: context.summaryDeclineReason(reason),
+});
 // Diagnostic text never decides whether a failure is terminal and never grants replay.
 const acSummaryReason = reason => reason.replace(/[\u0000-\u001f\u007f]/g, " ")
     .trim().slice(0, 1024).toWellFormed() || "Selected summary provider failed";
@@ -322,7 +324,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             return error.outcome(request);
         const reason = error instanceof Error && error.message ? error.message : "Selected summary failed without error detail";
         return slot.started ? acSummaryUnknown(request.operationId, reason) :
-            acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported");
+            acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported", session.storedContext);
     } finally {
         slot.controller.abort();
         await Promise.allSettled([...inFlight]); // concurrent map chunks must join before releasing slot

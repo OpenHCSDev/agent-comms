@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from .agent_events import AgentEvent, CompactionSkipped, CompactionStart
 from .backend import PersistentPiSession
 from .compaction_records import CompactionOperation, SelectedSummaryAttempt
-from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
+from .compaction_source import CompactionSource
+from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
 from .owner_compaction_settings import PiCompactionSettings
