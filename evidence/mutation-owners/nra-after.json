@@ -1,0 +1,73 @@
+{
+  "timing": {
+    "parse_seconds": 1.919,
+    "analysis_seconds": 12.883,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.097,
+    "analysis_cache_status": "partial",
+    "total_seconds": 14.899
+  },
+  "supporting_raw_finding_count": 1,
+  "supporting_raw_findings": [
+    {
+      "pattern_id": 14,
+      "title": "Repeated field assignment should become an authoritative builder",
+      "why": "The docs say repeated manual field assignment is an SSOT violation: the mapping should be declared once in an authoritative constructor, classmethod, or shared builder rather than copied across call sites.",
+      "capability_gap": "single authoritative data-to-record mapping",
+      "relation_context": "same builder role repeated across sibling functions or methods",
+      "confidence": "medium",
+      "certification": "certified",
+      "capability_tags": [
+        "unit_rate_coherence",
+        "authoritative_mapping",
+        "provenance"
+      ],
+      "observation_tags": [
+        "keyword_mapping",
+        "builder_call",
+        "dataflow_root"
+      ],
+      "detector_id": "repeated_builder_calls",
+      "summary": "Call `MonitorEvidence` repeats the same field-mapping shape across 2 sites.",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-mutation-owners-20260928/src/agent_comms/attempt_recovery.py",
+          "line": 237,
+          "symbol": "RecoveryMonitorCapability.abandon_released_native_attempt:MonitorEvidence"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-mutation-owners-20260928/src/agent_comms/attempt_recovery.py",
+          "line": 330,
+          "symbol": "RecoveryMonitorCapability.recover_native_failure:MonitorEvidence"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-mutation-owners-20260928/src/agent_comms/attempt_recovery.py",
+        "line": 237,
+        "symbol": "RecoveryMonitorCapability.abandon_released_native_attempt:MonitorEvidence"
+      },
+      "authority_evidence": null,
+      "compression_certificate": null,
+      "metrics": {
+        "mapping_site_count": 2,
+        "field_count": 5,
+        "mapping_name": "MonitorEvidence",
+        "field_names": [
+          "subprocess_dead",
+          "backend_done",
+          "unknown_effects",
+          "reason_code",
+          "observed_at_ms"
+        ],
+        "source_name": "time",
+        "identity_field_names": []
+      },
+      "stable_id": "80ad62b360",
+      "evidence_ids": [
+        "b955bd63e5",
+        "d5e78db834"
+      ]
+    }
+  ],
+  "scope": "Mutation ownership with complete src/agent_comms dependency context; raw scan. This payload lacks detector coverage inventory; not a proof of global completeness."
+}

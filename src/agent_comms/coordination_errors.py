@@ -15,3 +15,23 @@ class IntegrityViolationError(CoordinationError):
 
 class IdentityConflict(CoordinationError):  # noqa: N818
     """A requested operation conflicts with frozen coordination identity."""
+
+
+class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
+    """The supplied CAS revision is not the authoritative revision."""
+
+
+class StaleFence(CoordinationError):  # noqa: N818 - nominal outcome name
+    """The owner, generation, pointer, token or attempt is no longer current."""
+
+
+class RecoveryBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
+    """A dead attempt lacks authoritative backend-final evidence."""
+
+
+class PublicationUncertain(CoordinationError):  # noqa: N818 - nominal outcome name
+    """A frozen publishing intent has no authoritative bus-keyed receipt."""
+
+
+class PublicationActivationBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
+    """No bus-owned idempotent append receipt is available in this slice."""

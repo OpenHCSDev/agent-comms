@@ -9,7 +9,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
-from agent_comms.coordination_store import PublicationActivationBlocked
+from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_source_cursor import _bounded_coverage_pages, _source_witness
 from agent_comms.private_bus_checkpoint import PrefixWitness

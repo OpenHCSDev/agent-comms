@@ -1,16 +1,26 @@
 """Actual configured-provider coding turn in an owned persistent work directory."""
-import asyncio,json,os,tempfile,time,sys,faulthandler
+import asyncio
+import faulthandler
+import json
+import os
+import sys
+import tempfile
+import time
+
 faulthandler.dump_traceback_later(45, repeat=True)
 from dataclasses import asdict
 from pathlib import Path
-from agent_comms import Thread
+
 from agent_comms.operations import Comms
+
+from agent_comms import Thread
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.coordinated_runtime import run_one_sealed_claim
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_store import MutationStore
-from agent_comms.coordinated_runtime import run_one_sealed_claim
+from agent_comms.coordinator import Coordination
+
 
 async def main():
     evidence=Path(__file__).resolve().parent
@@ -27,10 +37,10 @@ async def main():
     root_id=c.initialize_private_initial_protocol();c.initialize_private_claim_protocol()
     source=c.send_message('sender','#coding-check','For the coding-check owner: use read to read input.txt; use edit to replace BEFORE with AFTER; use write to create nested/result.txt containing the full edited input text; use bash to run a Python assertion that both files have equal contents and state=AFTER. Use all four tools. Reply CODING_TOOLS_OK only after the checks pass. Work only in this worktree.')
     initial=c.bus.read_initial_cohort(root_id,source.seq)
-    with MutationStore(str(root/'coordination.sqlite3')) as store:
+    with Coordination(str(root/'coordination.sqlite3')) as store:
         install_private_cohort_schema(store);install_private_response_schema(store);install_native_runtime_schema(store)
         for person in initial.audience.recipients:
-            store.register_participant(person.recipient_lookup,person.canonical_thread,person.canonical_thread,committed=True)
+            store.participants.register(person.recipient_lookup,person.canonical_thread,person.canonical_thread,committed=True)
         accept_initial_cohort(c.bus,root_id,source.seq,store)
     package=Path((evidence/'physical-package.txt').read_text().strip())
     report={'root':str(root),'worktree':str(work),'package':str(package),'source_seq':source.seq,'started_at':time.time()}

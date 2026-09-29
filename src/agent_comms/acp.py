@@ -39,8 +39,14 @@ from acp.schema import (
     TextContentBlock,
 )
 
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_errors import (
+    CoordinationError,
+    IdentityConflict,
+    PublicationActivationBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
 from . import manual_compaction_bridge
@@ -62,12 +68,6 @@ from .cohort_foreground import _accept_visible_initials
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
-from .coordination_store import (
-    IdentityConflict,
-    MutationStore,
-    PublicationActivationBlocked,
-    StaleFence,
-)
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
@@ -398,7 +398,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if scope is None:
             return result
         try:
-            with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
+            with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
                 bus = MessageBus(
                     self._comms.root / "bus.jsonl",
                     self._comms.registry,
@@ -539,7 +539,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         with bus.log.locked():
             admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
-        with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
+        with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
                 bus,
                 wire_root_id,
@@ -549,7 +549,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 owner_name=owner.name,
                 native_package=package,
             )
-            participant = store.participant(stable_thread_lookup(owner.created_at))
+            participant = store.participants.get(stable_thread_lookup(owner.created_at))
             candidate = next_sealed_assignment(
                 store, participant.lookup, owner.name, after_seq=admission_after_seq
             )
@@ -603,8 +603,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # input. Extend only an existing current generation or an all-N prefix;
             # old-generation Pi evidence cannot initialize this cursor on reconnect.
             try:
-                with MutationStore(str(self._comms.root / "coordination.sqlite3")) as store:
-                    person = store.participant(stable_thread_lookup(owner.created_at))
+                with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
+                    person = store.participants.get(stable_thread_lookup(owner.created_at))
                     admission_generation = self._comms.registry.snapshot().admission_generations[
                         thread_name
                     ]

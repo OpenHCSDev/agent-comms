@@ -22,15 +22,15 @@ from agent_comms.cohort_schema import (
     assert_optional_awareness_schema,
 )
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
-from agent_comms.coordination_store import (
-    AlreadyApplied,
-    Applied,
+from agent_comms.coordination_errors import (
     IdentityConflict,
-    MutationStore,
+    IntegrityViolationError,
+    SchemaVersionError,
 )
+from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
+from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 from agent_comms.wake import NoWakeDecision, WakeDecision
 
@@ -229,7 +229,7 @@ def accept_initial_cohort(
     bus: MessageBus,
     wire_root_id: str,
     wire_seq: int,
-    store: MutationStore,
+    store: Coordination,
 ) -> Applied[AcceptedCohort] | AlreadyApplied[AcceptedCohort]:
     """Bus-read first, then one SQLite transaction for every N/K fact.
 
@@ -237,7 +237,7 @@ def accept_initial_cohort(
     participant owner or commit one based merely on a bus message. If the
     coordinator has not registered each frozen stable lookup, no N is accepted.
     """
-    if type(bus) is not MessageBus or type(store) is not MutationStore:
+    if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
     with bus.log.locked():
         marker = bus.log._private_marker_unlocked()
@@ -246,7 +246,7 @@ def accept_initial_cohort(
         if wire_seq <= marker.admission_after_seq:
             raise IdentityConflict("historical source precedes the current admission floor")
     initial = bus.log.read_initial_cohort(wire_root_id, wire_seq)
-    with store._transaction() as db:
+    with store.session.transaction() as db:
         assert_cohort_schema(db)
         receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if receipt is not None:
@@ -258,7 +258,7 @@ def accept_initial_cohort(
         for recipient in initial.audience.recipients:
             if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
                 raise IdentityConflict("frozen recipient has no durable participant identity")
-        accepted_at = store._now()
+        accepted_at = store.session.now()
         expected = _expected_assignments(initial, accepted_at)
         ClaimBatchReceipts(
             wire_root_id=wire_root_id,
@@ -308,14 +308,14 @@ def accept_initial_cohort(
         return Applied(_receipt_matches(db, initial))
 
 
-def sealed_cohort_sequences(store: MutationStore, wire_root_id: str) -> frozenset[int]:
+def sealed_cohort_sequences(store: Coordination, wire_root_id: str) -> frozenset[int]:
     """Already committed cohort batches, derived from their immutable receipts."""
-    with store._read_transaction():
-        assert_cohort_schema(store._connection)
+    with store.session.read():
+        assert_cohort_schema(store.session._connection)
         return frozenset(
             row.wire_seq
             for row in ClaimBatchReceipts.select(
-                store._connection,
+                store.session._connection,
                 where="wire_root_id=? AND sealed=1",
                 parameters=(wire_root_id,),
             )
@@ -323,7 +323,7 @@ def sealed_cohort_sequences(store: MutationStore, wire_root_id: str) -> frozense
 
 
 def next_sealed_assignment(
-    store: MutationStore,
+    store: Coordination,
     recipient_lookup: str,
     owner_name: str,
     *,
@@ -349,7 +349,7 @@ def next_sealed_assignment(
 
 
 def sealed_cohort_assignments(
-    store: MutationStore, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100
+    store: Coordination, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100
 ) -> tuple[WakeAssignment, ...]:
     """Bounded receipt-backed projection. Never pages unbound singleton claims."""
     if (
@@ -359,8 +359,8 @@ def sealed_cohort_assignments(
         or not 0 < limit <= 100
     ):
         raise ValueError("receipt-backed page bounds are invalid")
-    with store._read_transaction():
-        db = store._connection
+    with store.session.read():
+        db = store.session._connection
         assert_cohort_schema(db)
         return tuple(
             WakeAssignment.read(

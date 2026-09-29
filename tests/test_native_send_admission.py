@@ -18,7 +18,8 @@ from agent_comms import native_pi, native_prompt_send
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination_store import MutationStore, StaleFence
+from agent_comms.coordination_errors import StaleFence
+from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -37,8 +38,8 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
 
     async def race(*args, **kwargs):
         if drift == "generation":
-            with MutationStore(str(root / "coordination.sqlite3")) as store:
-                store.advance_owner_generation(
+            with Coordination(str(root / "coordination.sqlite3")) as store:
+                store.participants.advance_generation(
                     stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
                 )
         else:
@@ -467,15 +468,15 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
     import time
 
     path = tmp_path / "coordinator.sqlite3"
-    with MutationStore(path, lock_timeout=0) as store:
-        store.register_participant("owner", "owner", "owner", committed=True)
+    with Coordination(path, lock_timeout=0) as store:
+        store.participants.register("owner", "owner", "owner", committed=True)
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
         entered = []
 
         @contextmanager
         def historical_admission():
-            with store._transaction() as db:
+            with store.session.transaction() as db:
                 db.execute("UPDATE owner_generations SET generation=2")
                 # A reader enters after BEGIN IMMEDIATE and blocks its COMMIT.
                 reader.execute("BEGIN")
@@ -498,9 +499,9 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
             assert caught.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
             assert entered == [1]
             assert os.read(read_fd, 100) == b"one prompt\n"
-            assert not store._connection.in_transaction
+            assert not store.session._connection.in_transaction
             assert (
-                store._connection.execute("SELECT generation FROM owner_generations").fetchone()[0]
+                store.session._connection.execute("SELECT generation FROM owner_generations").fetchone()[0]
                 == 1
             )
         finally:
@@ -582,8 +583,8 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     ]
     assert json.loads(received.read_text())["type"] == "prompt"
     assert len(children) == 1 and children[0].returncode is not None
-    with MutationStore(root / "coordination.sqlite3") as store:
-        rows = store._connection.execute(
+    with Coordination(root / "coordination.sqlite3") as store:
+        rows = store.session._connection.execute(
             "SELECT sent_owner_admission_generation FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and rows[0][0] is not None

@@ -10,7 +10,7 @@ import sys
 import pytest
 
 from agent_comms import private_sidecar as sidecar
-from agent_comms.coordination_store import IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_prompt_binding import PromptBinding
 
 

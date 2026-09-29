@@ -29,8 +29,9 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import IdentityConflict, MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
@@ -86,13 +87,13 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 )
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
             install_native_runtime_schema(store)
             install_prompt_binding_schema(store)
             for name in ("alpha", "beta"):
-                store.register_participant(
+                store.participants.register(
                     stable_thread_lookup(comms.registry.require(name).created_at),
                     name,
                     name,
@@ -124,12 +125,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 ).seq
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
         if prior_seq:
-            with MutationStore(str(root / "coordination.sqlite3")) as store:
+            with Coordination(str(root / "coordination.sqlite3")) as store:
                 _accept_visible_initials(
                     bus, root_id, store, stable_thread_lookup(51003.0), 0, owner_name="beta"
                 )
         message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             _accept_visible_initials(
                 bus, root_id, store, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
             )
@@ -272,12 +273,12 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             )
         )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             install_private_response_schema(store)
             install_native_runtime_schema(store)
             install_prompt_binding_schema(store)
-            store.register_participant(
+            store.participants.register(
                 stable_thread_lookup(61002.0), "alpha", "alpha", committed=True
             )
         env = dict(os.environ)
@@ -314,8 +315,8 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                     model="test/fake",
                 )
             )
-            with MutationStore(str(root / "coordination.sqlite3")) as store:
-                store.register_participant(
+            with Coordination(str(root / "coordination.sqlite3")) as store:
+                store.participants.register(
                     stable_thread_lookup(61003.0), "beta", "beta", committed=True
                 )
             (base / "registered").touch()
@@ -349,7 +350,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             await attached.load_session(str(work), "beta")
             message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
             bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
-            with MutationStore(str(root / "coordination.sqlite3")) as store:
+            with Coordination(str(root / "coordination.sqlite3")) as store:
                 _accept_visible_initials(
                     bus, root_id, store, stable_thread_lookup(61003.0), 0, owner_name="beta"
                 )
@@ -368,13 +369,13 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
             owner = Comms(root).bus.log.claim_projection()[str(resource)]
             assert owner.owner == "beta" and owner.admission is not None
-            with MutationStore(str(root / "coordination.sqlite3")) as store:
+            with Coordination(str(root / "coordination.sqlite3")) as store:
                 assert (
-                    store.assignment(owner.admission.wake_assignment_id).lifecycle.declared_name
+                    store.assignments.get(owner.admission.wake_assignment_id).lifecycle.declared_name
                     == "completed"
                 )
                 assert (
-                    store._connection.execute(
+                    store.session._connection.execute(
                         f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
                     ).fetchone()[0]
                     == 1

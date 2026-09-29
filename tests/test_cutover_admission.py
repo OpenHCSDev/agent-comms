@@ -9,8 +9,9 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import IdentityConflict, MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_source_cursor import _bounded_coverage_pages
 from agent_comms.wake_candidate_index import WakeCandidateIndex
@@ -30,12 +31,12 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
         marker.admission_after_seq = marker.last_seq
         comms.bus.log.write_metadata_unlocked(marker)
 
-    with MutationStore(str(comms.root / "coordination.sqlite")) as store:
+    with Coordination(str(comms.root / "coordination.sqlite")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
         install_native_runtime_schema(store)
         for name, lookup in lookups.items():
-            store.register_participant(lookup, name, name, committed=True)
+            store.participants.register(lookup, name, name, committed=True)
         for _ in range(2):
             reopened = Comms(comms.root)
             WakeCandidateIndex(reopened.bus).maintain(rebuild=True)

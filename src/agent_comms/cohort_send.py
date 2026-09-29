@@ -14,8 +14,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
+
 from .comms import Comms
-from .coordination_store import IdentityConflict, PublicationActivationBlocked
 from .native_pi import _private_session_dir
 
 

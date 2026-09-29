@@ -128,8 +128,8 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
 def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
     from agent_comms.assignment_states import TriagePendingAssignment
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-    from agent_comms.coordination_store import MutationStore
     from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+    from agent_comms.coordinator import Coordination
     from agent_comms.native_runtime_input import NativeRuntimeInput
 
     journal, session, inputs, source = continued
@@ -160,9 +160,9 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     proof_file.chmod(0o600)
     # Native schema fixture: the immutable result columns represent an already
     # recorded live result; the journal must only corroborate those columns.
-    with MutationStore(str(journal.path.parent / "coordination.sqlite3")) as store:
-        store.register_participant("f" * 32, "owner", "owner", committed=True)
-        store.accept_assignment(
+    with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+        store.participants.register("f" * 32, "owner", "owner", committed=True)
+        store.assignments.accept(
             WakeAssignment(
                 assignment_id="claim",
                 recipient="owner",
@@ -176,7 +176,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
             )
         )
         install_native_runtime_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             NativeRuntimeInput(
                 input_id="a" * 32,
                 stage="triage",

@@ -11,7 +11,7 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import native_pi
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from test_coordinated_runtime import _root
@@ -78,9 +78,9 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
     assert [item["type"] for item in writes] == ["get_state"]
     with pytest.raises(ProcessLookupError):
         ProcessIdentity.capture(int(child_pid.read_text()))
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            store._connection.execute(
+            store.session._connection.execute(
                 f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
             ).fetchone()[0]
             == 1

@@ -18,7 +18,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.threads import Thread
 
@@ -48,10 +48,10 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         # BOTH barriers must be installed while the private bus is empty.
-        with MutationStore(str(root / "coordination.sqlite3")) as coordinator:
+        with Coordination(str(root / "coordination.sqlite3")) as coordinator:
             install_private_cohort_schema(coordinator)
             for name in ("Alice", "Bob"):
-                coordinator.register_participant(
+                coordinator.participants.register(
                     stable_thread_lookup(people[name]), name, name, committed=True
                 )
             message = comms.messaging.send_initial_cohort(

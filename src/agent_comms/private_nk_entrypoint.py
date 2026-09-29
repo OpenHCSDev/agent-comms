@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.coordination_errors import PublicationActivationBlocked
+
 from .cohort_foreground import _preflight
-from .coordination_store import PublicationActivationBlocked
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent

@@ -11,9 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordinator import Coordination
+
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
@@ -49,7 +51,7 @@ class _HistoricalSource(TypedRow):
 
 
 def read_historical_native_inputs(
-    store: MutationStore,
+    store: Coordination,
     *,
     wire_root_id: str,
     recipient_lookup: str,
@@ -66,7 +68,7 @@ def read_historical_native_inputs(
     requires a just-settled input in the live admission epoch.
     """
     if (
-        type(store) is not MutationStore
+        type(store) is not Coordination
         or type(wire_root_id) is not str
         or len(wire_root_id) != 32
         or any(character not in "0123456789abcdef" for character in wire_root_id)
@@ -77,10 +79,10 @@ def read_historical_native_inputs(
         or source_seq <= 0
     ):
         raise ValueError("historical input requires exact trusted root, lookup, and sequence")
-    if store._connection.in_transaction:
+    if store.session._connection.in_transaction:
         raise IdentityConflict("historical native input view requires a committed snapshot")
-    with store._read_transaction():
-        db = store._connection
+    with store.session.read():
+        db = store.session._connection
         assert_cohort_schema(db)
         assert_native_runtime_schema(db)
         sources = _HistoricalSource.read(
@@ -107,7 +109,7 @@ def read_historical_native_inputs(
             raise IdentityConflict("historical native input disappeared inside its snapshot")
     if len(rows) > 2 or len({row.stage for _source, row in rows}) != len(rows):
         raise IdentityConflict("historical source has ambiguous native input evidence")
-    expected_dir = (store.path.parent / "native-sessions" / recipient_lookup).absolute()
+    expected_dir = (store.session.path.parent / "native-sessions" / recipient_lookup).absolute()
     evidence: list[HistoricalNativeInput] = []
     for source, row in rows:
         session_file = Path(row.session_file)

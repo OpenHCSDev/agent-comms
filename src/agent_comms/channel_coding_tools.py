@@ -14,13 +14,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from agent_comms.coordinator import Coordination
+
 from .claim_admission import (
     publish_selected_resource_claim,
     release_selected_resources,
     verify_selected_wake,
 )
 from .comms import Comms
-from .coordination_store import MutationStore
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
     ClaimOwner,
@@ -119,7 +120,7 @@ class CodingCall(NativeToolCall):
 @dataclass
 class CodingToolOwner:
     comms: Comms
-    store: MutationStore
+    store: Coordination
     admission: WakeAdmission
     owner_name: str
     session_dir: Path

@@ -25,6 +25,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
+from agent_comms.coordinator import Coordination
+
 from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
 from .cohort_schema import CohortDeliveryReceipts
@@ -35,7 +38,6 @@ from .coordinated_runtime import (
     SelectedExistingFileWrite,
 )
 from .coordination_cohort import accept_initial_cohort, sealed_cohort_sequences
-from .coordination_store import IdentityConflict, MutationStore, PublicationActivationBlocked
 from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
 from .message_bus import MessageBus
@@ -70,7 +72,7 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
 def _accept_visible_initials(
     bus: MessageBus,
     root_id: str,
-    store: MutationStore,
+    store: Coordination,
     lookup: str,
     after_seq: int,
     *,
@@ -169,16 +171,16 @@ async def run_foreground_once(
         comms.channels._require_available_new_tags(tags)
         comms.registry.register(thread)
     try:
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             store.install_private_runtime()
             lookup = stable_thread_lookup(comms.registry.require(name).created_at)
-            store.register_participant(lookup, name, name, committed=True)
+            store.participants.register(lookup, name, name, committed=True)
         if ready is not None:
             ready(thread)
         deadline = time.monotonic() + wait_seconds
         bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
         cursor = 0
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             while True:
                 cursor = _accept_visible_initials(
                     bus, wire_root_id, store, lookup, cursor, owner_name=thread.name
@@ -197,9 +199,9 @@ async def run_foreground_once(
                     return result
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    with store._read_transaction():
+                    with store.session.read():
                         observers = CohortDeliveryReceipts.read(
-                            store._connection.execute(
+                            store.session._connection.execute(
                                 "SELECT d.* FROM cohort_delivery_receipts d "
                                 "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
                                 "AND r.wire_seq=d.wire_seq WHERE r.sealed=1 "

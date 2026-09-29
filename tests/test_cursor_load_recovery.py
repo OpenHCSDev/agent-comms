@@ -9,7 +9,7 @@ from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.runtime import SocketClient
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -22,8 +22,8 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     )
     comms.threads.register(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
-        store.register_participant(
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        store.participants.register(
             stable_thread_lookup(owner.created_at), owner.name, owner.name, committed=True
         )
     agent = CommsAgent(

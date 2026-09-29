@@ -12,9 +12,9 @@ from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import Participants
+from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .coordination_store import MutationStore
 from .typed_table import (
     Column,
     ForeignKey,
@@ -528,12 +528,12 @@ def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
     assert_optional_awareness_schema(db)
 
 
-def install_private_cohort_schema(store: MutationStore) -> None:
+def install_private_cohort_schema(store: Coordination) -> None:
     """Create current receipt tables on a fresh coordinator; no old-schema repair."""
-    if type(store) is not MutationStore:
-        raise TypeError("cohort installation requires an initialized MutationStore")
-    with store._transaction() as db:
-        if store.schema_version != COORDINATION_SCHEMA_VERSION:
+    if type(store) is not Coordination:
+        raise TypeError("cohort installation requires an initialized Coordination")
+    with store.session.transaction() as db:
+        if store.session.schema_version != COORDINATION_SCHEMA_VERSION:
             raise SchemaVersionError("unsupported coordinator schema")
         if not _cohort_objects(db):
             for table in TypedTable.members_with(CohortTable):

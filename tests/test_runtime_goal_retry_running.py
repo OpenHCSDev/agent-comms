@@ -8,15 +8,13 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
-from delivery_owner_fixture import canonical_agent
+from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
 from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import wire
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_store import MutationStore
-from agent_comms.native_prompt_binding import install_prompt_binding_schema
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     BlockedGoalAction,
@@ -28,7 +26,9 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
 from agent_comms.goals import Goal
+from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.runtime import RuntimeProxy, socket_path
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -56,12 +56,12 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     # The live drain requires the same installed stores and participant as the
     # production root. Merely issuing the bus marker is insufficient.
-    with MutationStore(str(comms.root / "coordination.sqlite3")) as coordination:
+    with Coordination(str(comms.root / "coordination.sqlite3")) as coordination:
         install_private_cohort_schema(coordination)
         install_private_response_schema(coordination)
         install_native_runtime_schema(coordination)
         install_prompt_binding_schema(coordination)
-        coordination.register_participant(
+        coordination.participants.register(
             stable_thread_lookup(comms.registry.require(session).created_at),
             session, session, committed=True,
         )

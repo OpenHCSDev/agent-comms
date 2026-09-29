@@ -1,0 +1,65 @@
+........................................................................ [ 60%]
+.........................F....................F                          [100%]
+=================================== FAILURES ===================================
+_________ test_later_attested_release_still_fences_original_admission __________
+
+released_failure = (<ForkProcess name='ForkProcess-11' pid=2501787 parent=2497732 stopped exitcode=0>, <Event at 0x7f39681765d0 set>, Pos...ca5ae3', PosixPath('/var/tmp/ac-sealed-test-sjx8cxl3/wire/native-sessions/6d4f60856e50bca7c54c8d4220d5a443/one.jsonl'))
+
+    def test_later_attested_release_still_fences_original_admission(released_failure):
+        process, exit_allowed, root, execution_id, _input_id, session_file = released_failure
+        leave(process, exit_allowed)
+        replacement = multiprocessing.get_context("fork").Process(
+            target=replacement_release, args=(root,)
+        )
+        replacement.start()
+        replacement.join(5)
+>       assert replacement.exitcode == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <ForkProcess name='ForkProcess-12' pid=2501816 parent=2497732 stopped exitcode=1>.exitcode
+
+tests/test_native_failure_recovery.py:271: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Process ForkProcess-12:
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 320, in _bootstrap
+    self.run()
+    ~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-mutation-owners-20260928/tests/test_native_failure_recovery.py", line 257, in replacement_release
+    replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True
+                                    ^^^^^^^^^^^^^^^
+NameError: name 'ProcessIdentity' is not defined
+_____________ test_unknown_settlement_is_atomic_on_existing_store ______________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-8rwbecq5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3963ac5f60>
+
+    def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch):  # noqa: F811
+        from agent_comms.coordination_errors import StaleFence, StaleRevision
+        from test_coordination_store import ready, started
+    
+        with ready(tmp_path / "store.sqlite3") as store:
+            _snapshot, fence = started(store)
+            before = store.snapshots.get(fence.execution_id)
+            for stale_fence, revision, error in (
+                (fence, before.pointer_revision + 1, StaleRevision),
+                (replace(fence, token="wrong"), before.pointer_revision, StaleFence),
+            ):
+                with pytest.raises(error):
+                    store.attempts.fail_unknown(stale_fence, expected_pointer_revision=revision)
+                assert store.snapshots.get(fence.execution_id) == before
+    
+            def fail_settlement(*_args, **_kwargs):
+                raise RuntimeError("settlement interrupted")
+    
+            with monkeypatch.context() as interrupted:
+>               interrupted.setattr(store, "_settle", fail_settlement)
+E               AttributeError: <agent_comms.coordinator.Coordination object at 0x7f396a623950> has no attribute '_settle'
+
+tests/test_native_unknown_recovery.py:345: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_native_failure_recovery.py::test_later_attested_release_still_fences_original_admission
+FAILED tests/test_native_unknown_recovery.py::test_unknown_settlement_is_atomic_on_existing_store
+2 failed, 117 passed in 65.79s (0:01:05)
