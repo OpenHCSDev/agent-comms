@@ -14,6 +14,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
+from .native_input_record import NativeInputRecord
 from .typed_table import Column, TypedTable
 
 
@@ -45,7 +46,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(NativeRuntimeTable, TypedTable):
+class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
     input_id: str = field(
         metadata={
             "sql": Column(

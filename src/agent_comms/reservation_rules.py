@@ -19,10 +19,8 @@ class ReservationViolationError(ValueError):
         super().__init__(f"{rule.declared_name}: {rule.explanation}")
 
 
-@dataclass(frozen=True, kw_only=True)
-class ReservationCheck:
-    source: SelectedSource
-    revision: SessionRevision | None
+class RuleCheck:
+    """A check selects applicable declarations from the one reservation rule family."""
 
     def require_valid(self) -> None:
         for declaration in ReservationRule.members_with(ReservationRule):
@@ -30,6 +28,12 @@ class ReservationCheck:
                 rule = declaration()
                 if rule.violated(self):
                     raise ReservationViolationError(rule)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReservationCheck(RuleCheck):
+    source: SelectedSource
+    revision: SessionRevision | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -66,7 +70,7 @@ class InterruptedInputCheck(InputSourceCheck, InterruptedReservationCheck):
 
 
 class ReservationRule(DeclaredFamily, affix="Rule"):
-    check_type: ClassVar[type[ReservationCheck]] = ReservationCheck
+    check_type: ClassVar[type[RuleCheck]] = ReservationCheck
     explanation: ClassVar[str]
 
     @abstractmethod
