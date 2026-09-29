@@ -13,7 +13,13 @@ No feature is complete merely because a draft exists or a PR was merged.
 - Toad recursion: user supplied an authentic trace from the installed 9830 runtime:
   ViewportPresentation.prepare calls _refresh_layout while preparing paint, which
   reenters SessionView/Textual layout. Carver owns the urgent root fix and real UI
-  reproduction; Tesla coordinates the overlapping PR142 viewport sites. Not fixed.
+  reproduction; Tesla coordinates the overlapping PR142 viewport sites.
+  Fixed by merged150c2534676: synchronous reflow deleted, native UpdateScroll owns
+  it. Final paired installed139x25 growth/resize/tail/reader/session-return passes;
+  actual live retained PR95 paint passes at139x25 (38 saved phrase matches).
+- New IndexError: saved terminal trace _compositor.render_segments indexes
+  chops[y] outside its row range. Carver owns Textual investigation; recovered
+  latest OpenCode compaction summary shared locally with Carver/Tesla. Not fixed.
 - Comms323 merged658b9a89: turn observation/goal settlement; 494 production lines
   deleted. Comms325 merged6bd8c423: native custody/partial snapshot ownership;
   445 production lines deleted. No stored schema change or compatibility path.
@@ -30,7 +36,11 @@ No feature is complete merely because a draft exists or a PR was merged.
   105 matching phrases/679 nonspace characters, Ready with no app/delivery error.
 - Toad149 merged1ea4f954: nominal block/menu/copy/context disclosure ownership,
   163 product lines deleted. Review and actual private X11 interaction passed;
-  this newest UI change is pending the next paired UI installation.
+  installed together with150 in runtime-viewport-layout-20260928, core6bd unchanged.
+- Parent deployment correction: first owner restart retained the previous runtime's
+  absolute native launcher, causing a reserved/not-sent ACP refusal. Four idle
+  owners restarted with the current core's canonical launcher; actual configured
+  native GetState handshake passes4/4, no prompt or replay. Failed input stays unsent.
 
 PR142 recent-source return and latency acceptance remain Tesla's independent work.
 The full original/round-two refactor goal remains active.
