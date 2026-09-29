@@ -129,6 +129,18 @@ class SelectedSummaryData(PiResponseData):
     def response(self, request, tokens_before):
         """Interpret this native outcome without granting commit or replay authority."""
 
+    def settle(self, journal):
+        """A complete summary stays reserved until the canonical writer commits it."""
+
+    def require_result(self):
+        return self
+
+    def manual_summary(self, journal):
+        raise ValueError("Selected summary has no manual result")
+
+    def adaptive_summary(self, journal, identity):
+        raise ValueError("Selected summary has no adaptive result")
+
     @classmethod
     def wire_member(cls, value):
         # Status is the native discriminator, mapped through the existing family.
@@ -141,9 +153,35 @@ class SummaryDeclinedData(SelectedSummaryData, declared_name="summary_declined")
     reason: str
 
     def response(self, request, tokens_before):
-        from .selected_pi_summary_rpc import SelectedSummaryResult
+        return self
 
-        return SelectedSummaryResult(self.operation_id, None, self.reason)
+    @property
+    def summary(self):
+        return None
+
+    @property
+    def decline_reason(self):
+        return self.reason
+
+    def settle(self, journal):
+        if self.reason not in {"split_turn", "unsupported"}:
+            journal.summaries.refuse(self.operation_id, self.reason)
+
+    def manual_summary(self, journal):
+        journal.summaries.refuse(self.operation_id, self.reason)
+        raise ValueError(f"Selected Pi declined manual summary ({self.reason})")
+
+    def adaptive_summary(self, journal, identity):
+        from .owner_compaction_provider import SelectedSummaryDecline
+        from .owner_compaction_settings import PiSettingsEvidenceError
+
+        if self.reason in {"split_turn", "unsupported"}:
+            return SelectedSummaryDecline(
+                journal.summaries.get(self.operation_id), identity, self.reason
+            )
+        raise PiSettingsEvidenceError(
+            f"Selected Pi declined summary ({self.reason}); original remains unbound"
+        )
 
     def __post_init__(self):
         if not 0 < len(self.reason) <= 256:
@@ -194,18 +232,43 @@ class SummarySummarizedData(WitnessedSummaryData, declared_name="summary_summari
     result: SummaryResult
 
     def response(self, request, tokens_before):
-        from .owner_compaction_provider import NativeSummary
-        from .selected_pi_summary_rpc import SelectedSummaryResult
-
         self.require_source(request)
         if (
             self.result.first_kept_entry_id != request.witness.first_kept_entry_id
             or self.result.tokens_before != tokens_before
         ):
             raise ValueError("Selected summary result source changed")
-        return SelectedSummaryResult(
-            self.operation_id,
-            NativeSummary(self.result.summary, self.result.details, self.result.usage),
+        return self
+
+    @property
+    def summary(self):
+        from .owner_compaction_provider import NativeSummary
+
+        return NativeSummary(self.result.summary, self.result.details, self.result.usage)
+
+    @property
+    def decline_reason(self):
+        return None
+
+    def manual_summary(self, journal):
+        from .owner_compaction_manual import ManualSelectedSummary
+
+        return ManualSelectedSummary(
+            self.result.summary,
+            self.result.details,
+            self.result.usage,
+            journal.summaries.get(self.operation_id),
+        )
+
+    def adaptive_summary(self, journal, identity):
+        from .owner_compaction_provider import SelectedNativeSummary
+
+        return SelectedNativeSummary(
+            self.result.summary,
+            self.result.details,
+            self.result.usage,
+            journal.summaries.get(self.operation_id),
+            identity,
         )
 
 
@@ -222,6 +285,14 @@ class SummaryFailedData(WitnessedSummaryData, declared_name="summary_failed"):
     def response(self, request, tokens_before):
         self.require_source(request)
         return self
+
+    def settle(self, journal):
+        journal.summaries.fail(self.operation_id, self.reason)
+
+    def require_result(self):
+        from .selected_pi_summary_rpc import SelectedSummaryFailed
+
+        raise SelectedSummaryFailed(self)
 
     def __post_init__(self):
         if not 0 < len(self.reason) <= 1024 or any(

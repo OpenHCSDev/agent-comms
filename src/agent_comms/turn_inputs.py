@@ -40,9 +40,12 @@ class InputForwarding:
     uncertain: bool = False
 
     @property
-    def permits_extension_ui(self) -> bool:
-        """Uncertain input delivery cannot grant a fresh extension interaction."""
+    def permits_admission(self) -> bool:
+        """Only confirmed input delivery permits a fresh native interaction."""
         return not self.uncertain
+
+    def can_forward(self, writer):
+        return self.queue is not None and writer is not None
 
     @property
     def unresolved(self) -> bool:
@@ -173,9 +176,7 @@ class InputForwarding:
                 and text == queued_text
                 and (not session.require_input_id or native_id == expected_native_id)
             ):
-                if session.native_start is not None and (
-                    not session.native_start(input_id, expected_native_id, queued_text)
-                ):
+                if not session.notify_input_started(input_id, expected_native_id, queued_text):
                     return (False, None)
                 self.accepted.discard(input_id)
                 self.pending.pop(index)

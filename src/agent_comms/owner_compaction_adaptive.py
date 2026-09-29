@@ -201,24 +201,7 @@ async def maybe_compact_owner_turn(
                 future_queue=future_queue,
                 on_event=on_event,
             )
-            if result.summary is None:
-                if result.decline_reason in {"split_turn", "unsupported"}:
-                    return SelectedSummaryDecline(
-                        bridge.journal.summaries.get(result.operation_id),
-                        identity,
-                        result.decline_reason,
-                    )
-                raise PiSettingsEvidenceError(
-                    f"Selected Pi declined summary ({result.decline_reason}); "
-                    "original remains unbound"
-                )
-            return SelectedNativeSummary(
-                result.summary.text,
-                result.summary.details,
-                result.summary.usage,
-                bridge.journal.summaries.get(result.operation_id),
-                identity,
-            )
+            return result.adaptive_summary(bridge.journal, identity)
 
         summary_strategy = selected_summary
 

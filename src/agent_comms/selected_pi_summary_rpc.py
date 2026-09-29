@@ -24,11 +24,10 @@ from .input_disposition import FutureInputQueue
 from .native_pi import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness
-from .owner_compaction_provider import NativeSummary
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
-from .pi_summary_payloads import SummaryFailedData
+from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
@@ -44,16 +43,9 @@ class SelectedSummaryFailed(RuntimeError):  # noqa: N818 - terminal protocol sta
         super().__init__(f"Selected summary failed: {receipt.reason}; original input not sent")
 
 
-@dataclass(frozen=True)
-class SelectedSummaryResult:
-    operation_id: str
-    summary: NativeSummary | None
-    decline_reason: str | None = None
-
-
 def _summary_response(
     raw: bytes, request: AgentCommsSummarizeCompaction, tokens_before: int
-) -> SelectedSummaryResult | SummaryFailedData:
+) -> SelectedSummaryData:
     """Decode the existing native v1 protocol once at the RPC boundary."""
 
     try:
@@ -96,7 +88,7 @@ class SelectedSummarySlot:
         future_queue: FutureInputQueue | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
-    ) -> SelectedSummaryResult:
+    ) -> SelectedSummaryData:
         """Reserve durably, exchange once, and leave settlement to the owner.
 
         Caller holds owner/turn exclusion and supplies its captured source.
@@ -168,13 +160,7 @@ class SelectedSummarySlot:
                 result = _summary_response(raw, request, tokens_before)
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
-                if isinstance(result, SummaryFailedData):
-                    journal.summaries.fail(operation, result.reason)
-                elif result.summary is None and result.decline_reason not in {
-                    "split_turn",
-                    "unsupported",
-                }:
-                    journal.summaries.refuse(operation, result.decline_reason)
+                result.settle(journal)
             except BaseException as error:
                 persistent.require_reopen(session_file)
                 # Keep the child marked unusable even if cancellation interrupts
@@ -197,6 +183,4 @@ class SelectedSummarySlot:
                 ) from error
             # Raise only after attestation and durable settlement succeed. This
             # known terminal outcome must not enter the transport UNKNOWN handler.
-            if isinstance(result, SummaryFailedData):
-                raise SelectedSummaryFailed(result)
-            return result
+            return result.require_result()

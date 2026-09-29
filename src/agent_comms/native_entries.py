@@ -192,14 +192,9 @@ class MessageEntry(NativeEntry):
         return self
 
     def require_failed_terminal(self, parent_id: str) -> None:
-        if (
-            self.parent_id != parent_id
-            or not self.message.assistant
-            or not self.message.stop_reason.recoverable_terminal
-            or not self.message.error_message
-            or self.message.content != ()
-        ):
+        if self.parent_id != parent_id:
             raise ValueError("Native recovery requires an unambiguous failed terminal")
+        self.message.require_failed_terminal()
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self.message.transcript_events(context)

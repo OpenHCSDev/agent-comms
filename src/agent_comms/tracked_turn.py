@@ -328,6 +328,21 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise NativePiUnavailable("Native Pi assistant content is malformed")
         message.stop_reason.tracked(self, message)
 
+    def accept_tool_round(self, message):
+        if self.tool_socket is None:
+            return False
+        self.tool_socket.announce(message.content)
+        self.text_parts.clear()
+        self.final_messages.clear()
+        return True
+
+    def accept_final_message(self, message):
+        if self.tool_socket is not None:
+            self.tool_socket.assert_complete()
+        if any(not item.final_text_allowed for item in message.content):
+            raise NativePiUnavailable("Native Pi assistant returned non-text content")
+        self.final_messages.append("".join(item.text for item in message.content))
+
     def context_proof(self) -> NativeContextProof:
         if self.prompt_response is None or self.input_event is None or self.context_event is None:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")

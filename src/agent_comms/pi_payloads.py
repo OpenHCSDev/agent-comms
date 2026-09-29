@@ -381,6 +381,9 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def measured_tokens(self):
         return self.usage.positive_tokens if self.usage is not None else None
 
+    def require_failed_terminal(self):
+        raise ValueError("Native recovery requires an unambiguous failed terminal")
+
     async def apply_end(self, session):
         if False:
             yield
@@ -436,26 +439,25 @@ class AssistantMessage(PiMessage):
 
     @property
     def retry_progress(self):
-        return not self.stop_reason.failed
+        return self.stop_reason.permits_progress()
+
+    def require_failed_terminal(self):
+        self.stop_reason.require_failed_terminal(self)
+
+    def require_failure_shape(self):
+        if not self.error_message or self.content != ():
+            raise ValueError("Native recovery requires an unambiguous failed terminal")
 
     async def apply_end(self, session):
         from .agent_events import CommittedProgress
 
         reason = self.stop_reason
-        if (
-            reason.tool_round
-            and session.admission.started
-            and not session.inputs.uncertain
-            and not session.native.attestation.uncertain
-            and session.output.matches_message(self.text)
-        ):
+        if reason.tool_round and session.committable_message(self.text):
             yield CommittedProgress(text=self.text)
         session.output.start_message()
-        if self.usage is not None and not session.native.attestation.uncertain:
+        if self.usage is not None and session.accepts_output:
             yield session.usage.charge(self.usage)
-        session.output.final_assistant_stop = (
-            reason.successful and session.admission.started and not session.inputs.uncertain
-        )
+        session.output.final_assistant_stop = reason.successful and session.started_input
         async for event in reason.apply(session, self):
             yield event
 
@@ -490,66 +492,15 @@ class AssistantMessage(PiMessage):
 class UserMessage(PiMessage):
     user = True
 
-    async def apply_start(self, session, event):
-        import asyncio
-        from . import agent_events as events
-        from . import turn_failure as failures
+    def matches_input(self, text, native_id, require_id):
+        return self.text == text and (not require_id or self.input_id == native_id)
 
-        if (
-            session.admission.awaiting_start
-            and (not session.inputs.uncertain)
-            and (self.text == session.task)
-            and (not session.require_input_id or self.input_id == session.original_input_id)
-        ):
-            if session.native_start is not None and (
-                not session.native_start(None, session.original_input_id, session.task)
-            ):
-                session.inputs.uncertain = True
-                session.output.record_failure(
-                    failures.InputMissing("Pi input start did not match the durable attempt.")
-                )
-                await session.abort_stalled_rpc()
-                session.finished = True
-                return
-            session.admission = session.admission.start(event)
-            if session.native_start is not None:
-                yield events.InputStarted(id=None)
-            if (
-                session.inputs.queue is not None
-                and session.native.proc.stdin is not None
-                and (session.steering_task is None)
-            ):
-                session.steering_task = asyncio.create_task(session.inputs.forward(session))
-        elif session.admission.started and (not session.inputs.uncertain):
-            matched, input_id = session.inputs.mark_started(session, event)
-            if matched:
-                yield events.InputStarted(id=input_id)
-            else:
-                session.inputs.uncertain = True
-                session.output.final_assistant_stop = False
-                session.output.record_failure(
-                    failures.FollowupUnrecognized(
-                        "Pi RPC saw an unrecognized follow-up user message start."
-                    )
-                )
-                await session.abort_stalled_rpc()
-                session.finished = True
-                return
-        else:
-            session.inputs.uncertain = True
-            session.output.final_assistant_stop = False
-            session.output.record_failure(
-                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
-            )
-            await session.abort_stalled_rpc()
-            session.finished = True
-            return
+    async def apply_start(self, session, event):
+        async for update in session.admit_user_message(self, event):
+            yield update
 
     def observe_start_abort(self, session, event):
-        if not session.native.attestation.uncertain:
-            matched, identity = session.inputs.mark_started(session, event)
-            if matched:
-                session.started_during_abort.append(identity)
+        session.observe_input_during_abort(event)
 
     def transcript_events(self, context):
         from .routing import TurnRouting
@@ -823,8 +774,7 @@ class CompactionData(PiResponseData):
         return compaction_summary(self.summary) if self.summary is not None else None
 
     def charge(self, session):
-        if self.usage is not None and not session.usage.compaction_recorded:
-            yield session.usage.charge(self.usage)
+        yield from session.usage.charge_compaction(self.usage)
 
 
 @dataclass(frozen=True)

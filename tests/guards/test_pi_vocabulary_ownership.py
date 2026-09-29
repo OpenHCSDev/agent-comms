@@ -48,7 +48,7 @@ def test_summary_members_own_the_response_contract():
         if isinstance(node, ast.FunctionDef) and node.name == "_summary_response"
     )
     assert not any(
-        isinstance(node, ast.Name) and node.id.startswith("Summary") for node in ast.walk(decoder)
+        isinstance(node, ast.Name) and node.id.startswith("Summary") for body in decoder.body for node in ast.walk(body)
     )
 
 

@@ -119,6 +119,7 @@ class IgnoredCodexItem(CodexItem):
 
 @dataclass(frozen=True)
 class MessageCodexItem(CodexItem):
+    text_types = frozenset({"input_text", "output_text", "text"})
     role: ImportRole
     body: str
     source_id: str
@@ -135,7 +136,7 @@ class MessageCodexItem(CodexItem):
             else [
                 text(part.get("text"))
                 for part in objects(content)
-                if part.get("type") in {"input_text", "output_text", "text"}
+                if part.get("type") in cls.text_types
             ]
         )
         return cls(ImportRole(role), "\n".join(pieces), text(wire.get("id")))
@@ -239,7 +240,7 @@ class TurnContextCodexRecord(CodexRecord):
         return cls(text(payload.get("cwd")))
 
     def reverse(self, scan, offset, raw):
-        if scan.checkpoint is None and not scan.latest_project:
+        if scan.searching_checkpoint and scan.needs_project:
             scan.latest_project = self.project
         return False
 
@@ -271,7 +272,7 @@ class CompactedCodexRecord(CodexRecord):
 
     def reverse(self, scan, offset, raw):
         request = self.latest_request(scan.reverse_buffer.limits)
-        if scan.checkpoint is not None:
+        if scan.found_checkpoint:
             scan.prior_request = request
             return bool(request)
         scan.checkpoint = (offset, len(raw), self)
@@ -294,7 +295,7 @@ class ResponseItemCodexRecord(CodexRecord):
         return cls(CodexItem.from_wire(payload))
 
     def reverse(self, scan, offset, raw):
-        if scan.checkpoint is not None:
+        if scan.found_checkpoint:
             probe = ReverseImportBuffer(scan.reverse_buffer.limits)
             self.item.apply(probe)
             scan.prior_request = probe.latest_request
@@ -314,6 +315,26 @@ class CodexImportScan:
     latest_project: str = ""
     checkpoint: tuple[int, int, CompactedCodexRecord] | None = None
     prior_request: str = ""
+
+    @property
+    def needs_project(self):
+        return not self.latest_project
+
+    @property
+    def found_checkpoint(self):
+        return self.checkpoint is not None
+
+    @property
+    def searching_checkpoint(self):
+        return self.checkpoint is None
+
+    def rebuild(self):
+        if self.checkpoint is None:
+            return self.reverse_buffer.forward_buffer(), None
+        buffer = ImportBuffer(self.reverse_buffer.limits, notices=set(self.reverse_buffer.notices))
+        offset, size, checkpoint = self.checkpoint
+        checkpoint.forward(self, buffer)
+        return buffer, offset + size
 
 
 class OpenCodeSource(DeclaredFamily, affix="OpenCodeSource"):

@@ -10,7 +10,6 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     successful = False
     tool_round = False
     explicit_abort = False
-    recoverable_terminal = False
     tracked_failure = "Provider returned an unsuccessful terminal"
 
     @classmethod
@@ -24,10 +23,18 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
             return UnreportedStopReason
 
     @classmethod
+    def permits_progress(cls):
+        return True
+
+    @classmethod
+    def require_failed_terminal(cls, message):
+        raise ValueError("Native recovery requires an unambiguous failed terminal")
+
+    @classmethod
     async def apply(cls, session, message):
         session.output.error_message = None
         tokens = message.measured_tokens
-        if tokens is not None and not session.native.attestation.uncertain:
+        if tokens is not None and session.accepts_output:
             session.usage.used = session.usage.confirmed = tokens
             yield session.context_info()
         elif session.usage.provisional:
@@ -49,13 +56,7 @@ class StopStopReason(PiStopReason):
 
     @classmethod
     def tracked(cls, session, message):
-        from .native_pi import NativePiUnavailable
-
-        if session.tool_socket is not None:
-            session.tool_socket.assert_complete()
-        if any(not item.final_text_allowed for item in message.content):
-            raise NativePiUnavailable("Native Pi assistant returned non-text content")
-        session.final_messages.append("".join(item.text for item in message.content))
+        session.accept_final_message(message)
 
 
 class LengthStopReason(PiStopReason):
@@ -67,16 +68,20 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
 
     @classmethod
     def tracked(cls, session, message):
-        if session.tool_socket is None:
+        if not session.accept_tool_round(message):
             return super().tracked(session, message)
-        session.tool_socket.announce(message.content)
-        session.text_parts.clear()
-        session.final_messages.clear()
 
 
 class ErrorStopReason(PiStopReason):
     failed = True
-    recoverable_terminal = True
+
+    @classmethod
+    def permits_progress(cls):
+        return False
+
+    @classmethod
+    def require_failed_terminal(cls, message):
+        message.require_failure_shape()
 
     @classmethod
     async def apply(cls, session, message):
@@ -94,7 +99,10 @@ class ErrorStopReason(PiStopReason):
 
 class AbortedStopReason(ErrorStopReason):
     explicit_abort = True
-    recoverable_terminal = False
+
+    @classmethod
+    def require_failed_terminal(cls, message):
+        return PiStopReason.require_failed_terminal(message)
 
 
 class DeferredStopReason(PiStopReason):

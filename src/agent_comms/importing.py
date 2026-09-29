@@ -243,6 +243,10 @@ class ImportBuffer:
             self.characters -= len(removed.body)
             self.truncated -= int(removed.truncated)
 
+    def restore_missing_request(self, body):
+        if not self.latest_request:
+            self.latest_request = body
+
     def set_summary(self, body: str) -> None:
         self.summary = body[: self.limits.per_message]
 
@@ -503,21 +507,15 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
                 record = codex_record(raw, terminated=terminated, notices=reverse.notices)
                 if record is not None and CodexRecord.from_wire(record).reverse(scan, offset, raw):
                     break
-            if scan.checkpoint is None:
-                buffer = reverse.forward_buffer()
-            else:
-                buffer = ImportBuffer(limits, notices=set(reverse.notices))
-                offset, size, checkpoint = scan.checkpoint
-                checkpoint.forward(scan, buffer)
-                after = offset + size
+            buffer, after = scan.rebuild()
+            if after is not None:
                 if after < boundary:
                     after += 1
                 for _, raw, terminated in forward_lines(stream, after, boundary):
                     record = codex_record(raw, terminated=terminated, notices=buffer.notices)
                     if record is not None:
                         CodexRecord.from_wire(record).forward(scan, buffer)
-                if not buffer.latest_request:
-                    buffer.latest_request = scan.prior_request
+                buffer.restore_missing_request(scan.prior_request)
         if session_id and session_id != scan.identity:
             raise ValueError("The rollout belongs to a different Codex session.")
         return buffer.snapshot(
