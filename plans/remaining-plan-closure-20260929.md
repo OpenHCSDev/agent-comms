@@ -12,7 +12,7 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — PR371 source checkpoint
+## Current remaining mapping — PR376 transaction checkpoint
 
 Parent reports361 merged at `d7745d0e` and the paired installed saved-history
 ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
@@ -27,8 +27,8 @@ this document does not promote an activation-in-progress claim to completed.
   GoalScheduler owner; the input declaration owns its immutable acceptance context.
   [PR365 receipt](../evidence/s14-goal-scheduler/README.md):328 production lines
   deleted,35 chain terms removed; actual installed socket retry/native and selected
-  handoff paths passed before parent merge. Boyle371 now closes journal
-  enrollment/publication identities below; neither slice completes all S14.
+  handoff paths passed before parent merge. Boyle371 journal
+  enrollment/publication identities are merged;376 continues transaction ownership; neither slice completes all S14.
 - Wegener retains current SelectedExecution/coordinated-runtime/startup work.
   Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
   Do not create competing work in those files.
@@ -50,8 +50,21 @@ owns journal enrollment/terminal/publication state and identity closure. [Receip
 records213 production lines deleted,50 chain terms removed, actual native/ACP
 commit and private original-input handoff, plus post-commit correction refusal
 and disconnected UNKNOWN preservation. Current-main installed acceptance65passed,
-2optional skips. Ready for parent review/live installation; native pins unchanged.
+2optional skips. Parent reviewed and merged371; its source work is complete. Native pins unchanged.
 Wegener PiEvent/fresh-native, Tesla366 transcript and parentA2 remain separate.
+
+## Journal transaction ownership — PR376
+
+Boyle chose the remaining CompactionJournal role rather than overlap parent373's
+HistoryViews/ThreadView presentation work. Base main2ccfaed4 includes371 and368.
+Operations, selected summaries, private enrollment/raw writes, and publication
+acknowledgement now have their own transaction APIs; the former journal methods
+and all production/test callers are deleted. One canonical database owns schema,
+locking and commit/fsync. Repeated exclusion queries, the enrollment table roster,
+and selected transition SQL collapse onto declared table/lifecycle owners.
+[PR376 receipt](../evidence/q8-journal-transactions/README.md) tracks exact installed
+native/ACP and failure evidence. Parent owns merge/default installation. This is
+whole journal role closure, not a claim that all Q8/history/T4 work is complete.
 
 ## Registry lifecycle followthrough — PR361
 

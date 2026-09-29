@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
+from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
@@ -28,14 +29,16 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journa
 
 def _publication_events(updates):
     return [
-        item
+        event.publication
         for item in updates
-        if item.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
+        for event in decode_updates(item.get("_meta"))
+        if isinstance(event, CompactionPublishedUpdate)
     ]
 
 
 @pytest.fixture
 def owner(tmp_path):
+    (tmp_path / "project").mkdir()
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     session = tmp_path / "saved.jsonl"
@@ -77,7 +80,7 @@ async def test_local_delivery_requires_existing_owner_and_attached_transport(own
         wire_value = json.dumps(updates)
         assert commit_id in wire_value and "entry" in wire_value
         assert "private summary" not in wire_value and "recipient" not in wire_value
-        assert "compactionPublication" in wire_value
+        assert [event.commit_id for event in _publication_events(updates)] == [commit_id]
         assert await publish_pending_local(agent, "project", "project") == 0
         bus = comms.root / "bus.jsonl"
         assert not bus.exists() or b"private summary" not in bus.read_bytes()
@@ -99,14 +102,9 @@ async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp
             updates.append(update.model_dump(by_alias=True, exclude_none=True))
 
     async def events(*args, **kwargs):
-        assert any(
-            item.get("_meta", {})
-            .get("agentComms", {})
-            .get("compactionPublication", {})
-            .get("commitId")
-            == commit_id
-            for item in updates
-        ), "Local metadata projection must precede native provider send"
+        assert [event.commit_id for event in _publication_events(updates)] == [commit_id], (
+            "Local metadata projection must precede native provider send"
+        )
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True
         yield ae.Done(ok=False, text="No provider invoked")
@@ -116,16 +114,7 @@ async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp
     try:
         await agent.inputs.run_owned_input("project", "project", "distinct new input")
         assert journal.publications.pending(str(session)) == ()
-        assert (
-            len(
-                [
-                    item
-                    for item in updates
-                    if item.get("_meta", {}).get("agentComms", {}).get("compactionPublication")
-                ]
-            )
-            == 1
-        )
+        assert len(_publication_events(updates)) == 1
     finally:
         await agent.shutdown()
 
@@ -504,8 +493,8 @@ async def test_uncertain_local_delivery_remains_pending_until_exact_reprojection
         client.fail = False
         assert await publish_pending_local(agent, "project", "project") == 1
         assert len(seen) == 2
-        first = seen[0]["_meta"]["agentComms"]["compactionPublication"]
-        second = seen[1]["_meta"]["agentComms"]["compactionPublication"]
-        assert first == second and first["commitId"] == commit_id
+        first = _publication_events(seen[:1])[0]
+        second = _publication_events(seen[1:])[0]
+        assert first == second and first.commit_id == commit_id
     finally:
         await agent.shutdown()

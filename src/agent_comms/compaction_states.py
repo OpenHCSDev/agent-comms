@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ChildOutcome
+from .compaction_errors import CompactionJournalError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .text_digest import TextDigest
@@ -19,6 +20,7 @@ from .text_digest import TextDigest
 if TYPE_CHECKING:
     from .compaction_journal import CompactionJournal
     from .compaction_records import SelectedSummaryAttempt
+    from .input_disposition import InputDocument
 
 
 
@@ -40,8 +42,6 @@ class OperationState(DeclaredFamily, LifecycleState, affix="Operation"):
     terminal: ClassVar[bool] = False
     committed: ClassVar[bool] = False
     def require_committed(self, commit_id: str) -> None:
-        from .compaction_errors import CompactionJournalError
-
         raise CompactionJournalError(
             f"Native compaction operation {commit_id} is {self.declared_name}; "
             "reconcile exact ID before any new input"
@@ -97,32 +97,28 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[SummaryState], ...]: ...
-    def require_original_admission(self) -> None:
-        from .compaction_errors import CompactionJournalError
+    def blocks_input(self, attempt: SelectedSummaryAttempt, inputs: InputDocument) -> bool:
+        """Only this lifecycle owns whether original-input start can retire its barrier."""
+        if self.settled_without_original:
+            return False
+        if not self.original_eligible:
+            return True
+        return not attempt.original_has_started(inputs)
 
+    def require_original_admission(self) -> None:
         if not self.original_eligible:
             raise CompactionJournalError("Manual compaction cannot admit an original input")
     def require_commit_reservation(self) -> None:
-        from .compaction_errors import CompactionJournalError
-
         raise CompactionJournalError("Selected summary is not a commit reservation")
     def manual_recovery(self) -> SummaryState:
-        from .compaction_errors import CompactionJournalError
-
         raise CompactionJournalError(
             "Prior selected compaction is uncertain; inspect compaction-status, never replay"
         )
     def refuse(self, reason: str) -> SummaryState:
-        from .compaction_errors import CompactionJournalError
-
         raise CompactionJournalError("Selected summary refusal transition forbidden")
     def fail(self, reason: str) -> SummaryState:
-        from .compaction_errors import CompactionJournalError
-
         raise CompactionJournalError("Selected summary failure transition forbidden")
     def retire_unchanged_source(self) -> SummaryState:
-        from .compaction_errors import CompactionJournalError
-
         raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
     def verifies_original(
         self, journal: CompactionJournal, attempt: SelectedSummaryAttempt

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .child_process import ProcessIdentity
+from .compaction_errors import CompactionJournalError
 from .field_codec import FieldCodec
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation
@@ -46,9 +47,7 @@ class SelectedCommitReference:
         return SummaryOperationIdentity(session_file, self.operation_id)
     def require_source(self, source_json: str) -> None:
         if self.source_digest != TextDigest.of(source_json).value:
-            from .compaction_errors import CompactionJournalError
-
-            raise CompactionJournalError("Selected native intent source digest required")
+                raise CompactionJournalError("Selected native intent source digest required")
 
 
 @dataclass(frozen=True)

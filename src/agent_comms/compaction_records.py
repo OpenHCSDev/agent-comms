@@ -23,7 +23,6 @@ from .compaction_states import (
     sql_names,
 )
 from .field_codec import FieldCodec
-from .input_attempt import InputAttempt
 from .input_disposition import InputDocument
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SelectedModel
@@ -167,8 +166,7 @@ class SelectedSummaryAttempt(
         return tuple(
             attempt
             for attempt in cls.for_session(db, canonical)
-            if not attempt.state.settled_without_original
-            and not attempt.original_has_started(inputs.rows)
+            if attempt.state.blocks_input(attempt, inputs)
         )
 
     def transition(self, db: sqlite3.Connection, target: SummaryState) -> SelectedSummaryAttempt:
@@ -177,9 +175,12 @@ class SelectedSummaryAttempt(
         Called inside an existing write transaction. This does not mint a receipt:
         terminal input authority is issued only after the caller's fsync returns.
         """
-        self.require_transition(target)
         if type(self).one(db, operation_id=self.operation_id) != self:
             raise CompactionJournalError("Selected summary changed before transition")
+        if target == self.state:
+            # The lifecycle may attest an identical observation (e.g. same refusal).
+            return self
+        self.require_transition(target)
         before = db.total_changes
         type(self).update(
             db,
@@ -195,18 +196,16 @@ class SelectedSummaryAttempt(
             raise CompactionJournalError("Exact selected summary transition required")
         return expected
 
-    def original_has_started(self, inputs: dict[str, InputAttempt]) -> bool:
+    def original_has_started(self, inputs: InputDocument) -> bool:
         """Completed input evidence retires this barrier, never recreates a send token.
 
         The existing input ledger owns native-start proof. A linked/declined
         summary alone, a bound UNKNOWN input, or an unrelated started input
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
-        if not self.state.original_eligible:
-            return False
         try:
             envelope = FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json))
-            return envelope.source.original_has_started(InputDocument(rows=inputs))
+            return envelope.source.original_has_started(inputs)
         except (KeyError, TypeError, ValueError):
             return False
 

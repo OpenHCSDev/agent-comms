@@ -513,3 +513,17 @@ def test_invalid_source_or_id_refuses_before_reservation(reserved):
     with pytest.raises(ValueError, match="operation ID"):
         journal.summaries.reserve(session, source, operation_id="not-hex")
     assert journal.summaries.unresolved(session) == ()
+
+
+def test_repeated_identical_refusal_preserves_blocker_without_new_authority(reserved):
+    journal, session, source = reserved
+    operation_id = journal.summaries.reserve(session, source)
+    journal.summaries.refuse(operation_id, "source_changed")
+    refused = journal.summaries.get(operation_id)
+    journal.summaries.refuse(operation_id, "source_changed")
+    assert journal.summaries.get(operation_id) == refused
+    assert journal.summaries.blocking(session) == (refused,)
+    with pytest.raises(CompactionJournalError, match="refusal transition forbidden"):
+        journal.summaries.refuse(operation_id, "different observation")
+    assert journal.summaries.get(operation_id) == refused
+    assert not native_input_admitted(journal.path.parent, session)
