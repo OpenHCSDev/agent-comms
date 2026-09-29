@@ -178,7 +178,8 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     owner.provider.text = "Reopened retained context."
     reopened = await owner.run("after validated reopen")
     assert reopened[-1].ok and reopened[-1].text == owner.provider.text, reopened[-1]
-    assert owner.persistent.custody.child.proc is not retained and owner.persistent.custody.child.proc.alive()
+    assert owner.persistent.custody.child.proc is not retained
+    assert owner.persistent.custody.child.proc.alive()
     assert owner.persistent.custody.idle().current
     reopened_child = owner.persistent.custody.child.proc
     # The deliberately oversized output tests framing, not permission to admit
@@ -210,6 +211,8 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
                 assert not turn.done(), turn.result() if turn.done() else None
                 await asyncio.sleep(0.01)
         child = owner.children[-1]
+        session = backend.TurnSession.active[turn]
+        stderr, forwarding = session.native.stderr_task, session.steering_task
         if termination == "cancel":
             turn.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -222,6 +225,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
             result = await turn
             assert isinstance(result[-1], events.Done) and not result[-1].ok
         assert turn not in backend.TurnSession.active
+        assert stderr.done() and forwarding is not None and forwarding.done()
         assert not child.alive()
         assert not owner.persistent.available
         assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
@@ -229,3 +233,52 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
         if not turn.done():
             turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
+
+
+async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
+    native_backend, monkeypatch
+):
+    from agent_comms.native_custody import PiSessionChild, RetiringNative
+
+    owner = native_backend
+    owner.provider.status = 0
+    turn = asyncio.create_task(owner.run("Uncertain input before interrupted owner stop"))
+    entered, release = asyncio.Event(), asyncio.Event()
+    close = PiSessionChild.close
+    stop = None
+    try:
+        async with asyncio.timeout(15):
+            while owner.provider.posts != 1:
+                assert not turn.done()
+                await asyncio.sleep(0.01)
+        session = backend.TurnSession.active[turn]
+
+        async def held_close(child):
+            if child is session.native:
+                entered.set()
+                await release.wait()
+            await close(child)
+
+        monkeypatch.setattr(PiSessionChild, "close", held_close)
+        stop = asyncio.create_task(backend.terminate_task_process(turn))
+        await asyncio.wait_for(entered.wait(), 5)
+        stop.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await stop
+        assert backend.TurnSession.active[turn] is session
+        assert isinstance(owner.persistent.custody, RetiringNative)
+        assert not owner.persistent.custody.task.done()
+        release.set()
+        result = await asyncio.wait_for(turn, 10)
+        assert not result[-1].ok
+        assert not session.native.proc.alive()
+        assert session.native.stderr_task.done() and session.steering_task.done()
+        assert turn not in backend.TurnSession.active
+        assert owner.provider.posts == len(owner.saved_inputs()) == 1
+    finally:
+        release.set()
+        if not turn.done():
+            turn.cancel()
+        await asyncio.gather(turn, return_exceptions=True)
+        if stop is not None:
+            await asyncio.gather(stop, return_exceptions=True)

@@ -2,13 +2,13 @@
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from types import SimpleNamespace
-from agent_comms.native_attestation import ObservedAttestation
 
 from agent_comms import pi_commands as commands
 from agent_comms.backend import TurnSession
+from agent_comms.native_attestation import ObservedAttestation
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_payloads import StateData
 from agent_comms.pi_rpc import PiRpcChannel
@@ -78,6 +78,9 @@ def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
         for node in ast.walk(backend)
     )
     assert "_ACTIVE_INPUT_RESTORERS" not in (root / "backend.py").read_text()
+    for retired_index in ("_ACTIVE_PROCESSES", "_ACTIVE_STDERR_TASKS", "_ACTIVE_STEERING"):
+        assert retired_index not in (root / "backend.py").read_text()
+        assert retired_index not in (root / "pi_events.py").read_text()
     turn = next(
         node
         for node in backend.body
