@@ -74,12 +74,13 @@ class TranscriptReplay:
 
     async def replay(self, session_id: str, name: str, client: Any = None) -> None:
         destination = client or self.runtime
-        page = await asyncio.to_thread(self.comms.transcripts.thread_transcript_page, name)
+        snapshot = await asyncio.to_thread(
+            TranscriptSnapshotUpdate.capture, self.comms.transcripts, name)
         await destination.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(TranscriptSnapshotUpdate(page)),
+                field_meta=encode_updates(snapshot),
             ),
         )
