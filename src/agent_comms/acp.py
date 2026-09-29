@@ -47,6 +47,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
+from agent_comms.native_source_cursor import NativeSourceCursor
 
 from . import agent_events as events
 from . import manual_compaction_bridge
@@ -71,7 +72,6 @@ from .coordination_cohort import next_sealed_assignment
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
-from .native_source_cursor import advance_current_native_cursor, read_current_native_cursor
 from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -404,8 +404,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     self._comms.registry,
                     private_response_writes=True,
                 )
-                cursor = read_current_native_cursor(
-                    bus, store, wire_root_id=root_id, owner_name=thread_name
+                cursor = NativeSourceCursor(bus, store, wire_root_id=root_id).read(
+                    owner_name=thread_name
                 )
         except BlockingIOError:
             # A writer holding a nonblocking observation lock did not invalidate
@@ -608,10 +608,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                     admission_generation = self._comms.registry.snapshot().admission_generations[
                         thread_name
                     ]
-                    cursor = advance_current_native_cursor(
-                        bus,
-                        store,
-                        wire_root_id=wire_root_id,
+                    cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance(
                         owner=owner,
                         owner_admission_generation=admission_generation,
                         owner_generation=person.participant_generation,

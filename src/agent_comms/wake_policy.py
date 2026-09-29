@@ -8,6 +8,12 @@ from typing import ClassVar
 
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
+from .source_proof_requirement import (
+    FullSourceProof,
+    NoSourceProof,
+    SourceProofRequirement,
+    TriageSourceProof,
+)
 from .typed_table import sql_literal
 
 
@@ -46,7 +52,7 @@ class BoundedTriageEngagement(Engagement):
 
 
 @dataclass(frozen=True)
-class WakePolicy(DeclaredFamily, affix="Wake"):
+class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
     active: ClassVar[bool] = True
     triage: ClassVar[bool] = False
 
@@ -64,7 +70,7 @@ class WakePolicy(DeclaredFamily, affix="Wake"):
         return "this is yours; answer the original committed message"
 
 
-class PassiveWake(WakePolicy):
+class PassiveWake(NoSourceProof, WakePolicy):
     active = False
 
     @classmethod
@@ -77,7 +83,7 @@ class PassiveWake(WakePolicy):
         raise IntegrityViolationError("passive claim cannot engage")
 
 
-class BoundedTriageWake(WakePolicy):
+class BoundedTriageWake(TriageSourceProof, WakePolicy):
     triage = True
 
     def triage_expectation(self):
@@ -90,7 +96,7 @@ class BoundedTriageWake(WakePolicy):
         return TriagePendingAssignment
 
 
-class FullWake(WakePolicy):
+class FullWake(FullSourceProof, WakePolicy):
     @classmethod
     def initial_state(cls):
         from .assignment_states import FullPendingAssignment

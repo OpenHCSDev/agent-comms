@@ -22,7 +22,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
-from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_native_prompt_binding import _fake_model
@@ -103,8 +103,8 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        cursor = read_current_native_cursor(
-            comms.bus, reopened, wire_root_id=root_id, owner_name="alpha"
+        cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha"
         )
         assert cursor is not None and cursor.input_id == second.input_id
         assert cursor.injected_seq == selected.seq and cursor.covered_seq == selected.seq
@@ -132,8 +132,8 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        cursor = read_current_native_cursor(
-            comms.bus, reopened, wire_root_id=root_id, owner_name="alpha"
+        cursor = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha"
         )
         assert cursor is not None and cursor.input_id == second.input_id
         assert cursor.covered_seq == selected.seq and cursor.injected_seq == selected.seq
@@ -157,8 +157,8 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     start = time.perf_counter()
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        current = read_current_native_cursor(
-            comms.bus, reopened, wire_root_id=root_id, owner_name="alpha"
+        current = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha"
         )
     reconnect_ms = (time.perf_counter() - start) * 1000
     assert current is not None and current.input_id == turn.input_id
@@ -184,7 +184,7 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
         db.execute("DELETE FROM addressed")  # Disposable corrupt sidecar only.
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RelationViolationError, match="seal changed"):
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
         assert (
             store.session._connection.execute(
                 f"SELECT COUNT(*) FROM {CurrentNativeCursor.declared_name}"

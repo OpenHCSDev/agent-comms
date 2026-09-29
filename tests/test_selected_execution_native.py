@@ -16,7 +16,9 @@ from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.native_pi import read_tracked_input_digest
+from agent_comms.native_prompt_binding import read_expected_prompt_binding
+from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -24,8 +26,12 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 tmp_path = private_root_fixture
 
 
-@pytest.mark.parametrize("after_cutover, selected_write", [(False, False), (True, False), (False, True)])
-async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover, selected_write):
+@pytest.mark.parametrize(
+    "after_cutover, selected_write", [(False, False), (True, False), (False, True)]
+)
+async def test_native_full_four_tools_publish_and_release(
+    tmp_path, monkeypatch, after_cutover, selected_write
+):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
@@ -72,7 +78,9 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2
                 if len(requests) == 1:
-                    assert {t["function"]["name"] for t in request["tools"]} == {name for name, _ in calls}
+                    assert {t["function"]["name"] for t in request["tools"]} == {
+                        name for name, _ in calls
+                    }
                     delta = {
                         "role": "assistant",
                         "tool_calls": [
@@ -154,8 +162,11 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     execution = SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path(package),
-        selected_tool_intent=SelectedToolIntent() if selected_write else None
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=Path(package),
+        selected_tool_intent=SelectedToolIntent() if selected_write else None,
     )
     try:
         outcome = await asyncio.wait_for(execution.run(), 40)
@@ -176,18 +187,37 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
             assert execution.assignment.wire_seq == initial.message.seq
-            cursor = read_current_native_cursor(
-                comms.bus, store, wire_root_id=root_id, owner_name="beta"
+            cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="beta"
             )
             assert cursor is not None
             assert cursor.injected_seq == initial.message.seq
             assert cursor.covered_seq >= cursor.injected_seq
             assert cursor.input_id == outcome.input_id
+            proofs = read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(owner.created_at),
+                source_seq=initial.message.seq,
+            )
+            assert len(proofs) == 1 and proofs[0].input_id == outcome.input_id
+            assert proofs[0].expected_prompt_equality_established
+            binding = read_expected_prompt_binding(store, outcome.input_id)
+            assert binding is not None
+            assert (
+                read_tracked_input_digest(proofs[0].context.session_file, outcome.input_id)
+                == binding.expected_prompt_digest
+            )
             if after_cutover:
-                assert read_historical_native_inputs(
-                    store, wire_root_id=root_id,
-                    recipient_lookup=stable_thread_lookup(owner.created_at), source_seq=old_seq,
-                ) == ()
+                assert (
+                    read_historical_native_inputs(
+                        store,
+                        wire_root_id=root_id,
+                        recipient_lookup=stable_thread_lookup(owner.created_at),
+                        source_seq=old_seq,
+                    )
+                    == ()
+                )
         with pytest.raises(IdentityConflict, match="cannot be reused"):
             await execution.run()
         assert len(requests) == 2

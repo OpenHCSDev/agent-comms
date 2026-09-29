@@ -11,32 +11,43 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_source_cursor import _bounded_coverage_pages, _source_witness
-from agent_comms.private_bus_checkpoint import PrefixWitness
+from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
+from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
+
+
+def source_witness(bus):
+    with bus.log.locked(blocking=False):
+        return verify_private_bus_checkpoint_unlocked(bus.log, bus.log._private_marker_unlocked())
 
 
 def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
         install_native_runtime_schema(store)
-        witness = _source_witness(comms.bus)
+        witness = source_witness(comms.bus)
         assert isinstance(witness, PrefixWitness)
         assert witness.root_id == root_id and witness.through_seq == witness.offset == 0
         assert comms.bus.log.read_metadata_unlocked(required=True).claims
-        empty = _bounded_coverage_pages(comms.bus, store, root_id, lookups["bob"])
+        empty = SourceCoverage(
+            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
+        ).prefix()
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
         sent = comms.messaging.send_user_message(
             "bob", "fresh selected input", worktree=str(tmp_path)
         )
-        before = _bounded_coverage_pages(comms.bus, store, root_id, lookups["bob"])
+        before = SourceCoverage(
+            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
+        ).prefix()
         assert before.blocked_seq == sent.seq and before.injected_source_seqs == ()
         accept_initial_cohort(comms.bus, root_id, sent.seq, store)
-        selected = _bounded_coverage_pages(comms.bus, store, root_id, lookups["bob"])
+        selected = SourceCoverage(
+            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
+        ).prefix()
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
-        assert _source_witness(Comms(comms.root).bus).through_seq == sent.seq
+        assert source_witness(Comms(comms.root).bus).through_seq == sent.seq
 
 
 def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):
@@ -59,7 +70,7 @@ def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monk
     with pytest.raises(RelationViolationError, match="pending"):
         Comms(comms.root).registry.snapshot()
     with pytest.raises(RelationViolationError):
-        _source_witness(comms.bus)
+        source_witness(comms.bus)
     assert comms.bus.log.path.read_bytes() == b""
 
 
@@ -80,7 +91,9 @@ async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tm
     root_id = comms.messaging.initialize_private_initial_protocol()
     package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
     agent = CommsAgent(
-        comms, auto_wake=False, private_nk_wire_root_id=root_id,
+        comms,
+        auto_wake=False,
+        private_nk_wire_root_id=root_id,
         private_nk_native_package=package,
     )
     try:
@@ -88,6 +101,6 @@ async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tm
         assert fresh.session_id in comms.registry
         await agent.load_session(cwd=str(tmp_path), session_id=fresh.session_id)
         assert agent.sessions.require(fresh.session_id) == fresh.session_id
-        assert _source_witness(comms.bus).through_seq == 0
+        assert source_witness(comms.bus).through_seq == 0
     finally:
         await agent.shutdown()
