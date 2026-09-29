@@ -156,7 +156,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     store = GoalAttemptStore.initialize(private)
     store.create_goal(original.id)
     reservation = store.reserve(original.id, 1)
-    store.record_failed(reservation, "Previous goal attempt failed")
+    reservation.fail(store, "Previous goal attempt failed")
 
     refusal = (
         "The interrupted goal attempt is unresolved. Inspect it, then use "

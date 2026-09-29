@@ -6,6 +6,7 @@ tools. Recovery-only historical phases remain readable without manufacturing
 recovery events from a successful result.
 """
 
+from agent_comms.attempt_states import AttemptFailedAttempt
 from . import pi_events as pi
 from .attempt_states import (
     CompactionAttempt,
@@ -106,7 +107,8 @@ class DurableTurn(MroDispatch):
         Coordination owns the atomic replay/finality/slot mutation.
         """
         return self.attempts.fail_unknown(
-            self.fence, expected_pointer_revision=self.pointer_revision,
+            self.fence,
+            expected_pointer_revision=self.pointer_revision,
         ).value
 
     def fail_terminal(self):
@@ -122,6 +124,6 @@ class DurableTurn(MroDispatch):
         return self.attempts.settle_nonpublication(
             final.fence,
             expected_pointer_revision=final.snapshot.pointer_revision,
-            success=False,
+            outcome=AttemptFailedAttempt(),
             reason_code="native_terminal_failure",
         ).value

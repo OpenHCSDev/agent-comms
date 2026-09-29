@@ -1,0 +1,7 @@
+{
+  "permit_module": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/attempt-ownership/runtime/lib/python3.14/site-packages/agent_comms/goal_attempts.py",
+  "goal_admission": "    def violated(self, check: OrdinaryGoalGrantCheck) -> bool:\n        return not check.permit.is_claimed(check.store)\n",
+  "claim_check": "    def is_claimed(self, store: GoalAttemptStore) -> bool:\n        attempt = self.reservation\n        return attempt.readback(\n            store,\n            ClaimedAttempt(),\n            Generation(\n                attempt.goal_id,\n                attempt.generation,\n                ReservedGeneration(),\n                attempt.attempt_id,\n            ),\n        )\n",
+  "native": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent",
+  "verified": true
+}
