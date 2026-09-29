@@ -168,7 +168,10 @@ this audit does not silently close it or claim the target met.
   PR318 creation adds4chain terms and3foreign probes in each of two files;
   ownership correction removes both chains. Actual MessageWireCodec introduction
   adds1 and removal subtracts1. Actual ClaimTransition ownership move grows the
-  small owner while GodClassExcess stays0. No historical native input replay.
+  small owner while GodClassExcess stays0. Actual merged Toad142 grows
+  Conversation2150→2191, so GodClassExcess increases41. Tesla156's recorded
+  2191→2054 ownership change already addresses that growth; no competing edit or
+  new merge hold is introduced. No historical native input replay.
 - [Current named surfaces](../evidence/remaining-plan-closure/current-surfaces.json):
   exact main heads, bounded class spans and semantic chain classification;
   no production imports, process launches or shared-state mutations.

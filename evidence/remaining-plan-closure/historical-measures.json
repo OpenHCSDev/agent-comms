@@ -164,6 +164,64 @@
         37,
         39
       ]
+    },
+    {
+      "project": "Toad",
+      "base": "4985a19e4fd7cd6c378af48a41fb1a14c0652d55",
+      "head": "040607c23031450a6c53bb25fdea72256b2ca2ad",
+      "paths": [
+        "src/toad/widgets/conversation.py"
+      ],
+      "measure": "GodClassExcess",
+      "before": {
+        "GodClassExcess:src/toad/widgets/conversation.py::Loading": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::PaintOnlyRefresh": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ThreadLoading": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::TurnActivity": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Cursor": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CategorizedMount": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Contents": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ContentsGrid": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CursorContainer": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ConversationWindowSettings": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Window": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Conversation": 1650,
+        "GodClassExcess:src/toad/widgets/conversation.py::ConversationCommsConsumer": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CompactionRenderer": 0
+      },
+      "after": {
+        "GodClassExcess:src/toad/widgets/conversation.py::Loading": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::PaintOnlyRefresh": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ThreadLoading": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::TurnActivity": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Cursor": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CategorizedMount": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Contents": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ContentsGrid": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CursorContainer": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ConversationWindowSettings": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Window": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Conversation": 1691,
+        "GodClassExcess:src/toad/widgets/conversation.py::ConversationCommsConsumer": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CompactionRenderer": 0
+      },
+      "delta": {
+        "GodClassExcess:src/toad/widgets/conversation.py::Loading": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::PaintOnlyRefresh": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ThreadLoading": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::TurnActivity": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Cursor": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CategorizedMount": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Contents": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ContentsGrid": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CursorContainer": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::ConversationWindowSettings": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Window": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::Conversation": 41,
+        "GodClassExcess:src/toad/widgets/conversation.py::ConversationCommsConsumer": 0,
+        "GodClassExcess:src/toad/widgets/conversation.py::CompactionRenderer": 0
+      },
+      "note": "Actual merged workspace142, compared with its first-parent main. Report measured growth as a remaining owned correction, not a new merge hold."
     }
   ]
 }
