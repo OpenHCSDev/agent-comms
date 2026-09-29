@@ -40,7 +40,7 @@ async def main(package: Path, evidence: Path):
                 payload = json.loads(raw)
                 allowance = payload["max_tokens"]
                 requests.append({"allowance": allowance, "bytes": len(raw), "messages": payload["messages"]})
-                if len(requests) > 2:
+                if len(requests) > 3:
                     raise AssertionError("Provider request did not converge")
                 if len(requests) == 1:
                     assert allowance + input_count > context_limit
@@ -49,6 +49,10 @@ async def main(package: Path, evidence: Path):
                                f"messages and {allowance} tokens for the completion. Please reduce the number of tokens.")
                     body = json.dumps({"error": {"message": "Provider returned error", "code": 400,
                                       "metadata": {"raw": json.dumps({"errors": [{"message": message}], "success": False})}}}).encode()
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                elif len(requests) == 3:
+                    body = json.dumps({"error": {"message": "Unsupported fixture parameter.", "code": "invalid_request_error"}}).encode()
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json")
                 else:
@@ -125,6 +129,15 @@ async def main(package: Path, evidence: Path):
                 assert not any(row.get("type") == "compaction" for row in records), "A fitting input was compacted"
                 report = {"requests": [{key: value for key, value in request.items() if key != "messages"} for request in requests],
                           "native_users": len(users), "compactions": 0, "response": "BUDGET_NATIVE_RECOVERY_OK"}
+                async with asyncio.timeout(30):
+                    await client.prompt("budget-native", [TextContentBlock(type="text", text="UNKNOWN_REJECTION_INPUT")])
+                assert len(requests) == 3, "Unknown provider rejection was automatically retried"
+                assert len(subscriber.failures) == 1 and "Unsupported fixture parameter" in subscriber.failures[0]
+                records = [json.loads(line) for line in native.read_text().splitlines()]
+                users = [row for row in records if row.get("type") == "message" and row.get("message", {}).get("role") == "user"]
+                assert len(users) == 2, "Unknown rejection replayed its native input"
+                assert not any(row.get("type") == "compaction" for row in records)
+                report["unknown_rejection"] = {"provider_calls": 1, "native_users": len(users), "compactions": 0}
                 (evidence / "receipt.json").write_text(json.dumps(report, indent=2))
                 print("ACTUAL_ACP_OWNER_PI_CONTEXT_REJECTION_RECOVERED_SAME_INPUT_NO_COMPACTION", report, flush=True)
             finally:
