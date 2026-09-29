@@ -119,7 +119,7 @@ def _owner_error(error: Exception) -> dict[str, Any]:
             "error": reason if isinstance(reason, str) and reason else str(error),
             "rpcError": error.to_error_obj(),
         }
-    return {"error": str(error)}
+    return {"error": str(error) or type(error).__name__}
 
 
 def _raise_owner_error(data: dict[str, Any]) -> None:

@@ -32,6 +32,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
+    cancellation_feedback: ClassVar[str] = "Delivery unconfirmed — input not retried. Inspect delivery before deciding whether to send a new message."
 
     @property
     @abstractmethod
@@ -250,6 +251,7 @@ class BoundUnknownInput(SentInput):
 class StartedInput(SentInput):
     has_started = True
     public_status = "started"
+    cancellation_feedback = "Native input started; turn cancelled — input not retried."
 
     def proves_started(
         self,
@@ -274,6 +276,7 @@ class StartedInput(SentInput):
 class NotSentInput(StoredInput):
     unresolved = True
     public_status = "not_sent"
+    cancellation_feedback = "Not sent — cancellation completed before native delivery. Input not retried."
 
     def unsettled_for(self, owner: Thread, pending_key: str | None) -> bool:
         return False

@@ -23,6 +23,7 @@ from .acp_extension import (
     GoalChangedUpdate,
     InputFailedUpdate,
     McpClientReceiptUpdate,
+    PromptCancelledUpdate,
     RequestFailedUpdate,
     TextRouteUpdate,
     TurnSettledUpdate,
@@ -211,7 +212,6 @@ class AcpEventConsumer(MroDispatch):
         )
         if self.agent.turns.emitted_errors.get(session_id) == failure:
             return
-        self.agent.turns.emitted_errors[session_id] = failure
         failed_input = None
         input_text = original.notice_text if original else None
         if input_text and not self.agent.inputs.dispositions.read().all_started(original_keys):
@@ -228,6 +228,18 @@ class AcpEventConsumer(MroDispatch):
                 ),
             ),
         )
+        self.agent.turns.emitted_errors[session_id] = failure
+
+    @handles(events.PromptCancelled)
+    async def on_cancelled(self, event):
+        await self.client.session_update(
+            session_id=self.session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(PromptCancelledUpdate(event.input_state)),
+            ),
+        )
 
     @handles(events.Done)
     async def on_done(self, event: events.Done) -> None:
@@ -240,4 +252,3 @@ class AcpEventConsumer(MroDispatch):
             # The existing emission owner deduplicates full typed evidence,
             # including a terminal not-sent transition with unchanged text.
             await self.agent._emit_event(session_id, events.Error(str(event.text)), client)
-        self.agent.turns.emitted_errors.pop(session_id, None)
