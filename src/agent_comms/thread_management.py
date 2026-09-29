@@ -615,13 +615,11 @@ class ThreadManagement:
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
-            session_file=fork_native_session(parent, pi_bin).session_file,
+            session_file=fork_native_session(parent.session_file, parent.worktree, pi_bin).session_file,
             process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,
         )
-        if child.model is None and (model := _session_model(Path(child.session_file))):
-            child = replace(child, model="/".join(model))
         self.channels._require_available_new_tags(child.tags)
         self.registry.register(child)
         self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
@@ -629,7 +627,8 @@ class ThreadManagement:
         key = f"acp:{uuid4().hex}"
         try:
             owned = self.owners._launch_owner_unlocked(
-                child, pi_bin, startup_input_key=key,
+                replace(child, model=self.resolve_thread_model(child.name)),
+                pi_bin, startup_input_key=key,
             )
             InputDispositions(self.root / InputDispositions.filename).record(
                 key, seq=None, owner=owned.name, target=owned.name,
