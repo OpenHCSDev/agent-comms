@@ -27,7 +27,9 @@ from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
+from .input_disposition import InputDispositions
 from .message_bus import MessageBus
+from .native_fork import fork_native_session
 from .native_transcript import NativeTranscript
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
@@ -607,12 +609,14 @@ class ThreadManagement:
                 f"Parent thread {spec.parent!r} has no session file to fork."
             )
 
+        session = fork_native_session(parent.session_file, parent.worktree, pi_bin)
         child = Thread(
             name=spec.name,
             tags=spec.tags,
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
+            session_file=session.session_file,
             process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,
@@ -621,21 +625,18 @@ class ThreadManagement:
         self.registry.register(child)
         self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
-        # Non-interactive pi refuses to run without an explicit model, so pass
-        # the parent's last model choice through to the child.
-        model = (
-            tuple(parent.model.split("/", 1))
-            if parent.model and "/" in parent.model
-            else _session_model(Path(parent.session_file))
-        )
-        args = ["--print", "--provider", model[0], "--model", model[1]] if model else None
+        key = f"acp:{uuid4().hex}"
         try:
-            return self.owners._launch_owner_unlocked(
-                child,
-                pi_bin,
-                args,
-                prompt=spec.prompt or spec.task,
+            owned = self.owners._launch_owner_unlocked(
+                replace(child, model=self.resolve_thread_model(child.name)),
+                pi_bin, startup_input_key=key,
             )
+            InputDispositions(self.root / InputDispositions.filename).record(
+                key, seq=None, owner=owned.name, target=owned.name,
+                admission=self.registry.snapshot().admission_generations[owned.name],
+                text=spec.prompt or spec.task,
+            )
+            return owned
         except OSError:
             self.registry.remove(spec.name)
             raise
