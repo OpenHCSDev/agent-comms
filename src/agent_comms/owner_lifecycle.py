@@ -41,11 +41,9 @@ class OwnerRestartSelection:
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str):
         owner = snapshot.require_active(name)
-        if owner.process_identity is None:
-            raise OwnerSelectionChangedRefusal()
         return cls(
             snapshot.owner_identity(owner.name),
-            owner.process_identity,
+            owner.require_process(),
             snapshot.admission_generations[owner.name],
         )
 

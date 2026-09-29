@@ -16,6 +16,8 @@ native attachment and new loopback input after replacement. Preserve uncertain
 input dispositions; never restart a live owner or mutate the live root.
 
 Patterns: IMPL-1, MEMB-3, BOUND-1, BOUND-2, TIME-1.
+The checkpoint adds more than it deletes because queue/refusal/environment facts
+now have declarations and the fixture exercises a real continuous owner handoff.
 
 Implemented: one `QueuedRestart` declaration and state family decoded by the
 existing FieldCodec; typed `OwnerRestartSelection` delegates to the registry's
@@ -78,7 +80,8 @@ threads.py and pi_events.py; these files are excluded here. Kepler owns TC2 ACP
 SDK. Arendt owns Core416 large-context native accounting and usage acceptance.
 C4 remains parent-owned after C1 and this scope. No new workers.
 
-All C3 acceptance transfers intact to the separate owner-state follow-up draft.
+All C3 acceptance transfers intact to Core421, the separate owner-state follow-up
+draft at `/home/ts/wt/comms-owner-state-cleanup-20260929`.
 A C2 checkpoint is not completion of pending C3 acceptance. Einstein additionally
 reported the retired `SelectedSummaryAttempt` import in the independent
 `test_selected_summary_exchange` child fixture; Mendel owns a separate tests-only
