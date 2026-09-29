@@ -113,3 +113,27 @@ did not yet inspect the declared failure update. That gap is corrected here.
 Ruff passes; canonical IDEN-3 foreignabsence3->3, IMPL-14 chainterms0->0.
 Actual final healthy-runtime provider/native family proof remains pending parent
 hostruntime repair; no GREEN, no replay, no userattempt reset.
+
+## Upgrade interval: first-input contract correction (not executed native)
+
+Deleted12 test lines, including redundant post-wait failure checks and the
+incorrect unconditional second ACP submission. Source trace: normal
+ThreadManagement._fork_unlocked records spec.prompt/spec.task, then worker
+run_startup_input dispatches that one journaled owner input. A concurrent ACP
+prompt uses accept_followup, whose end_turn explicitly means local acceptance.
+
+Fork case now supplies hey Boss through normal ForkSpec.task and sends NO
+additional ACP prompt; ordinary case submits hey Boss through attached ACP.
+Each existing case owns its first-input behavior. Shared bounded20s acceptance
+waits for an actual native assistant FIRST_OWNER_ANSWER, rejects typed failures
+while waiting, then preserves exactly-one userinput,2 actual provider calls,
+retained parent request context, no native/ACP compaction and no replay checks.
+Timer includes owner launch/attach, not merely the fast queue acknowledgement.
+Fresh provider answer marker differs from the retained parent assistant answer.
+
+Non-Node checks only during owner OS upgrade: Ruff passes, both family cases
+collect successfully; canonical foreignabsence3->3 and chainterms0->0. Small
+correct owners24lines maximum, no500threshold crossing/godclass growth.
+Full actual native/provider behavior is UNEXECUTED for this correction pending
+healthy host; do not treat collection/static measures as runtime acceptance.
+No OS/live/provider changes and no repeated native runs during upgrade.

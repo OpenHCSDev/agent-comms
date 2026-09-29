@@ -40,6 +40,9 @@ class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
     async def create(self, comms): ...
 
     @abstractmethod
+    async def first_input(self, attachment, child): ...
+
+    @abstractmethod
     def verify_fraction(self, fraction): ...
 
     @abstractmethod
@@ -52,6 +55,11 @@ class OrdinaryOwnerCase(OwnerAdmissionCase):
     async def create(self, comms):
         await asyncio.to_thread(comms.owners.start, "physical-parent")
         return comms.registry.require("physical-parent")
+
+    async def first_input(self, attachment, child):
+        return await attachment.prompt(
+            child.name, [TextContentBlock(type="text", text="hey Boss")]
+        )
 
     def verify_fraction(self, fraction):
         assert 0.60 < fraction < 0.70
@@ -70,9 +78,14 @@ class ForkOwnerCase(OwnerAdmissionCase):
             ForkSpec(
                 name="physical-child",
                 parent="physical-parent",
-                task="Continue retained architecture",
+                task="hey Boss",
             ),
         )
+
+    async def first_input(self, attachment, child):
+        # Normal fork already journaled and dispatched the first input.
+        # A second ACP prompt would test queueing instead of fork first-send.
+        return None
 
     def verify_fraction(self, fraction):
         assert 0.20 < fraction < 0.27
@@ -162,6 +175,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         flush=True,
     )
 
+    native.provider.text = "FIRST_OWNER_ANSWER"
     await native.persistent.close()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv(
@@ -208,6 +222,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         return launch(*args, output=output, **kwargs)
 
     monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
+    first_send_started = time.monotonic()
     try:
         child = await case.create(comms)
         async with asyncio.timeout(15):
@@ -219,12 +234,37 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
                     if not comms.registry.require(child.name).process_alive:
                         raise
                     await asyncio.sleep(0.1)
-        first_send_started = time.monotonic()
         try:
-            async with asyncio.timeout(20):
-                response = await attachment.prompt(
-                    child.name, [TextContentBlock(type="text", text="hey Boss")]
-                )
+            async with asyncio.timeout(20 - (time.monotonic() - first_send_started)):
+                response = await case.first_input(attachment, child)
+                # ACP end_turn can mean local queue acceptance; actual native
+                # answer publication is the completion boundary for both cases.
+                while True:
+                    request_failures = [
+                        fact.failure for fact in facts if isinstance(fact, RequestFailedUpdate)
+                    ]
+                    input_failures = [
+                        fact.failure for fact in facts if isinstance(fact, InputFailedUpdate)
+                    ]
+                    assert not request_failures, "\n".join(
+                        failure.feedback for failure in request_failures
+                    )
+                    assert not input_failures, "\n".join(
+                        failure.description + "\n" + failure.input_disposition
+                        for failure in input_failures
+                    )
+                    thread = comms.registry.require(child.name)
+                    rows = [
+                        json.loads(line)
+                        for line in Path(thread.session_file).read_text().splitlines()
+                    ]
+                    answers = [
+                        row["message"] for row in rows
+                        if row["type"] == "message" and row["message"].get("role") == "assistant"
+                    ]
+                    if any("FIRST_OWNER_ANSWER" in json.dumps(answer) for answer in answers):
+                        break
+                    await asyncio.sleep(0.05)
         except Exception as error:
             rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
             print(
@@ -246,12 +286,6 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
             "REQUEST_BYTES", [len(json.dumps(request)) for request in native.provider.requests],
             flush=True,
         )
-        request_failures = [fact.failure for fact in facts if isinstance(fact, RequestFailedUpdate)]
-        input_failures = [fact.failure for fact in facts if isinstance(fact, InputFailedUpdate)]
-        assert not request_failures, "\n".join(failure.feedback for failure in request_failures)
-        assert not input_failures, "\n".join(
-            failure.description + "\n" + failure.input_disposition for failure in input_failures
-        )
         assert latency < 20
         assert not any(isinstance(fact, CompactionChangedUpdate) for fact in facts)
         assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
@@ -267,6 +301,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
             if entry["type"] == "message" and entry["message"].get("role") == "user"
         ]
         assert any("PHYSICAL_PARENT_CONTEXT" in json.dumps(message["content"]) for message in users)
+        assert "FIRST_OWNER_ANSWER" in json.dumps(entries)
         assert sum("hey Boss" in json.dumps(message["content"]) for message in users) == 1
         assert native.provider.posts == 2  # physical parent, first answer only
         assert "PHYSICAL_PARENT_CONTEXT" in json.dumps(native.provider.requests[-1]["messages"])
