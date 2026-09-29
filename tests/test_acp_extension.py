@@ -40,7 +40,12 @@ from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
 
 
-def test_declared_family_roundtrip_and_strict_boundary():
+def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
+    from agent_comms.comms import wire
+    from agent_comms.threads import Thread
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("pilot", frozenset(), str(tmp_path)))
+    read = comms.transcripts.capture_page_read("pilot")
     owner = OwnerIdentity(ThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)
     samples = (
@@ -67,7 +72,7 @@ def test_declared_family_roundtrip_and_strict_boundary():
         CompactionChangedUpdate(CompactionStart()),
         CompactionCommittedUpdate("commit", "summary"),
         TranscriptSnapshotUpdate(
-            TranscriptPage((), TranscriptCursor("s", 0), TranscriptCursor("s", 1), False, False)
+            read.read(), read.identity
         ),
         InputDeliveryChangedUpdate("input"),
         CompactionPublishedUpdate(
