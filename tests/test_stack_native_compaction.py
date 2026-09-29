@@ -18,6 +18,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
@@ -440,9 +441,20 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             ]
             assert any("FINAL_OWNER_REPLY" in text for text in texts)
             assert not any("[agent error]" in text for text in texts)
-            assert '"type":"compaction"' in session.read_text()
+            saved_entries = [json.loads(line) for line in session.read_text().splitlines()]
+            committed = [entry["summary"] for entry in saved_entries if entry.get("type") == "compaction"]
+            assert committed == ["summary"]
+            completions = [
+                field.event
+                for update in updates
+                for field in decode_updates(update.field_meta or {})
+                if isinstance(field, CompactionChangedUpdate)
+                and isinstance(field.event, ae.CompactionEnd)
+            ]
+            assert len(completions) == 1
+            assert completions[0].publication_summary == committed[0]
             return
-        assert ae.InputStarted in kinds
+        assert ae.InputStarted in kinds, [(type(event).__name__, getattr(event, "text", None)) for event in events]
         assert isinstance(events[-1], ae.Done)
         if case == "post_compaction_tool_rounds":
             assert events[-1].ok is True
