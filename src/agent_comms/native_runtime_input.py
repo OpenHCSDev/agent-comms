@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -16,7 +15,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import StaleFence
 from .native_input_record import NativeInputRecord
 from .typed_table import Column, TypedTable
 
@@ -102,15 +101,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
         """Only the original reserved capability can acquire its first proof."""
         if self.owner_token_digest != token_digest or self.session_id is not None:
             raise StaleFence("native proof belongs to a different or already settled dispatch")
-
-    def verify_context(self, context: NativeContextProof, session_dir: Path) -> None:
-        """Corroborate live RPC evidence; a disk row alone grants no authority."""
-        from .native_pi import NativeContextProof
-
-        if context.input_id != self.input_id or context.session_file.parent != session_dir:
-            raise IdentityConflict("Pi live assembled context does not bind the reserved input")
-        if NativeContextProof.read_evidence(context.session_file, self.input_id) != context:
-            raise IdentityConflict("native Pi event differs from its private session evidence")
 
     def commit_context(
         self,

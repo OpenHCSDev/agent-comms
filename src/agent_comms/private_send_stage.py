@@ -115,9 +115,12 @@ class NativeSendStage(ABC):
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
+        if not context.corroborates_input(input_id, session_dir):
+            raise IdentityConflict(
+                "Pi live assembled context differs from its reserved input proof"
+            )
         with store.session.read():
-            row = self.pending_input(store, input_id, owner, token_digest)
-            row.verify_context(context, session_dir)
+            self.pending_input(store, input_id, owner, token_digest)
             binding = self.require_binding(
                 store,
                 input_id,
@@ -250,9 +253,9 @@ class TriageNativeSend(NativeSendStage):
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         if (
-            not current.lifecycle.deferred
+            current.lifecycle
+            != DeferredAssignment.build(self.assignment.lifecycle.mode, None, None)
             or current.revision != self.assignment.revision + 1
-            or current.lifecycle.execution_id is not None
         ):
             raise StaleFence("triage claim changed before native send")
 
