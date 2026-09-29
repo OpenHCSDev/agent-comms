@@ -1,7 +1,7 @@
 ## Ready: whole journal transaction ownership
 
 991 production lines deleted/replaced;1111 added (including moved declarations,
-net+120). Source `8ac16539`, current main373/374 integrated. Full ownership and
+net+120). Source `ce15a23d`, current main367/375/377 integrated. Full ownership and
 receipts: [README](evidence/q8-journal-transactions/README.md).
 
 CompactionJournal now owns only the canonical database/schema/transaction/fsync
@@ -17,7 +17,17 @@ Identical refusal stays idempotent and blocking. Terminal grants still mint only
 after returned commit+fsync. Native/source/UNKNOWN and no-replay fences retained.
 SQL schema and durable shapes unchanged.
 
-## Verification
+## Current-main integration
+
+Resolved367 caller/fault-test conflict against current main4734433d. Production
+selected enrollment/raw-send paths consume the actual journal owners; no wrappers.
+Corrected require_source indentation. **4 affected checks passed33.81s:** actual
+saved selected EOF/UNKNOWN/no replay; ACP publication-before-binding across two
+saved-session inputs; postcommit correction refusal; real fsync-fault no-dispatch.
+No old journal callers, no ratchet increases. Run scratch cleaned after reference
+check. [Current receipt](evidence/q8-journal-transactions/main367-integration/README.md).
+
+## Earlier closure verification
 
 - 94 focused journal/fresh/admission/guard cases passed,2 optional skips (13.76s).
 - Current-main noneditable installed native/ACP:2 passed (22.94s), including

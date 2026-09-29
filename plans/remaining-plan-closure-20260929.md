@@ -64,7 +64,8 @@ locking and commit/fsync. Repeated exclusion queries, the enrollment table roste
 and selected transition SQL collapse onto declared table/lifecycle owners.
 [PR376 receipt](../evidence/q8-journal-transactions/README.md):991 production lines
 replaced/deleted,206 class excess removed,94 focused cases and final2 actual
-installed native/ACP cases pass; source8ac16539 is ready. Failed receipts retained. Parent owns merge/default installation. This is
+installed native/ACP cases pass; sourcece15a23d integrates main367/375/377 with4 affected checks passed33.81s.
+Failed receipts retained. Parent owns merge/default installation. This is
 whole journal role closure, not a claim that all Q8/history/T4 work is complete.
 
 ## Registry lifecycle followthrough — PR361

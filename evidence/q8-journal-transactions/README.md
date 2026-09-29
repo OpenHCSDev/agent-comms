@@ -1,5 +1,15 @@
 # Q8 journal transaction ownership: ready
 
+## Latest main367/377 integration
+
+Ready source `ce15a23d754d77b65946ccc13ba19e4ae3ea3918` integrates main4734433d.
+[Integration receipt](main367-integration/README.md): **4 passed,33.81s**, comprising
+three actual native/ACP/refusal/UNKNOWN cases and the conflicting fsync fault test.
+Actual new journal owners used throughout367; require_source indentation corrected.
+No old journal callers or ratchet increases. Parent owns integration/live.
+
+## Original closure evidence
+
 991 production lines deleted/replaced;1111 added, including moved declarations and
 role bodies (net+120). Source tested: `8ac16539b75577d92d8ad1ec6ece59275d191d9e`.
 Current main integrated: `efcdf49377261a209fc94ae1b9f244d6032404cb` (through373/374).
