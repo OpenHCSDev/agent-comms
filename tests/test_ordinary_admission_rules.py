@@ -104,6 +104,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
 
 
 def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_path):
+    from agent_comms.channel_input_batch import SingleInputBatch
     from agent_comms.comms import Comms
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goal_waits import GoalWait
@@ -111,7 +112,12 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     from agent_comms.messages import Message, MessageType
     from agent_comms.threads import Thread
     from agent_comms.turn_goal_permission import ContinuationGoalPermission
-    from agent_comms.turn_input_source import DependencyOriginalInput, RoutedOriginalInput
+    from agent_comms.turn_input_source import (
+        CapturedInputDependency,
+        DependencyOriginalInput,
+        NoInputDependency,
+        RoutedOriginalInput,
+    )
 
     comms = Comms(tmp_path / "wire")
     peer = Thread(name="peer", tags=frozenset(), worktree=str(tmp_path))
@@ -137,11 +143,12 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         prompt="Result",
         original_display="Result",
         origins=(message,),
-        direct_origins=(message,),
-        channel_batch=False,
+        batch=SingleInputBatch(),
     )
-    dependency = DependencyOriginalInput(**common, dependency_wait_id=wait.wait_id)
-    routed = RoutedOriginalInput(**common, dependency_wait_id=None)
+    dependency = DependencyOriginalInput(
+        **common, dependency=CapturedInputDependency(wait.wait_id, (message,))
+    )
+    routed = RoutedOriginalInput(**common, dependency=NoInputDependency())
     snapshot = comms.registry.snapshot()
     rules.OrdinaryContextCheck(
         source=dependency, goal=goal, wait=wait, registry=snapshot
