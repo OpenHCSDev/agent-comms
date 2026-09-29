@@ -1,0 +1,76 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort ___
+
+tmp_path = PosixPath('/home/ts/wt/nr323red/test_channel_with_unstarted_an0')
+
+    def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
+        comms = Comms(tmp_path / "wire")
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
+            comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        stopped = comms.registry.require("stopped-reviewer")
+        comms.registry.register(stopped, StoppedThreadStatus())
+        receiver = comms.registry.require("receiver")
+        lookup = stable_thread_lookup(receiver.created_at)
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+            with store.session.read():
+                assert Participants.select(store.session._connection) == []
+            message = comms.messaging.send_message("sender", "#team", "Hello @receiver")
+            initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+            assert {r.canonical_thread for r in initial.audience.recipients} == {
+                "receiver", "stopped-reviewer", "unstarted-reviewer"
+            }
+>           cursor = _accept_visible_initials(
+                comms.bus, root_id, store, lookup, 0, owner_name=receiver.name
+            )
+
+tests/test_channel_participant_registration.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/agent-comms/runtime-preview-permissions-20260928/lib/python3.14/site-packages/agent_comms/cohort_foreground.py:116: in _accept_visible_initials
+    accept_initial_cohort(bus, root_id, initial.message.seq, store)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+bus = <agent_comms.message_bus.MessageBus object at 0x7f429b8bbb60>
+wire_root_id = '49efa2497f5e40dbb616fceb52408b05', wire_seq = 1
+store = <agent_comms.coordinator.Coordination object at 0x7f429b7ba850>
+
+    def accept_initial_cohort(
+        bus: MessageBus,
+        wire_root_id: str,
+        wire_seq: int,
+        store: Coordination,
+    ) -> Applied[AcceptedCohort] | AlreadyApplied[AcceptedCohort]:
+        """Bus-read first, then one SQLite transaction for every N/K fact.
+    
+        Participants are separately durable identities; this cannot manufacture a
+        participant owner or commit one based merely on a bus message. If the
+        coordinator has not registered each frozen stable lookup, no N is accepted.
+        """
+        if type(bus) is not MessageBus or type(store) is not Coordination:
+            raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
+        with bus.log.locked():
+            marker = bus.log._private_marker_unlocked()
+            if marker.root_id != wire_root_id:
+                raise IdentityConflict("cohort admission wire root changed")
+            if wire_seq <= marker.admission_after_seq:
+                raise IdentityConflict("historical source precedes the current admission floor")
+        initial = bus.log.read_initial_cohort(wire_root_id, wire_seq)
+        with store.session.transaction() as db:
+            assert_cohort_schema(db)
+            receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
+            if receipt is not None:
+                return AlreadyApplied(_receipt_matches(db, initial))
+            if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
+                raise IdentityConflict("singleton claim cannot be adopted by a cohort")
+            if ClaimBatchReceipts.select(db, where="wire_seq=?", parameters=(wire_seq,)):
+                raise IdentityConflict("wire sequence already belongs to another cohort root")
+            for recipient in initial.audience.recipients:
+                if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
+>                   raise IdentityConflict("frozen recipient has no durable participant identity")
+E                   agent_comms.coordination_errors.IdentityConflict: frozen recipient has no durable participant identity
+
+../../.local/share/agent-comms/runtime-preview-permissions-20260928/lib/python3.14/site-packages/agent_comms/coordination_cohort.py:260: IdentityConflict
+=========================== short test summary info ============================
+FAILED tests/test_channel_participant_registration.py::test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort
+1 failed in 0.38s
