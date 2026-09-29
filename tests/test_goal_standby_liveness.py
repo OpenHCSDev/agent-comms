@@ -26,7 +26,7 @@ from goal_owner_fixture import activate_empty_source
 
 
 def _thread(comms, name, worktree):
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
         )

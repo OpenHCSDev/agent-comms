@@ -37,7 +37,7 @@ def _case(tmp_path):
     session = tmp_path / "session.jsonl"
     comms = wire(root)
     for name in ("peer", "owner", "other"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -75,7 +75,7 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
     source_session = tmp_path / "B-pi-session.jsonl"
     source = wire(source_root)
     for name in ("peer", "owner"):
-        source.threads.register(
+        source.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -88,7 +88,7 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
 
     viewer = wire(tmp_path / "A")
     for name in ("peer", "owner"):
-        viewer.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        viewer.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     local = viewer.messaging.send_message("peer", "owner", "the same routine message")
     assert local.message_id != foreign.message_id
     assert ScheduledTurn.incoming(local).prompt == ScheduledTurn.incoming(foreign).prompt
@@ -116,7 +116,7 @@ def test_imported_and_inherited_sessions_never_gain_legacy_route(tmp_path):
     comms, session = _case(tmp_path)
     message = comms.messaging.send_message("peer", "owner", "hello")
     _session(session, _entry(message))
-    comms.threads.register(Thread("child", frozenset(), str(tmp_path), parent="owner"))
+    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="owner"))
     inherited = comms.transcripts.thread_transcript_page("child")
     assert inherited.events[0].routing is None
     imported = comms.root / "imported_sessions" / "historical.jsonl"

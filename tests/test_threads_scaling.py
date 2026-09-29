@@ -23,7 +23,7 @@ def _listed(wired, *, active_only: bool = False) -> dict[str, int]:
 
 
 def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
-    wired.threads.register(Thread(name="third", tags=frozenset({"base"}), worktree="/tmp/third"))
+    wired.registry.declare(Thread(name="third", tags=frozenset({"base"}), worktree="/tmp/third"))
     wired.messaging.send("PR111", "fixer", "direct")
     wired.messaging.send("fixer", "PR111", "reverse direct")
     wired.messaging.send("PR111", "#all", "global")
@@ -76,7 +76,7 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
 
 def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
     for index in range(30):
-        wired.threads.register(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
+        wired.registry.declare(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
     checks = 0
     store_type = type(wired.registry.store)
     verify = store_type.private_guard_unlocked
@@ -148,7 +148,7 @@ def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
 
 
 def test_route_projection_detects_rewrite_before_append(wired):
-    wired.threads.register(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
+    wired.registry.declare(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
     wired.messaging.send("PR111", "fixer", "first")
     assert _listed(wired)["fixer"] == 1
     bus_path = wired.bus.log.path
@@ -162,7 +162,7 @@ def test_route_projection_detects_rewrite_before_append(wired):
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
-    wired.threads.register(Thread(name="broadcast", tags=frozenset(), worktree="/tmp/broadcast"))
+    wired.registry.declare(Thread(name="broadcast", tags=frozenset(), worktree="/tmp/broadcast"))
     wired.messaging.send("PR111", "broadcast", "direct message to the named thread")
     wired.messaging.send("fixer", "broadcast", "second sender")
     wired.messaging.send("PR111", "fixer", "old direct")

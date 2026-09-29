@@ -47,6 +47,9 @@ class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
     @abstractmethod
     def verify_history(self, native, thread, original): ...
 
+    def verify_relationships(self, comms, thread):
+        assert comms.registry.require(thread.name).incarnation == thread.incarnation
+
 
 class OrdinaryOwnerCase(OwnerAdmissionCase):
     repetitions = 2400
@@ -92,6 +95,20 @@ class ForkOwnerCase(OwnerAdmissionCase):
     def verify_history(self, native, thread, original):
         assert Path(thread.session_file) != native.session
         assert native.session.read_bytes() == original
+
+    def verify_relationships(self, comms, thread):
+        super().verify_relationships(comms, thread)
+        parent = comms.registry.require(thread.parent)
+        assert parent.name == "physical-parent"
+        edge = comms.relationships.edit(parent.name, "add", thread.name, "Actual native fork")
+        assert edge.pair_identity == frozenset((parent.incarnation, thread.incarnation))
+        for owner, peer in ((parent, thread), (thread, parent)):
+            saved = comms.relationships.collaborations(owner.name)
+            assert len(saved) == 1
+            assert saved[0].counterpart(owner) == peer.incarnation
+        reopened = Comms(comms.root)
+        assert reopened.relationships.collaborations(parent.name) == (edge,)
+        assert reopened.registry.require(parent.name) == parent
 
 
 @pytest.mark.parametrize(
@@ -186,7 +203,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     debug_log = native.project / "runtime-debug.log"
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
     comms = Comms(native.root)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "physical-parent",
             frozenset(),
@@ -298,6 +315,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         assert "PHYSICAL_PARENT_CONTEXT" in json.dumps(native.provider.requests[-1]["messages"])
         assert "hey Boss" in json.dumps(native.provider.requests[-1]["messages"])
         case.verify_history(native, thread, original)
+        case.verify_relationships(comms, thread)
         await asyncio.sleep(1.2)
         assert native.provider.posts == 2  # No uncertain original replay or unsolicited retry.
     finally:

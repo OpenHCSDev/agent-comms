@@ -14,7 +14,7 @@ def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tm
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     stopped = comms.registry.require("stopped-reviewer")
     comms.registry.register(stopped, StoppedThreadStatus())
     receiver = comms.registry.require("receiver")

@@ -26,12 +26,12 @@ def consistent(comms, *names):
 def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, monkeypatch, rebound):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     old = comms.messaging.send_message("sender", "recipient", "retained history")
     comms.messaging.send("sender", "#team", "old channel row")
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
-    comms.threads.register(Thread(rebound, frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread(rebound, frozenset({"team"}), str(tmp_path)))
     new = comms.messaging.send_message("sender", "recipient", "current input")
     comms.messaging.send("sender", "#team", "current channel input")
     current = wire(tmp_path)
@@ -56,7 +56,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, monkeypa
 def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     birth = comms.registry.require("recipient").created_at
     messages = [
         comms.bus.publisher.publish_ordinary(

@@ -21,7 +21,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
             "role": "user", "inputId": native_id, "content": "private wrapper",
         },
     }) + "\n")
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     comms.transcripts.routes.record_input_display("b" * 32, None)
     with closing(sqlite3.connect(comms.transcripts.routes.database_path)) as connection:
         assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
@@ -42,8 +42,8 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
     parent.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": "parent answer",
     }}) + "\n")
-    comms.threads.register(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent)))
-    comms.threads.register(Thread("child", frozenset(), str(tmp_path), parent="parent", task="continue"))
+    comms.registry.declare(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent)))
+    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="parent", task="continue"))
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:

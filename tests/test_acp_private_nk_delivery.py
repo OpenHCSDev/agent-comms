@@ -44,7 +44,7 @@ tmp_path = private_root_fixture
 def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -59,7 +59,7 @@ def _session(tmp_path, *, package=True):
         process_identity=ProcessIdentity.capture(os.getpid()),
         model="openai-codex/gpt-6-sol",
     )
-    comms.threads.register(owner)
+    comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
@@ -95,7 +95,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     project = tmp_path / "proj"
     project.mkdir()
     comms = Comms(root)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -573,7 +573,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
-    comms.threads.register(alpha)
+    comms.registry.declare(alpha)
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
             stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True

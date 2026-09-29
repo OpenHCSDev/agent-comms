@@ -190,7 +190,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             project = root / "parent"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     "child",
                     frozenset(),

@@ -138,7 +138,6 @@ class ThreadManagement:
         with _store_lock(self._wire_lock_path):
             if self.registry.name_reserved(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
-            self.channels._require_available_new_tags(thread.tags)
             session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             if os.name == "posix":
                 # Session output must remain in an owner-controlled directory.
@@ -151,7 +150,7 @@ class ThreadManagement:
                     raise ValueError("Imported session directory is not owner-controlled.")
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
-                self.registry.register(thread, StoppedThreadStatus())
+                self.registry._declare_unlocked(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
             except Exception:
                 if name in self.registry:
@@ -198,49 +197,6 @@ class ThreadManagement:
                         )
             return restored
 
-    def register(self, thread: Thread) -> None:
-        """Declare a thread in the registry.
-
-        Re-declaring an existing thread cannot silently drop provenance:
-        empty tags inherit the prior declaration's tags (a child that does
-        not receive tag env still keeps its channel subscriptions), and a
-        missing session_file and model keep the prior declaration. Explicit
-        values always win.
-        """
-        with _store_lock(self._wire_lock_path):
-            canonical = self.registry.canonical_name(thread.name)
-            existing = self.registry.all_threads().get(canonical)
-            if existing is not None and existing.executing:
-                if thread.process_identity not in {None, existing.process_identity}:
-                    raise RelationViolationError(
-                        "Cannot replace an executor during its active turn."
-                    )
-                thread = replace(
-                    thread,
-                    process_identity=existing.process_identity,
-                    active_turn=existing.active_turn,
-                    turn_generation=existing.turn_generation,
-                    last_finished_turn_id=existing.last_finished_turn_id,
-                )
-            thread = thread.for_registration(canonical, existing)
-            self.channels._require_available_new_tags(thread.tags)
-            # A fresh public registration is a new owner admission even when
-            # the OS has reused its PID and the project path is unchanged.
-            # An executing declaration above keeps its existing executor/lease;
-            # re-declaring metadata cannot turn that preservation into a new owner.
-            # Metadata setters re-register the saved declaration internally.
-            new_owner = (
-                existing is not None
-                and not existing.executing
-                and existing.process_identity is not None
-                and thread.process_identity is not None
-                and thread.incarnation != existing.incarnation
-            )
-            self.registry.register(thread, new_owner=new_owner)
-
-            with self.channels.catalog.editing() as document:
-                document.remember_tags(thread.tags, thread.created_at)
-
     def claim_thread(
         self,
         base_name: str,
@@ -255,13 +211,8 @@ class ThreadManagement:
     ) -> Thread:
         """Atomically register a unique thread and optionally baseline its inbox."""
         with _store_lock(self._wire_lock_path):
-            name = base_name
-            suffix = 2
-            while self.registry.name_reserved(name):
-                name = f"{base_name}-{suffix}"
-                suffix += 1
             thread = Thread(
-                name=name,
+                name=base_name,
                 tags=tags,
                 worktree=worktree,
                 process_identity=ProcessIdentity.capture(pid) if pid > 0 else None,
@@ -269,8 +220,7 @@ class ThreadManagement:
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
             )
-            self.channels._require_available_new_tags(thread.tags)
-            self.registry.register(thread)
+            thread = self.registry._claim_unlocked(thread)
             if start_at_latest:
                 self.bus.mark_delivered_through(thread.name, self.bus.log.latest_sequence())
             return thread
@@ -574,8 +524,7 @@ class ThreadManagement:
             model=parent.model,
             thinking_level=parent.thinking_level,
         )
-        self.channels._require_available_new_tags(child.tags)
-        self.registry.register(child)
+        child = self.registry._declare_unlocked(child)
         self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
         key = f"acp:{uuid4().hex}"
@@ -597,5 +546,4 @@ class ThreadManagement:
     def adopt_current(self) -> Thread:
         """Declare and register the current process's thread from env."""
         thread = current_thread()
-        self.register(thread)
-        return thread
+        return self.registry.declare(thread)

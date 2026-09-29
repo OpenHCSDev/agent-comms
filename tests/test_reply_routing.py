@@ -23,7 +23,7 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
-    comms.threads.register(Thread("peer", frozenset({"test"}), str(tmp_path)))
+    comms.registry.declare(Thread("peer", frozenset({"test"}), str(tmp_path)))
     session = tmp_path / "session.jsonl"
     session.touch()
     comms.threads.attach_session("worker", str(session))

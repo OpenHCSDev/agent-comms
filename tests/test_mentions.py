@@ -14,7 +14,7 @@ from agent_comms.wake import derive_exact_reply_target
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     comms = wire(tmp_path)
     for name in ("alpha", "beta"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     message = comms.messaging.send_user_message(
         "#team", "@alpha please review; @beta FYI", worktree=str(tmp_path)
     )
@@ -35,7 +35,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
 
 def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("alpha", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("alpha", frozenset({"team"}), str(tmp_path)))
     comms.registry.rename("alpha", "renamed")
     message = comms.messaging.send_user_message(
         "#team",
@@ -50,7 +50,7 @@ def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_p
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
     comms = wire(tmp_path)
     for name in ("alpha", "beta"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
 
     collective = comms.messaging.send_user_message(
         "#team", "@unknown can anyone answer?", worktree=str(tmp_path)
@@ -159,7 +159,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 
     comms = wire(tmp_path)
     for name in ("sender", "owner"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
     comms.messaging.send("owner", "#team", "Delivery failed: usage limit", MessageType.ALERT, notice=True)
     notice = comms.views.channel_history("#team")[-1]
@@ -172,8 +172,8 @@ def test_model_tool_changes_own_and_another_thread(tmp_path, monkeypatch):
     from agent_comms import invoke_tool
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
-    comms.threads.register(Thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     monkeypatch.setenv("PI_AGENT_ID", "owner")
     result = invoke_tool(comms, "comms_model", {"model": "openrouter/own"})
     assert result == {"thread": "owner", "model": "openrouter/own", "thinking_level": None}
@@ -191,7 +191,7 @@ def test_dismiss_reports_mentions_and_advances_only_own_cursor(tmp_path, monkeyp
 
     comms = wire(tmp_path)
     for name in ("alpha", "beta"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
     assert comms.bus.pending_count("alpha", "#team") == 1
     assert comms.bus.pending_count("beta", "#team") == 1
@@ -215,7 +215,7 @@ def test_dismiss_requires_a_target(tmp_path, monkeypatch):
     from agent_comms import invoke_tool
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread("beta", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("beta", frozenset({"team"}), str(tmp_path)))
     monkeypatch.setenv("PI_AGENT_ID", "beta")
     with pytest.raises(ValueError, match="channel target"):
         invoke_tool(comms, "comms_dismiss", {"target": ""})
@@ -224,7 +224,7 @@ def test_dismiss_requires_a_target(tmp_path, monkeypatch):
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):
     comms = wire(tmp_path)
     for name, tags in [("alpha", {"team"}), ("observer", {"team"}), ("outsider", set())]:
-        comms.threads.register(Thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     message = comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
     comms.registry.rename("alpha", "renamed")
     comms.registry.rename("renamed", "final")

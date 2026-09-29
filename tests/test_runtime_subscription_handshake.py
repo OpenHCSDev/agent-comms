@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 )
 async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, token_fields):
     comms = wire(tmp_path / "wire")
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "owner",
             frozenset(),

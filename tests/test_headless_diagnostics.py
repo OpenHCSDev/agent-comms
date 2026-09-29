@@ -57,7 +57,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     )
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="sender",
             tags=frozenset(),

@@ -389,7 +389,7 @@ def test_malformed_bus_refuses_source_capture_without_repair(native):
 def test_new_correction_send_invalidates_pre_summary_source(native):
     bridge, owner, owner_generation, witness = native
     comms = Comms(bridge.root)
-    comms.threads.register(Thread("peer", frozenset(), str(bridge.root)))
+    comms.registry.declare(Thread("peer", frozenset(), str(bridge.root)))
     comms.messaging.send("peer", "owner", "Correction: retain the newer requirement")
     with pytest.raises(RelationViolationError, match="source changed"):
         bridge.commit(owner, owner_generation, witness, "stale summary", 42)

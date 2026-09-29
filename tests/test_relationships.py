@@ -27,7 +27,7 @@ def change_shared_peer(root, instruction):
 def setup_wire(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name, parent in (("origin", None), ("owner", "origin"), ("peer", None), ("child", "owner")):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
     return comms
 
 
@@ -104,7 +104,7 @@ def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):
     comms = setup_wire(tmp_path)
     names = [f"worker-{index}" for index in range(8)]
     for name in names:
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     with ProcessPoolExecutor(max_workers=4) as pool:
         list(pool.map(add_peer, [comms.root] * len(names), names))
     assert {edge.peer for edge in comms.relationships.collaborations("owner")} == set(names)
@@ -214,7 +214,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     original = comms.relationships.edit("owner", "add", "peer", "Old incarnation's task")
     comms.owners.stop("peer")
     comms.registry.remove("peer")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
     )
 
@@ -241,7 +241,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.relationships.edit("origin", "add", "peer", "Independent work")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("owner", frozenset(), str(tmp_path), created_at=original.owner_created + 1)
     )
     assert comms.relationships.collaborations("owner") == ()
@@ -269,3 +269,33 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
     comms.relationships.edit("owner", "add", "child")
     row = next(row for row in collaboration_rows(comms) if not row.available)
     assert row.target == "peer" and row.detail == "Review before rename"
+
+
+def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path):
+    from agent_comms.goal_actions import SetGoalAction
+
+    comms = setup_wire(tmp_path)
+    peer = comms.registry.require("peer")
+    comms.relationships.edit("owner", "add", "peer", "Retained explicit contact")
+    comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
+    comms.registry.rename("peer", "renamed-peer")
+    visible = collaboration_rows(comms)[0]
+    assert visible.available and visible.person.thread.incarnation == comms.registry.require("renamed-peer").incarnation
+    assert visible.target == "renamed-peer"
+    assert visible.sources == ("explicit", "goal_mention")
+
+    # Deletion retains the exact current incarnation, but the real roster
+    # excludes it even when stopped/archived entries were requested.
+    comms.owners.stop("renamed-peer")
+    comms.registry.begin_delete("renamed-peer")
+    retained = comms.registry.require("renamed-peer")
+    assert retained.incarnation.current(comms.registry.snapshot())
+    assert retained.name not in {
+        view.thread.name
+        for view in comms.views.thread_views(show_stopped=True, show_archived=True)
+    }
+    unavailable = collaboration_rows(comms)[0]
+    assert unavailable.target == "renamed-peer"
+    assert unavailable.sources == ("explicit", "goal_mention")
+    assert not unavailable.available and unavailable.person is None
+    assert "Retained explicit contact" in unavailable.detail

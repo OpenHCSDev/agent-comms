@@ -1,0 +1,5 @@
+{
+  "agent_comms.registration": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/registration.py",
+  "agent_comms.thread_management": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/thread_management.py",
+  "agent_comms.relationships": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/relationships.py"
+}

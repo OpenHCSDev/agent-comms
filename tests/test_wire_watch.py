@@ -16,7 +16,7 @@ from agent_comms.wire_watch import open_wire_watcher
 @pytest.mark.asyncio
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     comms = Comms(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "owner",
             frozenset(),

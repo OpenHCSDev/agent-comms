@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
     process = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     comms = Comms(tmp_path / "wire")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("cold", frozenset(), str(tmp_path), process_identity=process.identity)
     )
     proxy = RuntimeProxy(
