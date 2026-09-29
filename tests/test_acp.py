@@ -556,14 +556,14 @@ class TestAgentTurn:
         assert not wired.registry.require("proj").executing
 
     @pytest.mark.parametrize(
-        "event",
+        ("event", "expected_state"),
         [
-            ae.Error("Pi preflight ended before attestation"),
-            ae.Done("Pi preflight ended before attestation", False),
+            (ae.Error("Pi preflight ended before attestation"), "reserved"),
+            (ae.Done("Pi preflight ended before attestation", False), "not_sent"),
         ],
     )
     async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
-        self, wired, tmp_path, event
+        self, wired, tmp_path, event, expected_state
     ):
         agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
@@ -576,14 +576,22 @@ class TestAgentTurn:
         agent.inputs.dispositions.record(
             key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
         )
-        agent.inputs.turn_original_input_keys["proj"] = (key,)
-        agent.inputs.turn_input_text["proj"] = "lost prompt"
+        from input_source_cases import owner_original
+
+        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
         await agent._emit_event("proj", event, FakeClient())
         update = sent[-1]
         (failed,) = facts(update.field_meta, InputFailedUpdate)
         assert failed.text == "lost prompt"
         assert failed.failure.description == "Pi preflight ended before attestation"
-        assert agent.inputs.dispositions.read().rows[key].declared_name == "reserved"
+        first = agent.inputs.dispositions.read().rows[key]
+        assert first.declared_name == expected_state
+        # A later explicit input is a new reservation, never a replay of NotSent.
+        key = "acp:new-explicit-input"
+        agent.inputs.dispositions.record(
+            key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
+        )
+        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
         agent.inputs.dispositions.bind(
             key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
         )
@@ -592,6 +600,7 @@ class TestAgentTurn:
         )
         await agent._emit_event("proj", ae.Error(text="later steering failure"), FakeClient())
         assert not facts(sent[-1].field_meta, InputFailedUpdate)
+        assert agent.inputs.dispositions.read().rows[first.key] == first
 
     @pytest.mark.parametrize("completed_in_turn", [False, True])
     async def test_missing_terminal_blocks_only_still_active_goal(

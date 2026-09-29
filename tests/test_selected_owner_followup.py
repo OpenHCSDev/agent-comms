@@ -1,6 +1,7 @@
 """Selected execution and ACP followups share one live input lifetime."""
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
@@ -137,9 +138,11 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         if change == "clear":
             await agent.inputs.clear_queued_inputs("beta")
         elif change == "missing_key":
-            agent.inputs.steering_input_keys["beta"].pop(input_id)
+            agent.inputs.following_sources["beta"].pop(input_id)
         elif change == "foreign_key":
-            agent.inputs.steering_input_keys["beta"][input_id] = old_key
+            agent.inputs.following_sources["beta"][input_id] = replace(
+                agent.inputs.following_sources["beta"][input_id], keys=(old_key,)
+            )
         else:
             turn.cancel()
         release.set()
@@ -222,7 +225,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         elif change == "owner_stopped":
             comms.registry.unregister("beta")
         elif change == "missing_key":
-            agent.inputs.steering_input_keys["beta"].pop(execution.accepted_input_id)
+            agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
         elif change == "foreign_key":
             execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
         expected.update(
@@ -370,13 +373,15 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     parked_wait = comms.goals.goal_wait("beta")
     agent._private_nk_native_package = Path(package)
     agent.turns.adaptive_compaction_enabled = False
-    agent.turns.agent_args = NativeArguments.parse([
-        "--no-extensions",
-        "--no-skills",
-        "--no-context-files",
-        "--session-dir",
-        str(tmp_path / "owner-sessions"),
-    ])
+    agent.turns.agent_args = NativeArguments.parse(
+        [
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--session-dir",
+            str(tmp_path / "owner-sessions"),
+        ]
+    )
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", package)
@@ -454,7 +459,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         assert await kwargs["ui_request"](request) is request
         assert kwargs["images"][0].data == "eA=="
         owner = comms.registry.require("beta")
-        original_key = agent.inputs.turn_original_input_keys["beta"][0]
+        original_key = agent.inputs.original_sources["beta"].notice_keys[0]
         receipts = agent.inputs.future_inputs(owner, original_key)
         assert len(receipts) == 2
         # The adaptive compaction owner accepts the same live queued receipts.
