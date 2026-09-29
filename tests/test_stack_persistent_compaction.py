@@ -13,9 +13,19 @@ from uuid import uuid4
 
 import pytest
 
+from agent_comms.acp import CommsClient
+from agent_comms.acp_extension import (
+    CompactionChangedUpdate,
+    CompactionCommittedUpdate,
+    CompactRequest,
+    TranscriptChangedUpdate,
+    TurnSettledUpdate,
+    decode_updates,
+    encode_request,
+)
+from agent_comms.agent_events import ManualCompactionEnd
 from agent_comms.comms import wire
-from agent_comms.compaction_result import CommittedCompactionResult
-from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.runtime import socket_path
 from delivery_owner_fixture import canonical_agent
 
 
@@ -154,28 +164,9 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         )
         # A transparent node shim installs localhost provider config;
         # it executes the same installed native CLI and never replaces its RPC.
-        preload = root / "local-only.cjs"
-        preload.write_text(
-            "const fs=require('node:fs');"
-            "const net=require('node:net');const connect=net.Socket.prototype.connect;"
-            "net.Socket.prototype.connect=function(...args){"
-            "const opts=Array.isArray(args[0])?args[0][0]:net._normalizeArgs(args)[0];"
-            "if(opts.port && !['127.0.0.1','localhost','::1'].includes(opts.host))"
-            "throw Error('BLOCKED_NONLOCAL_NETWORK: '+opts.host);"
-            "return connect.apply(this,args);};"
-            "fs.writeFileSync(process.env.PI_CODING_AGENT_DIR+'/models.json',"
-            + json.dumps(
-                json.dumps(
-                    {
-                        "providers": {
-                            "openrouter": {
-                                "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
-                            }
-                        }
-                    }
-                )
-            )
-            + ");"
+        preload = Path(__file__).with_name("native_local_provider.cjs")
+        monkeypatch.setenv(
+            "AC_NATIVE_LOCAL_PROVIDER_URL", f"http://127.0.0.1:{server.server_port}/v1"
         )
         binaries = root / "bin"
         binaries.mkdir()
@@ -220,7 +211,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
                 "--thinking",
                 "off",
             ],
-            runtime_enabled=False,
+            runtime_enabled=True,
             auto_wake=False,
         )
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
@@ -234,6 +225,20 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
         owner.on_connect(Client())
+        attachment = CommsClient(
+            comms,
+            agent_bin=native,
+            auto_wake=False,
+            private_nk_native_package=owner._private_nk_native_package,
+            private_nk_wire_root_id=owner._private_nk_wire_root_id,
+        )
+        attached_facts = []
+
+        class AttachedClient:
+            async def session_update(self, **kwargs):
+                attached_facts.extend(decode_updates(kwargs["update"].get("_meta")))
+
+        attachment.on_connect(AttachedClient())
         retained = resumed = None
         compact_task = None
         try:
@@ -250,7 +255,17 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert len(requests) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[-1]["messages"])
             before = session.read_bytes()
-            compact_task = asyncio.create_task(compact_context(owner.turns, "worker"))
+            runtime_path = socket_path(comms.root, os.getpid())
+            assert runtime_path.exists()
+            await attachment.load_session(cwd=str(project), session_id="worker")
+            assert attachment.sessions.proxies["worker"].path == runtime_path
+            assert not attachment.turns.persistent_backends
+            attached_facts.clear()
+            compact_task = asyncio.create_task(
+                attachment.prompt(
+                    "worker", [{"type": "text", "text": ""}], _meta=encode_request(CompactRequest())
+                )
+            )
             entered = await asyncio.to_thread(summary_entered.wait, 15)
             if not entered and compact_task.done():
                 pytest.fail(f"Native compaction did not request summary: {compact_task.result()}")
@@ -262,13 +277,50 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[2]["messages"])
             release_summary.set()
             result = await asyncio.wait_for(compact_task, 20)
-            assert isinstance(result, CommittedCompactionResult), result
+            assert result.stop_reason == "end_turn"
+            committed = [
+                fact
+                for fact in decode_updates(result.field_meta)
+                if isinstance(fact, CompactionCommittedUpdate)
+            ]
+            assert len(committed) == 1 and summary in committed[0].summary
+            async with asyncio.timeout(10):
+                while True:
+                    facts = attached_facts
+                    if (
+                        any(isinstance(fact, TurnSettledUpdate) for fact in facts)
+                        and any(isinstance(fact, TranscriptChangedUpdate) for fact in facts)
+                        and any(
+                            isinstance(fact, CompactionChangedUpdate)
+                            and isinstance(fact.event, ManualCompactionEnd)
+                            for fact in facts
+                        )
+                    ):
+                        break
+                    await asyncio.sleep(0.01)
+            terminal = [
+                fact.event
+                for fact in facts
+                if isinstance(fact, CompactionChangedUpdate)
+                and isinstance(fact.event, ManualCompactionEnd)
+            ]
+            assert len(terminal) == 1 and not terminal[0].aborted
+            assert terminal[0].summary == committed[0].summary
+            assert any(isinstance(fact, TranscriptChangedUpdate) for fact in facts)
+            assert not attachment.turns.persistent_backends
             assert retained.returncode is not None
             assert owner.turns.persistent_backends["worker"].proc is None
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
             assert summary in compactions[0]["summary"]
+            from agent_comms.compaction_journal import CompactionJournal
+
+            assert (
+                CompactionJournal(comms.root / "compaction-commits.sqlite3")
+                .get(committed[0].commit_id)
+                .state.committed
+            )
             await asyncio.wait_for(
                 owner.inputs.run_owned_input("worker", "worker", "AFTER_COMPACT"), 20
             )
@@ -280,7 +332,9 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             assert "COMPACTED_HISTORY_SENTINEL" in context
             assert "AFTER_COMPACT" in context
             assert "LEGACY_DISCARDED_HISTORY" not in context
+            await attachment.shutdown()
             await owner.shutdown()
+            assert not runtime_path.exists()
             assert resumed.returncode is not None
             assert not owner.turns.persistent_backends
         finally:
@@ -288,6 +342,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             if compact_task is not None and not compact_task.done():
                 compact_task.cancel()
                 await asyncio.gather(compact_task, return_exceptions=True)
+            await attachment.shutdown()
             await owner.shutdown()
             for process in (retained, resumed):
                 if process is not None:

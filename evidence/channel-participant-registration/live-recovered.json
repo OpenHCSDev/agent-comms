@@ -1,0 +1,68 @@
+{
+  "receipts": [
+    {
+      "wire_seq": 157,
+      "sealed": 1,
+      "member_count": 5,
+      "claim_count": 5
+    },
+    {
+      "wire_seq": 158,
+      "sealed": 1,
+      "member_count": 5,
+      "claim_count": 5
+    }
+  ],
+  "claims": [
+    {
+      "wire_seq": 157,
+      "recipient": "nra-class-first-name-review",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 157,
+      "recipient": "nra-domain-mapping",
+      "lifecycle": "{\"kind\":\"completed\",\"decision\":{\"kind\":\"bounded_triage\",\"execution_id\":\"wirev17a6e041917e263fc5d71883625b134f0b49342db8a45317528eb5554b2c468ba\",\"exact_target\":\"#nra\"}}"
+    },
+    {
+      "wire_seq": 157,
+      "recipient": "nra-ordered-branch-call-review",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 157,
+      "recipient": "refactor-r1",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 157,
+      "recipient": "nra-roster-heuristic-map",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 158,
+      "recipient": "nra-class-first-name-review",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 158,
+      "recipient": "nra-domain-mapping",
+      "lifecycle": "{\"kind\":\"completed\",\"decision\":{\"kind\":\"bounded_triage\",\"execution_id\":\"wirev106467380396b62596250bc06c6d1f3ea5d0bb93966f50fac50598b7f6940df93\",\"exact_target\":\"#nra\"}}"
+    },
+    {
+      "wire_seq": 158,
+      "recipient": "nra-ordered-branch-call-review",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 158,
+      "recipient": "refactor-r1",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    },
+    {
+      "wire_seq": 158,
+      "recipient": "nra-roster-heuristic-map",
+      "lifecycle": "{\"kind\":\"triage_pending\"}"
+    }
+  ]
+}
