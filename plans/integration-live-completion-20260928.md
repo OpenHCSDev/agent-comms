@@ -15,7 +15,8 @@ reproduces exact installed0931 IdentityConflict; final installed1906 passes27che
 Live #nra originals157/158 accepted for all5recipients; domain-mapping completed
 both bounded-triage deliveries. Missing4identities restored from registry once.
 Existing fixture setup manually registered recipients and hid this production gap.
-Carver verifying actual mounted inbox recovery, no prompt. Recursion remains below.
+Actual installed mounted domain-mapping shows Ready, no inbox error and21saved
+phrase matches after cutover. Zero prompts. Recursion remains below.
 
 Previous UI acceptance remains: actual saved-log navigation/scroll/wrap/recovery;
 PR95 retained105painted phrases; physicalPi/ACP/Toad permission exactly-once tool

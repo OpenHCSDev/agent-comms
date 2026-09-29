@@ -39,3 +39,7 @@ helper. Restart itself succeeded; a separate read-only verification checked curr
 process identity, exact runtime, preserved session/model and fresh ACP attachments.
 No second restart. Failed operator log is retained; executed operators deleted.
 Actual mounted inbox recovery receipt is separate; recursion remains unresolved.
+
+Mounted live UI after cutover: Ready, no painted inbox error,21saved phrase
+matches and437nonspace characters, no app exception or prompt. Both original
+claims have actual full native input receipts. See mounted-live.md (Toad305c7d03).
