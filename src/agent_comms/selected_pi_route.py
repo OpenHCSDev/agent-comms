@@ -1,9 +1,4 @@
-"""Provider-free probe of the already selected idle Pi RPC child.
-
-This v1 dry-run response is NOT credential/header route attestation, a summary,
-or commit/input authority. The patched native command is not enabled by ACP
-until its exact bytes receive separate review. No subprocess is started here.
-"""
+"""Read the selected idle child's actual compaction policy without starting input."""
 
 from __future__ import annotations
 
@@ -11,98 +6,21 @@ import asyncio
 import secrets
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import TypeVar
 
-from .backend import PersistentPiSession, _session_revision
-from .field_codec import FieldCodec
-from .owner_compaction_prepare import NativeWitness
-from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
-from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, PiCommand
+from .backend import PersistentPiSession
+from .native_pi import NativePiUnavailable
+from .native_session_reopen import NativeSessionIdentity
+from .owner_compaction_settings import PiCompactionDecision
+from .pi_commands import AgentCommsCompactionSettings, PiCommand
 from .pi_events import Response
 from .pi_rpc import PiRpcChannel
-from .pi_summary_payloads import ProbeDeclinedData, ProbeReadyData, SelectedModel
+from .pi_summary_payloads import SelectedModel
 
 
 class SelectedPiProbeUnknownError(RuntimeError):
     """A sent or untrusted probe is not retry/commit/input authority."""
-
-
-@dataclass(frozen=True)
-class SelectedPiDryRun:
-    """Readiness observation only; intentionally cannot be used as a bool grant."""
-
-    status: Literal["ready", "declined"]
-    reason: str | None
-    route_status: str | None
-
-    def __bool__(self) -> bool:
-        raise TypeError("Dry-run readiness never authorizes a paid summary or native commit")
-
-
-def _request(
-    witness: NativeWitness, selected: dict[str, Any], settings: dict[str, Any]
-) -> AgentCommsPrepareCompaction:
-    return AgentCommsPrepareCompaction(
-        id=secrets.token_hex(16),
-        witness=witness,
-        selected=SelectedModel.from_wire(selected),
-        settings=FieldCodec.decode(PiCompactionSettings, settings),
-    )
-
-
-def _read_response(raw: bytes, request: AgentCommsPrepareCompaction) -> SelectedPiDryRun:
-    if not raw or len(raw) > 8192 or not raw.endswith(b"\n"):
-        raise SelectedPiProbeUnknownError("Incomplete bounded selected Pi response")
-    try:
-        response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=8192)
-        if (
-            not isinstance(response, Response)
-            or response.id != request.id
-            or response.command is not type(request)
-            or response.success is not True
-        ):
-            raise ValueError("Unmatched selected Pi response")
-        data = response.data
-        if isinstance(data, ProbeReadyData) and (
-            data.witness == request.witness
-            and data.selected == request.selected
-            and data.settings == request.settings
-        ):
-            return SelectedPiDryRun("ready", None, data.route_status)
-        if isinstance(data, ProbeDeclinedData):
-            return SelectedPiDryRun("declined", data.reason, None)
-        raise ValueError("Unrecognized selected Pi dry-run outcome")
-    except (UnicodeError, ValueError, TypeError) as error:
-        raise SelectedPiProbeUnknownError("Invalid selected Pi response") from error
-
-
-async def probe_idle_selected_pi(
-    persistent: PersistentPiSession,
-    witness: NativeWitness,
-    selected: dict[str, Any],
-    settings: dict[str, Any],
-    *,
-    expected_package: Path,
-    timeout: float = 3.0,
-) -> SelectedPiDryRun:
-    """One RPC request to an idle, existing child; NEVER starts provider work.
-
-    A transmitted request with a missing/invalid result retires the exact old
-    child and requires strict saved-session validation before a later borrow.
-    The caller must not convert readiness into permission to summarize/send.
-    """
-    request = _request(witness, selected, settings)
-    return await _exchange_observation(
-        persistent,
-        request,
-        witness.session_file,
-        witness.session_id,
-        _read_response,
-        expected_package=expected_package,
-        timeout=timeout,
-    )
 
 
 _Observation = TypeVar("_Observation")
@@ -123,21 +41,13 @@ async def _exchange_observation(
     if not 0 < timeout <= 5:
         raise ValueError("Bounded selected Pi deadline required")
     async with persistent.lock:
-        proc, reader = persistent.proc, persistent.reader
-        if (
-            persistent.reopen_required is not None
-            or proc is None
-            or proc.returncode is not None
-            or proc.stdin is None
-            or reader is None
-            or persistent.session_file != session_file
-            or persistent.session_id != session_id
-            or persistent.revision is None
-            or persistent.revision != _session_revision(session_file)
-            or persistent.launch_key is None
-            or persistent.launch_key[0].package != expected_package
-        ):
-            raise SelectedPiProbeUnknownError("Selected idle Pi child is unavailable or stale")
+        try:
+            retained = persistent.custody.idle().selected(
+                NativeSessionIdentity(session_id, session_file), expected_package
+            )
+        except NativePiUnavailable as error:
+            raise SelectedPiProbeUnknownError(str(error)) from error
+        proc, reader = retained.child.proc, retained.child.reader
         transmitted = False
         try:
             proc.stdin.write(PiRpcChannel.command_bytes(request))
@@ -150,17 +60,14 @@ async def _exchange_observation(
                     else await reader.readline(max_bytes=max_response)
                 )
             outcome = decode(raw, request)
-            if proc.returncode is not None or persistent.revision != _session_revision(
-                session_file
-            ):
+            if not retained.current:
                 raise SelectedPiProbeUnknownError("Selected Pi source changed during dry run")
             return outcome
         except BaseException as error:
             if transmitted:
                 # Poison before a cancellable await. No next borrower may use
                 # old in-memory history or treat this as a paid-summary receipt.
-                persistent.reopen_required = session_file
-                persistent.reopen_session_id = session_id
+                persistent.require_reopen(session_file)
                 # close() retains its independently shielded reap task if
                 # cancellation interrupts this caller's join.
                 with suppress(asyncio.CancelledError):
@@ -205,7 +112,7 @@ async def read_selected_compaction_decision(
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
-    session_id = persistent.session_id
+    session_id = persistent.custody.idle().identity.session_id
     if (
         not session_id
         or not session_file

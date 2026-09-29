@@ -36,12 +36,20 @@ from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
-from .native_attestation import AttestationError, NativeAttestation, SavedSessionReopenError
+from .native_attestation import AttestationError, SavedSessionReopenError
+from .native_custody import (
+    BorrowedNative,
+    EmptyNative,
+    NativeCustody,
+    PiSessionChild,
+    RetainedNative,
+)
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
+from .turn_admission import UnacknowledgedPrompt
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
 from .turn_stats import StatsRequest
@@ -70,7 +78,6 @@ _TOOL_KINDS = {
 _ACTIVE_PROCESSES: dict[asyncio.Task[Any], AttachedChild] = {}
 _ACTIVE_STDERR_TASKS: dict[asyncio.Task[Any], asyncio.Task[str]] = {}
 _ACTIVE_STEERING: dict[asyncio.Task[Any], asyncio.Task[None]] = {}
-_ACTIVE_INPUT_RESTORERS: dict[asyncio.Task[Any], Callable[[], None]] = {}
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
 # transport backstop must remain strictly longer so Pi can emit its authoritative
 # timeout, auto-retry, and transport evidence before agent-comms intervenes.
@@ -140,163 +147,57 @@ def _session_revision(
 
 
 class PersistentPiSession:
-    """One Pi RPC child through launch, attested turn use, and idle retention.
-
-    A turn borrows the child only under the saved-session writer fence. The
-    revision check detects a separate writer between turns, so its in-memory
-    history cannot silently omit a compacted or appended saved session.
-    """
+    """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:
         self.lock = asyncio.Lock()
-        self.proc: AttachedChild | None = None
-        self.reader: PiRpcChannel | None = None
-        self.stderr_task: asyncio.Task[str] | None = None
-        self.launch_key: tuple[NativePiRpcLaunch, tuple[int, int]] | None = None
-        self.session_file: str | None = None
-        self.session_id: str | None = None
-        self.revision: tuple[_FileRevision, _FileRevision | None] | None = None
-        self.sensitive_diagnostics = False
-        self.reopen_required: str | None = None
-        self.reopen_session_id: str | None = None
-        # A cancellation cannot lose the sole handle to a child still being
-        # reaped. Every later borrower waits for this task before launching.
-        self._close_task: asyncio.Task[None] | None = None
+        self.custody: NativeCustody = EmptyNative()
+
+    @property
+    def available(self) -> bool:
+        return self.custody.available
 
     async def open(
-        self,
-        launch: NativePiRpcLaunch,
-        session_file: str | None,
-        *,
-        reuse: bool,
-        require_input_id: bool,
-        startup: NativeStartupAdmission | None,
-        finish_event: asyncio.Event | None,
-        watchdog: ProgressWatchdog,
-    ) -> None:
+        self, launch, session_file, *, reuse, require_input_id, startup, finish_event, watchdog
+    ) -> PiSessionChild:
         key = (launch, auth_revision())
-        reused = reuse and self.reusable(key, session_file)
-        if not reused:
+        child = self.custody.reuse(key, session_file) if reuse else None
+        reused = child is not None
+        if child is None:
             await self.close()
-        expected = NativeSessionIdentity(self.session_id, self.session_file) if reused else None
-        if self.reopen_required is not None:
-            if session_file != self.reopen_required or not require_input_id:
-                raise SavedSessionReopenError(
-                    "Saved native session requires explicit validated reopen."
-                )
-            from .native_session_reopen import validate_native_reopen
-
-            try:
-                validated_session_id = await asyncio.to_thread(
-                    validate_native_reopen,
-                    launch.package,
-                    session_file,
-                    expected_session_id=self.reopen_session_id,
-                )
-            except ValueError as error:
-                raise SavedSessionReopenError(
-                    "Saved native session failed strict reopen validation."
-                ) from error
-            expected = NativeSessionIdentity(validated_session_id, session_file)
-        self.attestation = NativeAttestation(expected)
-        if not reused and require_input_id and startup is not None:
-            await startup.acquire(finish_event)
-        watchdog.launching(asyncio.get_running_loop().time, session_file)
-        if not reused:
-            self.proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
-            assert self.proc.stdout is not None and self.proc.stderr is not None
-            self.reader = PiRpcChannel(self.proc.stdout)
-            self.stderr_task = asyncio.create_task(self.stderr_tail(self.proc.stderr))
-        self.launch_key = key
+            expected = await self.custody.expected(launch, session_file, require_input_id)
+            if require_input_id and startup is not None:
+                await startup.acquire(finish_event)
+            watchdog.launching(asyncio.get_running_loop().time, session_file)
+            child = await PiSessionChild.start(key, expected)
+            self.custody = BorrowedNative(child, self.custody)
+        else:
+            watchdog.launching(asyncio.get_running_loop().time, session_file)
+            self.custody = BorrowedNative(child, EmptyNative())
         watchdog.spawned(reused)
+        return child
 
-    @staticmethod
-    async def stderr_tail(stream: asyncio.StreamReader) -> str:
-        tail = b""
-        while chunk := await stream.read(4096):
-            tail = (tail + chunk)[-16000:]
-        return tail.decode(errors="replace").strip()
-
-    def retain(
-        self,
-        session_file: str,
-        session_id: str,
-        revision: tuple[_FileRevision, _FileRevision | None],
-        *,
-        sensitive: bool,
-    ) -> None:
-        self.session_file = session_file
-        self.session_id = session_id
-        self.revision = revision
-        self.sensitive_diagnostics = sensitive
-        self.reopen_required = None
-        self.reopen_session_id = None
-
-    def reusable(
-        self, launch_key: tuple[NativePiRpcLaunch, tuple[int, int]], session_file: str | None
-    ) -> bool:
-        return (
-            self.reopen_required is None
-            and self._close_task is None
-            and self.proc is not None
-            and self.proc.returncode is None
-            and self.reader is not None
-            and self.stderr_task is not None
-            and self.launch_key == launch_key
-            and self.session_file == session_file
-            and self.revision is not None
-            and self.revision == _session_revision(session_file)
-        )
+    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
+        revision = _session_revision(identity.session_file)
+        if revision is None or not child.proc.alive():
+            return False
+        self.custody = RetainedNative(child, identity, revision)
+        return True
 
     async def close(self) -> None:
-        """Reap the exact child even if a caller is cancelled mid-retirement.
-
-        The lock serializes normal borrowers. A cancelled borrower releases it,
-        but the retained cleanup task owns the old process and the next borrow
-        must await that same task before opening another Pi child.
-        """
-        if self._close_task is None:
-            proc, stderr_task = self.proc, self.stderr_task
-
-            async def finish() -> None:
-                if proc is not None:
-                    await proc.stop()
-                if stderr_task is not None:
-                    await asyncio.gather(stderr_task, return_exceptions=True)
-
-            # Create the independent cleanup BEFORE forgetting the process.
-            self._close_task = asyncio.create_task(finish())
-            self.proc = None
-            self.reader = None
-            self.stderr_task = None
-            self.launch_key = None
-            self.session_file = None
-            self.session_id = None
-            self.revision = None
-            self.sensitive_diagnostics = False
-        await asyncio.shield(self._close_task)
-        self._close_task = None
+        self.custody = self.custody.retire()
+        self.custody = await self.custody.closed()
 
     async def close_idle(self) -> None:
-        """Wait for a borrowed turn's stats/cleanup before closing its child."""
         async with self.lock:
             await self.close()
 
-    async def discard_for_external_write(self, session_file: str) -> None:
-        """Retire the injected in-memory manager; require strict disk validation.
+    def require_reopen(self, session_file: str) -> None:
+        self.custody = self.custody.retire(self.custody.reopen(session_file))
 
-        The old child must die BEFORE another process can rewrite its session.
-        A public field assignment or fresh attempt cannot revive that child.
-        """
+    async def discard_for_external_write(self, session_file: str) -> None:
         async with self.lock:
-            if self.session_file is not None and self.session_file != session_file:
-                raise ValueError("Idle manager belongs to a different saved session")
-            expected = self.session_id if self.session_file == session_file else None
-            # Poison before the first cancellable await. An interrupted retire
-            # cannot make old in-memory history reusable or waive validation.
-            self.reopen_required = session_file
-            if expected is not None:
-                self.reopen_session_id = expected
+            self.require_reopen(session_file)
             await self.close()
 
 
@@ -315,8 +216,6 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     if steering := _ACTIVE_STEERING.pop(task, None):
         steering.cancel()
         await asyncio.gather(steering, return_exceptions=True)
-    if restore_inputs := _ACTIVE_INPUT_RESTORERS.pop(task, None):
-        restore_inputs()
     proc = _ACTIVE_PROCESSES.pop(task, None)
     if proc is not None:
         await proc.stop()
@@ -587,7 +486,6 @@ class TurnSession:
         self.launch = launch
         self.task = task
         self.session_file = session_file
-        self.steering_queue = steering_queue
         self.finish_event = finish_event
         self.fork_session = fork_session
         self.images = images
@@ -600,12 +498,13 @@ class TurnSession:
         self.interrupt_boundary = interrupt_boundary
         self.native_start = native_start
         self.persistent_session = persistent_session
-        self.native = (
+        self.native_session = (
             persistent_session if persistent_session is not None else PersistentPiSession()
         )
         self.ui_request = ui_request
         self.startup = startup
-        self.inputs = InputForwarding()
+        self.inputs = InputForwarding(steering_queue)
+        self.admission = UnacknowledgedPrompt()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
@@ -653,12 +552,12 @@ class TurnSession:
         )
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
-        self.finished = self.skip = self.retained = False
+        self.finished = self.skip = False
         self.loop = asyncio.get_running_loop()
         self.owner = asyncio.current_task()
         try:
             try:
-                await self.native.open(
+                self.native = await self.native_session.open(
                     self.launch,
                     self.session_file,
                     reuse=self.persistent_session is not None and not self.fork_session,
@@ -700,7 +599,7 @@ class TurnSession:
                     continue
                 if self.require_input_id and self.native.attestation.state is None:
                     try:
-                        self.native.attestation.accept(self.payload)
+                        self.native.attestation = self.native.attestation.accept(self.payload)
                     except AttestationError as error:
                         await error.refuse(self)
                         break
@@ -727,8 +626,8 @@ class TurnSession:
             async for event in self.finish_result():
                 yield event
         finally:
-            if not self.retained:
-                await self.native.close()
+            if not self.native_session.custody.retained:
+                await self.native_session.close()
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
         while self.rejected_commands:
@@ -817,7 +716,7 @@ class TurnSession:
             return
 
     async def invalidate_identity(self) -> AsyncIterator[events.AgentEvent]:
-        self.session_identity_uncertain = True
+        self.native.attestation = self.native.attestation.invalidate()
         self.usage.invalidate()
         self.output.discard_text()
         yield self.context_info()
@@ -859,8 +758,7 @@ class TurnSession:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.rejected_signal = asyncio.Event()
-        self.session_identity_uncertain = False
-        if self.steering_queue is not None and self.native.proc.stdin is not None:
+        if self.inputs.queue is not None and self.native.proc.stdin is not None:
             self.stdin = self.native.proc.stdin
             if not self.require_input_id:
                 self.steering_task = asyncio.create_task(self.inputs.forward(self))
@@ -869,14 +767,8 @@ class TurnSession:
         self.model_name: str | None = None
         self.session_name: str | None = None
         self.active_session_file = self.session_file
-        self.initial_session_id: str | None = None
-        self.initial_session_file: str | None = None
-        self.initial_session_observed = False
-        self.initial_prompt_acknowledged = False
-        self.initial_input_started = False
         self.live_status_seen = False
         self.settlement_count = 0
-        self.agent_settled_seen = False
         self.native.reader.pending.cancel_all()
         self.native.reader.pending.add(
             commands.GetState,
@@ -894,8 +786,6 @@ class TurnSession:
         self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
         self.ui_seen: set[str] = set()
-        if self.owner is not None:
-            _ACTIVE_INPUT_RESTORERS[self.owner] = lambda: self.inputs.restore(self)
         if False:
             yield
 
@@ -903,54 +793,29 @@ class TurnSession:
         if self.steering_task is not None:
             self.steering_task.cancel()
             await asyncio.gather(self.steering_task, return_exceptions=True)
-        self.unresolved_inputs = bool(self.inputs.pending) or (
-            self.steering_queue is not None and (not self.steering_queue.empty())
-        )
-        self.inputs.restore(self)
         self.native.reader.pending.cancel_all()
-        if self.owner is not None:
-            _ACTIVE_INPUT_RESTORERS.pop(self.owner, None)
-        self.revision = _session_revision(self.active_session_file)
-        self.retained = self.can_retain()
-        if self.retained:
-            self.native.retain(
-                self.active_session_file,
-                self.initial_session_id,
-                self.revision,
-                sensitive=self.output.sensitive,
-            )
-        else:
+        identity = self.native.attestation.identity
+        if (
+            self.persistent_session is not None
+            and self.require_input_id
+            and identity is not None
+            and self.admission.permits_retention(self)
+        ):
+            self.native.sensitive_diagnostics = self.output.sensitive
+            self.native_session.retain(self.native, identity)
+        if not self.native_session.custody.retained:
             outcome = await self.native.proc.finish()
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
         if False:
             yield
 
-    def can_retain(self) -> bool:
-        return bool(
-            self.persistent_session is not None
-            and self.require_input_id
-            and (self.native.proc.returncode is None)
-            and self.output.clean
-            and (not self.session_identity_uncertain)
-            and (not self.inputs.uncertain)
-            and (not self.unresolved_inputs)
-            and self.initial_input_started
-            and self.initial_prompt_acknowledged
-            and self.output.final_assistant_stop
-            and self.agent_settled_seen
-            and self.stats.complete
-            and isinstance(self.initial_session_id, str)
-            and isinstance(self.initial_session_file, str)
-            and (self.initial_session_file == self.active_session_file)
-            and (self.revision is not None)
-            and self.output.permits_retention(self)
-        )
-
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         if self.owner is not None:
             _ACTIVE_PROCESSES.pop(self.owner, None)
-        self.error_text = "" if self.retained else await self.native.stderr_task
+        self.error_text = (
+            "" if self.native_session.custody.retained else await self.native.stderr_task
+        )
         self.output.startup_error(self.error_text)
         if self.owner is not None:
             _ACTIVE_STDERR_TASKS.pop(self.owner, None)

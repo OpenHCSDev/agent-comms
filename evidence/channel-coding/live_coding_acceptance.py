@@ -17,7 +17,7 @@ from agent_comms import Thread
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordinated_runtime import run_one_sealed_claim
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 
@@ -36,12 +36,12 @@ async def main():
         c.register(Thread(name,tags,str(work),pid=os.getpid(),model=model,task='Implement the requested local coding acceptance task',thinking_level='medium'))
     root_id=c.initialize_private_initial_protocol();c.initialize_private_claim_protocol()
     source=c.send_message('sender','#coding-check','For the coding-check owner: use read to read input.txt; use edit to replace BEFORE with AFTER; use write to create nested/result.txt containing the full edited input text; use bash to run a Python assertion that both files have equal contents and state=AFTER. Use all four tools. Reply CODING_TOOLS_OK only after the checks pass. Work only in this worktree.')
-    initial=c.bus.read_initial_cohort(root_id,source.seq)
+    initial=c.bus.read_delivery_cohort(root_id,source.seq)
     with Coordination(str(root/'coordination.sqlite3')) as store:
         install_private_cohort_schema(store);install_private_response_schema(store);install_native_runtime_schema(store)
         for person in initial.audience.recipients:
             store.participants.register(person.recipient_lookup,person.canonical_thread,person.canonical_thread,committed=True)
-        accept_initial_cohort(c.bus,root_id,source.seq,store)
+        accept_delivery_cohort(c.bus,root_id,source.seq,store)
     package=Path((evidence/'physical-package.txt').read_text().strip())
     report={'root':str(root),'worktree':str(work),'package':str(package),'source_seq':source.seq,'started_at':time.time()}
     receipt.write_text(json.dumps(report,indent=2)+'\n')

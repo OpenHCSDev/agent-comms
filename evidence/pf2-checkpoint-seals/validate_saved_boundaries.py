@@ -12,7 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_bus_checkpoint import (
     PrefixCertificate,
-    certified_initial_page_unlocked,
+    certified_delivery_page_unlocked,
     install_private_bus_checkpoint,
 )
 from agent_comms.wire_log import WireLog
@@ -101,7 +101,7 @@ def main():
                     with wire.locked():
                         current = wire._private_marker_unlocked()
                         while True:
-                            _, page, more = certified_initial_page_unlocked(
+                            _, page, more = certified_delivery_page_unlocked(
                                 wire,
                                 current,
                                 lookup,
@@ -113,7 +113,7 @@ def main():
                                 break
                     assert collected == sequences
                 with wire.locked():
-                    assert not certified_initial_page_unlocked(
+                    assert not certified_delivery_page_unlocked(
                         wire, wire._private_marker_unlocked(), "f" * 32
                     )[1]
                 assert (target / "bus.jsonl").read_bytes() == original

@@ -380,7 +380,6 @@ for line in sys.stdin:
         assert process.returncode is not None
         assert turn not in backend._ACTIVE_PROCESSES
         assert turn not in backend._ACTIVE_STEERING
-        assert turn not in backend._ACTIVE_INPUT_RESTORERS
         # Once written, this input may already have crossed a provider boundary.
         # It must not be silently requeued after caller cancellation.
         assert queue.empty()
@@ -2501,7 +2500,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            first_proc = persistent.proc
+            first_proc = persistent.custody.child.proc
             second = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2514,7 +2513,7 @@ for line in sys.stdin:
                 )
             ]
             assert first[-1].ok is True and second[-1].ok is True
-            assert persistent.proc is first_proc and first_proc is not None
+            assert persistent.custody.child.proc is first_proc and first_proc is not None
             assert first_proc.returncode is None
             ids = [line.split() for line in ids_file.read_text().splitlines()]
             assert len(ids) == 2
@@ -2532,9 +2531,9 @@ for line in sys.stdin:
                 )
             ]
             assert third[-1].ok is True
-            assert persistent.proc is not first_proc
+            assert persistent.custody.child.proc is not first_proc
             assert first_proc.returncode is not None
-            third_proc = persistent.proc
+            third_proc = persistent.custody.child.proc
             proof_file.write_text("outside writer changed the proof\n")
             proof_changed = [
                 event
@@ -2548,9 +2547,9 @@ for line in sys.stdin:
                 )
             ]
             assert proof_changed[-1].ok is True
-            assert persistent.proc is not third_proc
+            assert persistent.custody.child.proc is not third_proc
             assert third_proc is not None and third_proc.returncode is not None
-            fourth_proc = persistent.proc
+            fourth_proc = persistent.custody.child.proc
 
             async def cancelled_turn():
                 return [
@@ -2618,7 +2617,7 @@ for line in sys.stdin:
                 )
             ]
             assert revived[-1].ok is True
-            before_image_proc = persistent.proc
+            before_image_proc = persistent.custody.child.proc
             image = ImageInput("U0VDUkVUX0lNQUdFX0JZVEVT", "image/png")
             image_turn = [
                 event
@@ -2633,7 +2632,7 @@ for line in sys.stdin:
                 )
             ]
             assert image_turn[-1].ok is True
-            assert persistent.proc is before_image_proc and before_image_proc is not None
+            assert persistent.custody.child.proc is before_image_proc and before_image_proc is not None
             failed = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2664,7 +2663,7 @@ for line in sys.stdin:
             # a valid native JSONL. This stub tests the transport lifecycle:
             # discard injected manager; a different process and matching
             # get_state identity precede a distinct new input's provider work.
-            from agent_comms import native_session_reopen
+            from agent_comms import native_custody
 
             calls = []
 
@@ -2672,11 +2671,11 @@ for line in sys.stdin:
                 calls.append((file, expected_session_id))
                 return "fixed-session"
 
-            monkeypatch.setattr(native_session_reopen, "validate_native_reopen", validated)
-            retired = persistent.proc
+            monkeypatch.setattr(native_custody, "validate_native_reopen", validated)
+            retired = persistent.custody.child.proc
             await persistent.discard_for_external_write(str(session_file))
             assert retired is not None and retired.returncode is not None
-            assert persistent.proc is None and persistent.reopen_session_id == "fixed-session"
+            assert not persistent.available and persistent.custody.session_id == "fixed-session"
             reopened = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2690,9 +2689,9 @@ for line in sys.stdin:
             ]
             assert reopened[-1].ok is True
             assert calls == [(str(session_file), "fixed-session")]
-            assert persistent.proc is not None and persistent.proc is not retired
-            assert persistent.reopen_required is None
-            borrowed_proc = persistent.proc
+            assert persistent.available and persistent.custody.child.proc is not retired
+            assert persistent.custody.idle().current
+            borrowed_proc = persistent.custody.child.proc
 
             async def delayed_turn():
                 return [

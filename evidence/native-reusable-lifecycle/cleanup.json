@@ -1,0 +1,62 @@
+{
+  "removed_owned_disposable_directories": [
+    {
+      "path": ".artifacts/native-reusable-lifecycle/native-second",
+      "bytes": 5166435
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/private-first",
+      "bytes": 533347
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/private-second",
+      "bytes": 12637883
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/owned-fourth",
+      "bytes": 2187894
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/owned-fifth",
+      "bytes": 5169157
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/queue-final",
+      "bytes": 3864297
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/backend-callers",
+      "bytes": 9994
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/backend-callers-two",
+      "bytes": 132978
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/backend-remainder",
+      "bytes": 25514
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/final-native",
+      "bytes": 6051722
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/selected-final",
+      "bytes": 420490
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/nra-cache",
+      "bytes": 85355501
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/nra-cache-analysis",
+      "bytes": 8474442
+    },
+    {
+      "path": ".artifacts/native-reusable-lifecycle/nra-cache-semantic_descent",
+      "bytes": 14045790
+    }
+  ],
+  "bytes": 144075444,
+  "preserved": "Source, branch, canonical5fde package, raw JSON measurements/NRA and all logs"
+}
