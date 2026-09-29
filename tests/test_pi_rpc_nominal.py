@@ -95,14 +95,13 @@ def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
         NativePiRpcLaunch(("unused",), Path.cwd(), {}, Path.cwd(), None, Path.cwd()), "unused"
     )
-    session.failure = None
     for cls in (left, right, left):
-        session.record_failure(cls(cls.__name__))
+        session.output.record_failure(cls(cls.__name__))
     expected = max((left, right), key=lambda cls: cls.precedence)
-    assert type(session.failure) is expected
-    assert session.fail_reason == expected.__name__
-    assert session.failure.code == expected.code
-    assert session.failure.input_uncertain == expected.input_uncertain
+    assert type(session.output.failure) is expected
+    assert session.output.failure_text == expected.__name__
+    assert session.output.failure.code == expected.code
+    assert session.output.failure.input_uncertain == expected.input_uncertain
 
 
 def test_external_formats_are_derived_and_pin_wire_spellings():

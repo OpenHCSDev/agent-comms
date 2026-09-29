@@ -43,6 +43,7 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
 from .turn_inputs import InputForwarding
+from .turn_output import TurnOutput
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog
@@ -638,6 +639,7 @@ class TurnSession:
         self.inputs = InputForwarding()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
+        self.output = TurnOutput(sensitive=bool(images))
 
     async def stderr_tail(self) -> str:
         tail = b""
@@ -697,9 +699,8 @@ class TurnSession:
             yield event
         if self.finished:
             return
-        self.initialize_output()
-        if self.finished:
-            return
+        if self.reused and self.persistent_session is not None:
+            self.output.sensitive |= self.persistent_session.sensitive_diagnostics
         async for event in self.initialize_rpc():
             yield event
         if self.finished:
@@ -743,14 +744,6 @@ class TurnSession:
         if self.finished:
             return
 
-    def record_failure(self, failure: failures.TurnFailure) -> None:
-        if failure.supersedes(self.failure):
-            self.failure = failure
-
-    @property
-    def fail_reason(self) -> str:
-        return self.failure.text if self.failure else ""
-
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
         while self.rejected_commands:
             yield self.rejected_commands.pop(0)
@@ -763,16 +756,16 @@ class TurnSession:
             return
         if not self.line:
             if self.require_input_id and (not self.native_capability_confirmed):
-                self.preflight_failure = FailureReason.PREFLIGHT_EXIT
-                self.diagnostic = {
+                self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
+                self.output.diagnostic = {
                     "elapsed_ms": round(
                         (self.loop.time() - self.watchdog.launch_started_at) * 1000
                     ),
                     "spawn_ms": self.watchdog.spawn_ms,
                 }
                 if self.watchdog.session_bytes is not None:
-                    self.diagnostic["session_bytes"] = self.watchdog.session_bytes
-                self.record_failure(
+                    self.output.diagnostic["session_bytes"] = self.watchdog.session_bytes
+                self.output.record_failure(
                     failures.InputIdUnavailable(
                         "Pi native input-ID capability preflight ended before attestation."
                     )
@@ -790,7 +783,7 @@ class TurnSession:
             return
         except (ValueError, TypeError) as error:
             if self.require_input_id and not self.native_capability_confirmed:
-                self.record_failure(
+                self.output.record_failure(
                     failures.InputIdUnavailable(
                         f"Invalid Pi capability preflight response: {error}"
                     )
@@ -806,7 +799,7 @@ class TurnSession:
                 not isinstance(self.payload, pi.Response)
                 or self.payload.command is not commands.GetState
             ):
-                self.record_failure(
+                self.output.record_failure(
                     failures.InputIdUnavailable(
                         "Pi native input-ID capability preflight returned another event."
                     )
@@ -821,7 +814,7 @@ class TurnSession:
                 or (self.state is None)
                 or (self.state.native_input_proof_capability != NATIVE_INPUT_CAPABILITY)
             ):
-                self.record_failure(
+                self.output.record_failure(
                     failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
                 )
                 await self.proc.stop()
@@ -843,7 +836,7 @@ class TurnSession:
                 )
             ):
                 self.session_identity_uncertain = True
-                self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+                self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
                 await self.proc.stop()
                 self.finished = True
                 return
@@ -872,7 +865,7 @@ class TurnSession:
                     self.prompt_dispatched = True
                     self.proc.stdin.write(self.prompt_payload)
             if not self.authorized:
-                self.record_failure(
+                self.output.record_failure(
                     failures.InputMissing("Input authority changed before Pi prompt send.")
                 )
                 await self.proc.stop()
@@ -880,7 +873,7 @@ class TurnSession:
                 return
             await self.proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
-            self.record_failure(
+            self.output.record_failure(
                 failures.InputIdUnavailable(
                     "Pi RPC prompt could not be sent after capability preflight."
                 )
@@ -892,7 +885,7 @@ class TurnSession:
     async def invalidate_identity(self) -> AsyncIterator[events.AgentEvent]:
         self.session_identity_uncertain = True
         self.usage.invalidate()
-        self.text_parts.clear()
+        self.output.discard_text()
         yield self.context_info()
         yield events.TurnState(
             state="failed",
@@ -903,7 +896,7 @@ class TurnSession:
             replay_safe=False,
             side_effects_possible=True,
         )
-        self.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
+        self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()
         self.finished = True
 
@@ -1013,29 +1006,12 @@ class TurnSession:
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-    def initialize_output(self) -> None:
-        self.text_parts: list[str] = []
-        self.assistant_message_parts: list[str] = []
-        self.ok = True
-        self.failure = None
-        self.diagnostic: dict[str, int] = {}
-        self.preflight_failure: str | None = None
-        self.error_message: str | None = None
-        self.image_input_sent = bool(self.images)
-        self.inherited_image_sensitive = bool(
-            self.reused
-            and self.persistent_session is not None
-            and self.persistent_session.sensitive_diagnostics
-        )
-        assert self.proc.stdout is not None
-
     async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
         self.steering_task: asyncio.Task[None] | None = None
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.rejected_signal = asyncio.Event()
         self.session_identity_uncertain = False
-        self.final_assistant_stop = False
         if self.steering_queue is not None and self.proc.stdin is not None:
             self.stdin = self.proc.stdin
             if not self.require_input_id:
@@ -1102,17 +1078,14 @@ class TurnSession:
             self.persistent_session.session_file = self.active_session_file
             self.persistent_session.session_id = self.initial_session_id
             self.persistent_session.revision = self.revision
-            self.persistent_session.sensitive_diagnostics = (
-                self.image_input_sent or self.inherited_image_sensitive
-            )
+            self.persistent_session.sensitive_diagnostics = self.output.sensitive
             if self.validated_session_id is not None:
                 self.persistent_session.reopen_required = None
                 self.persistent_session.reopen_session_id = None
         else:
             outcome = await self.proc.finish()
             if isinstance(outcome, TimedOutOutcome):
-                self.ok = False
-                self.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
+                self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
         if False:
             yield
 
@@ -1121,39 +1094,27 @@ class TurnSession:
             self.persistent_session is not None
             and self.require_input_id
             and (self.proc.returncode is None)
-            and self.ok
-            and (not self.fail_reason)
-            and (self.error_message is None)
+            and self.output.clean
             and (not self.session_identity_uncertain)
-            and (not isinstance(self.failure, failures.InputIdUnavailable))
             and (not self.inputs.uncertain)
             and (not self.unresolved_inputs)
             and self.initial_input_started
             and self.initial_prompt_acknowledged
-            and self.final_assistant_stop
+            and self.output.final_assistant_stop
             and self.agent_settled_seen
             and self.stats.complete
             and isinstance(self.initial_session_id, str)
             and isinstance(self.initial_session_file, str)
             and (self.initial_session_file == self.active_session_file)
             and (self.revision is not None)
+            and self.output.permits_retention(self)
         )
 
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         if self.owner is not None:
             _ACTIVE_PROCESSES.pop(self.owner, None)
         self.error_text = "" if self.retained else await self.stderr_task
-        if (
-            self.preflight_failure == FailureReason.PREFLIGHT_EXIT
-            and self.error_text.strip()
-            and not (self.image_input_sent or self.inherited_image_sensitive)
-        ):
-            self.record_failure(
-                failures.InputIdUnavailable(
-                    "Pi native input-ID capability preflight ended before attestation. "
-                    "The prompt was not sent. Backend startup reported:\n" + self.error_text.strip()
-                )
-            )
+        self.output.startup_error(self.error_text)
         if self.owner is not None:
             _ACTIVE_STDERR_TASKS.pop(self.owner, None)
         if not self.retained and self.reused and (self.persistent_session is not None):
@@ -1162,83 +1123,4 @@ class TurnSession:
             yield
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
-        self.transport_successful = (
-            self.ok and (not self.fail_reason) and (self.retained or self.proc.returncode == 0)
-        )
-        self.otherwise_successful = self.transport_successful and self.error_message is None
-        if self.otherwise_successful and (not self.session_identity_uncertain):
-            if not self.initial_input_started:
-                self.record_failure(
-                    failures.InputMissing(
-                        "Pi RPC run ended without this prompt's user message start."
-                    )
-                )
-            elif not self.final_assistant_stop:
-                self.record_failure(
-                    failures.FinalStopMissing(
-                        "Pi RPC run ended without an authoritative final assistant stop."
-                    )
-                )
-            elif self.unresolved_inputs:
-                self.record_failure(
-                    failures.QueuedInputMissing(
-                        "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
-                    )
-                )
-        self.success = (
-            self.otherwise_successful
-            and self.initial_input_started
-            and self.final_assistant_stop
-            and (not self.inputs.uncertain)
-            and (not self.unresolved_inputs)
-        )
-        self.terminal_reason_code: str | None = None
-        if (self.transport_successful or self.inputs.uncertain or self.fail_reason) and (
-            not self.initial_input_started
-        ):
-            self.record_failure(
-                failures.InputMissing(
-                    self.fail_reason or "Pi RPC run ended without this prompt's user message start."
-                )
-            )
-        if self.transport_successful and (not self.final_assistant_stop):
-            self.record_failure(
-                failures.FinalStopMissing(
-                    self.fail_reason
-                    or self.error_message
-                    or "Pi RPC run ended without an authoritative final assistant stop."
-                )
-            )
-        if self.otherwise_successful and self.unresolved_inputs:
-            self.record_failure(
-                failures.QueuedInputMissing(
-                    self.fail_reason
-                    or "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
-                )
-            )
-        self.terminal_reason_code = self.failure.code if self.failure else None
-        yield events.Done(
-            text=(
-                self.failure.text
-                if self.failure is not None
-                else (
-                    "".join(self.text_parts).strip()
-                    if self.success
-                    else self.error_message
-                    or (
-                        "Image prompt failed; backend diagnostics withheld."
-                        if (self.image_input_sent or self.inherited_image_sensitive)
-                        and self.error_text
-                        else self.error_text
-                    )
-                    or f"Backend exited with code {self.proc.returncode}"
-                )
-            ),
-            ok=self.success and (not self.session_identity_uncertain),
-            reason_code=self.terminal_reason_code,
-            diagnostic={
-                **self.diagnostic,
-                **({"reason": self.preflight_failure} if self.preflight_failure else {}),
-                **({"exit_code": self.proc.returncode} if self.proc.returncode is not None else {}),
-            },
-        )
+        yield self.output.done(self, self.error_text)

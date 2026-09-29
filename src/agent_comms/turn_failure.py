@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
+
+if TYPE_CHECKING:
+    from .backend import TurnSession
+    from .turn_output import TurnOutput
 
 
 @dataclass(frozen=True)
@@ -49,22 +54,57 @@ class FollowupUnrecognized(TurnFailure):
     input_uncertain = True
 
 
-class InputMissing(TurnFailure):
+class TerminalFailure(TurnFailure):
+    """Missing terminal evidence, discovered from the same declaration as its verdict."""
+
+    default_text: ClassVar[str]
+
+    @classmethod
+    @abstractmethod
+    def detected(cls, session: TurnSession, transport_ok: bool) -> bool: ...
+
+    @classmethod
+    def explanation(cls, output: TurnOutput) -> str:
+        return output.failure_text or cls.default_text
+
+
+class InputMissing(TerminalFailure):
     code = FailureReason.INPUT_MISSING
     precedence = 50
     input_uncertain = True
+    default_text = "Pi RPC run ended without this prompt's user message start."
+
+    @classmethod
+    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+        return not session.initial_input_started and bool(
+            transport_ok or session.inputs.uncertain or session.output.failure_text
+        )
 
 
-class FinalStopMissing(TurnFailure):
+class FinalStopMissing(TerminalFailure):
     code = FailureReason.FINAL_STOP_MISSING
     precedence = 40
     input_uncertain = True
+    default_text = "Pi RPC run ended without an authoritative final assistant stop."
+
+    @classmethod
+    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+        return transport_ok and not session.output.final_assistant_stop
+
+    @classmethod
+    def explanation(cls, output: TurnOutput) -> str:
+        return output.failure_text or output.error_message or cls.default_text
 
 
-class QueuedInputMissing(TurnFailure):
+class QueuedInputMissing(TerminalFailure):
     code = FailureReason.QUEUED_INPUT_MISSING
     precedence = 30
     input_uncertain = True
+    default_text = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
+
+    @classmethod
+    def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
+        return transport_ok and session.output.error_message is None and session.unresolved_inputs
 
 
 class ModelStalled(TurnFailure):

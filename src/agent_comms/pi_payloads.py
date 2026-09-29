@@ -509,8 +509,7 @@ class TextDelta(PiDelta, declared_name="text_delta"):
 
     def emit(self, session):
         session.watchdog.output_started |= bool(self.delta)
-        session.text_parts.append(self.delta)
-        session.assistant_message_parts.append(self.delta)
+        session.output.append(self.delta)
         from .agent_events import Chunk
 
         return (Chunk(text=self.delta),)

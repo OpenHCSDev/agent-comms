@@ -63,10 +63,43 @@ def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
         "read_rpc_line",
         "turn_state",
         "handle_timeout",
+        "initialize_output",
+        "record_failure",
+        "fail_reason",
     }
     assert not any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in retired
         for node in ast.walk(backend)
+    )
+    retired_fields = {
+        "text_parts",
+        "assistant_message_parts",
+        "image_input_sent",
+        "inherited_image_sensitive",
+        "terminal_reason_code",
+        "transport_successful",
+        "otherwise_successful",
+        "final_assistant_stop",
+        "error_message",
+        "failure",
+        "ok",
+    }
+    assert not any(
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+        and node.attr in retired_fields
+        for node in ast.walk(backend)
+    )
+    # Tool event scratch output must never overwrite the stateful turn owner.
+    event_source = ast.parse((root / "pi_events.py").read_text())
+    assert not any(
+        isinstance(node, ast.Attribute)
+        and isinstance(node.ctx, ast.Store)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "session"
+        and node.attr == "output"
+        for node in ast.walk(event_source)
     )
     assert {
         "state_id",

@@ -187,15 +187,11 @@ class Prompt(PiCommand):
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
             else:
-                session.error_message = (
-                    "Image prompt failed; backend diagnostics withheld."
-                    if session.image_input_sent or session.inherited_image_sensitive
-                    else str(response.error or "Prompt was rejected")
-                )
+                error = session.output.error(str(response.error or "Prompt was rejected"))
                 yield session.watchdog.state(
                     session, "failed", "prompt_rejected", 0, event_phase="shutdown"
                 )
-                yield events.Error(text=session.error_message)
+                yield error
                 session.finished = True
                 return
         else:
