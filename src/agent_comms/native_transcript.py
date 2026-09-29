@@ -53,6 +53,13 @@ class NativeRecord:
             entry = None
         return cls(start, end, entry, raw.endswith(b"\n"))
 
+    def project(self, projection):
+        """A decoded record owns whether it can produce presentation events."""
+        return projection(self.entry) if self.entry is not None else ()
+
+    def incomplete_tail(self, through: int) -> bool:
+        return self.end == through and not self.complete and self.entry is None
+
     @property
     def size(self) -> int:
         return self.end - self.start
