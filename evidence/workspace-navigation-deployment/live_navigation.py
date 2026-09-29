@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import re
 import sys
 from tempfile import TemporaryDirectory
 
@@ -26,6 +27,17 @@ async def until(pilot, predicate):
 
 def paint(app):
     return "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+
+
+def phrases(text):
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return {tuple(words[i:i+5]) for i in range(len(words)-4)}
+
+
+def history_paint(app, chat):
+    region = chat.window.content_region
+    return "\n".join(strip.crop(region.x, region.right).text
+                     for strip in app.screen._compositor.render_strips()[region.y:region.bottom])
 
 
 async def main():
@@ -54,6 +66,8 @@ async def main():
                 document, undo = editor.document, editor.history
                 app.screen.query_one(ChannelsSidebar).reveal()
                 for name in ("#comms", "#nra", "#openhcs"):
+                    expected = comms.views.channel_display_page(name, worktree=owner.worktree, limit=8)
+                    expected_keys = {message.view_key for message in expected.messages}
                     roster = app.screen.query_one(CommsSidebar)
                     await until(pilot, lambda: roster.navigation_ready.is_set() and any(
                         group.row.target_name == name for group in roster.query(ChannelGroup)))
@@ -64,11 +78,20 @@ async def main():
                     await until(pilot, lambda: app.selected_mode != original_mode)
                     await app.selected_session.wait_content_ready()
                     chat = app.selected_session.query_one(CommsChatView)
-                    await until(pilot, lambda: (chat._history_initialized and bool(chat._history)) or "Wire error:" in chat.status)
+                    await until(pilot, lambda: chat._history_initialized or "Wire error:" in chat.status)
                     assert "Wire error:" not in chat.status, chat.status
-                    assert chat._history, f"No saved rows for {name}"
+                    assert expected_keys <= {message.view_key for message, _ in chat._history}
+                    matched = 0
+                    if expected.messages:
+                        source_phrases = set().union(*(phrases(message.body) for message in expected.messages))
+                        await until(pilot, lambda: bool(source_phrases & phrases(history_paint(app, chat))))
+                        matched = len(source_phrases & phrases(history_paint(app, chat)))
+                    else:
+                        assert not chat._history, f"Invented saved rows for empty channel {name}"
                     assert app._exception is None, app._exception
-                    report["channel_clicks"].append({"name": name, "saved_rows": len(chat._history), "history_initialized": True})
+                    report["channel_clicks"].append({"name": name, "saved_rows": len(chat._history),
+                        "expected_initial_rows": len(expected.messages), "history_initialized": True,
+                        "matching_saved_five_word_phrases_in_viewport": matched})
                     await app.select_session(original_mode)
                     await until(pilot, lambda: source.conversation.agent_ready)
                     assert source.conversation.prompt.text == "UNSENT_NAVIGATION_DRAFT"

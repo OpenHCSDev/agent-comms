@@ -6,15 +6,25 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ## Current urgent fixes and shipping batch
 
-- Current boundary: archive checkpoint cutover345 is LIVE and merged;
-  native343/344 and popup154/first-open153 closures are MERGED, not yet live.
-  Combined156 candidate actual live read-only channel clicks #comms/#nra pass
-  with saved rows and draft/Document/EditHistory custody. #openhcs remains
-  empty after20s despite direct archived paging returning20 rows: Noether owns
-  actual channel display scope/view investigation. Tesla owns retained
-  DirectoryWatcher shutdown: full SDK user assertions pass, process exit fails.
-  Those demonstrated failures remain open; final50ms latency and CI are deferred.
-  Dalton builds the continuous actual native/provider user-journey acceptance.
+- LIVE checkpoint2026-09-29: paired runtime-workspace-navigation-20260929 selects
+  core77c2, merged Toad15651fdf, Textual1738/native d396. Five launchers and the
+  default route aligned; eight idle owners restored with all settings/history
+  preserved and no input replay or store reset. The actual default live UI
+  continuous saved-data channel/participant/recent-return journey passes and
+  exits0; eight fresh actual ACP loads pass. Complete native saved-state user
+  journey157 passes fork first-open, visible status/reply and automatic author
+  observation. Final merged-byte run continues in the same existing helper.
+  Previous OpenHCS expectation was unfiltered history; correct saved scope8/8/0.
+  Gamma paint timeout was the helper cropping inactive Beta, fixed in place.
+  Full body/mount reuse and final50ms latency stay Tesla follow-up; CI deferred.
+  Original/round2/S14/T4/T9 remaining deletion scopes stay active below.
+
+- New live defect: fresh fork /open for openhcs-pr159-viewer-bind-owner fails
+  ACP attachment with missing owner socket. Registered PID is dead, Running
+  status and no native session; startup cause not yet established. Carver owns
+  the production startup/open repair; Dalton extends the existing continuous
+  journey to immediate fork /open before the first answer. No user input replay
+  or speculative owner restart. Already verified navigation checkpoint stays live.
 
 - Strategy correction2026-09-29: Tesla156 owns one coherent navigation/presentation
   integration, Carver153 first-open implementation and shared caller coordination.
