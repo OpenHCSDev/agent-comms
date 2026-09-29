@@ -29,6 +29,16 @@ still being checked at this checkpoint; this census does not upgrade that claim.
 
 The dated measurements and old PR status rows below are retained as history.
 
+## Registry lifecycle followthrough — PR361
+
+357 merged51830c28. PR361 removes the remaining RegistryDocument lifecycle chains
+and optional registration-change bundle; actual callers use declaration-owned
+initial/update/restart operations and exact turn identities. [Receipt](../evidence/s14-registry-lifecycle/README.md)
+records133 production lines deleted and the installed two-owner saved-history
+ACP/native reply, guarded restart and single fresh-input journey. Parent retains
+live installation; Wegener startup/watchdog and Carver failure/T4 remain disjoint.
+Whole S14 still includes scheduler/native-event scopes; whole T4 remains open.
+
 ## Registration followthrough — PR357
 
 Main `1dbb318d` includes353/354/355. PR357 replaces the remaining registration
