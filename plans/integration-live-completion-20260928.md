@@ -23,11 +23,15 @@ No feature is complete merely because a draft exists or a PR was merged.
   outside the current frame. Damage now enters the current frame once before
   crop/spans/chops derive from it. Actual installed shrink renders 25 rows with
   last span24; real PTY Toad shrink/growth, tail paint and source return pass.
-  All five launchers select runtime-frame-damage-20260928, paired core6bd/Toadc253.
+  Initial cutover selected runtime-frame-damage-20260928, paired core6bd/Toadc253.
   Actual retained PR95 small viewport paints 38 saved phrases, no app/delivery error.
 - Separate shutdown crash: authentic 23:30 trace from the older custody runtime
   reports dictionary mutation while Textual _close_all iterates screen stacks.
-  Carver owns the root fix and actual shutdown proof. Not yet fixed.
+  Textual10 merged1738abd8 captures the stack worklist before awaited destruction.
+  Actual installed mode removal and real PTY UI-failure shutdown both complete all
+  destructors and retire registry/screens/modes/stacks; original failure retained.
+  All five launchers now select runtime-frame-shutdown-20260928 including both
+  framework fixes. Existing core owners/history/settings are unchanged.
 - Comms323 merged658b9a89: turn observation/goal settlement; 494 production lines
   deleted. Comms325 merged6bd8c423: native custody/partial snapshot ownership;
   445 production lines deleted. No stored schema change or compatibility path.
@@ -51,6 +55,10 @@ No feature is complete merely because a draft exists or a PR was merged.
   native GetState handshake passes4/4, no prompt or replay. Failed input stays unsent.
 - Latest 23:29 native request to nra-architecture was received and started before
   the old TUI crashed. Registry confirms the same active turn. No duplicate send.
+- Comms332 merged082a3f35: active native cleanup belongs to TurnSession rather
+  than three copied handle maps. 35 production lines deleted/22 added. Actual
+  interruption, cancellation, reuse, cold preparation and owner-stop checks pass.
+  Install will share the upcoming331 core cutover; current core6bd unchanged.
 
 PR142 recent-source return and latency acceptance remain Tesla's independent work.
 The full original/round-two refactor goal remains active.
