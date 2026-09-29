@@ -25,7 +25,6 @@ class EffectCase(DeclaredFamily, affix="Case"):
     def body(self): ...
 
     successful = True
-    goal_syncs = 3
 
     async def assert_effect(self, execution, progress):
         assert progress.terminal_ok is self.successful
@@ -37,8 +36,6 @@ class NormalCase(EffectCase):
 
 
 class ToolCase(EffectCase):
-    goal_syncs = 5
-
     def body(self):
         return (
             ae.ToolStart("tool", "read", "Read source", {"path": "file"}),
@@ -49,7 +46,7 @@ class ToolCase(EffectCase):
 
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
-        assert progress.successful_tool_observed
+        assert progress.goals.successful_tool_observed
 
 
 class CompactionCase(EffectCase):
@@ -168,19 +165,14 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     execution, progress = owner_turn
     runner, comms = execution.runner, execution.runner.comms
     waiting_owner(execution)
-    observed, syncs = [], []
-    emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    observed = []
+    emit = runner.effects._emit_event
 
     async def observe(session, event, **kwargs):
         observed.append(type(event))
         await emit(session, event, **kwargs)
 
-    async def observe_sync(session, name):
-        syncs.append(name)
-        await sync(session, name)
-
     monkeypatch.setattr(runner.effects, "_emit_event", observe)
-    monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
     model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
     thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
     value = case()
@@ -205,7 +197,15 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         )
     )
     await value.assert_effect(execution, progress)
-    assert len(syncs) == value.goal_syncs
+    # Public goal synchronization follows observed events and leaves the actual
+    # execution signature current; no assertion about collaborator call counts.
+    assert execution.session_id in runner.goal_execution_signatures
+    assert (
+        comms.goals.goal_changed(
+            execution.thread_name, runner.goal_execution_signatures[execution.session_id]
+        )
+        is None
+    )
     assert comms.goals.goal_wait("waiting") is not None
     await progress.publish_result()
     messages = comms.bus.log.full_history()
