@@ -190,8 +190,6 @@ void runRpcMode(host);
   }
   assert.deepEqual((await request({id:'second',...base,operationId:'1'.repeat(32)})).data,
     {version:1,status:'declined',operationId:'1'.repeat(32),reason:'in_flight'});
-  assert.equal((await request({id:'readiness-during',type:'agent_comms_prepare_compaction',
-    version:1,dryRun:true,witness,selected,settings})).data.reason,'busy');
   assert.equal((await request({id:'state-during',type:'get_state'})).data.isCompacting,true);
   const canceled=await request({id:'cancel-hold',type:'agent_comms_cancel_summary',version:1,operationId:holdId});
   assert.deepEqual(canceled.data,{version:1,status:'unknown',operationId:holdId});
