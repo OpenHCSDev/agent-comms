@@ -49,16 +49,21 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
     )
     assert compacted.events(TranscriptProjection())[0].timestamp == expected
 
+    first = AssistantTranscript("start", timestamp=expected)
+    assert first.merge(replace(first, text="continued")).timestamp == expected
+    assert first.merge(replace(first, timestamp=expected + 1)) is None
+
+
+def test_new_native_entry_inherits_original_clock_projection():
     class ExternalNoteEntry(NativeEntry):
         def _events(self, context):
             return [AssistantTranscript("a new external note")]
 
     # Adding a content declaration does not add another clock propagation site.
+    stamp = "2026-09-28T23:12:33.123Z"
+    expected = datetime.fromisoformat(stamp).timestamp()
     note = ExternalNoteEntry(timestamp=stamp)
     assert note.events(TranscriptProjection())[0].timestamp == expected
-    first = AssistantTranscript("start", timestamp=expected)
-    assert first.merge(replace(first, text="continued")).timestamp == expected
-    assert first.merge(replace(first, timestamp=expected + 1)) is None
 
 
 @pytest.mark.parametrize("stamp", [None, "not-a-time", "2026-09-28T23:12:33"])

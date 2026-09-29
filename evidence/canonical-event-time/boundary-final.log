@@ -1,0 +1,78 @@
+.F.....                                                                  [100%]
+=================================== FAILURES ===================================
+_ test_original_record_clock_survives_split_and_routed_projection[2026-09-28T19:12:33.123-04:00] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-511/test_original_record_clock_sur1')
+stamp = '2026-09-28T19:12:33.123-04:00'
+
+    @pytest.mark.parametrize("stamp", ["2026-09-28T23:12:33.123Z", "2026-09-28T19:12:33.123-04:00"])
+    def test_original_record_clock_survives_split_and_routed_projection(tmp_path, stamp):
+        comms = wire(tmp_path / "wire")
+        for name in ("peer", "owner"):
+            comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        requests = tuple(
+            comms.messaging.send_message("peer", "owner", text) for text in ("first", "second")
+        )
+        entry = NativeEntry.from_wire(
+            {
+                "type": "message",
+                "timestamp": stamp,
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "native prompt"},
+                        {"type": "image", "data": "aGVsbG8=", "mimeType": "image/png"},
+                    ],
+                },
+            }
+        )
+        expected = datetime.fromisoformat(stamp).timestamp()
+        for context in (TranscriptProjection(), TranscriptProjection(routing=TurnRouting(requests))):
+            events = entry.events(context)
+            assert len(events) == 2
+            assert all(event.timestamp == expected for event in events)
+            assert entry.timestamp == stamp  # Native external field stays exact.
+        compacted = NativeEntry.from_wire(
+            {"type": "compaction", "timestamp": stamp, "summary": "kept context"}
+        )
+        assert compacted.events(TranscriptProjection())[0].timestamp == expected
+    
+>       class ExternalNoteEntry(NativeEntry):
+
+tests/test_transcript_event_time.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/declared_family.py:61: in __new__
+    cls: Any = super().__new__(mcs, name, bases, namespace, registry_config=config)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/agent-comms/runtime-cursor-recovery-20260928/lib/python3.14/site-packages/metaclass_registry/core.py:641: in __new__
+    mcs._register_class(new_class, key, registry_config)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'test_transcript_event_time.test_original_record_clock_survives_split_and_routed_projection.<locals>.ExternalNoteEntry'>
+key = 'external_note'
+config = RegistryConfig(registry_dict={'session': <class 'agent_comms.native_entries.SessionEntry'>, 'message': <class 'agent_c..._registration=True, registry_name='plugin', discovery_package=None, discovery_recursive=False, discovery_function=None)
+
+    @staticmethod
+    def _register_class(cls: Any, key: str, config: RegistryConfig) -> None:
+        previous = config.registry_dict.get(key)
+        if previous is not None:
+            # dataclass(slots=True) creates a replacement class, not a new member.
+            slot_replacement = (
+                "__slots__" in cls.__dict__
+                and "__slots__" not in previous.__dict__
+                and "__dataclass_fields__" in cls.__dict__
+                and cls.__dict__["__dataclass_fields__"]
+                is previous.__dict__.get("__dataclass_fields__")
+                and (cls.__module__, cls.__qualname__)
+                == (previous.__module__, previous.__qualname__)
+            )
+            if not slot_replacement:
+>               raise TypeError(
+                    f"Duplicate family name {key!r}: {previous.__name__}, {cls.__name__}"
+                )
+E               TypeError: Duplicate family name 'external_note': ExternalNoteEntry, ExternalNoteEntry
+
+src/agent_comms/declared_family.py:80: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_transcript_event_time.py::test_original_record_clock_survives_split_and_routed_projection[2026-09-28T19:12:33.123-04:00]
+1 failed, 6 passed, 1 deselected in 0.33s

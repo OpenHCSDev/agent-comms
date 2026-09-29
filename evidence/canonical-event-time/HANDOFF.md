@@ -24,3 +24,9 @@ Initial boundary checks: five pass (external offset/fractional times, split/rout
 ## Explicit local R0 conflict
 
 Independent class-size measure reports NativeEntry+17, TranscriptEvent+2; other ratchet measures unchanged. This missing-feature addition extends the two existing correct authorities. No facade/alternate owner introduced to evade the measure. Parent review has the exact conflict in337comment5883327190; no CI wait or deployment performed. Installed Toad142 return-paint acceptance belongs to Tesla and is not claimed by these core results.
+
+## Installed core receipt
+
+Noneditable wheel built with `uv build --wheel`, installed with `uv pip install --no-deps --target .artifacts/canonical-event-time/installed`. Verified import resolves inside that installation, not `src`. With existing runtime dependencies and immutable5fde native package,9 targeted tests passed in4.20s, including actual native + official ACP load/reload + clean teardown. New native content declaration inherits original time without any central dispatch change. Initial parametrized new-case test redeclared the same nominal family twice; fixed the test to declare its new case once, retaining the failed receipt.
+
+Production diff:2 lines deleted,22 added. Test closure deletes the obsolete replay_update fixture method and replaces it with the actual routed behavior. Net production addition is required original-time propagation, not a claimed deletion-only refactor. Latest NRA/refactor-audit22:16 skill reread; BOUND-1/BOUND-2 and TIME-9 decisions above applied. Exact contract and candidate sent directly to Tesla142; Carver/Noether notified of disjoint scope. No paid provider calls or live owner changes.
