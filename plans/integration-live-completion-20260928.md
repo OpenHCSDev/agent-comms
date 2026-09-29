@@ -4,23 +4,30 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core1906e94f (326 channel identity fix), Toad19de70c
-(146 permission ownership,147 preview navigation), Textualc974/native5fde.
-All five launchers and four idle-restarted owners use
-runtime-channel-participants-20260928. Four fresh actual ACP attachments pass.
-No runtime store reset, history rewrite or input resend. Ordinary publication now
-registers the entire frozen audience from the registry before append, including
-stopped/unstarted recipients. Production bootstrap/register/publish/inbox regression
-reproduces exact installed0931 IdentityConflict; final installed1906 passes27checks.
-Live #nra originals157/158 accepted for all5recipients; domain-mapping completed
-both bounded-triage deliveries. Missing4identities restored from registry once.
-Existing fixture setup manually registered recipients and hid this production gap.
-Actual installed mounted domain-mapping shows Ready, no inbox error and21saved
-phrase matches after cutover. Zero prompts. Recursion remains below.
+Latest installed pair: core8ad034a6 (322 native catalog/admission/typed compaction
+integration, includes326 channel fix), Toad9830cb24 (145 typed tool output and
+shared permission renderer), Textualc974/native5fde. Allfive launchers andfour
+idle-restarted owners use runtime-native-tool-owners-20260928. Fresh actualACP
+attachments pass4/4; actual installed PR95 saved history visibly paints105matching
+phrases, ready, no delivery/app error. No input replay/history mutation/store reset.
+Existing Toad must reopen to load newUI. Actual staged paired Read/Edit/Bash paints,
+copies/collapses/reopens; mixedpermissionmutation/removal/rebind passes; actual
+physicalPi/MCP/ACP/Toadallow passes12.60s with exactlyone toolcall. Actualattached
+native compaction socket/currentinput/channel regression8passes25.62s; prior45
+combinedchecks recorded separately. CIdeferred. Runtime reply format changed only
+inprocess communication, so both coreACP/owners restarted together.
 
-Previous UI acceptance remains: actual saved-log navigation/scroll/wrap/recovery;
-PR95 retained105painted phrases; physicalPi/ACP/Toad permission exactly-once tool
-execution and mounted pending-permission cancellation/replacement.
+322 carries316/318/319/320/324 and automatically closes those predecessorPRs.
+Production579linesdeleted/1152added; oldcatalog request lifecycle/send-boundary/
+rawcompaction terminal-result mechanisms removed.145production516deleted/757added;
+old raw-content dispatcher/duplicate permission renderer/hydration flags removed.
+No claim fullrefactor or net source reduction. Remaining323/325/142 below.
+
+326 retained channel proof: both original#nra157/158 sealed5recipients, domain-mapping
+completed both with fullnativeinputreceipts. Actual mounted Ready/noinboxerror,
+21savedphrase matches. Missing4participant identities restored once from registry;
+ordinarypublication now registers stopped/unstarted frozenrecipients beforeappend.
+No resend and no stoppedownerlaunch. Exact installed0931red/final1906green27checks.
 
 User reports a new RecursionError in running Toad; no traceback in latest ACP
 logs. Both previously observed user Toad processes exited; version/cause not
@@ -31,8 +38,8 @@ attribute this crash to old runtime or claim147 resolves it without evidence.
 source swaps pass; recent-source reuse and final latency/suite closure remain.
 Tesla owns transferring116 recent-source regression before116 closes.145Noether
 must consume existing ACPToolCallContent onto shared decode/render contract;
-318Boyle ready pending review;319Dalton correcting internal boolean discriminator
-compatibility to ordinary derived family tags;316Wegener ratchet correction.
+323Boyle owns turn observation/goal settlement;325Wegener owns native lifecycle,
+Dalton reviewing325.145/318/319/316 merged andinstalled asrecorded above.
 The original/refactor goal stays active, not globally complete.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
