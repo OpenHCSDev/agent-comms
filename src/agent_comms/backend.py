@@ -67,14 +67,6 @@ def compaction_summary(value: Any) -> str:
     )
 
 
-_TOOL_KINDS = {
-    "bash": "execute",
-    "read": "read",
-    "write": "edit",
-    "edit": "edit",
-    "grep": "search",
-    "glob": "search",
-}
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
 # transport backstop must remain strictly longer so Pi can emit its authoritative
 # timeout, auto-retry, and transport evidence before agent-comms intervenes.
@@ -282,42 +274,6 @@ def args_for_thinking_level(args: Sequence[str], level: str | None) -> list[str]
             continue
         result.append(argument)
     return [*result, "--thinking", level] if level else result
-
-
-def tool_kind(name: str) -> str:
-    return _TOOL_KINDS.get(name.lower(), "other")
-
-
-def _short_args(raw: Any, limit: int = 80) -> str:
-    try:
-        text = json.dumps(raw) if not isinstance(raw, str) else raw
-    except (TypeError, ValueError):
-        text = str(raw)
-    text = text.strip()
-    return text[:limit] + ("…" if len(text) > limit else "")
-
-
-def _tool_title(name: str, args: Any) -> str:
-    """Build a concise activity label from structured tool arguments."""
-    values = args if isinstance(args, dict) else {}
-    if name == "bash":
-        detail = values.get("command")
-        action = "Run"
-    elif name in {"read", "write", "edit"}:
-        detail = values.get("path") or values.get("file_path")
-        action = name.title()
-    elif name == "grep":
-        pattern = values.get("pattern")
-        path = values.get("path")
-        detail = f"{pattern} in {path}" if pattern and path else pattern or path
-        action = "Search"
-    elif name == "glob":
-        detail = values.get("pattern") or values.get("path")
-        action = "Find"
-    else:
-        detail = None
-        action = name.replace("_", " ").title()
-    return f"{action} {_short_args(detail, 120)}" if detail else action
 
 
 @contextmanager

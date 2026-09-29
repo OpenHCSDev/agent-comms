@@ -1,6 +1,7 @@
 """Permanent guards for the completed S10 boundaries."""
 
 import ast
+import inspect
 from pathlib import Path
 
 import pytest
@@ -69,3 +70,20 @@ def test_s10_native_lifetime_is_owned_by_a12_without_retired_guardian():
                 }
                 if isinstance(node.func.value, ast.Name):
                     assert node.func.value.id not in {"signal", "subprocess"}
+
+
+def test_native_tool_projection_has_no_backend_dispatch_or_session_scratch():
+    package = Path(pi_events.__file__).parent
+    backend = ast.parse((package / "backend.py").read_text())
+    removed = {"tool_kind", "_tool_title", "_short_args", "_TOOL_KINDS"}
+    assert not any(
+        (isinstance(node, ast.FunctionDef) and node.name in removed)
+        or (isinstance(node, ast.Name) and node.id in removed)
+        for node in ast.walk(backend)
+    )
+    tree = ast.parse(inspect.getsource(pi_events.ToolExecutionStart))
+    assert not any(
+        isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
+        and isinstance(node.value, ast.Name) and node.value.id == "session"
+        for node in ast.walk(tree)
+    )
