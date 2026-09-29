@@ -11,15 +11,26 @@ import json
 import sqlite3
 import types
 from abc import abstractmethod
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
-from typing import Annotated, ClassVar, Literal, Self, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Annotated,
+    ClassVar,
+    Literal,
+    Self,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 
+RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
 def _identifier(name: str) -> str:
     if not name or not name.isascii() or not name.replace("_", "a").isalnum():
@@ -296,26 +307,45 @@ class TypedRow:
         return tuple(item.name for item in cls._fields())
 
     @classmethod
+    def _positions(cls, cursor: sqlite3.Cursor, extra: tuple[str, ...] = ()) -> dict[str, int]:
+        if cursor.description is None:
+            raise ValueError("Typed read requires a result set")
+        names = tuple(item[0] for item in cursor.description)
+        if len(set(names)) != len(names) or set(names) != set((*cls.columns(), *extra)):
+            raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
+        return {name: index for index, name in enumerate(names)}
+
+    @classmethod
+    def _decode_row(cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]) -> Self:
+        values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
+        instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
+        for item in cls._fields():
+            if not item.init:
+                object.__setattr__(instance, item.name, values[item.name])
+        return instance
+
+    @classmethod
     def iterate(cls, cursor: sqlite3.Cursor) -> Generator[Self, None, None]:
         """Stream strictly decoded rows; close this iterator to release its query."""
         try:
-            if cursor.description is None:
-                raise ValueError("Typed read requires a result set")
-            names = tuple(item[0] for item in cursor.description)
-            if len(set(names)) != len(names) or set(names) != set(cls.columns()):
-                raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
-            positions = {name: index for index, name in enumerate(names)}
+            positions = cls._positions(cursor)
             for row in cursor:
-                values = {
-                    item.name: item.decode(row[positions[item.name]]) for item in cls._fields()
-                }
-                instance = cls(
-                    **{item.name: values[item.name] for item in cls._fields() if item.init}
-                )
-                for item in cls._fields():
-                    if not item.init:
-                        object.__setattr__(instance, item.name, values[item.name])
-                yield instance
+                yield cls._decode_row(row, positions)
+        finally:
+            cursor.close()
+
+    @classmethod
+    def joined(cls, cursor: sqlite3.Cursor, related: type[RelatedRow]) -> list[tuple[Self, RelatedRow]]:
+        """Decode disjoint joined declarations once without another partial row schema.
+
+        All actual columns must belong to exactly these declarations; duplicate,
+        missing and extra columns are rejected by the same strict query boundary.
+        This reads one SQLite snapshot and never re-encodes a stored row as JSON.
+        """
+        try:
+            positions = cls._positions(cursor, related.columns())
+            return [(cls._decode_row(row, positions), related._decode_row(row, positions))
+                    for row in cursor]
         finally:
             cursor.close()
 
