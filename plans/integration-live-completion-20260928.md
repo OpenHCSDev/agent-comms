@@ -5,11 +5,11 @@ local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
 Latest installed pair: core03b6f9f (299 idle cursor recovery plus298 combined
-288/290/292/294 ownership and acceptance), Toad5983adba (137 actual history paint),
+288/290/292/294 ownership and acceptance), Toad06003aff (138 observation owners;137 actual history paint),
 Textualc9743801, native5fde. All five launchers select immutable
-runtime-coordinator-idle-20260928; all four idle owners restarted canonically.
-No runtime store reset, history rewrite, or input replay. Existing Toad only needs
-reopening if it has not yet loaded137; this core batch keeps the same UI bytes.
+runtime-observation-20260928. Four core03b6f9f owners remain in the prior
+runtime-coordinator-idle slot; UI138 activation does not restart them.
+No runtime store reset, history rewrite, or input replay. Existing Toad loads138 on its next normal restart;137 already fixed actual paint.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
@@ -186,8 +186,11 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   at current rule/SQLite boundaries; source accounting alone is insufficient.
 - [ ] Wegener: remaining S2 backend ownership and actual failure/retry/steering
   acceptance, coordinated separately from Boyle/Dalton.
-- [ ] Carver: strengthen affected maintained Toad acceptance to actual visible
-  message painting; no mounted-node-only readiness claim. Coordinate129 owners.
+- [x] Carver:138 goal/delivery observation owners and complete caller deletion,
+  actual live/saved response paint added to maintained native tests; duplicate
+ 98-line renderer pilot deleted. Merged/installed; parent real NRA reads pass.
+- [ ] Carver: next whole planned T4 Conversation ownership/deletion surface,
+  independent of Tesla workspace and Noether sidebar; no façade extraction.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
   run completed35.94s; its payload lacks detector coverage counts, so it is not
   claimed as complete-detector/zero-debt proof. Domain review rejected schema-index
