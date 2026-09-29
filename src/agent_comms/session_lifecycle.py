@@ -34,6 +34,7 @@ from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
+from .session_load import SessionLoadAdmission
 
 
 class SessionLifecycle:
@@ -304,10 +305,6 @@ class AttachedSessionLifecycle(SessionLifecycle):
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = self.validated_thread(cwd, session_id)
-        owner = await asyncio.to_thread(
-            self.comms.owners.ensure_owner,
-            thread.name,
-            agent_bin=self.agent_bin,
-            agent_args=list(self.agent_args.argv),
-        )
+        admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
+        owner = await admission.resolve(self, thread)
         return await self.attach_owner(owner, session_id)
