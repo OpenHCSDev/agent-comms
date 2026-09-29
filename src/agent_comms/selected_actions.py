@@ -41,9 +41,7 @@ class SelectedAction(ABC):
         assignment: WakeAssignment,
         thread: Thread,
     ) -> SelectedAction:
-        return PlannedSelectedWrite(
-            plan.resource, plan.contents, authority, plan, assignment, thread
-        )
+        return PlannedSelectedWrite(authority, plan, assignment, thread)
 
 
 class NoSelectedTools(SelectedAction):
@@ -104,7 +102,7 @@ class SelectedExistingFileWrite(NoSelectedTools):
 
 
 @dataclass(frozen=True)
-class PlannedSelectedWrite(SelectedExistingFileWrite):
+class PlannedSelectedWrite(NoSelectedTools):
     authority: BoundSelectedWriteAuthority
     plan: PlannedWrite
     assignment: WakeAssignment
@@ -115,5 +113,5 @@ class PlannedSelectedWrite(SelectedExistingFileWrite):
 
     def apply(self, owner: CodingToolOwner) -> None:
         self.authority.require_current(self.assignment, self.thread, self.plan.operation_id)
-        super().apply(owner)
+        SelectedExistingFileWrite(self.plan.resource, self.plan.contents).apply(owner)
         self.authority.applied(self.assignment, self.thread, self.plan.operation_id)

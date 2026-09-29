@@ -1704,7 +1704,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
                 )
             return publish(*args, **kwargs)
 
-        monkeypatch.setattr(runtime, method, revoke_after_tx1)
+        monkeypatch.setattr(selected_turn, method, revoke_after_tx1)
         with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
             await SelectedExecution(
                 root=root,
@@ -1743,7 +1743,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    with pytest.raises(StaleFence, match="already has a current turn"):
+    with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()

@@ -53,14 +53,18 @@ class SelectedExecution:
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )
-            if self.selected_thinking_level not in ("low", "high"):
+            if type(
+                self.selected_thinking_level
+            ) is not str or self.selected_thinking_level not in ("low", "high"):
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )
         _trusted_package(self.native_package)  # before any claim or native reservation
-        if self.selected_existing_file_write is not None:
-            if type(self.selected_existing_file_write) is not SelectedExistingFileWrite:
-                raise TypeError("selected write requires an explicit trusted plan")
+        if (
+            self.selected_existing_file_write is not None
+            and type(self.selected_existing_file_write) is not SelectedExistingFileWrite
+        ):
+            raise TypeError("selected write requires an explicit trusted plan")
         if self.selected_tool_intent is not None:
             if type(self.selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("selected tool requires a nominal owner intent")
@@ -80,28 +84,30 @@ class SelectedExecution:
         self.root = Path(self.root).absolute()
         self.validate()
         comms = Comms(self.root)
-        with Coordination(str(self.root / "coordination.sqlite3")) as store:
-            with SelectedParticipant.select(
+        with (
+            Coordination(str(self.root / "coordination.sqlite3")) as store,
+            SelectedParticipant.select(
                 comms,
                 store,
                 self.wire_root_id,
                 self.owner_name,
                 self.after_seq,
-            ) as participant:
-                if participant is None:
-                    return None
-                session = SelectedSession.prepare(
-                    participant,
-                    self.session_file,
-                    self.fresh_private_enrollment,
-                    self.selected_thinking_level,
-                )
-                session, ignored = await SelectedConsideration(participant).run(
-                    self.native_package, session
-                )
-                if ignored is not None:
-                    return ignored
-                attempt = SelectedAttempt.engage(participant)
-                return await attempt.run(
-                    self.native_package, session, self.action(session), self.write_authority
-                )
+            ) as participant,
+        ):
+            if participant is None:
+                return None
+            session = SelectedSession.prepare(
+                participant,
+                self.session_file,
+                self.fresh_private_enrollment,
+                self.selected_thinking_level,
+            )
+            session, ignored = await SelectedConsideration(participant).run(
+                self.native_package, session
+            )
+            if ignored is not None:
+                return ignored
+            attempt = SelectedAttempt.engage(participant)
+            return await attempt.run(
+                self.native_package, session, self.action(session), self.write_authority
+            )

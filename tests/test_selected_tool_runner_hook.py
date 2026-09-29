@@ -266,7 +266,7 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         selected_tool_intent=intent_type(),
     ).run()
     assert len(calls) == len(kwargs_seen) == 1
-    assert "selected_tool_mode" not in kwargs_seen[0]
+    assert kwargs_seen[0]["selected_tool_mode"] is None
     assert "selected_claimed_write" not in calls[0][1]
     assert not bound
 

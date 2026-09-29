@@ -12,7 +12,7 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — PR376 transaction checkpoint
+## Current remaining mapping — PR384 selected lifetime checkpoint
 
 Parent reports361 merged at `d7745d0e` and the paired installed saved-history
 ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
@@ -29,9 +29,13 @@ this document does not promote an activation-in-progress claim to completed.
   deleted,35 chain terms removed; actual installed socket retry/native and selected
   handoff paths passed before parent merge. Boyle371 journal
   enrollment/publication identities are merged;376 continues transaction ownership; neither slice completes all S14.
-- Wegener retains current SelectedExecution/coordinated-runtime/startup work.
-  Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
-  Do not create competing work in those files.
+-376 journal transaction custody and381 native witness/CAS/admission ownership are
+  merged (parent main13d92f80). Boyle384 owns the whole SelectedExecution lifetime:
+  selected lease/source, fresh enrollment, triage/full stages, tools, terminal/UNKNOWN
+  settlement and caller deletion. [PR384 receipt](../evidence/q8-selected-execution/README.md)
+  records actual installed native and saved ACP reply journeys; parent owns integration/live.
+- Wegener owns InputDrain/native startup; Dalton owns MessageBus/history; parent owns
+  future attempt-store work. Carver retains failure/T4 work. No competing file claims.
 - Workspace156 mapping was superseded by160(+163 proof); first-open153,154 and345
   cutover were reported complete. Later Toad167 is in the parent's paired test
   above. The historical T4 and UI rows below are not fresh outstanding assignments;

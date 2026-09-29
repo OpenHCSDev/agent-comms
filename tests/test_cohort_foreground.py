@@ -628,7 +628,7 @@ def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: 
         base = Path(dirname)
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
-        script = """import sys
+        script = r"""import sys
 import threading
 import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
@@ -638,6 +638,19 @@ f._trusted_package = _fake_package
 r._trusted_package = _fake_package
 from agent_comms.tracked_turn import TrackedTurnSession
 TrackedTurnSession.execute = _fake_pi([])
+original_run = f.run_foreground_once
+async def wait_for_committed_source(*args, ready=None, **kwargs):
+    def registered(thread):
+        ready(thread)
+        if sys.stdin.readline() != "committed\n":
+            raise RuntimeError("parent did not release committed-source barrier")
+    try:
+        return await original_run(*args, ready=registered, **kwargs)
+    except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        raise
+f.run_foreground_once = wait_for_committed_source
 raise SystemExit(f.main(sys.argv[1:]))
 """
         env = {
@@ -671,6 +684,7 @@ raise SystemExit(f.main(sys.argv[1:]))
                         "--wait-seconds",
                         "1",
                     ],
+                    stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -705,10 +719,19 @@ raise SystemExit(f.main(sys.argv[1:]))
                 env=env,
             )
             assert json.loads(sender.stdout)["wire_seq"] == 1
+            # Both frozen recipients exist at commit. Finish alpha's original
+            # passive observation before beta publishes a NEW reply: that reply
+            # correctly gives alpha a triage wake, covered by the native roundtrip
+            # test rather than this original-cohort NO_WAKE fixture.
             outcomes: dict[str, dict[str, object]] = {}
             for name, child in children.items():
+                assert child.stdin is not None
+                child.stdin.write("committed\n")
+                child.stdin.flush()
+                child.stdin.close()
+                child.stdin = None
                 out, err = child.communicate(timeout=12)
-                assert child.returncode == 0, (name, out, err)
+                assert child.returncode == 0, f"{name}: {out}\n{err}"
                 outcomes[name] = json.loads(out.strip())
             assert outcomes["alpha"] == {"disposition": "NO_WAKE", "wire_seq": 1}
             assert outcomes["beta"]["response_message_id"]

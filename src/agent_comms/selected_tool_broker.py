@@ -58,7 +58,8 @@ class SelectedToolIntent(SelectedAction):
         "You may call selected_claimed_write at most once to request a complete UTF-8 "
         "replacement of an existing worktree file (maximum 128 KiB); the owner "
         "independently checks the active selected wake, claim and write before the tool "
-        "returns. Tool failure/UNKNOWN must not be retried. No shell, generic edits or other tools. "
+        "returns. Tool failure/UNKNOWN must not be retried. "
+        "No shell, generic edits or other tools. "
     )
 
     def mode(self, owner):

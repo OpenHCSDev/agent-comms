@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 from .activity import ActivityState
 from .attempt_start import AttemptStart
 from .channel_coding_tools import CodingToolOwner
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import prepare_fenced_response, publish_fenced_response
 from .coordination_tables.executions import ExecutionOrigin
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeAdmission
+from .native_pi import NativePiUnavailable
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
@@ -193,18 +195,34 @@ class SelectedAttempt:
             input_id,
         )
 
+    async def prepare(self, session, action, write_authority):
+        participant = self.participant
+        try:
+            action = write_authority.select(
+                self.stage.assignment,
+                participant.owner.thread,
+                participant.owner.admission_generation,
+                action,
+            )
+            prompt = await SelectedPrompt(participant).full(
+                self.stage.assignment, self.obligation, action
+            )
+            request = SelectedRequest.reserve(participant, session, self.stage, self.token, prompt)
+        except NativePiUnavailable:
+            # The attempt exists even if preparation fails before a request can
+            # own a reserved ID. Preserve the old dead-attempt UNKNOWN boundary;
+            # no previous triage ID is reused for this failed full preparation.
+            # A revoked attempt remains with the recovery owner.
+            with suppress(StaleFence):
+                self.stage.fail_unknown(
+                    participant.bus, participant.owner, participant.response_owner
+                )
+            raise
+        return request, action
+
     async def run(self, package: Path, session: SelectedSession, action, write_authority):
         participant = self.participant
-        action = write_authority.select(
-            self.stage.assignment,
-            participant.owner.thread,
-            participant.owner.admission_generation,
-            action,
-        )
-        prompt = await SelectedPrompt(participant).full(
-            self.stage.assignment, self.obligation, action
-        )
-        request = SelectedRequest.reserve(participant, session, self.stage, self.token, prompt)
+        request, action = await self.prepare(session, action, write_authority)
         self.stage.progress.input_id = request.admission.input_id
         with request.native_failures():
             tools = self.tool_owner(session, request.admission.input_id, action)

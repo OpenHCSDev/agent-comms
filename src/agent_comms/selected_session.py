@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import _response_boundary
+from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
+from .native_input_owner import RegistryOwner
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
 
 if TYPE_CHECKING:
@@ -56,9 +58,17 @@ class SelectedSession:
         # Original wire→bus→registry→store→journal order spans exclusive file
         # creation, fsync and enrollment. No historical-file coverage inference.
         with _response_boundary(participant.bus) as registry, participant.store.session.read():
-            participant.owner.require_snapshot(
-                registry, "fresh-session owner changed before enrollment"
+            actual = RegistryOwner.capture(
+                registry,
+                participant.owner.thread.name,
+                "fresh-session owner changed before enrollment",
             )
+            try:
+                actual.require_exact(
+                    registry, participant.owner.thread, participant.owner.admission_generation
+                )
+            except RelationViolationError as error:
+                raise StaleFence("fresh-session owner changed before enrollment") from error
             participant.identity.require(participant.store, participant.lookup)
             MaintenanceBarrier(participant.bus._registry.store.path).assert_open_unlocked()
             creation = create_fresh_private_session(
@@ -76,16 +86,16 @@ class SelectedSession:
                 admission_generation=participant.owner.admission_generation,
             )
         if thinking_level is not None:
-            return FirstSelectedSession(directory, creation.path, creation, first_start=creation)
+            return FirstSelectedSession(directory, creation.path, creation=creation)
         return cls(directory, creation.path, creation)
 
 
 @dataclass(frozen=True)
 class FirstSelectedSession(SelectedSession):
-    first_start: FreshPrivateSession = field(kw_only=True)
+    creation: FreshPrivateSession = field(kw_only=True)
 
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 
     def startup(self) -> FreshPrivateSession:
-        return self.first_start
+        return self.creation
