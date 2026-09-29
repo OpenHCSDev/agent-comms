@@ -1,0 +1,257 @@
+...............................................FFF
+=================================== FAILURES ===================================
+___ test_saved_stopped_turn_cannot_regain_owner_authority[before_tx1_forged] ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-p2cks8zj')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0ebe0e42f0>
+boundary = 'before_tx1_forged'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(TrackedTurnSession, "execute", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            restored = comms.registry.require("beta")
+            assert restored == replace(
+                saved, active_turn=replace(saved.active_turn, admission_generation=None)
+            )
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.agents.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                ).run()
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                ).run()
+            assert len(calls) == 1
+        else:
+            method = (
+                "prepare_fenced_response"
+                if boundary == "before_tx1_forged"
+                else "publish_fenced_response"
+            )
+            publish = getattr(selected_turn, method)
+    
+            def revoke_after_tx1(*args, **kwargs):
+                revoked_generation = kwargs["owner_witness"].admission_generation
+                revoke_and_restore()
+                if boundary.endswith("forged"):
+                    # A same-UID caller can supply a fresh epoch in a dataclass.
+                    # The locked registry snapshot must attest that THIS turn was
+                    # created in that epoch, not merely compare caller assertions.
+                    new_generation = comms.registry.snapshot().admission_generations["beta"]
+                    assert new_generation != revoked_generation
+                    kwargs["owner_witness"] = replace(
+                        kwargs["owner_witness"], admission_generation=new_generation
+                    )
+                return publish(*args, **kwargs)
+    
+>           monkeypatch.setattr(runtime, method, revoke_after_tx1)
+E           AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-q8-selected-execution-20260929/src/agent_comms/coordinated_runtime.py'> has no attribute 'prepare_fenced_response'
+
+tests/test_coordinated_runtime.py:1707: AttributeError
+_______ test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1] _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-awzjn5ac')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0ebc706900>
+boundary = 'after_tx1'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(TrackedTurnSession, "execute", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            restored = comms.registry.require("beta")
+            assert restored == replace(
+                saved, active_turn=replace(saved.active_turn, admission_generation=None)
+            )
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.agents.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                ).run()
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                ).run()
+            assert len(calls) == 1
+        else:
+            method = (
+                "prepare_fenced_response"
+                if boundary == "before_tx1_forged"
+                else "publish_fenced_response"
+            )
+            publish = getattr(selected_turn, method)
+    
+            def revoke_after_tx1(*args, **kwargs):
+                revoked_generation = kwargs["owner_witness"].admission_generation
+                revoke_and_restore()
+                if boundary.endswith("forged"):
+                    # A same-UID caller can supply a fresh epoch in a dataclass.
+                    # The locked registry snapshot must attest that THIS turn was
+                    # created in that epoch, not merely compare caller assertions.
+                    new_generation = comms.registry.snapshot().admission_generations["beta"]
+                    assert new_generation != revoked_generation
+                    kwargs["owner_witness"] = replace(
+                        kwargs["owner_witness"], admission_generation=new_generation
+                    )
+                return publish(*args, **kwargs)
+    
+>           monkeypatch.setattr(runtime, method, revoke_after_tx1)
+E           AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-q8-selected-execution-20260929/src/agent_comms/coordinated_runtime.py'> has no attribute 'publish_fenced_response'
+
+tests/test_coordinated_runtime.py:1707: AttributeError
+___ test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1_forged] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-7qj4anji')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0ebdcc8440>
+boundary = 'after_tx1_forged'
+
+    @pytest.mark.parametrize(
+        "boundary", ["before_run", "after_model", "before_tx1_forged", "after_tx1", "after_tx1_forged"]
+    )
+    async def test_saved_stopped_turn_cannot_regain_owner_authority(
+        tmp_path: Path, monkeypatch, boundary: str
+    ) -> None:
+        root, root_id, comms, _initial, _ = _root(tmp_path, direct=True)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        model, calls = _fake_model()
+        monkeypatch.setattr(TrackedTurnSession, "execute", model)
+    
+        def revoke_and_restore() -> None:
+            saved = comms.registry.require("beta")
+            assert saved.active_turn is not None
+            comms.registry.unregister("beta")
+            comms.registry.register(saved)
+            restored = comms.registry.require("beta")
+            assert restored == replace(
+                saved, active_turn=replace(saved.active_turn, admission_generation=None)
+            )
+            assert comms.registry.status("beta").active
+    
+        if boundary == "before_run":
+            comms.agents.begin_turn("beta", "old-authorized-turn")
+            revoke_and_restore()
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                ).run()
+            assert not calls
+        elif boundary == "after_model":
+    
+            async def revoke_after_model(*args, **kwargs):
+                result = await model(*args, **kwargs)
+                revoke_and_restore()
+                return result
+    
+            monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
+            with pytest.raises(StaleFence, match="stopped or changed"):
+                await SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=tmp_path,
+                    opt_in=True,
+                ).run()
+            assert len(calls) == 1
+        else:
+            method = (
+                "prepare_fenced_response"
+                if boundary == "before_tx1_forged"
+                else "publish_fenced_response"
+            )
+            publish = getattr(selected_turn, method)
+    
+            def revoke_after_tx1(*args, **kwargs):
+                revoked_generation = kwargs["owner_witness"].admission_generation
+                revoke_and_restore()
+                if boundary.endswith("forged"):
+                    # A same-UID caller can supply a fresh epoch in a dataclass.
+                    # The locked registry snapshot must attest that THIS turn was
+                    # created in that epoch, not merely compare caller assertions.
+                    new_generation = comms.registry.snapshot().admission_generations["beta"]
+                    assert new_generation != revoked_generation
+                    kwargs["owner_witness"] = replace(
+                        kwargs["owner_witness"], admission_generation=new_generation
+                    )
+                return publish(*args, **kwargs)
+    
+>           monkeypatch.setattr(runtime, method, revoke_after_tx1)
+E           AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-q8-selected-execution-20260929/src/agent_comms/coordinated_runtime.py'> has no attribute 'publish_fenced_response'
+
+tests/test_coordinated_runtime.py:1707: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[before_tx1_forged]
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1]
+FAILED tests/test_coordinated_runtime.py::test_saved_stopped_turn_cannot_regain_owner_authority[after_tx1_forged]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 3 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+3 failed, 47 passed, 1 deselected in 22.46s

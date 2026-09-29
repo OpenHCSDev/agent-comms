@@ -1,0 +1,36 @@
+......F.................                                                 [100%]
+=================================== FAILURES ===================================
+____________________ test_opted_in_triage_remains_no_tools _____________________
+
+private_root = PosixPath('/var/tmp/ac-tool-hook-7vj_ubpb')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7e5a757860>
+nominal_broker_stub = (<class 'agent_comms.selected_tool_broker.SelectedToolIntent'>, <class 'agent_comms.selected_tool_broker.SelectedToolMode'>, [])
+
+    @pytest.mark.asyncio
+    async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nominal_broker_stub):
+        intent_type, _mode_type, bound = nominal_broker_stub
+        root, root_id, _comms, _initial, _ = _root(private_root)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        kwargs_seen = []
+    
+        async def observed(*args, **kwargs):
+            kwargs_seen.append(kwargs)
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", observed)
+        await runtime.SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=private_root,
+            selected_tool_intent=intent_type(),
+        ).run()
+        assert len(calls) == len(kwargs_seen) == 1
+>       assert "selected_tool_mode" not in kwargs_seen[0]
+E       assert 'selected_tool_mode' not in {'input_id': '6bd334f38604eed0468b5f27133313a9', 'prompt': '── comms: 1 selected ──\nselected: {"source_seq":1,"claim_... 'session_dir': PosixPath('/var/tmp/ac-tool-hook-7vj_ubpb/wire/native-sessions/ae90bf839ee6629ebac4c6b225d24585'), ...}
+
+tests/test_selected_tool_runner_hook.py:269: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_selected_tool_runner_hook.py::test_opted_in_triage_remains_no_tools
+1 failed, 23 passed, 57 deselected in 27.71s

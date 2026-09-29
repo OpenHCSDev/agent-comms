@@ -1,0 +1,106 @@
+F
+=================================== FAILURES ===================================
+______ test_two_real_recipient_processes_emit_selected_and_typed_no_wake _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-614/test_two_real_recipient_proces0')
+
+    def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: Path) -> None:
+        with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
+            base = Path(dirname)
+            base.chmod(0o700)
+            root, root_id, comms = _wire(base)
+            script = """import sys
+    import threading
+    import time
+    from agent_comms import cohort_foreground as f, coordinated_runtime as r
+    from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+    f.Thread = _configured_thread
+    f._trusted_package = _fake_package
+    r._trusted_package = _fake_package
+    from agent_comms.tracked_turn import TrackedTurnSession
+    TrackedTurnSession.execute = _fake_pi([])
+    original_run = f.run_foreground_once
+    async def wait_for_committed_source(*args, ready=None, **kwargs):
+        def registered(thread):
+            ready(thread)
+            if sys.stdin.readline() != "committed\n":
+                raise RuntimeError("parent did not release committed-source barrier")
+        return await original_run(*args, ready=registered, **kwargs)
+    f.run_foreground_once = wait_for_committed_source
+    raise SystemExit(f.main(sys.argv[1:]))
+    """
+            env = {
+                **os.environ,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONPATH": os.pathsep.join(
+                    (str(Path(__file__).resolve().parents[1] / "src"), str(Path(__file__).parent))
+                ),
+            }
+            children: dict[str, subprocess.Popen[str]] = {}
+            try:
+                for name in ("alpha", "beta"):
+                    child = subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-c",
+                            script,
+                            "--opt-in",
+                            "--root",
+                            str(root),
+                            "--wire-root-id",
+                            root_id,
+                            "--name",
+                            name,
+                            "--worktree",
+                            str(base),
+                            "--tags",
+                            "team",
+                            "--native-package",
+                            str(tmp_path),
+                            "--wait-seconds",
+                            "1",
+                        ],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        env=env,
+                    )
+                    children[name] = child
+                    assert child.stdout is not None
+                    assert select.select([child.stdout], [], [], 8)[0]
+>                   assert json.loads(child.stdout.readline())["pid"] == child.pid
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cohort_foreground.py:691: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/json/__init__.py:352: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.decoder.JSONDecoder object at 0x7f1cece3e3c0>, s = '', idx = 0
+
+    def raw_decode(self, s, idx=0):
+        """Decode a JSON document from ``s`` (a ``str`` beginning with
+        a JSON document) and return a 2-tuple of the Python
+        representation and the index in ``s`` where the document ended.
+    
+        This can be used to decode a JSON document from a string that may
+        have extraneous data at the end.
+    
+        """
+        try:
+            obj, end = self.scan_once(s, idx)
+        except StopIteration as err:
+>           raise JSONDecodeError("Expecting value", s, err.value) from None
+E           json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+/usr/lib/python3.14/json/decoder.py:363: JSONDecodeError
+=========================== short test summary info ============================
+FAILED tests/test_cohort_foreground.py::test_two_real_recipient_processes_emit_selected_and_typed_no_wake
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 0.38s

@@ -13,13 +13,13 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms.acp import CommsAgent
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
-from agent_comms.coordinated_runtime import SelectedExistingFileWrite
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.selected_actions import SelectedExistingFileWrite
 from agent_comms.selected_tool_broker import (
     SelectedToolIntent,
     SelectedToolRequest,
@@ -266,7 +266,7 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         selected_tool_intent=intent_type(),
     ).run()
     assert len(calls) == len(kwargs_seen) == 1
-    assert "selected_tool_mode" not in kwargs_seen[0]
+    assert kwargs_seen[0]["selected_tool_mode"] is None
     assert "selected_claimed_write" not in calls[0][1]
     assert not bound
 
