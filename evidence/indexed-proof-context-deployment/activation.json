@@ -1,0 +1,14 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-indexed-proof-controls-20260929",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent",
+  "verified": true,
+  "owners": 9,
+  "session_bindings_preserved": true,
+  "fresh_acp_loads": 9,
+  "replayed_inputs": 0,
+  "native_histories_rewritten": 0,
+  "reset_stores": 0,
+  "converted_proof_journals": 87,
+  "local_sockets_verified": 9,
+  "verification_limit": "One-use post-check named a retired private helper after restart; corrected with actual sockets, preserved session bindings and all nine fresh ACP loads. No second restart or original replay."
+}
