@@ -8,6 +8,45 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ### Latest verified checkpoint, 2026-09-29
 
+- LIVE `runtime-idle-warm-source-20260929`: core efcdf493, Toad c4492593,
+  Textual609b74bf, unchanged native d396. All five launchers and nine idle owners
+  activated; complete Thread metadata except ProcessIdentity preserved. Zero
+  interrupted turns, reset stores or replayed inputs; READY generation12 unchanged.
+  Fresh nine actual live ACP loads and normal default-App saved channel/participant
+  navigation, typed configuration, native history, draft/Document/undo PASS.
+- The missing-socket fork route now retains its actual owner process lifetime.
+  The installed canonical fork/menu/dialog/physical-open test holds the new worker
+  without a socket beyond the former five-second expiry, then resumes that same
+  worker and paints its first new reply exactly once in one correctly named tab.
+  Core372 and Toad169 are included. No restart/retry of the original input.
+- Complete exported installed Pi/ACP/UI saved-state journey PASS EXIT0 on the
+  current pair: all13/17/13 rendered bodies and line-cache identities retained on
+  A/B/A; canonical repeated raw reads0/0/0; slow/fast/reverse/End preparation and
+  cropped paint pass. Idle over1.2s stays65->65 preparation misses,3->3 provider
+  requests, work[],pending0. Separate stopped-DM return retains1/1 original body.
+  Core373/374, Toad174 and Textual11 fix projection, cursor publication, first-read
+  watcher lifetime and declaration-derived component ancestry. Final50ms target
+  and4/16/32/64 latency matrix remain active, not a gate for this working checkpoint.
+- Earlier fork checkpoint also shipped core365/366/368/369/370/371 and Toad170/172:
+  scheduler/submission ownership, canonical transcript read identity, extension
+  request cases, sealed FieldCodec capabilities and full old codec caller deletion,
+  publication identity and journal admission. Actual installed queue/renderer/native
+  refusal/UNKNOWN and summary handoff evidence accompanies those source slices.
+- Core367 selected-input lifetime is newly merged and queued for the next paired
+  install; it is not claimed included in efcdf493. Remaining work is active:
+  Wegener107 native proof recovery; Carver173 ACP effects; Dalton375 registration;
+  Boyle376 journal transaction ownership; Noether Prompt/first frame; Tesla final
+  workspace latency; parent active-route ownership and paired shipping. Full plan
+  reconciliation is merged in Toad171; universal size/deletion/acceptance closure
+  is still unproved. No overall completion verdict.
+- Removed142 clean unused old UV source copies after excluding process references,
+  current pins, newest copies and uncommitted work; recovered2.57GiB. Removed one
+  unused staged runtime22MB. Installed/GUI-referenced slots, native package, every
+  worktree, user history and failure receipts remain. No new paid calls.
+  [Current installed/live receipt](../evidence/idle-warm-source-deployment/README.md).
+
+### Earlier verified configuration checkpoint
+
 - LIVE configuration-lifecycle checkpoint: core361/d7745d0e and Toad167/5059d4aa,
   unchanged Textual1738/native d396. Actual installed normalApp/native physical
   model/thinking selection, persisted high, reconnect, saved reply and original
