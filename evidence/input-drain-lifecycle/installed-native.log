@@ -1,0 +1,43 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+____ test_actual_acp_queued_during_summary_runs_once_after_original[False] _____
+
+tmp_path = PosixPath('/home/ts/wt/.idnative/test_actual_acp_queued_during_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2be50cd7f0>
+foreign = False
+
+    @pytest.mark.parametrize("foreign", [False, True])
+    async def test_actual_acp_queued_during_summary_runs_once_after_original(
+        tmp_path, monkeypatch, foreign
+    ):
+>       async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+
+tests/test_input_drain_native.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:338: in helper
+    return _AsyncGeneratorContextManager(func, args, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib._AsyncGeneratorContextManager object at 0x7f2be69ea990>
+func = <function owner_fixture at 0x7f2be45a97a0>
+args = (PosixPath('/home/ts/wt/.idnative/test_actual_acp_queued_during_0'), <_pytest.monkeypatch.MonkeyPatch object at 0x7f2be50cd7f0>)
+kwds = {'real_host': True, 'goal': False}
+
+    def __init__(self, func, args, kwds):
+>       self.gen = func(*args, **kwds)
+                   ^^^^^^^^^^^^^^^^^^^
+E       TypeError: owner_fixture() got an unexpected keyword argument 'real_host'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:109: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_input_drain_native.py::test_actual_acp_queued_during_summary_runs_once_after_original[False]
+1 failed, 1 passed in 7.91s

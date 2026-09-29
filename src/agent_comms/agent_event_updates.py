@@ -205,7 +205,8 @@ class AcpEventConsumer(MroDispatch):
         client = self.client
         text = str(event.text or "Backend failed")
         failure = ACPFailure.from_error(-32603, text, diagnostics=event.diagnostics)
-        original_keys = self.agent.inputs.turn_original_input_keys.get(session_id, ())
+        original = self.agent.inputs.original_sources.get(session_id)
+        original_keys = original.notice_keys if original else ()
         from dataclasses import replace
 
         failure = replace(
@@ -216,10 +217,8 @@ class AcpEventConsumer(MroDispatch):
             return
         self.agent.turns.emitted_errors[session_id] = failure
         failed_input = None
-        input_text = self.agent.inputs.turn_input_text.get(session_id)
-        if input_text and not self.agent.inputs.dispositions.read().all_started(
-            self.agent.inputs.turn_original_input_keys.get(session_id, ())
-        ):
+        input_text = original.notice_text if original else None
+        if input_text and not self.agent.inputs.dispositions.read().all_started(original_keys):
             failed_input = InputFailedUpdate(input_text, failure)
         await client.session_update(
             session_id=session_id,
@@ -239,9 +238,8 @@ class AcpEventConsumer(MroDispatch):
         session_id = self.session_id
         client = self.client
         with _store_lock(self.agent._comms._wire_lock_path):
-            self.agent.inputs.dispositions.settle_unbound(
-                self.agent.inputs.turn_original_input_keys.get(session_id, ())
-            )
+            original = self.agent.inputs.original_sources.get(session_id)
+            self.agent.inputs.dispositions.settle_unbound(original.notice_keys if original else ())
         if not event.ok and event.text:
             # The existing emission owner deduplicates full typed evidence,
             # including a terminal not-sent transition with unchanged text.

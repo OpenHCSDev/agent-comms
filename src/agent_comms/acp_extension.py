@@ -10,7 +10,7 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from hashlib import sha256
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent, CompactionProgress
@@ -25,6 +25,14 @@ from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+
+if TYPE_CHECKING:
+    import asyncio
+    from typing import Any
+    from .input_attempt import InputAttempt
+    from .input_drain import InputDrain
+    from .queued_input import QueuedInput
+    from .threads import Thread
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
@@ -426,21 +434,30 @@ class PromptRequest(CommsRequest):
     def draft_text(self) -> str | None:
         return self.user_text
 
-    @property
     @abstractmethod
-    def delivery(self) -> str: ...
+    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput: ...
+
+    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
+        pass
+
+    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
+        pass
 
 
 class QueuePromptRequest(PromptRequest):
-    @property
-    def delivery(self) -> str:
-        return "queue"
+    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
+        return item.deferred(row, owner)
+
+    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
+        await inputs.emit_queue_state(session_id)
 
 
 class SteerPromptRequest(PromptRequest):
-    @property
-    def delivery(self) -> str:
-        return "steer"
+    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
+        return item
+
+    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
+        inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
 
 
 @dataclass(frozen=True)
