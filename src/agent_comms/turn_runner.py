@@ -404,15 +404,18 @@ class TurnRunner:
             activity_detail=activity.detail,
         )
 
-    async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
+    def current_turn_update(self, session_id: str):
+        from .transcript_updates import SettledTranscriptUpdate
         thread_name = self.sessions.require(session_id)
         active = self.comms.registry.require(thread_name).active_turn
-        event = (
+        return (
             self.started_event(thread_name, active.id)
             if active is not None
-            else events.NoActiveTurn()
+            else SettledTranscriptUpdate()
         )
-        await self.effects._emit_event(session_id, event, client=client)
+
+    async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
+        await self.effects._emit_event(session_id, self.current_turn_update(session_id), client=client)
 
     def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
         return (

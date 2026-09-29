@@ -191,7 +191,7 @@ class Thread:
 
     def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
         if self.goal_checkpoint != checkpoint:
-            raise ValueError("The goal changed; refresh its state.")
+            raise ValueError("The goal changed before this action; the action was not applied.")
         assert self.goal is not None
         return self.goal
 

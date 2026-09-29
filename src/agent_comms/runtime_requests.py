@@ -221,11 +221,13 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     async def change(self, ctx: RuntimeRequestContext) -> None: ...
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+        from .acp_extension import encode_updates
         await self.change(ctx)
         goal, execution = ctx.server.agent._comms.goals.goal_snapshot(ctx.name)
         return {
             "goal": goal.to_wire() if goal is not None else None,
             "goalExecution": asdict(execution) if execution is not None else None,
+            "_meta": encode_updates(ctx.server.agent.turns.current_turn_update(ctx.session_id).fact),
         }
 
 

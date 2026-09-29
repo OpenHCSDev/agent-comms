@@ -59,13 +59,13 @@ class ForkSpec:
 
     name: str
     parent: str
-    task: str
-    tags: frozenset[str] = frozenset()
+    task: str = ""
+    tags: frozenset[str] | None = None
     prompt: str | None = None
 
-    def __post_init__(self) -> None:
-        if not self.task:
-            raise ValueError("Fork task cannot be empty.")
+    @property
+    def initial_prompt(self) -> str:
+        return self.task if self.prompt is None else self.prompt
 
 
 
@@ -515,7 +515,7 @@ class ThreadManagement:
         session = fork_native_session(parent.session_file, parent.worktree, pi_bin)
         child = Thread(
             name=spec.name,
-            tags=spec.tags,
+            tags=parent.tags if spec.tags is None else spec.tags,
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
@@ -527,17 +527,18 @@ class ThreadManagement:
         child = self.registry._declare_unlocked(child)
         self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
-        key = f"acp:{uuid4().hex}"
+        key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
         try:
             owned = self.owners._launch_owner_unlocked(
                 replace(child, model=self.resolve_thread_model(child.name)),
                 pi_bin, startup_input_key=key,
             )
-            InputDispositions(self.root / InputDispositions.filename).record(
-                key, seq=None, owner=owned.name, target=owned.name,
-                admission=self.registry.snapshot().admission_generations[owned.name],
-                text=spec.prompt or spec.task,
-            )
+            if key is not None:
+                InputDispositions(self.root / InputDispositions.filename).record(
+                    key, seq=None, owner=owned.name, target=owned.name,
+                    admission=self.registry.snapshot().admission_generations[owned.name],
+                    text=spec.initial_prompt,
+                )
             return owned
         except OSError:
             self.registry.remove(spec.name)
