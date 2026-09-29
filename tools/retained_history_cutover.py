@@ -82,11 +82,15 @@ class PreparedSource:
     initial_proofs: int
     response_proofs: int
 
+    @staticmethod
+    def source_revision(root: Path) -> tuple:
+        return tuple(file_revision(root/name) for name in
+                     ('bus.jsonl','registry.json','bus_meta.json','private_bus_checkpoint.sqlite3'))
+
     def unchanged(self) -> None:
         self.source.validate()
         root = Path(self.source.root)
-        observed = tuple(file_revision(root/name) for name in
-                         ('bus.jsonl','registry.json','bus_meta.json','private_bus_checkpoint.sqlite3'))
+        observed = self.source_revision(root)
         expected = (self.bus_revision,self.registry_revision,self.metadata_revision,self.checkpoint_revision)
         if observed != expected:
             raise ValueError('Retained source changed after preparation; no cutover')
@@ -165,8 +169,7 @@ def prepare(root: Path, output: Path) -> tuple[PreparedSource, ...]:
                 dst.write(line)
             dst.flush();os.fsync(dst.fileno())
         certify_current(stage)
-        item=PreparedSource(source,folder,*(file_revision(original/name) for name in
-                            ('bus.jsonl','registry.json','bus_meta.json','private_bus_checkpoint.sqlite3')),
+        item=PreparedSource(source,folder,*PreparedSource.source_revision(original),
                             rows,initials,responses)
         item.unchanged()
         prepared.append(item)
