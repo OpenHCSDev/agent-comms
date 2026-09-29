@@ -1,0 +1,18 @@
+{
+  "core_head": "01fb8302c6e4ec1861423ea1e69061750a4121d6",
+  "retired_paths_present": {
+    "src/agent_comms/operations.py": false,
+    "src/agent_comms/declarations.py": false,
+    "src/agent_comms/coordination.py": false,
+    "src/agent_comms/coordination_store.py": false,
+    "src/agent_comms/durability.py": false,
+    "src/agent_comms/resource_claims.py": false,
+    "tools/debt_ratchet.py": false,
+    "tools/cutover": false
+  },
+  "current_production_references": {
+    "MutationStore": [],
+    "read_proven_source_coverage": [],
+    "native_source_cursor(": []
+  }
+}

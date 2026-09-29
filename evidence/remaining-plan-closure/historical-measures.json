@@ -66,6 +66,24 @@
       }
     },
     {
+      "base": "8d4a2ff1edbbc8f6d147645653e1c40856af7596",
+      "head": "651069d8d4559dcf15f066c507116b3e00ade22f",
+      "paths": [
+        "src/agent_comms/declarations.py"
+      ],
+      "measure": "CodecSubclass",
+      "before": {
+        "CodecSubclass:src/agent_comms/declarations.py": 0
+      },
+      "after": {
+        "CodecSubclass:src/agent_comms/declarations.py": 1
+      },
+      "delta": {
+        "CodecSubclass:src/agent_comms/declarations.py": 1
+      },
+      "note": "Original MessageWireCodec introduction, before its later C0 relocation into messages.py."
+    },
+    {
       "base": "b5ec95ac6c464cd0b2e9108394d85d291461417a",
       "head": "bc698f375cb12b99507566e006997ea74ee29853",
       "paths": [

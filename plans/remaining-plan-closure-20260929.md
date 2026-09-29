@@ -68,7 +68,7 @@ this is not a fresh whole-project debt percentage or detector-coverage claim.
 | S5 duplicate authorities | ThreadIncarnation/ProcessIdentity/TurnLeaseFence replace duplicate epoch/resource-claim authority.312 correction and318 reuse actual identities/ReservationRule. | Apply these owners to remaining S14 piecewise comparisons, not another identity roster. |
 | S6 exports | Scope/limit/format declaration families and direct CLI/Toad callers; retired kind enums/caller adapters removed. | No old constructor/golden compatibility obligation; current external contracts remain. |
 | S7 / R3,R5,R6 | WireLog/Publisher, typed input/document/transcript owners;184/186,195/199/202.306 removes free source cursor/proof functions and all callers (**640 production lines deleted,591 added**).312/318 own sends;323 removes captured runner/goal scratch (**494 deleted,621 added**). | TurnRunner scheduler and SelectedExecution still own large unrelated decision surfaces; see concrete S14 locations. Transactions/fences cannot be removed to satisfy a lock grep. |
-| S7 contention | 285 replaces obsolete Comms facade/legacy replay benchmark with actual three-poller50/100/150 tests; **141 old benchmark lines deleted**.289 fixes discovered marker replacement race using canonical leaf lock and opened-inode fstat. | Measurement executed; old285 RED poll receipts remain. Shared flock reduces registry wait but does not prove uniform total-send speedup or sole A8 causality. |
+| S7 contention | 285 replaces obsolete Comms facade/legacy replay benchmark with actual three-poller50/100/150 tests; **141 old benchmark lines deleted**.289 fixes discovered marker replacement race using canonical leaf lock and opened-inode fstat. | Measurement executed; old285 RED poll receipts remain. Shared flock reduces registry wait but does not prove uniform total-send speedup or sole A8 causality.289 then records1,200 durable sends/7,646polls with zero failed polls. |
 | S8 / R4 goals |190 replaces goal cursor/loaders/grant-adoption with GoalState/Action/Execution and typed attempts/history;323 owns goal account/settlement. | Scheduler decisions below remain distinct from completed goal record migration. |
 | D1–D4 |181/183/185/186 canonical manual/adaptive owner compaction replaces stock manual writer/detached provider and string outcome adapters;319 typed manual results;339/340 selected fork/token admission correction. | Latest parent confirms339/340 live. Context phase presentation remains Carver155; no new compaction trigger/cap workaround. |
 | PF1–PF5 | NativeToolCall removes parallel tool status collections; WireMetadata/seals remove duplicate prefix/marker factories; NativeContextProof reader removes hand parsing; ActiveRoute observation removes Comms construction; HistoryView captures scope once. Source map in [PF audit](../evidence/pf-deletion-closure/AUDIT-PF1-PF5.md). | PF3 residual decoder in old281 audit closed283, capacity closed284. No new unowned PF implementation identified. |
@@ -107,6 +107,17 @@ collector, current settings declarations, ACP typed admission, command families,
 render/source kinds, terminal command/read owners and typed session metadata.
 Their old dispatch “pending” rows are historical. T4 and later T9 still require
 actual ownership closure in current product code.
+
+| Earlier Toad surface | Landed deletion/caller closure | Current qualification |
+|---|---|---|
+| TR0 |117/268 remove manual pilot roster/copied ratchet and retired raw-Pi/replay drivers; discovered collector executes installed stack. | New metric correction is this PR; full-suite ceremony is not a gate. |
+| TL0A |118/107 remove arbitrary MCP executable/capability negotiation, product test hook and dead modules; render_server retained as actual entrypoint. | T2/T6 own partB removals. No global zero-marker/dead-module completeness claim from this bounded census. |
+| T1 |119/current107 settings kinds/effects replace schema dict, Settings.get coercion, schema_to_widget and setting_updated callers; retained settings behavior. | No converter or old dotted-read interface should return. |
+| T2 |122 through125 pairs core272/273; shared ACP extension records replace copied fields/epoch probes; installed native and mounted boundary receipt. | New process/measurement consumers152/155 remain open; their incompleteness is not a reason to restore old payloads. |
+| T3 |120 through125 Command.apply, CommandCatalog and ThreadAction remove run adapter, command rosters, name dispatch and TargetContext.is_thread; current menu/ACP callers migrated. | T9 MCP validation still has6-term chains, separate from completed action dispatch. |
+| T5 |121 through125 owns nominal navigation/filter/goal/source presentation and replaces row-kind strings/duplicated state probes. | Source state feedback135/137/138/156 and laterT9 chains require their own closure. |
+| T6 |123 through125 owns renderer command/reply/backend/category declarations; removes enum/roster dispatch, keeps actual worker entrypoint. | Prepared publication/mount lifetime still156, not a second renderer. |
+| T7 / T8 |114/115 through107 move terminal command/read behavior to owners, share terminal environment and typed session/metadata/danger behavior. | Recorded terminal stream and retained46-session receipts; no new universal platform claim. |
 
 | T4 responsibility | Main deletion / replacement | Current remainder |
 |---|---|---|
@@ -152,7 +163,7 @@ this audit does not silently close it or claim the target met.
 
 - [Installed ratchet log](../evidence/remaining-plan-closure/ratchet-tests-fixed.log):
   **35 passed19.67s**, serial actual console commands/real Git commits, both source
-  roots. Initial fixture-root setup failed before tests; preserved in ratchet-tests.log.
+  roots. Initial fixture-root setup failed before tests; preserved in ratchet-tests.log.gz.
 - [Historical measures](../evidence/remaining-plan-closure/historical-measures.json):
   PR318 creation adds4chain terms and3foreign probes in each of two files;
   ownership correction removes both chains. Actual MessageWireCodec introduction
@@ -168,6 +179,14 @@ this audit does not silently close it or claim the target met.
   [323](../evidence/turn-progress-ownership/README.md),
   [S7](../evidence/s7-contention/RESULTS.md). These are retained results at their
   recorded heads, not reruns under this PR.
+
+All declared measures also show no increase on this PR's sole changed production
+module (`self-measures.json`); this is a bounded module check. The existing sealed
+FieldCodec guard remains responsible for alias/import/qualified-subclass closure;
+CodecSubclass is the broader TIME-9 census measure, not a replacement resolver.
+Per-file measures deliberately reject moving debt into a previously clean file.
+Original aggregate type/subscript measures and unique class-move baselines retain
+their original relocation behavior.
 
 The ratchet patch is source/tooling only. Its affected installed entrypoint is
 `agent-comms-ratchet`; no UI/native behavior changes justify a repeated provider
