@@ -5,6 +5,7 @@ import json
 import os
 import select
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -230,6 +231,20 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         # The remaining controls exercise actual queue transitions and owner
         # signals synchronously, with no unattended background watcher race.
         monkeypatch.setattr(queue, "_start_watcher", lambda root, environment: None)
+        wrong_target = queue.enqueue(comms, "worker")
+        wrong_target = replace(
+            wrong_target,
+            target=replace(
+                wrong_target.target, agent_bin=str(source_runtime / "bin/pi-comms-native")
+            ),
+        )
+        queue._save(comms.root / queue.DIRECTORY / f"{wrong_target.id}.json", wrong_target)
+        await asyncio.to_thread(queue.step, comms)
+        assert isinstance(
+            next(row.state for row in queue.status(comms, "worker") if row.id == wrong_target.id),
+            queue.BlockedRestart,
+        )
+        assert comms.registry.require("worker").process_identity == replacement.process_identity
         cancelled = queue.enqueue(comms, "worker")
         (cancelled,) = queue.cancel(comms, "worker")
         assert isinstance(cancelled.state, queue.CancelledRestart)

@@ -32,9 +32,10 @@ stores bounded acceptance logs and private fixture receipts.
 
 ## Verified checkpoint
 
-Actual serial installed-source CLI / native / ACP acceptance:5 passed54.37s.
+Final serial installed-source CLI / native / ACP acceptance after merging C0
+697bba42:5 passed61.42s. Earlier source checkpoint:5 passed54.37s.
 Source runtime-journaled-original-20260929 with native776; target Core candidate
-from mainab3397 plus this patch via absolute PYTHONPATH, reusing the installed
+from main697bba42 plus this patch via absolute PYTHONPATH, reusing the installed
 Core412 Python/dependencies with native7817. No new target Core wheel installed.
 Source starts through its installed agent-comms CLI comms_start declaration.
 Target watcher receives the target's explicit retained root/package authority
@@ -48,7 +49,11 @@ three loopback provider requests, with no input replay. Then cancellation, stale
 selection and ambiguous post-retirement launch remain terminal without retry.
 All fixture owner identities and watcher children are dead after teardown.
 
-Evidence: actual-handoff-second.log and its private wire/session/queue receipts.
+Evidence: actual-handoff-final.log and its private wire/session/queue receipts.
+The final controls also mutate the queued target to the old native launcher and
+prove Blocked before the owner is fenced or signalled. Required source debt
+ratchet passes with no increases. Read-only own-fixture environment scan found
+zero remaining processes; no global process scan or stop was issued.
 First setup failure preserved in actual-handoff-first.log: new Core correctly
 refused old native manifest, and a relative PYTHONPATH selected old installed
 code in a child cwd. Driver uses the true source CLI and an absolute target

@@ -174,6 +174,8 @@ class RestartTarget:
         )
         if self.interpreter != sys.executable or self.runtime != current:
             raise ValueError("Watcher target runtime changed")
+        if self.agent_bin != comms.owners.restart_entrypoint(self.agent_bin):
+            raise ValueError("Target agent entrypoint differs from reviewed launch authority")
         if not Path(self.interpreter).is_file() or not os.access(self.interpreter, os.X_OK):
             raise ValueError("Target interpreter is unavailable")
         if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
