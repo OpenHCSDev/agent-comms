@@ -79,3 +79,14 @@ family-derived membership; BOUND-1 existing native RPC decoding; TIME-9 no
 codec subclass/adapter; AGENT-8 actual existing native fixture/tool path.
 Fork proof still requires latest339 startup correction; no blanket fork/branch
 or live deployment certification from this ordinary receipt.
+
+## Latest339 fda6e4be independent family execution
+
+Noneditable installed merged339 fda6e4be, matched native package; actual ordinary
+case passes again (first answer5.844s). Actual24.07% parent normal fork now starts.
+Combined result1pass/1fail20.96s: after ACP prompt returns, child native history
+contains ZERO hey Boss user entries, violating original-input exactly-once assertion.
+No compaction fact/entry was observed before this failure. Earlier fork-startup
+refusal is corrected; this is a new meaningful first-send/history failure, notGREEN.
+See latest339-family.log and latest339-install.log. Boyle sole production owner
+informed; no retry, live changes or input replay performed.
