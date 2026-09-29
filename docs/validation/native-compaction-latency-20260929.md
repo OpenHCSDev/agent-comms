@@ -30,3 +30,11 @@ The installed7817 native `summarizeSource` waits at `Promise.allSettled` for eac
 IMPL-12/IMPL-13: the policy plan becomes the one native scheduling owner. IDEN-5: source completion remains measured by the native job; no presentation progress counter or authoritative view copy is added. TIME-9: no alternate codecs/readers/adapters. Arendt owns shared elapsed/source phase publication; native producer4a00766e is separately handed to425 and does not hold417.
 
 Scratch owner429: `/home/ts/.cache/agent-scratch/comms-native-compaction-latency-20260929`, patch reconstruction and reviewed disposable native candidate. Prepared canonical native package stays in this persistent worktree. Remove disposable candidate/fixture files after preserving receipt; do not remove Arendt42MB source copy or active native package.
+
+## Source checkpoint evidence
+
+Canonical native4ab910061590d1e0 builds through normal preparation. Noneditable installed candidate passes67 affected Pi/payload/ownership tests in1.50s. Source policy check passes rolling admission, four-worker bound, source-failure propagation and iterator close. These source checks do not establish native or live readiness.
+
+Deleted18 production JavaScript lines across existing policy/source owners,1 declaration line, plus25 actual compiled native algorithm lines replaced by18 lines. Patch-text deletion counts are not production deletion counts. Original batch mechanism is deleted; no alternate scheduler or reader remains.
+
+Actual retained native/RPC provider-span baseline/candidate and overrun/ACP acceptance are prepared, pending the serial slot currently assigned210/426 then214. No native fixture is running for429; no paid route or live owner has been touched. Shared measured source/elapsed migration is coordinated with425; existing flattened automatic progress carriers remain an identified ownership gap assigned to that shared contract owner, not hidden as completion.

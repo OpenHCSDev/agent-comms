@@ -1,0 +1,28 @@
+{
+  "state": "native_acceptance_pending_serial_slot",
+  "production_source_js": {
+    "added": 43,
+    "deleted": 18
+  },
+  "native_compiled_algorithm": {
+    "added": 18,
+    "deleted": 25
+  },
+  "declaration": {
+    "added": 1,
+    "deleted": 1
+  },
+  "installed_focused_tests": {
+    "passed": 67,
+    "seconds": 1.5
+  },
+  "canonical_native_build": "4ab910061590d1e0",
+  "source_policy_checks": [
+    "rolling_admission",
+    "concurrency_four",
+    "source_failure_join_and_close"
+  ],
+  "native_slot_dependency": "210/426 then214 capture; direct owners notified",
+  "paid_calls": 0,
+  "live_sessions_mutated": false
+}
