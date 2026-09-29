@@ -21,14 +21,27 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class AssignedSourceIdentity:
+    root: str
+    recipient: ThreadIncarnation
+
+
+@dataclass(frozen=True)
 class AssignedSourceCursor:
     root: str
     recipient: ThreadIncarnation
     sequence: int
 
+    @property
+    def identity(self) -> AssignedSourceIdentity:
+        return AssignedSourceIdentity(self.root, self.recipient)
+
     def contains(self, other: AssignedSourceCursor) -> bool:
-        return (self.root == other.root and self.recipient == other.recipient
-                and self.sequence >= other.sequence)
+        return self.identity == other.identity and self.sequence >= other.sequence
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        if self.identity != identity:
+            raise ValueError("Receipt cursor belongs to a different transcript source")
 
     def covers(self, sequence: int) -> bool:
         return 0 < sequence <= self.sequence
