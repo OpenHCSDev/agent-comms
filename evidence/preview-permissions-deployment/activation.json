@@ -1,0 +1,20 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-preview-permissions-20260928",
+  "installed": {
+    "agent-comms": "0931c47d13cace1934a3c3744174bb9a81172ee9",
+    "batrachian-toad": "19de70cacbfc20e7df39dba17488511c9786a586",
+    "textual": "c9743801c98dc570f82f82e25915ecce89800f4b"
+  },
+  "launchers": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-preview-permissions-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-preview-permissions-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-preview-permissions-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-preview-permissions-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-preview-permissions-20260928/bin/agent-comms-nk-foreground"
+  },
+  "workers_restarted": false,
+  "reason": "UI-only update; exact core package unchanged",
+  "history_mutated": false,
+  "runtime_stores_reset": false,
+  "prompts_replayed": 0
+}
