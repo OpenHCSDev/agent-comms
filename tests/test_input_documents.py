@@ -130,7 +130,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     for name in ("native_id", "turn_id", "sent_text"):
         assert name not in {item.name for item in fields(reserved)}
         assert not hasattr(reserved, name)
-    assert store.finish_unbound("acp:input")
+    assert store.settle_unbound(("acp:input",))
     unsent = store.read().lookup("acp:input")
     assert isinstance(unsent, NotSentInput) and unsent.unresolved
     assert not unsent.accepts_reservation
@@ -157,7 +157,7 @@ def test_incomplete_sent_evidence_is_rejected_without_overwriting_history(tmp_pa
     saved = json.dumps(dict(version=1, rows={"acp:x": row}))
     store.path.write_text(saved)
     with pytest.raises(ValueError):
-        store.finish_unbound("acp:x")
+        store.settle_unbound(("acp:x",))
     assert store.path.read_text() == saved
 
 
@@ -195,7 +195,7 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
     record = json.loads(store.path.read_text())["rows"]["acp:x"]
     assert record["kind"] == "reserved"
     assert not {"status", "native_id", "turn_id", "sent_text"}.intersection(record)
-    assert store.finish_unbound("acp:x")
+    assert store.settle_unbound(("acp:x",))
     record = json.loads(store.path.read_text())["rows"]["acp:x"]
     assert record["kind"] == "not_sent"
     assert not {"native_id", "turn_id", "sent_text"}.intersection(record)

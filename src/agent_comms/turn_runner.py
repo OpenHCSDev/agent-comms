@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .acp_failure import ACPFailure
+
 import asyncio
 import os
 import shlex
@@ -115,7 +117,7 @@ class TurnRunner:
         self.pending_goal_origins: dict[str, str] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
         self.active_turns: dict[str, str] = {}
-        self.emitted_errors: dict[str, str] = {}
+        self.emitted_errors: dict[str, ACPFailure] = {}
         self.goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
         self.reply_window = (
             reply_window

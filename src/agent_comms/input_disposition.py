@@ -90,6 +90,13 @@ class InputDocument:
             return None
         return tuple(self.rows[key].source_text for key in keys)
 
+    def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:
+        """Project only a complete, homogeneous durable observation."""
+        states = {type(self.lookup(key)) for key in keys}
+        if len(states) == 1 and all(self.lookup(key).exists for key in keys):
+            return states.pop()
+        return None
+
     def all_started(self, keys) -> bool:
         return all(self.lookup(key).has_started for key in keys)
 
@@ -192,9 +199,22 @@ class InputDispositions(LockedStore[InputDocument]):
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
 
-    def finish_unbound(self, key: str) -> bool:
-        """Caller ended the owning turn under its wire fence; never permits replay."""
-        return self._transition(key, lambda row: row.finish_unbound())
+    def settle_unbound(self, keys: tuple[str, ...]) -> bool:
+        """Terminal caller holds wire; settle one complete batch atomically."""
+        changed = False
+
+        def settle(document: InputDocument) -> InputDocument:
+            nonlocal changed
+            rows = dict(document.rows)
+            for key in keys:
+                next_row = document.lookup(key).finish_unbound()
+                if next_row is not None:
+                    changed = True
+                    rows[key] = next_row
+            return replace(document, rows=rows) if changed else document
+
+        self.update(settle)
+        return changed
 
     def review_for_goal(
         self,

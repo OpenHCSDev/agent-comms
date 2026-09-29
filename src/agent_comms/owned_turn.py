@@ -453,6 +453,8 @@ class OwnedTurn:
             await backend.terminate_task_process(self.owner_task)
             raise
         except Exception as error:
+            with _store_lock(self.runner.comms._wire_lock_path):
+                self.runner.inputs.dispositions.settle_unbound(self.original_keys)
             await self.progress.report_failure(error)
             await backend.terminate_task_process(self.owner_task)
             raise

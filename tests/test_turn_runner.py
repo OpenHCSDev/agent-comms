@@ -198,9 +198,12 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
     with pytest.raises(RuntimeError, match="execution failed"):
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
     errors = failure_facts(updates, RequestFailedUpdate)
-    assert len(errors) == 1
+    assert len(errors) == (2 if isinstance(prior, events.Error) else 1)
+    from agent_comms.input_attempt import NotSentInput
+
+    assert errors[-1].failure.input_state is NotSentInput
     expected = prior.text if prior is not None else "execution failed"
-    assert errors[0].failure.detail == expected
+    assert errors[-1].failure.detail == expected
     assert native.session.read_bytes() == original
     assert native.provider.posts == 1  # Preparation/fault must not send or replay input.
     assert owner._comms.registry.require(session).active_turn is None
@@ -228,7 +231,7 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
 
     async def compact(*args, **kwargs):
         assert args[4].model == "response-local/fixture"
-        assert args[6].proc is not None and args[6].proc.alive()
+        assert args[6].custody.child.proc.alive()
         attempts.append(args[5])
         raise failure from source
 
@@ -248,6 +251,10 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
     assert len(failed_inputs) == 1
     assert failed_inputs[0].text == "Original stays unknown"
     assert failed_inputs[0].failure == errors[0].failure
+    from agent_comms.input_attempt import NotSentInput
+
+    assert errors[0].failure.input_state is NotSentInput
+    assert "Not sent" in errors[0].failure.feedback
     assert owner.inputs.dispositions.read().rows[attempts[0]].declared_name == "not_sent"
     assert native.provider.posts == 1
     assert native.session.read_bytes() == before
