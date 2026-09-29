@@ -22,7 +22,7 @@ import secrets
 import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, aclosing, contextmanager, nullcontext, suppress
+from contextlib import AbstractContextManager, aclosing, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -756,7 +756,7 @@ class TurnSession:
             yield self.rejected_commands.pop(0)
         self.rejected_signal.clear()
         try:
-            self.line = await self.watchdog.read(self, self.watchdog.read_timeout(self))
+            self.line = await self.watchdog.read(self)
         except TimeoutError:
             async for event in self.watchdog.expire(self):
                 yield event

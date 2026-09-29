@@ -136,7 +136,7 @@ class ProgressWatchdog:
             attempt={"current": attempt[0], "max": attempt[1]} if attempt is not None else None,
         )
 
-    async def read(self, session: TurnSession, timeout: float | None) -> bytes:
+    async def read(self, session: TurnSession) -> bytes:
         if session.rejected_signal.is_set():
             return b"\n"
         read_task = asyncio.create_task(session.reader.readline())
@@ -151,7 +151,7 @@ class ProgressWatchdog:
             tasks.add(finish_task)
         try:
             done, _ = await asyncio.wait(
-                tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+                tasks, timeout=self.read_timeout(session), return_when=asyncio.FIRST_COMPLETED
             )
             if not done:
                 raise TimeoutError
