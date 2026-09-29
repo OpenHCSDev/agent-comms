@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import DetachedProcess, ProcessIdentity
+from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity
 from .diagnostics import owner_process_output
 from .registration import Registration
 
@@ -233,7 +233,7 @@ class OwnerLifecycle:
     def _stop_process(self, thread: Thread, admission_generation: int) -> None:
         assert thread.process_identity is not None
         with suppress(ProcessLookupError):
-            DetachedProcess.attach(thread.process_identity).stop_sync(
+            ObservedProcess(thread.process_identity).stop_sync(
                 guard=lambda: self._signal_guard(thread, admission_generation),
             )
 
@@ -324,7 +324,7 @@ class OwnerLifecycle:
             self.registry.register(owned, new_owner=True)
 
         with owner_process_output(self.root, thread) as output:
-            DetachedProcess.launch(
+            ParentedProcess.launch(
                 (sys.executable, "-m", "agent_comms.worker"),
                 env=env,
                 cwd=thread.worktree,
