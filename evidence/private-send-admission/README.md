@@ -1,3 +1,44 @@
+# Current312 correction — 2026-09-28
+
+Parent review correctly rejected the relocated seven/eleven-field comparisons.
+Source correction **78316454** supersedes the initial ready claim below.
+
+- Registry identity now uses ThreadIncarnation and ProcessIdentity equality,
+  including the actual current process start time. Role, admission, worktree,
+  exact ActiveTurn and goal each have a named refusal rule.
+- NativeRuntimeInput and PromptBinding inherit shared NativeInputRecord behavior:
+  coordinator ownership is the existing OwnerGenerations value, not an invented
+  thread incarnation or another owner registry. No durable schema changes.
+- Extended the existing ReservationRule family through a shared RuleCheck base.
+  No second dispatcher/registry. Distinct rules diagnose claim/stage/attempt,
+  coordinator identity, token, already-sent admission, proven session, verdict,
+  binding root/source/message and native request digest. TextDigest owns digest
+  equality; typed triage/full stages own attempt matching.
+- The ACP InputAttempt family was inspected; those rows describe a different
+  durable ledger and cannot stand in for native coordinator rows. No fake ACP
+  row or synthetic historical identity is constructed.
+- Both prelaunch production callers now pass their typed stage. The prelaunch
+  binding uses the same identity rules as final send; deleted its independent
+  string-stage and component-comparison roster. No source proofs/fences removed.
+- Reproduction of a stale ProcessIdentity with the same PID is explicitly denied.
+  Per-rule tests use actual production-created SQLite reservation and binding
+  rows, then test each changed authority and its named refusal, for both stages.
+  These are rule/fence tests, not provider acceptance.
+
+**Installed correction evidence:** `correction-final.log`: **122 passed in71.69s**,
+including all original raw-writer tests, binding/cursor/runtime checks, shared
+reservation-rule tests and all3 actual pinned native/local HTTP paths.
+`correction-guards.log`: **3 passed**, including the added prohibition on identity
+comparison tuples and bare-PID comparisons. `correction-ratchet.json`: zero
+increases against main c338e8ab. Black/Ruff/diff checks pass. NRA full context
+completed31.219s with0 emitted findings; detector inventory limit remains as below.
+
+Earlier constructor-failure receipts are retained and closed by the final run.
+Parent can review/merge the correction; no install or CI wait performed here.
+OwnedTurn work was paused until this correction was published and verified.
+
+---
+
 # S7/C0 private native send admission closure
 
 2026-09-28. PR312. Source checkpoint `59eea1b6` on main `c338e8ab`
