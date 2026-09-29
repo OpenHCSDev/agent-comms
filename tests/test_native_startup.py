@@ -16,12 +16,12 @@ def test_readiness_budget_is_size_aware_bounded_and_not_a_turn_deadline():
     policy = NativeStartupPolicy()
     mib = 1024 * 1024
     assert policy.slots == 4
-    assert policy.readiness_timeout(None) == 5.0
-    assert policy.readiness_timeout(0) == 5.0
-    assert policy.readiness_timeout(8 * mib) == 5.0
-    assert policy.readiness_timeout(8 * mib + 1) == 7.0
-    assert policy.readiness_timeout(111_533_315) == 31.0
-    assert policy.readiness_timeout(112_851_639) == 31.0
+    assert policy.readiness_timeout(None) == 10.0
+    assert policy.readiness_timeout(0) == 10.0
+    assert policy.readiness_timeout(8 * mib) == 10.0
+    assert policy.readiness_timeout(8 * mib + 1) == 12.0
+    assert policy.readiness_timeout(111_533_315) == 35.0
+    assert policy.readiness_timeout(112_851_639) == 35.0
     assert policy.readiness_timeout(1024 * mib) == 35.0
     assert policy.readiness_timeout(112_851_639, base_seconds=0.05) == 26.05
 

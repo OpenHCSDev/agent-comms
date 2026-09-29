@@ -14,7 +14,8 @@ from .session_fence import _open_lock, _try_lock, _unlock
 @dataclass(frozen=True)
 class NativeStartupPolicy:
     slots: int = 4
-    readiness_seconds: float = 5.0
+    # A cold extension can initialize a local stdio server before Pi answers get_state.
+    readiness_seconds: float = 10.0
     readiness_step_bytes: int = 8 * 1024 * 1024
     readiness_step_seconds: float = 2.0
     readiness_max_seconds: float = 35.0
@@ -27,7 +28,7 @@ class NativeStartupPolicy:
 
         A cold Pi parses the entire saved JSONL before responding. Allow two
         extra seconds for each full 8 MiB beyond the first 8 MiB, up to 35s.
-        Missing/unreadable sessions retain the original five-second bound.
+        Missing/unreadable sessions retain the ten-second base bound.
         """
         base = self.readiness_seconds if base_seconds is None else base_seconds
         extra_steps = (
