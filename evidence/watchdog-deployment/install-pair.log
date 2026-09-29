@@ -1,0 +1,13 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-watchdog-20260928
+   Updating https://github.com/OpenHCSDev/toad.git (436514d875c01964f3a4fea6919f1892e60c73f8)
+    Updated https://github.com/OpenHCSDev/toad.git (436514d875c01964f3a4fea6919f1892e60c73f8)
+Resolved 2 packages in 1.21s
+   Building batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@436514d875c01964f3a4fea6919f1892e60c73f8
+      Built batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@436514d875c01964f3a4fea6919f1892e60c73f8
+Prepared 1 package in 519ms
+Uninstalled 2 packages in 7ms
+Installed 2 packages in 5ms
+ - agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@03b6f9f43e16aef6b86983f2f0e0a327c8293ea7)
+ + agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@664623a3c1393c878a0dbf59e65eb2e530163cd9)
+ - batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@06003affd69db185b3dea4fb02c94787768528d4)
+ + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@436514d875c01964f3a4fea6919f1892e60c73f8)
