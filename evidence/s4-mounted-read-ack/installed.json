@@ -1,0 +1,34 @@
+{
+  "runtime": "runtime-watchdog-20260928",
+  "imports": [
+    "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/toad/__init__.py",
+    "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/lib/python3.14/site-packages/textual/__init__.py"
+  ],
+  "packages": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "664623a3c1393c878a0dbf59e65eb2e530163cd9",
+        "requested_revision": "664623a3c1393c878a0dbf59e65eb2e530163cd9"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "436514d875c01964f3a4fea6919f1892e60c73f8",
+        "requested_revision": "436514d875c01964f3a4fea6919f1892e60c73f8"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "c9743801c98dc570f82f82e25915ecce89800f4b",
+        "requested_revision": "c9743801c98dc570f82f82e25915ecce89800f4b"
+      }
+    }
+  }
+}
