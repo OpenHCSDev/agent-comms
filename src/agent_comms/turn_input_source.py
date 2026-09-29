@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .channel_input_batch import InputBatch
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot
+    from .thread_identity import TurnId
+    from .threads import Thread
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -111,7 +113,20 @@ class OriginalTurnInput(TurnInputSource):
         return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
 
     def compaction_key(self, session_file: str | None) -> str | None:
-        return None
+        return self.keys[0] if session_file is not None and len(self.keys) == 1 else None
+
+    def reserve(
+        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int
+    ) -> OriginalTurnInput:
+        """Every original uses the same durable input authority before native preparation.
+
+        ACP and bus inputs already own ingress keys. A scheduled original has no
+        external ingress; its admitted turn supplies identity, never replay authority.
+        """
+        if self.keys:
+            return self
+        key = dispositions.reserve_turn(owner.name, turn, admission, self.prompt)
+        return replace(self, keys=(key,))
 
     def selected_admission(self, inputs: InputDrain, session_id: str):
         return inputs.selected_summary_admissions.get(session_id)
@@ -143,9 +158,6 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
     def notice_text(self) -> str:
         return self.original_display or self.prompt
 
-    def compaction_key(self, session_file: str | None) -> str | None:
-        return self.keys[0] if session_file is not None and len(self.keys) == 1 else None
-
 
 class RoutedInput(TurnInputSource):
     def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
@@ -162,6 +174,14 @@ class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
 class DependencyOriginalInput(OriginalTurnInput, DirectInput):
     def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
         return self.dependency.allows(wait, registry)
+
+
+class ScheduledOriginalInput(DependencyOriginalInput):
+    """An internal scheduled original inherits reservation and dependency checks.
+
+    Captured goal permission and an applicable launch permit authorize this input;
+    having a durable input key cannot turn it into an unsolicited routed message.
+    """
 
 
 class FollowingTurnInput(TurnInputSource):

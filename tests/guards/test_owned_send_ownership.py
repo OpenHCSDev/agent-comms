@@ -10,9 +10,19 @@ from agent_comms.owned_send_admission import OwnedSendAdmission
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_goal_permission import TurnGoalPermission
 from agent_comms.turn_input_binding import TurnInputBinding
-from agent_comms.turn_input_source import TurnInputSource
+from agent_comms.turn_input_source import OriginalTurnInput, TurnInputSource
 
 pytestmark = pytest.mark.refactor_guard
+
+
+def test_original_input_cases_inherit_reservation_and_compaction():
+    """New input cases cannot silently opt out of the shared original path."""
+    cases = list(OriginalTurnInput.__subclasses__())
+    while cases:
+        case = cases.pop()
+        cases.extend(case.__subclasses__())
+        assert case.reserve is OriginalTurnInput.reserve, case
+        assert case.compaction_key is OriginalTurnInput.compaction_key, case
 
 
 def test_owned_turn_no_longer_owns_send_authority_or_native_binding():
