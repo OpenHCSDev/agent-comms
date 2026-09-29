@@ -20,7 +20,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
 ):
     comms, agent, _root_id = _session(tmp_path)
     counts = {"accept": 0, "cursor": 0}
-    accept, cursor = acp._accept_visible_initials, acp.NativeSourceCursor.advance
+    accept, cursor = acp._accept_visible_deliveries, acp.NativeSourceCursor.advance
 
     def accepted(*args, **kwargs):
         counts["accept"] += 1
@@ -33,7 +33,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
     def no_package(_path):
         raise AssertionError("idle observation must not hash the native package")
 
-    monkeypatch.setattr(acp, "_accept_visible_initials", accepted)
+    monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
     monkeypatch.setattr(acp.NativeSourceCursor, "advance", covered)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", no_package)
@@ -149,18 +149,18 @@ def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
     root, root_id, comms, original, people = _root(tmp_path, direct=True)
     lookup = stable_thread_lookup(people[2].created_at)
     accepted = []
-    accept = cohort_foreground.accept_initial_cohort
+    accept = cohort_foreground.accept_delivery_cohort
 
     def observed(bus, root_id, sequence, store):
         accepted.append(sequence)
         return accept(bus, root_id, sequence, store)
 
-    monkeypatch.setattr(cohort_foreground, "accept_initial_cohort", observed)
+    monkeypatch.setattr(cohort_foreground, "accept_delivery_cohort", observed)
     with Coordination(root / "coordination.sqlite3") as store:
         statements = []
         store.session._connection.set_trace_callback(statements.append)
         assert (
-            cohort_foreground._accept_visible_initials(
+            cohort_foreground._accept_visible_deliveries(
                 comms.bus, root_id, store, lookup, 0, owner_name="beta"
             )
             == original.message.seq
@@ -168,12 +168,12 @@ def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
         assert not accepted
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
         message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")
-        cohort_foreground._accept_visible_initials(
+        cohort_foreground._accept_visible_deliveries(
             comms.bus, root_id, store, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]
         statements.clear()
-        cohort_foreground._accept_visible_initials(
+        cohort_foreground._accept_visible_deliveries(
             comms.bus, root_id, store, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]

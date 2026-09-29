@@ -1,7 +1,7 @@
 """Real publication must register the entire audience, without test SQL setup."""
 
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.cohort_foreground import _accept_visible_initials
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_tables.participants import Participants
@@ -23,11 +23,11 @@ def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tm
         with store.session.read():
             assert Participants.select(store.session._connection) == []
         message = comms.messaging.send_message("sender", "#team", "Hello @receiver")
-        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         assert {r.canonical_thread for r in initial.audience.recipients} == {
             "receiver", "stopped-reviewer", "unstarted-reviewer"
         }
-        cursor = _accept_visible_initials(
+        cursor = _accept_visible_deliveries(
             comms.bus, root_id, store, lookup, 0, owner_name=receiver.name
         )
         assert cursor == message.seq
@@ -37,7 +37,7 @@ def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tm
         before = tuple(store.participants.get(r.recipient_lookup)
                        for r in initial.audience.recipients)
         again = comms.messaging.send_message("sender", "#team", "Second @receiver")
-        assert _accept_visible_initials(
+        assert _accept_visible_deliveries(
             comms.bus, root_id, store, lookup, cursor, owner_name=receiver.name
         ) == again.seq
         assert tuple(store.participants.get(r.recipient_lookup)

@@ -15,13 +15,13 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from .bus_publication import CommittedInitial, stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .threads import Thread
 from .wake import WakeDecision, derive_exact_reply_target
 
 
 def render_selected_wake_frame(
-    initial: CommittedInitial,
+    initial: CommittedDelivery,
     assignment: WakeAssignment,
     owner: Thread,
     *,

@@ -20,7 +20,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
@@ -106,7 +106,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
 
 
 def _accept(root: Path, root_id: str, comms: Comms, message) -> None:
-    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -118,7 +118,7 @@ def _accept(root: Path, root_id: str, comms: Comms, message) -> None:
                 recipient.canonical_thread,
                 committed=True,
             )
-        assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count == 2
+        assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count == 2
 
 
 def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) -> None:
@@ -150,7 +150,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
         assert comms.registry.require("beta").pid == ready[1]
 
         message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
-        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         assert len(initial.audience.recipients) == 2
         assert (
             sum(decision.__class__.__name__ == "NoWakeDecision" for decision in initial.decisions)

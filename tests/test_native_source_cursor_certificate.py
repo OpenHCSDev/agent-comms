@@ -16,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -77,7 +77,7 @@ def _fresh(tmp_path: Path, count: int = 2):
 def _seal(comms: Comms, root: Path, root_id: str, target: str, body: str):
     message = comms.messaging.send_initial_cohort("sender", target, body)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count
+        assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count
     return message
 
 
@@ -147,7 +147,7 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     source = _seal(comms, root, root_id, "#team", "@alpha selected")
-    frozen = comms.bus.log.read_initial_cohort(root_id, source.seq)
+    frozen = comms.bus.log.read_delivery_cohort(root_id, source.seq)
     assert len(frozen.audience.recipients) == recipients
     start = time.perf_counter()
     turn = await runtime.SelectedExecution(

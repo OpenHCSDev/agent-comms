@@ -14,7 +14,7 @@ import pytest
 from agent_comms.bus_publication import HumanOrigin, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
@@ -51,24 +51,24 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     channel = comms.messaging.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
     assert channel.sender_role is ThreadRole.USER
     assert [row.body for row in comms.views.channel_history("#team")] == ["hello @alice"]
-    initial = comms.bus.log.read_initial_cohort(root_id, channel.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, channel.seq)
     assert initial.message == channel
     assert {member.recipient_lookup for member in initial.audience.recipients} == set(
         lookups.values()
     )
-    receipt = accept_initial_cohort(comms.bus, root_id, channel.seq, store)
+    receipt = accept_delivery_cohort(comms.bus, root_id, channel.seq, store)
     assert isinstance(receipt, Applied)
     assert receipt.value.member_count == 2
     assert receipt.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert comms.views.dm_history(channel.sender, "bob")[-1] == dm
-    dm_initial = comms.bus.log.read_initial_cohort(root_id, dm.seq)
+    dm_initial = comms.bus.log.read_delivery_cohort(root_id, dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)
         for member in dm_initial.audience.recipients
     ] == [("bob", lookups["bob"])]
-    accepted = accept_initial_cohort(comms.bus, root_id, dm.seq, store)
+    accepted = accept_delivery_cohort(comms.bus, root_id, dm.seq, store)
     assert isinstance(accepted, Applied)
     assert accepted.value.member_count == accepted.value.assignment_count == 1
 
@@ -82,7 +82,7 @@ def test_explicit_root_override_preserves_private_user_receipt(
     selected = wire()
     assert selected.root == comms.root
     sent = selected.messaging.send_user_message("alice", "explicit", worktree=str(tmp_path))
-    assert selected.bus.log.read_initial_cohort(root_id, sent.seq).message == sent
+    assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent
 
 
 def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_path: Path) -> None:
@@ -133,7 +133,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     assert calls == 1
     error = raised.value
     assert error.wire_root_id == root_id
-    initial = comms.bus.log.read_initial_cohort(root_id, error.wire_seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, error.wire_seq)
     assert initial.message.message_id == error.message_id
     assert len(comms.bus.log.full_history()) == 1
     monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', original)
@@ -211,7 +211,7 @@ def test_cancellation_after_append_entry_is_typed_unknown(
     monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', cancel_after_append)
     with pytest.raises(HumanInitialUnknownError, match="outcome UNKNOWN") as raised:
         comms.messaging.send_user_message("alice", "cancelled after append", worktree=str(tmp_path))
-    assert comms.bus.log.read_initial_cohort(root_id, raised.value.wire_seq).message.message_id == (
+    assert comms.bus.log.read_delivery_cohort(root_id, raised.value.wire_seq).message.message_id == (
         raised.value.message_id
     )
     assert len(comms.bus.log.full_history()) == 1
@@ -237,7 +237,7 @@ def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Pa
         messages = [future.result(timeout=5) for future in futures]
     assert sorted(message.seq for message in messages) == [1, 2]
     assert {
-        comms.bus.log.read_initial_cohort(root_id, message.seq).message.message_id
+        comms.bus.log.read_delivery_cohort(root_id, message.seq).message.message_id
         for message in messages
     } == {message.message_id for message in messages}
 
@@ -265,7 +265,7 @@ def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) 
     members = comms.registry.all_threads().values()
     humans = [thread for thread in members if thread.role is ThreadRole.USER]
     assert len(humans) == 1
-    assert [comms.bus.log.read_initial_cohort(root_id, seq).message.seq for seq in seqs] == seqs
+    assert [comms.bus.log.read_delivery_cohort(root_id, seq).message.seq for seq in seqs] == seqs
 
 
 async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
@@ -301,4 +301,4 @@ async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
             break
         await asyncio.sleep(0.01)
     assert calls == 1
-    assert comms.bus.log.read_initial_cohort(root_id, 1).message.body == "cancelled"
+    assert comms.bus.log.read_delivery_cohort(root_id, 1).message.body == "cancelled"

@@ -19,9 +19,8 @@ from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     HumanOrigin,
     initial_sideband,
-    public_envelope_digest,
     stable_thread_lookup,
-    validate_initial_record,
+    validate_delivery_record,
 )
 from .channel_targets import BuiltinChannel, is_channel_target
 from .envelope_claim_transitions import (
@@ -451,21 +450,26 @@ class Publisher:
             decisions = resolve_wake_cohort(
                 stored, frozen_audience=audience, control=classification
             )
+            from .delivery_policy import InitialDeliveryPolicy
+            from .field_codec import FieldCodec
+
             row = {
                 **stored.to_wire(),
-                PRIVATE_WIRE_FIELD: {
-                    "version": 1,
-                    "initial": initial_sideband(
-                        metadata.root_id,
-                        stored,
-                        audience,
-                        decisions,
-                        control=classification.value,
-                    ),
-                },
+                PRIVATE_WIRE_FIELD: FieldCodec.encode(
+                    InitialDeliveryPolicy(
+                        version=1,
+                        initial=initial_sideband(
+                            metadata.root_id,
+                            stored,
+                            audience,
+                            decisions,
+                            control=classification.value,
+                        ),
+                    )
+                ),
             }
             # Check the exact bytes and one coherent source revision before any append.
-            validate_initial_record(row, metadata.root_id)
+            validate_delivery_record(row, metadata.root_id)
             if before_revisions != tuple(file_revision(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
             # Every frozen subscriber needs an identity, including stopped
@@ -474,10 +478,10 @@ class Publisher:
             from .coordinator import Coordination
 
             with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
+                if sender_thread.role.executable:
+                    store.participants.register(sender_lookup, sender, sender, committed=True)
                 for thread, lookup in zip(selected, lookups, strict=True):
-                    store.participants.register(
-                        lookup, thread.name, thread.name, committed=True
-                    )
+                    store.participants.register(lookup, thread.name, thread.name, committed=True)
             if _human_origin is None:
                 self.log._append_private_unlocked(metadata, row)
             else:
@@ -491,15 +495,12 @@ class Publisher:
                     ) from error
             return stored
 
-    def publish_keyed_response(self, intent: PublicationIntents) -> Message:
-        """Default-OFF fsynced append; runtime owner fencing needs a coordinator."""
-        if self._private_response_writes is not True:
-            raise RelationViolationError("Private response publication is disabled.")
-        with self.log.locked():
-            return self._publish_keyed_response_unlocked(intent)
-
     def _publish_keyed_response_unlocked(
-        self, intent: PublicationIntents, *, registry_snapshot: RegistrySnapshot | None = None
+        self,
+        intent: PublicationIntents,
+        *,
+        conversation,
+        registry_snapshot: RegistrySnapshot | None = None,
     ) -> Message:
         """Internal append with bus lock; a supplied registry snapshot stays locked."""
 
@@ -535,18 +536,7 @@ class Publisher:
         )
         if stored.message_id != intent.expected_message_id:
             raise RelationViolationError("Stored response does not match expected Message ID.")
-        public = stored.to_wire()
-        row = {
-            **public,
-            PRIVATE_WIRE_FIELD: {
-                "version": 1,
-                "response": {
-                    "wire_root_id": metadata.root_id,
-                    "execution_id": intent.execution_id,
-                    "publication_key": intent.publication_key,
-                    "envelope_digest": public_envelope_digest(public),
-                },
-            },
-        }
+        row = conversation.record(metadata.root_id, stored, intent)
+        validate_delivery_record(row, metadata.root_id)
         self.log._append_private_unlocked(metadata, row)
         return stored

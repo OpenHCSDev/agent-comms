@@ -12,12 +12,12 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import coordination_cohort as cohort
-from agent_comms.bus_publication import CommittedInitial, stable_thread_lookup
+from agent_comms.bus_publication import CommittedDelivery, stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin
@@ -63,9 +63,9 @@ def _root(
 
 def _accepted(
     comms: Comms, store: Coordination, root_id: str, target: str, body: str
-) -> tuple[CommittedInitial, WakeAssignment]:
+) -> tuple[CommittedDelivery, WakeAssignment]:
     message = comms.messaging.send_initial_cohort("sender", target, body)
-    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     for recipient in initial.audience.recipients:
         store.participants.register(
             recipient.recipient_lookup,
@@ -73,7 +73,7 @@ def _accepted(
             recipient.canonical_thread,
             committed=True,
         )
-    receipt = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
+    receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
     assert len(receipt.assignments) == 1
     return initial, receipt.assignments[0]
 
@@ -118,7 +118,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
         message = comms.messaging.send_initial_cohort(
             "sender", "#team", "@member000 @member001 act"
         )
-        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.participants.register(
                 recipient.recipient_lookup,
@@ -140,7 +140,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
         monkeypatch.setattr(
             cohort, "assert_optional_awareness_schema", inject_second_insert_failure
         )
-        accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store).value
+        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
         assert len(accepted.assignments) == 2
         assert (
             store.session._connection.execute(
@@ -173,7 +173,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
     comms, store, _index, root_id = _root(tmp_path)
     try:
         message = comms.messaging.send_initial_cohort("sender", "member000", "fresh")
-        initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.participants.register(
                 recipient.recipient_lookup,
@@ -198,7 +198,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
 
             monkeypatch.setattr(cohort, "_receipt_matches", crash_after_seal)
         with pytest.raises(RuntimeError, match="simulated interruption"):
-            accept_initial_cohort(comms.bus, root_id, message.seq, store)
+            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert (
             store.session._connection.execute(
                 "SELECT COUNT(*) FROM claim_batch_receipts WHERE wire_seq=?", (message.seq,)
@@ -533,8 +533,8 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         comms.threads._rename_thread("member000", "gamma")
         current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
-        current = comms.bus.log.read_initial_cohort(root_id, current_message.seq)
-        receipt = accept_initial_cohort(comms.bus, root_id, current_message.seq, store).value
+        current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
+        receipt = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(receipt.assignments) == 1
         current_claim = receipt.assignments[0]
         index.maintain(rebuild=True)

@@ -64,7 +64,7 @@ from .acp_extension import (
 )
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
-from .cohort_foreground import _accept_visible_initials
+from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .compaction_result import CompactionResult
 from .coordinated_runtime import SelectedExecution
@@ -534,7 +534,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         with bus.log.locked():
             admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
         with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-            _accept_visible_initials(
+            _accept_visible_deliveries(
                 bus,
                 wire_root_id,
                 store,

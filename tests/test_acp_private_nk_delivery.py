@@ -20,7 +20,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_foreground import _accept_visible_initials
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
@@ -181,7 +181,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     if seal_old:
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
+            _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"})
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
@@ -250,7 +250,7 @@ def test_private_rename_compensates_registry_failure_with_new_old_owner_generati
         Coordination(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),
     ):
-        _accept_visible_initials(bus, root_id, store, lookup, 0, owner_name="beta")
+        _accept_visible_deliveries(bus, root_id, store, lookup, 0, owner_name="beta")
     assert comms.bus.log.latest_sequence() == 0
 
 

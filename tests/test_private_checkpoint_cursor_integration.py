@@ -17,7 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
@@ -74,7 +74,7 @@ def _root(tmp_path: Path):
         install_prompt_binding_schema(store)
         lookup = stable_thread_lookup(people[1].created_at)
         store.participants.register(lookup, "alpha", "alpha", committed=True)
-        accept_initial_cohort(comms.bus, root_id, first.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, first.seq, store)
     return root, root_id, comms, first, lookup
 
 
@@ -96,7 +96,7 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     )
     assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, second.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -126,7 +126,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
     later = comms.messaging.send_initial_cohort("sender", "alpha", "later selected")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, later.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, later.seq, store)
     good, good_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     result = await runtime.SelectedExecution(

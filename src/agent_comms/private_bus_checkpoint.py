@@ -17,7 +17,6 @@ import os
 import sqlite3
 import stat
 import tempfile
-from collections.abc import Mapping
 from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -30,7 +29,8 @@ from .typed_table import Column, SQLiteSchemaObject, TypedTable
 from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
-    from .bus_publication import CommittedInitial
+    from .bus_publication import CommittedDelivery
+    from .delivery_policy import KeyedResponseReceipt
     from .messages import Message
     from .wire_log import WireLog
 
@@ -41,7 +41,7 @@ _TAIL_BYTES = 4096
 @dataclass(frozen=True)
 class PrefixWitness(PrefixSeal):
     # The high-water is a derived page fact, not a persistent seal field.
-    latest_initial_seq: int = field(default=0, compare=False, metadata={"seal_exclude": True})
+    latest_source_seq: int = field(default=0, compare=False, metadata={"seal_exclude": True})
 
     @property
     def device(self) -> int:
@@ -69,7 +69,7 @@ class ResponseKeys(CheckpointTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class Initials(CheckpointTable, TypedTable):
+class DeliverySources(CheckpointTable, TypedTable):
     seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
     message_id: str
     offset: int = field(metadata={"sql": Column(check="offset>=0")})
@@ -79,7 +79,7 @@ class Initials(CheckpointTable, TypedTable):
 @dataclass(frozen=True)
 class Addressed(CheckpointTable, TypedTable):
     lookup: str = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(primary_key=True, references=(Initials, "seq"))})
+    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
 
 
 @dataclass(frozen=True)
@@ -192,13 +192,13 @@ def _index_row(
     offset: int,
     raw: bytes,
     message: Message,
-    receipt: Mapping[str, object] | None,
-    initial: CommittedInitial | None,
+    receipt: KeyedResponseReceipt | None,
+    initial: CommittedDelivery | None,
 ) -> None:
     if receipt is not None:
-        ResponseKeys(receipt["publication_key"]).insert(db)
+        ResponseKeys(receipt.publication_key).insert(db)
     if initial is not None:
-        Initials(message.seq, message.message_id, offset, len(raw)).insert(db)
+        DeliverySources(message.seq, message.message_id, offset, len(raw)).insert(db)
         for recipient in initial.audience.recipients:
             Addressed(recipient.recipient_lookup, message.seq).insert(db)
 
@@ -308,7 +308,7 @@ def _recover_pending_unlocked(
 
     with db:
         db.execute("DELETE FROM addressed")
-        db.execute("DELETE FROM initials")
+        db.execute(f"DELETE FROM {DeliverySources.declared_name}")
         db.execute("DELETE FROM response_keys")
 
         def collect(offset, raw, message, receipt, initial):
@@ -389,7 +389,7 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             observed_prefix = saved.offset == 0
             prefix_seq = 0
             additions: list[
-                tuple[int, bytes, Message, Mapping[str, object] | None, CommittedInitial | None]
+                tuple[int, bytes, Message, KeyedResponseReceipt | None, CommittedDelivery | None]
             ] = []
             suffix_bytes = 0
 
@@ -397,8 +397,8 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                 offset: int,
                 raw: bytes,
                 message: Message,
-                receipt: Mapping[str, object] | None,
-                initial: CommittedInitial | None,
+                receipt: KeyedResponseReceipt | None,
+                initial: CommittedDelivery | None,
             ) -> None:
                 nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
                 digest = _chain(digest, raw)
@@ -462,8 +462,8 @@ def append_private_bus_checkpoint_unlocked(
     marker: WireMetadata,
     raw: bytes,
     message: Message,
-    receipt: Mapping[str, object] | None,
-    initial: CommittedInitial | None,
+    receipt: KeyedResponseReceipt | None,
+    initial: CommittedDelivery | None,
 ) -> PrefixWitness:
     """Append one certified row only AFTER the canonical bus/parent fsync."""
     path = _path(bus.path)
@@ -506,24 +506,24 @@ def append_private_bus_checkpoint_unlocked(
         raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
 
 
-def certified_initial_page_unlocked(
+def certified_delivery_page_unlocked(
     bus: WireLog,
     marker: WireMetadata,
     lookup: str,
     *,
     after: int = 0,
     limit: int = 100,
-) -> tuple[PrefixWitness, tuple[CommittedInitial, ...], bool]:
+) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
     """Complete addressed page; caller holds bus lock and must bind SQL/native proof.
 
     The returned through sequence is a global bus bound. The page witness's
-    latest_initial_seq is derived from this same sealed index connection under
+    latest_source_seq is derived from this same sealed index connection under
     the final revision fence; only that field bounds initial-source coverage.
     Neither bound grants native-input acceptance, ACK, or skip permission.
     Recheck the witness under the same bus-held SQL commit; an unlocked return
     is advisory only.
     """
-    from .bus_publication import PRIVATE_WIRE_FIELD, unique_wire_object, validate_initial_record
+    from .bus_publication import PRIVATE_WIRE_FIELD, unique_wire_object, validate_delivery_record
 
     if (
         type(lookup) is not str
@@ -541,18 +541,22 @@ def certified_initial_page_unlocked(
             closing(_connect(_path(bus.path), readonly=True)) as db,
             bus.path.open("rb") as stream,
         ):
-            rows = Initials.read(
+            rows = DeliverySources.read(
                 db.execute(
-                    "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
-                    "JOIN initials i ON i.seq=a.seq "
+                    f"SELECT i.seq,i.message_id,i.offset,i.length FROM {Addressed.declared_name} a "
+                    f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                     "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
                     (lookup, after, limit + 1),
                 )
             )
             has_more = len(rows) > limit
-            last = Initials.read(db.execute("SELECT * FROM initials ORDER BY seq DESC LIMIT 1"))
-            latest_initial_seq = last[0].seq if last else 0
-            if latest_initial_seq < 0 or latest_initial_seq > witness.through_seq:
+            last = DeliverySources.read(
+                db.execute(
+                    f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"
+                )
+            )
+            latest_source_seq = last[0].seq if last else 0
+            if latest_source_seq < 0 or latest_source_seq > witness.through_seq:
                 raise RelationViolationError("Certified initial high-water is invalid.")
             initials = []
             for row in rows[:limit]:
@@ -563,7 +567,7 @@ def certified_initial_page_unlocked(
                 record = json.loads(raw, object_pairs_hook=unique_wire_object)
                 if not isinstance(record, dict) or PRIVATE_WIRE_FIELD not in record:
                     raise RelationViolationError("Certified initial row is unavailable.")
-                initial = validate_initial_record(record, witness.root_id)
+                initial = validate_delivery_record(record, witness.root_id)
                 if (
                     initial.message.seq != row.seq
                     or initial.message.message_id != row.message_id
@@ -578,7 +582,7 @@ def certified_initial_page_unlocked(
             ):
                 raise RelationViolationError("Certified page changed during its read fence.")
             return (
-                replace(witness, latest_initial_seq=latest_initial_seq),
+                replace(witness, latest_source_seq=latest_source_seq),
                 tuple(initials),
                 has_more,
             )
@@ -590,7 +594,7 @@ def certified_initial_page_unlocked(
 
 def addressed_source_pointers_unlocked(
     bus: WireLog, marker: WireMetadata, lookup: str, *, limit: int = 4
-) -> tuple[Initials, ...]:
+) -> tuple[DeliverySources, ...]:
     """Latest source pointers for natural-turn awareness, never delivery evidence.
 
     Caller holds the bus lock. Read only the current sealed index: no payload
@@ -607,10 +611,10 @@ def addressed_source_pointers_unlocked(
             or file_revision(bus.path.stat()) != saved.revision
         ):
             raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
-        rows = Initials.read(
+        rows = DeliverySources.read(
             db.execute(
-                "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
-                "JOIN initials i ON i.seq=a.seq "
+                f"SELECT i.seq,i.message_id,i.offset,i.length FROM {Addressed.declared_name} a "
+                f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                 "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
                 (lookup, marker.admission_after_seq, limit),
             )

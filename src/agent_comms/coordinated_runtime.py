@@ -44,13 +44,13 @@ from .assignment_states import (
     IgnoredAssignment,
     TriagePendingAssignment,
 )
-from .bus_publication import CommittedInitial, stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import accept_initial_cohort, next_sealed_assignment
+from .coordination_cohort import accept_delivery_cohort, next_sealed_assignment
 from .coordination_response import (
     LiveResponseOwner,
     _assert_response_schema,
@@ -140,8 +140,8 @@ class OptionalAwarenessSupplement:
 
 
 async def _bounded_optional_awareness(
-    builder: Callable[[CommittedInitial, WakeAssignment, Thread], OptionalAwarenessSupplement],
-    initial: CommittedInitial,
+    builder: Callable[[CommittedDelivery, WakeAssignment, Thread], OptionalAwarenessSupplement],
+    initial: CommittedDelivery,
     assignment: WakeAssignment,
     owner: Thread,
     remaining_prompt_bytes: int,
@@ -223,7 +223,7 @@ def _production_optional_awareness(
     through_seq: int,
     generation: int,
     admission_generation: int,
-) -> Callable[[CommittedInitial, WakeAssignment, Thread], OptionalAwarenessSupplement]:
+) -> Callable[[CommittedDelivery, WakeAssignment, Thread], OptionalAwarenessSupplement]:
     """Bind the trusted selected-owner snapshot to read-only SQL awareness.
 
     This is invoked only on the selected private foreground path. Failed or
@@ -241,7 +241,7 @@ def _production_optional_awareness(
     )
 
     def build(
-        initial: CommittedInitial, assignment: WakeAssignment, owner: Thread
+        initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessSupplement:
         result = projection(initial, assignment, owner)
         if not result.mandatory_complete:
@@ -271,7 +271,7 @@ def _execution_id(assignment: WakeAssignment) -> str:
     return "wirev1" + hashlib.sha256(assignment.assignment_id.encode()).hexdigest()
 
 
-def _triage_prompt(initial: CommittedInitial, assignment: WakeAssignment, owner: Thread) -> str:
+def _triage_prompt(initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread) -> str:
     frame = render_selected_wake_frame(initial, assignment, owner, phase="triage")
     return (
         frame + f"You are participant {owner.name}. "
@@ -342,7 +342,7 @@ class SelectedExecution:
     selected_write_plan_check: Callable[[WakeAssignment, Thread, str], None] | None = None
     selected_write_plan_applied: Callable[[WakeAssignment, Thread, str], None] | None = None
     optional_awareness_builder: (
-        Callable[[CommittedInitial, WakeAssignment, Thread], OptionalAwarenessSupplement] | None
+        Callable[[CommittedDelivery, WakeAssignment, Thread], OptionalAwarenessSupplement] | None
     ) = None
 
     owned_turn_lease: TurnLeaseFence | None = field(init=False, default=None)
@@ -1009,9 +1009,9 @@ class SelectedExecution:
             fresh_selected=self.first_selected,
         )
 
-    def _selected_source(self, root_id: str) -> CommittedInitial:
-        initial = self.bus.log.read_initial_cohort(root_id, self.assignment.wire_seq)
-        receipt = accept_initial_cohort(
+    def _selected_source(self, root_id: str) -> CommittedDelivery:
+        initial = self.bus.log.read_delivery_cohort(root_id, self.assignment.wire_seq)
+        receipt = accept_delivery_cohort(
             self.bus, root_id, self.assignment.wire_seq, self.store
         ).value
         if (
@@ -1352,7 +1352,7 @@ class SelectedExecution:
 def _publish_native_failure(
     comms: Comms,
     owner: Thread,
-    initial: CommittedInitial,
+    initial: CommittedDelivery,
     input_id: str,
     description: str,
     *,

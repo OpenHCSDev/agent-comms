@@ -574,8 +574,11 @@ def _settle_fenced_response(
                     raise PublicationUncertain("no keyed bus receipt; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
+                from .response_conversation import ResponseConversation
+
+                conversation = ResponseConversation.capture(bus, snapshot)
                 matched = bus.publisher._publish_keyed_response_unlocked(
-                    intent, registry_snapshot=registry_snapshot
+                    intent, conversation=conversation, registry_snapshot=registry_snapshot
                 )
             if matched.message_id != intent.expected_message_id:
                 raise PublicationUncertain("bus receipt conflicts with immutable intent")

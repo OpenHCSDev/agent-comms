@@ -8,7 +8,7 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
@@ -41,7 +41,7 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         ).prefix()
         assert before.blocked_seq == sent.seq and before.injected_source_seqs == ()
-        accept_initial_cohort(comms.bus, root_id, sent.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
         selected = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         ).prefix()

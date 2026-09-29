@@ -40,7 +40,7 @@ from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
     install_native_runtime_schema,
 )
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
@@ -133,7 +133,7 @@ def _root(
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = comms.messaging.send_initial_cohort("sender", target, body)
-    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
             store.participants.register(
@@ -142,7 +142,7 @@ def _root(
                 recipient.canonical_thread,
                 committed=True,
             )
-        accepted = accept_initial_cohort(comms.bus, root_id, message.seq, store)
+        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
     return root, root_id, comms, initial, people
 
@@ -1458,7 +1458,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     comms.registry.rename("beta", "gamma")
     root_id = comms.messaging.initialize_private_initial_protocol()
     incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
-    initial = comms.bus.log.read_initial_cohort(root_id, incoming.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, incoming.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -1470,7 +1470,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
                 recipient.canonical_thread,
                 committed=True,
             )
-        accept_initial_cohort(comms.bus, root_id, incoming.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, incoming.seq, store)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model()
 
@@ -1549,7 +1549,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     started, stopped = threading.Event(), threading.Event()
     workers: list[threading.Thread] = []
 
-    def blocking_append(self, intent, *, registry_snapshot=None):
+    def blocking_append(self, intent, *, conversation, registry_snapshot=None):
         def stop_owner():
             started.set()
             comms.registry.unregister("beta")
@@ -1560,7 +1560,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         worker.start()
         assert started.wait(2)
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
-        return append(self, intent, registry_snapshot=registry_snapshot)
+        return append(self, intent, conversation=conversation, registry_snapshot=registry_snapshot)
 
     monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
     try:
@@ -1831,7 +1831,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
             message = comms.messaging.send_initial_cohort(
                 "sender", "#team", f"Bounded selected-page item {number}"
             )
-            accept_initial_cohort(comms.bus, root_id, message.seq, store)
+            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         first_page = sealed_cohort_assignments(store, lookup, limit=100)
         assert len(first_page) == 100
         for assignment in first_page:
@@ -1946,7 +1946,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert notice.target == ("sender" if direct else "#team")
     assert "The usage limit has been reached" in notice.body
     assert "No automatic retry" in notice.body
-    notice_initial = comms.bus.log.read_initial_cohort(root_id, notice.seq)
+    notice_initial = comms.bus.log.read_delivery_cohort(root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in notice_initial.decisions)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[2].created_at)
@@ -1966,7 +1966,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert len(calls) == before  # Failed input never replayed.
     fresh = comms.messaging.send_initial_cohort("sender", "beta", "New independent message")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path

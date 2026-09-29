@@ -22,7 +22,7 @@ from agent_comms import (
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
@@ -521,4 +521,4 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     with pytest.raises(StopBeforeSpawnError):
         comms.owners.start("late-owner", agent_bin="pi")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        assert accept_initial_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1
+        assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1

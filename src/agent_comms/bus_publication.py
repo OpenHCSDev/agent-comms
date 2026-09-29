@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
+    from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
     from .messages import Message
     from .wake import NoWakeDecision, WakeDecision
 
@@ -108,8 +109,8 @@ def decisions_digest(decisions: list[dict[str, str]]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class CommittedInitial:
-    """Bus-reader result, never a caller-supplied SQLite authority."""
+class CommittedDelivery:
+    """Bus-reader delivery, for both an original and a keyed response."""
 
     wire_root_id: str
     message: Message
@@ -120,6 +121,7 @@ class CommittedInitial:
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
+    receipt: KeyedResponseReceipt | None = None
 
 
 def initial_sideband(
@@ -129,147 +131,87 @@ def initial_sideband(
     decisions: tuple[WakeDecision | NoWakeDecision, ...],
     *,
     control: str,
-) -> dict[str, object]:
+) -> DeliveryManifest:
     """Serialize once at the committed-bus boundary; no independent sidecar."""
     from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 
     if len(decisions) != len(audience.recipients):
         raise ValueError("Every frozen recipient requires a selected or no-wake decision.")
+    from .delivery_policy import DeliveryManifest
+    from .wake import ControlClassification
+
     rows = decisions_wire(decisions)
-    return {
-        "wire_root_id": wire_root_id,
-        "manifest_codec": INITIAL_CODEC,
-        "resolver_version": RESOLVER_VERSION,
-        "policy_version": POLICY_VERSION,
-        "control": control,
-        "audience": {**audience._digest_record(), "digest": audience.digest},
-        "decisions": rows,
-        "decisions_digest": decisions_digest(rows),
-    }
+    return DeliveryManifest(
+        wire_root_id,
+        INITIAL_CODEC,
+        RESOLVER_VERSION,
+        POLICY_VERSION,
+        ControlClassification(control),
+        audience,
+        rows,
+        decisions_digest(rows),
+    )
 
 
-def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> CommittedInitial:
-    """Strictly reconstruct and independently recompute all N from raw committed bytes.
-
-    This alone is not authority: only MessageBus.read_initial_cohort calls it
-    after checking the owner-only marker and scanning the original bus inode.
-    """
+def validate_delivery_record(record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
+    """Decode the tagged declaration once and independently recompute its proof."""
     from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 
-    from .audience_manifest import FrozenRecipient, freeze_audience
+    from .audience_manifest import freeze_audience
+    from .delivery_policy import DeliveryPolicy
+    from .field_codec import FieldCodec
     from .messages import Message
-    from .wake import ControlClassification, resolve_wake_cohort
 
     if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {PRIVATE_WIRE_FIELD}:
         raise ValueError("Unknown private bus namespace.")
     private = record[PRIVATE_WIRE_FIELD]
-    if (
-        not isinstance(private, dict)
-        or set(private) != {"version", "initial"}
-        or type(private["version"]) is not int
-        or private["version"] != 1
-    ):
-        raise ValueError("Unsupported initial bus sideband version.")
-    raw = private["initial"]
-    if not isinstance(raw, dict) or set(raw) != {
-        "wire_root_id",
-        "manifest_codec",
-        "resolver_version",
-        "policy_version",
-        "control",
-        "audience",
-        "decisions",
-        "decisions_digest",
-    }:
-        raise ValueError("Malformed private initial bus sideband.")
-    if (
-        raw["wire_root_id"] != wire_root_id
-        or raw["manifest_codec"] != INITIAL_CODEC
-        or raw["resolver_version"] != RESOLVER_VERSION
-        or raw["policy_version"] != POLICY_VERSION
-        or type(raw["control"]) is not str
-    ):
-        raise ValueError("Unsupported or wrong-root initial sideband.")
-    control = ControlClassification(raw["control"])
-    if not control.supports_initial:
-        raise ValueError("Unsupported initial control issuer in codec v1.")
-    audience_raw = raw["audience"]
-    if not isinstance(audience_raw, dict) or set(audience_raw) != {
-        "version",
-        "wire_seq",
-        "message_id",
-        "exact_target",
-        "sender_lookup",
-        "sender_name",
-        "source_revision",
-        "recipients",
-        "wire_envelope_digest",
-        "digest",
-    }:
-        raise ValueError("Malformed initial audience.")
-    member_rows = audience_raw["recipients"]
-    if not isinstance(member_rows, list) or len(member_rows) > 4096:
-        raise ValueError("Initial audience has invalid member list.")
-    if any(
-        not isinstance(item, dict)
-        or set(item) != {"recipient_lookup", "canonical_thread"}
-        or type(item["recipient_lookup"]) is not str
-        or type(item["canonical_thread"]) is not str
-        for item in member_rows
-    ):
-        raise ValueError("Malformed initial audience member.")
-    if (
-        type(audience_raw["source_revision"]) is not str
-        or _HEX64.fullmatch(audience_raw["source_revision"]) is None
-        or type(audience_raw["sender_lookup"]) is not str
-        or _HEX32.fullmatch(audience_raw["sender_lookup"]) is None
-        or any(_HEX32.fullmatch(member["recipient_lookup"]) is None for member in member_rows)
-    ):
-        raise ValueError("Initial creator lookup or source revision is invalid.")
-    recipients = tuple(FrozenRecipient(**member) for member in member_rows)
+    policy = FieldCodec.decode(DeliveryPolicy, private)
+    if _canonical(private) != _canonical(FieldCodec.encode(policy)):
+        raise ValueError("Private publication is not canonical.")
+    raw = policy.initial
+    if raw.wire_root_id != wire_root_id:
+        raise ValueError("Delivery belongs to another wire root.")
+    if raw.manifest_codec != INITIAL_CODEC:
+        raise ValueError("Unsupported delivery manifest codec.")
+    if raw.resolver_version != RESOLVER_VERSION or raw.policy_version != POLICY_VERSION:
+        raise ValueError("Unsupported delivery decision versions.")
+    if not raw.control.supports_initial:
+        raise ValueError("Unsupported delivery control issuer.")
+    audience = raw.audience
+    if _HEX64.fullmatch(audience.source_revision) is None:
+        raise ValueError("Delivery source revision is invalid.")
+    lookups = (audience.sender_lookup, *(r.recipient_lookup for r in audience.recipients))
+    if any(_HEX32.fullmatch(lookup) is None for lookup in lookups):
+        raise ValueError("Delivery creator or recipient lookup is invalid.")
     public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
     message = Message.from_wire(public)
-    if (
-        type(public.get("seq")) is not int
-        or any(
-            type(public.get(field)) is not str
-            for field in ("id", "from", "to", "text", "type", "sender_role")
-        )
-        or _canonical(public) != _canonical(message.to_wire())
-        or public_envelope_digest(public) != public_envelope_digest(message.to_wire())
-    ):
-        raise ValueError("Initial public envelope is not canonical.")
+    if _canonical(public) != _canonical(message.to_wire()):
+        raise ValueError("Delivery public envelope is not canonical.")
+    public_envelope_digest(public)
     candidate = freeze_audience(
         message,
-        recipients,
-        audience_raw["source_revision"],
-        sender_lookup=audience_raw["sender_lookup"],
-        sender_name=audience_raw["sender_name"],
+        audience.recipients,
+        audience.source_revision,
+        sender_lookup=audience.sender_lookup,
+        sender_name=audience.sender_name,
     )
-    if (
-        audience_raw != {**candidate._digest_record(), "digest": candidate.digest}
-        or type(audience_raw["version"]) is not int
-        or type(audience_raw["wire_seq"]) is not int
-    ):
-        raise ValueError("Initial audience does not match the committed public envelope.")
-    decisions = resolve_wake_cohort(message, frozen_audience=candidate, control=control)
+    if audience != candidate:
+        raise ValueError("Delivery audience differs from committed public envelope.")
+    decisions = policy.resolve(message, candidate, raw.control)
     rows = decisions_wire(decisions)
-    if (
-        type(raw["decisions"]) is not list
-        or raw["decisions"] != rows
-        or type(raw["decisions_digest"]) is not str
-        or raw["decisions_digest"] != decisions_digest(rows)
-    ):
-        raise ValueError("Initial decisions do not match the full committed N.")
-    return CommittedInitial(
+    if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
+        raise ValueError("Delivery decisions do not match the full committed N.")
+    receipt = policy.require_receipt(wire_root_id, message)
+    return CommittedDelivery(
         wire_root_id,
         message,
         candidate,
         decisions,
-        raw["decisions_digest"],
-        control.value,
+        raw.decisions_digest,
+        raw.control.value,
         RESOLVER_VERSION,
         POLICY_VERSION,
+        receipt=receipt,
     )
 
 

@@ -133,7 +133,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
 ):
     from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.cohort_schema import install_private_cohort_schema
-    from agent_comms.coordination_cohort import accept_initial_cohort
+    from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
 
     old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
@@ -183,7 +183,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             message = current.messaging.send_user_message(
                 "#comms", "@live Reply once", worktree=str(tmp_path)
             )
-        accept_initial_cohort(current.bus, root_id, message.seq, store)
+        accept_delivery_cohort(current.bus, root_id, message.seq, store)
         assert tuple(
             store.session._connection.execute(
                 "SELECT member_count, claim_count, sealed FROM claim_batch_receipts "

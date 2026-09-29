@@ -14,17 +14,17 @@ from typing import TYPE_CHECKING, BinaryIO
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    canonical_publication_key,
 )
 
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
-    CommittedInitial,
+    CommittedDelivery,
     has_private_wire_fields,
     public_envelope_digest,
     unique_wire_object,
-    validate_initial_record,
+    validate_delivery_record,
 )
+from .delivery_policy import KeyedResponseReceipt
 from .envelope_claim_transitions import (
     ClaimProjection,
     apply_transition,
@@ -169,11 +169,11 @@ class WireLog:
         *,
         on_row: (
             Callable[
-                [int, bytes, Message, Mapping[str, object] | None, CommittedInitial | None], None
+                [int, bytes, Message, KeyedResponseReceipt | None, CommittedDelivery | None], None
             ]
             | None
         ) = None,
-    ) -> Iterator[tuple[Message, Mapping[str, object] | None, CommittedInitial | None]]:
+    ) -> Iterator[tuple[Message, KeyedResponseReceipt | None, CommittedDelivery | None]]:
         """Validate the ENTIRE append-only log before any new append or trusted read.
 
         A later corrupt row cannot be skipped to attest an earlier row. No
@@ -242,47 +242,13 @@ class WireLog:
                         or private["version"] != 1
                     ):
                         raise ValueError("Unsupported private bus record.")
-                    if set(private) == {"version", "initial"}:
-                        try:
-                            initial = validate_initial_record(record, metadata.root_id)
-                        except (KeyError, TypeError, ValueError, OverflowError) as error:
-                            raise RelationViolationError(
-                                "Malformed private initial bus sideband."
-                            ) from error
-                        if on_row is not None:
-                            on_row(offset, line, existing, None, initial)
-                        yield existing, None, initial
-                        continue
-                    if set(private) != {"version", "response"}:
-                        raise RelationViolationError(
-                            "Conflicting or malformed private bus receipt."
-                        )
-                    receipt = private["response"]
-                    if not isinstance(receipt, dict) or set(receipt) != {
-                        "wire_root_id",
-                        "execution_id",
-                        "publication_key",
-                        "envelope_digest",
-                    }:
-                        raise RelationViolationError(
-                            "Conflicting or malformed private bus receipt."
-                        )
-                    if (
-                        public_envelope_digest(public) != receipt["envelope_digest"]
-                        or receipt["wire_root_id"] != metadata.root_id
-                        or not isinstance(receipt["execution_id"], str)
-                        or not isinstance(receipt["publication_key"], str)
-                        or receipt["publication_key"]
-                        != canonical_publication_key(receipt["execution_id"], existing.target)
-                        or receipt["publication_key"] in seen_keys
-                    ):
-                        raise RelationViolationError(
-                            "Conflicting or malformed private bus receipt."
-                        )
-                    seen_keys.add(receipt["publication_key"])
+                    initial = validate_delivery_record(record, metadata.root_id)
+                    receipt = initial.receipt
+                    if receipt is not None:
+                        receipt.add_unique(seen_keys)
                     if on_row is not None:
-                        on_row(offset, line, existing, receipt, None)
-                    yield existing, receipt, None
+                        on_row(offset, line, existing, receipt, initial)
+                    yield existing, receipt, initial
                 except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
                     if isinstance(error, RelationViolationError):
                         raise
@@ -333,11 +299,11 @@ class WireLog:
         if certificate_enabled(self.path):
             private = row.get(PRIVATE_WIRE_FIELD)
             initial = (
-                validate_initial_record(row, metadata.root_id)
+                validate_delivery_record(row, metadata.root_id)
                 if isinstance(private, dict) and "initial" in private
                 else None
             )
-            receipt = private.get("response") if isinstance(private, dict) else None
+            receipt = initial.receipt if initial is not None else None
             public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
             try:
                 append_private_bus_checkpoint_unlocked(
@@ -350,7 +316,7 @@ class WireLog:
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
 
-    def read_initial_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedInitial:
+    def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
         from .audience_manifest import MAX_WIRE_SEQ
 
@@ -360,7 +326,7 @@ class WireLog:
             metadata = self._private_marker_unlocked()
             if wire_root_id != metadata.root_id:
                 raise RelationViolationError("Initial wire root does not match the bus marker.")
-            matched: CommittedInitial | None = None
+            matched: CommittedDelivery | None = None
             for _message, _receipt, initial in self._verified_private_rows_unlocked(metadata):
                 if initial is not None and initial.message.seq == wire_seq:
                     matched = initial
@@ -385,8 +351,8 @@ class WireLog:
         previous_sequence = 0
         for existing, receipt, _initial in self._verified_private_rows_unlocked(metadata):
             previous_sequence = existing.seq
-            if receipt is not None and receipt["publication_key"] == intent.publication_key:
-                if receipt["execution_id"] != intent.execution_id:
+            if receipt is not None and receipt.publication_key == intent.publication_key:
+                if receipt.execution_id != intent.execution_id:
                     raise RelationViolationError("Response publication identity conflicts.")
                 matched = existing
         if matched is not None:
@@ -564,9 +530,6 @@ class WireLog:
             return int(row["seq"])
         except (ValueError, UnicodeError) as error:
             raise RelationViolationError("Malformed last bus row blocks publication.") from error
-
-
-
 
     def claim_gate_enabled(self) -> bool:
         # _store_lock is also used for registry, channels, and marker files.

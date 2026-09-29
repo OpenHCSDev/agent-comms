@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from agent_comms.cohort_foreground import _accept_visible_initials
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
@@ -21,7 +21,7 @@ from test_private_human_ingress import _root
 def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
     comms, old_store, root_id, lookups = _root(tmp_path)
     old = comms.messaging.send_user_message("bob", "old pending input", worktree=str(tmp_path))
-    accept_initial_cohort(comms.bus, root_id, old.seq, old_store)
+    accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
     assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1
     old_store.close()
     # Preserve the actual old receipt database for history; rebuild only runtime.
@@ -41,14 +41,14 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
             reopened = Comms(comms.root)
             WakeCandidateIndex(reopened.bus).maintain(rebuild=True)
             assert (
-                _accept_visible_initials(
+                _accept_visible_deliveries(
                     reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
                 )
                 == old.seq
             )
             assert sealed_cohort_assignments(store, lookups["bob"]) == ()
             with pytest.raises(IdentityConflict, match="admission floor"):
-                accept_initial_cohort(reopened.bus, root_id, old.seq, store)
+                accept_delivery_cohort(reopened.bus, root_id, old.seq, store)
             coverage = SourceCoverage(
                 reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
             ).prefix()
@@ -60,7 +60,7 @@ def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path):
         with reopened.bus.log.locked():
             assert reopened.bus.log._private_marker_unlocked().admission_after_seq == old.seq
         for _ in range(2):
-            _accept_visible_initials(
+            _accept_visible_deliveries(
                 reopened.bus, root_id, store, lookups["bob"], 0, owner_name="bob"
             )
         assignments = sealed_cohort_assignments(store, lookups["bob"])

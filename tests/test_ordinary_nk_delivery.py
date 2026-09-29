@@ -98,7 +98,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     else:
         assert result.disposition is disposition
     message = original[0]
-    initial = comms.bus.log.read_initial_cohort(root_id, message.seq)
+    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     assert initial.message == message
     expected_n = 1 if target == "beta" else 2
     assert len(initial.audience.recipients) == expected_n
@@ -139,12 +139,12 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     message = comms.messaging.send_message("sender", "beta", "ordinary send")
     metadata = comms.bus.log.read_metadata_unlocked(required=True)
     assert metadata.private and metadata.claims
-    initial = comms.bus.log.read_initial_cohort(metadata.root_id, message.seq)
+    initial = comms.bus.log.read_delivery_cohort(metadata.root_id, message.seq)
     assert initial.message == message
     assert initial.audience.canonical_members == frozenset({"beta"})
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     reply = comms.messaging.send_message("sender", viewer, "human notification")
-    human = comms.bus.log.read_initial_cohort(metadata.root_id, reply.seq)
+    human = comms.bus.log.read_delivery_cohort(metadata.root_id, reply.seq)
     assert human.message.notice
     assert human.audience.recipients == ()
     assert human.decisions == ()

@@ -19,7 +19,7 @@ from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttemp
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
@@ -83,7 +83,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     original = comms.messaging.send_initial_cohort(
         "sender", target, "Need owner to consider and reply."
     )
-    original_record = comms.bus.log.read_initial_cohort(root_id, original.seq)
+    original_record = comms.bus.log.read_delivery_cohort(root_id, original.seq)
     assert len(original_record.audience.recipients) == 1
     recipient = original_record.audience.recipients[0]
     bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
@@ -96,7 +96,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         recipient.canonical_thread,
         committed=True,
     )
-    accepted = accept_initial_cohort(comms.bus, root_id, original.seq, store)
+    accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
     assert accepted.value.member_count == accepted.value.assignment_count == 1
     assignment = accepted.value.assignments[0]
     reply_target = derive_exact_reply_target(original)
@@ -112,15 +112,17 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     )
     store.executions.mark_pending("exec", expected_revision=1)
     token = prepare_fence_token()
-    first = store.attempts.start(AttemptStart(
-        "exec",
-        1,
-        "owner",
-        1,
-        token,
-        expected_execution_revision=2,
-        expected_pointer_revision=0,
-    )).value.fence
+    first = store.attempts.start(
+        AttemptStart(
+            "exec",
+            1,
+            "owner",
+            1,
+            token,
+            expected_execution_revision=2,
+            expected_pointer_revision=0,
+        )
+    ).value.fence
     accepted_turn = store.attempts.advance(
         first, PromptAcceptedAttempt, expected_pointer_revision=1
     ).value.fence
@@ -256,7 +258,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
             case.store, case.bus, case.fence, "reply", owner_witness=case.witness
         ).value
 
-        def crash_before_append(_intent, *, registry_snapshot=None):
+        def crash_before_append(_intent, *, conversation, registry_snapshot=None):
             raise OSError("injected process death before append")
 
         monkeypatch.setattr(
@@ -293,8 +295,8 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         ).value
         real_append = case.bus.publisher._publish_keyed_response_unlocked
 
-        def committed_then_lost_ack(frozen, *, registry_snapshot=None):
-            real_append(frozen, registry_snapshot=registry_snapshot)
+        def committed_then_lost_ack(frozen, *, conversation, registry_snapshot=None):
+            real_append(frozen, conversation=conversation, registry_snapshot=registry_snapshot)
             raise OSError("injected loss after bus fsync")
 
         monkeypatch.setattr(
@@ -360,11 +362,13 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
         )
         real_append = case.bus.publisher._publish_keyed_response_unlocked
 
-        def blocking_append(frozen, *, registry_snapshot=None):
+        def blocking_append(frozen, *, conversation, registry_snapshot=None):
             entered.set()
             assert not concurrent_done.wait(0.25), "revocation raced an in-flight fenced append"
             assert not wire_done.is_set(), "registry writer raced an in-flight append"
-            return real_append(frozen, registry_snapshot=registry_snapshot)
+            return real_append(
+                frozen, conversation=conversation, registry_snapshot=registry_snapshot
+            )
 
         monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", blocking_append)
         outcomes: list[str] = []
@@ -421,7 +425,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
             env.pop(name, None)
         env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
 
-        def concurrent_stop(frozen, *, registry_snapshot=None):
+        def concurrent_stop(frozen, *, conversation, registry_snapshot=None):
             nonlocal child
             child = subprocess.Popen(
                 [
@@ -446,7 +450,9 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
             assert child.stdout.readline() == "READY\n"
             with pytest.raises(subprocess.TimeoutExpired):
                 child.wait(timeout=0.15)
-            return actual_append(frozen, registry_snapshot=registry_snapshot)
+            return actual_append(
+                frozen, conversation=conversation, registry_snapshot=registry_snapshot
+            )
 
         monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", concurrent_stop)
         result = publish_fenced_response(

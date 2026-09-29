@@ -22,7 +22,7 @@ from agent_comms.coordination_schema import (
 )
 from agent_comms.coordination_tables.assignments import WakeAssignment
 
-from .bus_publication import CommittedInitial, stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .cohort_schema import (
     COHORT_SCHEMA_VERSION,
     assert_cohort_schema,
@@ -136,7 +136,7 @@ class OptionalAwarenessProjection:
             raise ValueError("optional awareness requires a bounded trusted source window")
 
     def __call__(
-        self, initial: CommittedInitial, assignment: WakeAssignment, owner: Thread
+        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
@@ -158,10 +158,10 @@ class OptionalAwarenessProjection:
             return OptionalAwarenessResult("", False, omission_reason=type(error).__name__)
 
     def _build(
-        self, initial: CommittedInitial, assignment: WakeAssignment, owner: Thread
+        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         if (
-            type(initial) is not CommittedInitial
+            type(initial) is not CommittedDelivery
             or type(assignment) is not WakeAssignment
             or type(owner) is not Thread
         ):
@@ -316,7 +316,7 @@ class OptionalAwarenessProjection:
     def _verify_schema_and_owner(
         self,
         db: sqlite3.Connection,
-        initial: CommittedInitial,
+        initial: CommittedDelivery,
         assignment: WakeAssignment,
         owner: Thread,
     ) -> None:
