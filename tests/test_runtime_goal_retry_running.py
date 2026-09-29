@@ -65,7 +65,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             stable_thread_lookup(comms.registry.require(session).created_at),
             session, session, committed=True,
         )
-    store = owner.turns.open_goal_store()
+    store = owner.turns.goals.open_goal_store()
     goal = comms.goals.update_goal(
         session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
     )
@@ -155,7 +155,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             None,
         )
         assert store.ready_grant(goal.id, 2)
-        owner.turns.schedule_goal(session)
+        owner.turns.goals.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
             fact.goal.state.active
@@ -167,7 +167,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             await proxy.request("cancel")
             assert (await turn)["stopReason"] == "cancelled"
             assert comms.registry.require(session).goal.state.declared_name == "paused"
-            owner.turns.schedule_goal(session)
+            owner.turns.goals.schedule_goal(session)
             assert not owner.inputs.pending_turns.get(session) and len(calls) == 1
             assert store.snapshot(goal.id) == generation
         else:
@@ -177,7 +177,7 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             assert (
                 session not in owner.turns.active_turns and session in owner.inputs.backend_inboxes
             )
-            owner.turns.schedule_goal(session)
+            owner.turns.goals.schedule_goal(session)
             assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
             finish.set()
             if outcome == "exception":
@@ -208,7 +208,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
     owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    store = owner.turns.open_goal_store()
+    store = owner.turns.goals.open_goal_store()
     goal = comms.goals.update_goal(
         session, SetGoalAction(text="Keep attempt authority"), owner_store=store
     )
@@ -240,7 +240,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, mo
 
         monkeypatch.setattr(owner.sessions, "require", replaced_owner)
     elif fence == "origin":
-        owner.turns.pending_goal_origins[session] = goal.id
+        owner.turns.goals.pending_goal_origins[session] = goal.id
     try:
         expected = {"owner": "owner changed", "origin": "origin turn"}.get(fence, "unresolved")
         with pytest.raises(RuntimeError, match=expected):

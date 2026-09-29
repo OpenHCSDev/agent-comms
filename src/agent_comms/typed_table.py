@@ -15,7 +15,7 @@ from collections.abc import Generator
 from dataclasses import dataclass, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
-from typing import ClassVar, Literal, Self, Union, get_args, get_origin, get_type_hints
+from typing import Annotated, ClassVar, Literal, Self, Union, get_args, get_origin, get_type_hints
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -28,6 +28,8 @@ def _identifier(name: str) -> str:
 
 
 def _base_type(annotation: object) -> tuple[object, bool]:
+    if get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
     if get_origin(annotation) in (Union, types.UnionType):
         members = get_args(annotation)
         if types.NoneType in members and len(members) == 2:
@@ -39,7 +41,6 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     """Each SQLite representation owns its conversion at the storage boundary."""
 
     sql_type: ClassVar[str]
-    codec: ClassVar[type[FieldCodec]] = FieldCodec
 
     @classmethod
     @abstractmethod
@@ -70,7 +71,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
 
     @classmethod
     def to_sql(cls, value: object) -> object:
-        return cls.codec.encode(value)
+        return FieldCodec.encode(value)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -192,7 +193,7 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def to_sql(cls, value: object) -> str:
-        return json.dumps(cls.codec.encode(value), separators=(",", ":"), allow_nan=False)
+        return json.dumps(FieldCodec.encode(value), separators=(",", ":"), allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -255,11 +256,11 @@ class _Field:
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
-        self.storage.codec.decode(self.annotation, self.storage.codec.encode(value))
+        FieldCodec.decode(self.annotation, FieldCodec.encode(value, self.annotation))
         return None if value is None else self.storage.to_sql(value)
 
     def decode(self, value: object) -> object:
-        return self.storage.codec.decode(
+        return FieldCodec.decode(
             self.annotation, None if value is None else self.storage.from_sql(value)
         )
 
@@ -277,7 +278,7 @@ class TypedRow:
     def _fields(cls) -> tuple[_Field, ...]:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         return tuple(
             _Field(
                 item.name,
