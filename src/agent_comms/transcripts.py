@@ -19,7 +19,9 @@ from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
-from .transcript_routes import TranscriptRoutes
+from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
+from .store_files import file_revision
+from .coordination_errors import StaleRevision
 
 _LOG = logging.getLogger(__name__)
 
@@ -46,6 +48,49 @@ class TranscriptPage:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class TranscriptReadIdentity:
+    """All canonical inputs to a bounded native page, including annotations."""
+
+    root: str
+    requested_name: str
+    thread: Thread
+    session_file: str
+    native_revision: tuple[int, int, int, int] | None
+    route_revision: TranscriptRouteRevision
+    bus_revision: tuple[int, int, int, int] | None
+    before: TranscriptCursor | None
+    after: TranscriptCursor | None
+    through: TranscriptCursor | None
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptRead:
+    """Deferred canonical read, fenced to the identity captured by its owner."""
+
+    owner: Transcripts
+    identity: TranscriptReadIdentity
+
+    def current(self) -> bool:
+        identity = self.identity
+        return self.owner.capture_page_read(
+            identity.requested_name, before=identity.before, after=identity.after,
+            through=identity.through,
+        ).identity == identity
+
+    def read(self) -> TranscriptPage:
+        if not self.current():
+            raise StaleRevision("Transcript read inputs changed before preparation")
+        identity = self.identity
+        page = self.owner.thread_transcript_page(
+            identity.requested_name, before=identity.before, after=identity.after,
+            through=identity.through,
+        )
+        if not self.current():
+            raise StaleRevision("Transcript read inputs changed during preparation")
+        return page
+
+
 class Transcripts:
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, messaging: Messaging):
         self.root = root
@@ -53,6 +98,27 @@ class Transcripts:
         self.bus = bus
         self.messaging = messaging
         self.routes = TranscriptRoutes(root)
+        self.page_reads = 0
+
+    def capture_page_read(
+        self, name: str, *, before: TranscriptCursor | None = None,
+        after: TranscriptCursor | None = None, through: TranscriptCursor | None = None,
+    ) -> TranscriptRead:
+        """Expose the source owner's complete identity without parsing its page.
+
+        Native bytes alone are insufficient: input display/routing and older
+        bus receipts contribute to the same projection. Registry-owned thread
+        metadata also carries inherited fork text and source selection.
+        """
+        thread, session_file, _ = self._thread_transcript_source(
+            name, through.session_file if through is not None else None,
+        )
+        return TranscriptRead(self, TranscriptReadIdentity(
+            str(self.root), name, thread, session_file,
+            file_revision(Path(session_file)) if session_file else None,
+            self.routes.revision(), file_revision(self.bus.log.path),
+            before, after, through,
+        ))
 
     def thread_transcript(
         self,
@@ -143,6 +209,7 @@ class Transcripts:
         historical_source: str | None = None,
     ) -> TranscriptPage:
         """Read one adjacent page with exclusive, file-bound byte cursors."""
+        self.page_reads += 1
         if before is not None and after is not None:
             raise ValueError("Choose one transcript paging direction.")
         if max_messages <= 0 or max_bytes <= 0:

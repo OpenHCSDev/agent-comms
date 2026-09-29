@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .errors import RelationViolationError
 from .routing import TurnRouting
-from .store_files import _store_lock
+from .store_files import _store_lock, file_revision
 from .typed_table import Column, SQLiteSchemaObject, TypedTable
 
 
@@ -106,12 +106,25 @@ class _SessionRoutes:
         self.close()
 
 
+@dataclass(frozen=True, slots=True)
+class TranscriptRouteRevision:
+    database: tuple[int, int, int, int] | None
+    journal: tuple[int, int, int, int] | None
+
+
 class TranscriptRoutes:
     filename = "transcript_routes.sqlite3"
 
     def __init__(self, root: Path):
         self.database_path = root / self.filename
         self._initialized = False
+
+    def revision(self) -> TranscriptRouteRevision:
+        """SQLite owns its committed data in the database or its WAL file."""
+        return TranscriptRouteRevision(
+            file_revision(self.database_path),
+            file_revision(self.database_path.with_name(self.database_path.name + "-wal")),
+        )
 
     def snapshot(self, destination: Path) -> None:
         """Retain a consistent current annotation store for attached history."""
