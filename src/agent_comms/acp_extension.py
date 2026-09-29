@@ -272,6 +272,9 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     @abstractmethod
     def status(self) -> str | None: ...
 
+    @abstractmethod
+    def feedback(self, supported: bool) -> str: ...
+
 
 @dataclass(frozen=True)
 class PendingQueueProjection(QueueProjection):
@@ -279,12 +282,18 @@ class PendingQueueProjection(QueueProjection):
     def status(self) -> None:
         return None
 
+    def feedback(self, supported: bool) -> str:
+        return "Checking input queue…" if supported else ""
+
 
 @dataclass(frozen=True)
 class UnavailableQueueProjection(QueueProjection):
     @property
     def status(self) -> str:
         return "unavailable"
+
+    def feedback(self, supported: bool) -> str:
+        return "Remote queue unavailable (input status unchanged)"
 
 
 @dataclass(frozen=True)
@@ -295,6 +304,9 @@ class AvailableQueueProjection(QueueProjection):
     @property
     def status(self) -> str:
         return "available"
+
+    def feedback(self, supported: bool) -> str:
+        return ""
 
 
 @dataclass(frozen=True)
