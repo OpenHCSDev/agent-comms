@@ -85,9 +85,11 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
             assert allowed is True
             # A separately opened flock description cannot acquire while the native
             # callback is yielded, exactly where backend stdin.write executes.
-            with pytest.raises(BlockingIOError):
-                with _store_lock(comms._wire_lock_path, blocking=False):
-                    pytest.fail("wire exclusion released before native write")
+            with (
+                pytest.raises(BlockingIOError),
+                _store_lock(comms._wire_lock_path, blocking=False),
+            ):
+                pytest.fail("wire exclusion released before native write")
         with _store_lock(comms._wire_lock_path, blocking=False):
             pass
         yield ae.StreamSettled()
