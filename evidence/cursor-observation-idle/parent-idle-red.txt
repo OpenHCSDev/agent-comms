@@ -1,0 +1,42 @@
+PREPARED_REAL_NATIVE_SAVED_HISTORY_AND_CHANNEL 2
+INSTALLED_APP_RUN_TEST_ENTER
+INSTALLED_APP_RUN_TEST_YIELDED
+ATTACHED_AND_NAVIGABLE
+SAVED_HISTORY_STARTUP_ACTUAL_PAINT
+ACTUAL_NATIVE_PAGE_DELIVERED_WHILE_STATUS_STORE_HELD
+CHANNEL_BAR_CLICK_COMMS_SCREEN_SAVED_HISTORY_PAINT
+SAVED_CHANNEL_AGENT_RETURN_NO_REPLAY
+UNOPENED_THREAD_PHYSICAL_CLICK_ACTUAL_ATTACHMENT
+CHANNEL_ACTIVE_PARTICIPANT_CLICK_SAME_NATIVE_TAB
+CLICKED_RETURN_ACTUAL_RENDERED_BODY_IDENTITY session-1 13
+CLICKED_RETURN_ACTUAL_RENDERED_BODY_IDENTITY session-2 17
+CLICKED_RETURN_ACTUAL_RENDERED_BODY_IDENTITY session-1 13
+CLICKED_ABA_CANONICAL_RAW_PAGE_READ_COUNTS [0, 0, 0]
+CLICKED_ABA_SAVED_READER_DOCUMENT_HISTORY_DRAFT_UNDO_PRESERVED
+ACTUAL_IDLE_PREPARATION_CENSUS {'before': (64, 3), 'after': (65, 3), 'work': [('RenderPreparation', 'None', "RenderPreparation(task=ValidateSessionUpdateTask(session_id='gamma', update={'_meta': {'agentComms': {'updates': [{'kind': 'cursor_advanced', 'envelope': {'scope': {'session_id': 'gamma', 'wire_root_id': 'af1e8183a9a34231b85da8b6841e7e36', 'owner': {'incarnation': {'name': 'gamma', 'created_at': 1790681383.3649242}, 'generation': 4}, 'owner_pid': 526515}, 'revision': 28, 'observation': {'kind': 'unavailable'}}, 'selected_status': None}]}}, 'sessionUpdate': 'session_info_update'}, metadata=None))")], 'pending': 0}
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-field-representation-owner-20260929/tests/saved_state_user_journey_pilot.py", line 487, in <module>
+    asyncio.run(native_fixture(
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^
+        app_type=InstalledApp, prepare_state=prepare_saved_state, acceptance=acceptance,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ))
+    ^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/toad-field-representation-owner-20260929/tests/l0a_native_installed_pilot.py", line 282, in main
+    await acceptance(app, pilot, agent, comms, entered, release,
+                     hold_next, requests)
+  File "/home/ts/wt/toad-field-representation-owner-20260929/tests/saved_state_user_journey_pilot.py", line 120, in acceptance
+    await adaptive_reader_journey(app, pilot, requests)
+  File "/home/ts/wt/toad-field-representation-owner-20260929/tests/saved_state_user_journey_pilot.py", line 382, in adaptive_reader_journey
+    assert after == before, ("Idle reader kept preparing or replaying", before, after, idle_work)
+           ^^^^^^^^^^^^^^^
+AssertionError: ('Idle reader kept preparing or replaying', (64, 3), (65, 3), {139928979511792: ('RenderPreparation', 'None', "RenderPreparation(task=ValidateSessionUpdateTask(session_id='gamma', update={'_meta': {'agentComms': {'updates': [{'kind': 'cursor_advanced', 'envelope': {'scope': {'session_id': 'gamma', 'wire_root_id': 'af1e8183a9a34231b85da8b6841e7e36', 'owner': {'incarnation': {'name': 'gamma', 'created_at': 1790681383.3649242}, 'generation': 4}, 'owner_pid': 526515}, 'revision': 28, 'observation': {'kind': 'unavailable'}}, 'selected_status': None}]}}, 'sessionUpdate': 'session_info_update'}, metadata=None))")})

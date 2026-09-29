@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from enum import IntFlag
 from typing import Final
@@ -16,7 +16,7 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IntegrityViolationError
+from agent_comms.coordination_errors import IntegrityViolationError, IdentityConflict
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.field_codec import projected
@@ -47,17 +47,47 @@ APPROVED_REPLAY_FACT_MASK: Final = sum(fact.value for fact in ReplayFact)
 
 @dataclass(frozen=True, slots=True)
 class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
+    def advance(
+        self,
+        session,
+        phase: type[AttemptState],
+        *,
+        backend_done: bool,
+        process_dead: bool,
+        progress: bool,
+        reason_code: str | None,
+    ) -> None:
+        """Record a checked phase inside the caller's fenced transaction."""
+        db = session._connection
+        now = session.now(self.updated_at_ms)
+        AttemptRecord.update(
+            db,
+            where="execution_id=? AND attempt_ordinal=?",
+            parameters=(self.execution_id, self.attempt_ordinal),
+            lifecycle=self.lifecycle.observed(
+                phase, backend_done=backend_done, process_dead=process_dead, progress=progress
+            ),
+            revision=self.revision + 1,
+            updated_at_ms=now,
+            last_progress_at_ms=now if progress else self.last_progress_at_ms,
+            reason_code=reason_code,
+        )
+
     @property
     def authority(self) -> AttemptAuthority:
         return AttemptAuthority(
-            self.execution_id, self.attempt_ordinal, self.owner_thread,
-            self.owner_generation, self.owner_token_digest,
+            self.execution_id,
+            self.attempt_ordinal,
+            self.owner_thread,
+            self.owner_generation,
+            self.owner_token_digest,
         )
 
     @property
     def owner_identity(self) -> OwnerGenerations:
         return OwnerGenerations(
-            owner_lookup=self.owner_lookup, owner_thread=self.owner_thread,
+            owner_lookup=self.owner_lookup,
+            owner_thread=self.owner_thread,
             generation=self.owner_generation,
         )
 
@@ -315,6 +345,36 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
     replay_safe: bool = dataclass_field(metadata={"sql": Column()})
     side_effects_possible: bool = dataclass_field(metadata={"sql": Column()})
     revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+
+    def require_successor(self, after: ReplayAssessments) -> None:
+        accumulated = replace(
+            after,
+            facts=self.facts | after.facts,
+            replay_safe=self.replay_safe and after.replay_safe,
+            side_effects_possible=self.side_effects_possible or after.side_effects_possible,
+        )
+        if accumulated != after:
+            raise IdentityConflict("replay facts cannot be erased")
+
+    def record(self, db, before: ReplayAssessments | None) -> bool:
+        """Persist monotonic replay evidence inside the checked transaction."""
+
+        if before is not None:
+            if replace(before, revision=self.revision) == self:
+                return False
+            before.require_successor(self)
+            ReplayAssessments.update(
+                db,
+                where="execution_id=?",
+                parameters=(self.execution_id,),
+                facts=self.facts,
+                replay_safe=self.replay_safe,
+                side_effects_possible=self.side_effects_possible,
+                revision=before.revision + 1,
+            )
+        else:
+            self.insert(db)
+        return True
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)

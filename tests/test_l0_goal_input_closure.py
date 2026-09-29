@@ -95,7 +95,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     # A known failed generation requires an explicit owner decision to advance.
     store.create_goal(goal.id)
     reservation = store.reserve(goal.id, 1)
-    store.record_failed(reservation, "Observed failure")
+    reservation.fail(store, "Observed failure")
     assert not store.snapshot(goal.id).lifecycle.allows_resume(False)
     changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
     assert changed.state.active and changed.id == goal.id

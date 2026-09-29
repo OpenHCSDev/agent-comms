@@ -179,9 +179,9 @@ def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, termi
     store.create_goal(started["id"])
     reservation = store.reserve(started["id"], 1)
     if terminal == "blocked":
-        store.record_failed(reservation, "uncertain turn")
+        reservation.fail(store, "uncertain turn")
     else:
-        store.record_verified_completion(store.claim_launch(reservation), "finished")
+        store.claim_launch(reservation).record_verified_completion(store, "finished")
     terminal_goal = comms.goals.update_goal(
         "owner",
         (
