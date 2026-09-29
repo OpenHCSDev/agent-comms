@@ -16,9 +16,9 @@ import pytest
 from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
+from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_custody import PiSessionChild
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.pi_rpc import PiRpcChannel
@@ -345,3 +345,50 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
             await persistent.close_idle()
+
+
+async def test_actual_summary_slot_denies_mutation_and_joins_cancellation(tmp_path):
+    from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+
+    async with native_failure_owner(tmp_path, None) as fixture:
+        package, session, original, preparation, selected, settings, calls, started, launch = fixture
+        child, _, exchange, _ = await launch()
+        operation = "d" * 32
+        request = AgentCommsSummarizeCompaction(
+            id="held-summary", version=1, operation_id=operation,
+            witness=preparation.witness, selected=selected, settings=settings,
+        )
+        child.stdin.write((json.dumps(request.to_rpc()) + "\n").encode())
+        await child.stdin.drain()
+        assert await asyncio.to_thread(started.wait, 10)
+        _, state = await exchange(dict(type="get_state", id="during-summary"))
+        assert state["data"]["isCompacting"]
+        for command in (
+            dict(type="prompt", message="Must never start", inputId="c" * 32),
+            dict(type="set_model", provider=selected.provider, modelId=selected.model_id),
+            dict(type="compact"),
+            dict(type="new_session"),
+        ):
+            _, response = await exchange(dict(id=command["type"], **command))
+            assert not response["success"]
+            assert response["error"] == "Selected summary in flight; mutation denied"
+        _, second = await exchange(dict(request.to_rpc(), id="second", operationId="e" * 32))
+        assert second["data"]["status"] == "declined"
+        assert second["data"]["reason"] == "in_flight"
+        _, cancelled = await exchange(dict(
+            id="cancel", type="agent_comms_cancel_summary", version=1, operationId=operation,
+        ))
+        assert cancelled["success"] and cancelled["data"]["status"] == "unknown"
+        _, idle = await exchange(dict(type="get_state", id="after-cancellation"))
+        assert not idle["data"]["isCompacting"] and not idle["data"]["isStreaming"]
+        _, duplicate = await exchange(dict(request.to_rpc(), id="duplicate"))
+        assert duplicate["data"]["reason"] == "duplicate_operation"
+        assert session.read_bytes() == original
+        # This direct native request does not create a Python owner journal.
+        # Native input proof, not the journal admission default, proves no start.
+        assert not Path(str(session) + ".input-proof").exists()
+        total_calls = len(calls)
+        await child.stop()
+        await launch()
+        assert len(calls) == total_calls
+        assert session.read_bytes() == original

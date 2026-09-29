@@ -64,8 +64,6 @@ python3 "$stack_root/patch-native-model-config.py" \
 python3 "$stack_root/patch-native-adaptive-settings.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 rpc=dist/modes/rpc/rpc-mode.js
-python3 "$stack_root/patch-native-compaction-readiness.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 python3 "$stack_root/patch-native-selected-compaction-summary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 # One SessionManager storage owner; replace eager loaders and their consumers together.

@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Pinned Pi RPC selected-summary patch, after native readiness.
-
-Normal preparation includes this operation for the existing selected owner.
-"""
+"""Install selected-owner compaction and its mutation fence in pinned Pi RPC."""
 from __future__ import annotations
 
 import hashlib
 import sys
 from pathlib import Path
 
-BASE_SHA = "d818b6bfe53eeb60cae73eb7bf3c058c992d7f7f00bd70b02f1405548d64643a"
+BASE_SHA = "bd6dfca7b14cad4023c5ab56a7fc91bef3db9670c96b6ad7625df16353b42e5a"
 
 
 def replace_once(source: str, old: str, new: str) -> str:
@@ -21,31 +18,47 @@ def replace_once(source: str, old: str, new: str) -> str:
 def main(path: Path) -> None:
     raw = path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != BASE_SHA:
-        raise SystemExit("Selected summary requires exact phase1-patched RPC bytes")
+        raise SystemExit("Selected summary requires exact pinned RPC bytes")
     source = raw.decode()
     source = replace_once(source,
-        'import { prepareCompaction } from "../../core/compaction/index.js";',
+        'import * as crypto from "node:crypto";',
+        'import * as crypto from "node:crypto";\n'
         'import { compact, prepareCompaction, shouldCompact } from "../../core/compaction/index.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()
     source = replace_once(source, "export async function runRpcMode(runtimeHost) {", helper + "\nexport async function runRpcMode(runtimeHost) {")
     source = replace_once(source,
-        "    let acOtherCommandInFlight = 0;\n    // Handle a single command",
+        "    // Handle a single command\n    const handleCommand",
         "    let acOtherCommandInFlight = 0;\n"
         "    let acSummarySlot = null;\n"
         "    const acSpentSummaryIds = new Set();\n"
-        "    // Handle a single command")
+        "    // Handle a single command\n    const handleCommand")
     source = replace_once(source,
         '''        const id = command.id;
         switch (command.type) {''',
         '''        const id = command.id;
-        // The phase2 slot is reserved synchronously before ANY await. RPC stdin
-        // dispatches concurrent lines, so native mutations cannot interleave.
+        // Reserve synchronously before ANY await: RPC dispatches concurrent lines.
         if (acSummarySlot && !["agent_comms_cancel_summary", "agent_comms_summarize_compaction",
-            "agent_comms_prepare_compaction", "agent_comms_compaction_settings", "get_state"].includes(command.type))
+            "agent_comms_compaction_settings", "get_state"].includes(command.type))
             return error(id, command.type, "Selected summary in flight; mutation denied");
         switch (command.type) {''')
-    source = replace_once(source, '''            case "agent_comms_prepare_compaction": {''', '''            case "agent_comms_compaction_settings": {
+    source = replace_once(source, '''                void session
+                    .prompt(command.message, {''', '''                // Prompt preflight may await auth/extensions before isStreaming.
+                // Retain the mutation fence until the entire promise settles.
+                acOtherCommandInFlight++;
+                void session
+                    .prompt(command.message, {''')
+    source = replace_once(source, '''                    .catch((e) => {
+                    if (!preflightSucceeded) {
+                        output(error(id, "prompt", e.message));
+                    }
+                });''', '''                    .catch((e) => {
+                    if (!preflightSucceeded) {
+                        output(error(id, "prompt", e.message));
+                    }
+                })
+                    .finally(() => { acOtherCommandInFlight--; });''')
+    source = replace_once(source, '''            case "get_state": {''', '''            case "agent_comms_compaction_settings": {
                 if (!acValidCompactionSettingsRequest(command))
                     return error(id, command.type, "Invalid selected compaction settings request");
                 return success(id, command.type, acSelectedCompactionSettings(command, session,
@@ -84,18 +97,28 @@ def main(path: Path) -> None:
                     ? acSummaryUnknown(command.operationId)
                     : acSummaryDecline(command.operationId, "cancelled"));
             }
-            case "agent_comms_prepare_compaction": {''')
-    source = replace_once(source,
-        "acPrepareReadiness(command, session, acOtherCommandInFlight !== 0)",
-        "acPrepareReadiness(command, session, acOtherCommandInFlight !== 0 || acSummarySlot !== null)")
+            case "get_state": {''')
     source = replace_once(source,
         "isCompacting: session.isCompacting,",
         "isCompacting: session.isCompacting || acSummarySlot !== null,")
-    source = replace_once(source,
-        '''        const acCountCommand = command?.type !== "agent_comms_prepare_compaction" &&
-            command?.type !== "get_state";''',
-        '''        const acCountCommand = !["agent_comms_prepare_compaction", "agent_comms_summarize_compaction",
-            "agent_comms_cancel_summary", "agent_comms_compaction_settings", "get_state"].includes(command?.type);''')
+    source = replace_once(source, '''        const command = parsed;
+        try {
+            const response = await handleCommand(command);''', '''        const command = parsed;
+        const acCountCommand = !["agent_comms_summarize_compaction", "agent_comms_cancel_summary",
+            "agent_comms_compaction_settings", "get_state"].includes(command?.type);
+        if (acCountCommand) acOtherCommandInFlight++;
+        try {
+            const response = await handleCommand(command);''')
+    source = replace_once(source, '''            output(error(command.id, command.type, commandError instanceof Error ? commandError.message : String(commandError)));
+            await waitForRawStdoutBackpressure();
+        }
+    };''', '''            output(error(command?.id, command?.type ?? "parse", commandError instanceof Error ? commandError.message : String(commandError)));
+            await waitForRawStdoutBackpressure();
+        }
+        finally {
+            if (acCountCommand) acOtherCommandInFlight--;
+        }
+    };''')
     path.write_text(source)
 
 

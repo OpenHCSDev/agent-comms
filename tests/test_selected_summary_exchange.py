@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_prepare import NativeWitness
@@ -257,83 +254,6 @@ async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
     stream.feed_data(b"y" * 13 + b"\n")
     with pytest.raises(ValueError, match="transport limit"):
         await reader.readline(max_bytes=32)
-
-
-@pytest.mark.skipif(not os.environ.get("PI_NATIVE_PACKAGE_DIR"), reason="Owned copied Pi fixture")
-@pytest.mark.parametrize("provider_error", [False, True])
-async def test_python_to_actual_native_rpc_retains_summary_without_native_write(
-    tmp_path, provider_error
-):
-    package = Path(os.environ["PI_NATIVE_PACKAGE_DIR"]).resolve()
-    env = dict(os.environ, PR95_RPC_FIXTURE="1", TMPDIR=str(tmp_path))
-    if provider_error:
-        env["PR95_PROVIDER_ERROR"] = "1"
-    script = (
-        Path(__file__).resolve().parents[1] / "stack/test-native-selected-compaction-summary.mjs"
-    )
-    child = await AttachedChild.start(
-        ("node", str(script)),
-        env=env,
-    )
-    try:
-        async with asyncio.timeout(10):
-            line = await child.stderr.readline()
-            assert line.startswith(b"{"), line.decode()
-            fixture = json.loads(line)
-            persistent = retained_native_host(
-                child,
-                NativePiRpcLaunch(
-                    ("node",), tmp_path, env, tmp_path, Path(fixture["sessionFile"]), package
-                ),
-                NativeSessionIdentity(fixture["witness"]["sessionId"], fixture["sessionFile"]),
-            )
-            source = dict(
-                source=manual_source(persistent.custody.identity.session_file),
-                selected=fixture["selected"],
-                settings=fixture["settings"],
-            )
-            file = Path(fixture["sessionFile"])
-            before = file.read_bytes()
-            journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-            exchange = SelectedSummarySlot(
-                "owner", persistent.custody.identity.session_id
-            ).run_selected_summary(
-                persistent,
-                journal,
-                FieldCodec.decode(NativeWitness, fixture["witness"]),
-                source,
-                tokens_before=fixture["tokensBefore"],
-                expected_package=package,
-                idle_timeout_seconds=5,
-            )
-            if provider_error:
-                from agent_comms.selected_pi_summary_rpc import SelectedSummaryFailed
-
-                with pytest.raises(
-                    SelectedSummaryFailed, match="402: insufficient credits on configured model"
-                ) as failed:
-                    await exchange
-                assert file.read_bytes() == before
-                attempt = journal.selected_summary(failed.value.operation_id)
-                assert attempt.state.declared_name == "failed"
-                assert attempt.state.settled_without_original
-                assert not attempt.state.original_eligible
-                assert not journal.unresolved_selected_summary(str(file))
-                assert not journal.blocking_selected_summary(str(file))
-                assert persistent.custody.child.proc.returncode is None
-                assert persistent.custody.idle().current
-                return
-            result = await exchange
-            assert "Synthetic summary" in result.summary.text
-            assert result.summary.details.read_files == result.summary.details.modified_files == ()
-            assert result.summary.usage.output > 0
-            assert file.read_bytes() == before
-            assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
-            assert not native_input_admitted(journal.path.parent, str(file))
-            child.stdin.close()
-            assert (await child.wait()).successful
-    finally:
-        await persistent.close_idle()
 
 
 async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):

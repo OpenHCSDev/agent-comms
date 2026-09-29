@@ -1,5 +1,9 @@
 // Injected into the exact disposable Pi RPC build, never the installed pin.
 // One operation is NOT a replay grant. Python must journal its ID before send.
+function acExactObject(value, keys) {
+    return value !== null && typeof value === "object" && !Array.isArray(value) &&
+        Object.keys(value).sort().join(",") === [...keys].sort().join(",");
+}
 const acSummaryId = value => typeof value === "string" && /^[0-9a-f]{32}$/.test(value);
 const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // Read the actual selected SettingsManager: it already owns project trust,
@@ -46,9 +50,17 @@ function acValidSummaryRequest(value) {
     }
     if (!acExactObject(value, fields) ||
         value.type !== "agent_comms_summarize_compaction" || !acSummaryId(value.operationId)) return false;
-    const readiness = { id: value.id, type: "agent_comms_prepare_compaction", version: value.version,
-        dryRun: true, witness: value.witness, selected: value.selected, settings: value.settings };
-    return acValidReadiness(readiness);
+    const nonempty = text => typeof text === "string" && text.length > 0 && text.length <= 4096;
+    const integer = number => Number.isSafeInteger(number) && number >= 0;
+    return nonempty(value.id) && value.version === 1 &&
+        acExactObject(value.witness, ["sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"]) &&
+        ["sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"].every(key =>
+            nonempty(value.witness[key])) &&
+        acExactObject(value.selected, ["provider", "modelId", "contextWindow"]) &&
+        nonempty(value.selected.provider) && nonempty(value.selected.modelId) &&
+        integer(value.selected.contextWindow) && value.selected.contextWindow > 0 &&
+        acExactObject(value.settings, ["reserveTokens", "keepRecentTokens"]) &&
+        integer(value.settings.reserveTokens) && integer(value.settings.keepRecentTokens);
 }
 function acValidSummaryCancel(value) {
     return acExactObject(value, ["id", "type", "version", "operationId"]) &&
@@ -131,16 +143,39 @@ function acSummaryValidResult(result, request) {
 function acAdmitSummary(request, session, conflict, spent, host) {
     if (spent.has(request.operationId)) return { denial: "duplicate_operation" };
     if (conflict) return { denial: "in_flight" };
-    const readiness = acPrepareReadiness({ ...request, type: "agent_comms_prepare_compaction", dryRun: true },
-        session, false);
-    if (readiness.status !== "ready") return { denial: readiness.reason };
+    if (session.isCompacting) return { denial: "compacting" };
+    if (!session.isIdle || session.isStreaming || session.isRetrying ||
+        session._retryAttempt || session._nativeInterruptIds) return { denial: "busy" };
+    if (session.pendingMessageCount || session.agent.steeringQueue.messages.length ||
+        session.agent.followUpQueue.messages.length || session._pendingNextTurnMessages.length ||
+        session._pendingCustomMessages.length || session._pendingBashMessages.length)
+        return { denial: "queue_nonempty" };
+    const manager = session.sessionManager;
+    if (!manager || !session.sessionFile || !session.sessionId ||
+        request.witness.sessionId !== session.sessionId ||
+        request.witness.sessionFile !== session.sessionFile ||
+        request.witness.leafId !== manager.getLeafId()) return { denial: "source_mismatch" };
+    const model = session.model;
+    if (!model || model.provider !== request.selected.provider || model.id !== request.selected.modelId ||
+        model.contextWindow !== request.selected.contextWindow) return { denial: "model_mismatch" };
+    const catalog = session.modelRuntime.getAvailableSnapshot();
+    if (!Array.isArray(catalog) || !catalog.some(item => item.provider === model.provider &&
+        item.id === model.id && item.contextWindow === model.contextWindow)) return { denial: "unsupported" };
+    const settings = session.settingsManager.getCompactionSettings();
+    if (!settings || settings.reserveTokens !== request.settings.reserveTokens ||
+        settings.keepRecentTokens !== request.settings.keepRecentTokens) return { denial: "settings_mismatch" };
+    let witness;
+    try { witness = manager.captureCompactionWitness(request.witness.firstKeptEntryId); }
+    catch { return { denial: "source_mismatch" }; }
+    if (!acExactObject(witness, ["sessionId", "sessionFile", "leafId", "firstKeptEntryId", "revision"]) ||
+        Object.keys(request.witness).some(key => witness[key] !== request.witness[key]))
+        return { denial: "source_mismatch" };
     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
     let preparation;
-    try { preparation = prepareCompaction(session.sessionManager.entryStore,
-        session.settingsManager.getCompactionSettings(), session.model, session.sessionManager.getLeafId()); }
+    try { preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId()); }
     catch { return { denial: "unsupported" }; }
-    if (!preparation ||
-        preparation.firstKeptEntryId !== request.witness.firstKeptEntryId) return { denial: "source_mismatch" };
+    if (!preparation || preparation.firstKeptEntryId !== request.witness.firstKeptEntryId)
+        return { denial: "source_mismatch" };
     // Native compact() owns model-sized map/reduction requests. Total retained
     // history is not a request-size limit, and raw JSON includes metadata that
     // never reaches the model. Do not reject a valid preparation before chunking.

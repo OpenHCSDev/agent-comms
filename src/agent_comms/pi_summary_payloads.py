@@ -148,42 +148,6 @@ class SummaryFailedData(SelectedSummaryData, declared_name="summary_failed"):
             raise ValueError("Invalid selected summary failure detail")
 
 
-@dataclass(frozen=True, kw_only=True)
-class SelectedProbeData(PiResponseData):
-    strict_fields = True
-    version: Literal[1]
-
-    @classmethod
-    def wire_member(cls, value):
-        return cls.decode("probe_" + str(value.get("status")))
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProbeReadyData(SelectedProbeData, declared_name="probe_ready"):
-    status: Literal["ready"]
-    route_status: Literal["UNVERIFIED_NO_AUTH_RESOLUTION"] = field(
-        metadata={"wire_name": "routeStatus"}
-    )
-    witness: NativeWitness
-    selected: SelectedModel
-    settings: PiCompactionSettings
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProbeDeclinedData(SelectedProbeData, declared_name="probe_declined"):
-    status: Literal["declined"]
-    reason: Literal[
-        "busy",
-        "queue_nonempty",
-        "compacting",
-        "source_mismatch",
-        "model_mismatch",
-        "settings_mismatch",
-        "split_turn",
-        "unsupported",
-    ]
-
-
 @dataclass(frozen=True)
 class CompactionSettingsData(PiResponseData):
     from .owner_compaction_settings import PiCompactionDecision

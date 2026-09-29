@@ -51,3 +51,14 @@ for Darwin's paired PR236 consumers, with no second registry. See
 `evidence/s10-pi-boundary/HANDOFF.md` for actual loopback native tools, cancellation,
 boundary and guard receipts. Parent owns coupled integration/quiet activation;
 S9 startup consumers remain explicitly Darwin-owned until his paired closure.
+
+## Selected-summary dry-run retirement — native sidecar, PR343
+
+Removed the unused readiness RPC, Python command/response family, native helper
+and intermediate build stage left after325. Existing selected-summary admission
+owns its live fences directly; no pretend readiness envelope remains. Deleted
+the synthetic-session harness and its consumer; actual pinned native slot
+mutation/cancellation/reopen and installed private ACP commit/admission cover the
+replacement.340 token policy and339 current-main fork work are retained. See
+`evidence/selected-probe-retirement/HANDOFF.md` for deletion counts, immutable
+package, exact local receipts and their limits. Parent owns final live pairing.

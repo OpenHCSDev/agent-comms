@@ -29,7 +29,6 @@ from .pi_payloads import (
 from .pi_summary_payloads import (
     CompactionSettingsData,
     SelectedModel,
-    SelectedProbeData,
     SelectedSummaryData,
 )
 
@@ -414,17 +413,6 @@ class AgentCommsSummarizeCompaction(PiCommand):
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}
     )
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentCommsPrepareCompaction(PiCommand):
-    response_payload = SelectedProbeData
-    strict_response = True
-    version: int = 1
-    dry_run: bool = field(default=True, metadata={"wire_name": "dryRun"})
-    witness: NativeWitness
-    selected: SelectedModel
-    settings: PiCompactionSettings
 
 
 @dataclass(frozen=True, kw_only=True)
