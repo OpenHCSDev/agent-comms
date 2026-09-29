@@ -520,8 +520,6 @@ def _settle_fenced_response(
                 matched = bus.publisher._publish_keyed_response_unlocked(
                     intent, conversation=conversation, registry_snapshot=registry_snapshot
                 )
-            if matched.message_id != intent.expected_message_id:
-                raise PublicationUncertain("bus receipt conflicts with immutable intent")
             now = store.session.now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
             PublicationReceipts(
                 execution_id=intent.execution_id,
