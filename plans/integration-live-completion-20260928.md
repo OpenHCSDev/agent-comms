@@ -26,6 +26,13 @@ No feature is complete merely because a draft exists or a PR was merged.
   journey to immediate fork /open before the first answer. No user input replay
   or speculative owner restart. Already verified navigation checkpoint stays live.
 
+- User-confirmed remaining rendering scope: agent-tab return clears warm rendered
+  history while IRC remains warm. Tesla owns retained body/mount reuse in the
+  follow-up, with actual A/B/A identity/work/reader/editor checks. Also implement
+  authorized velocity/direction-adaptive history lookahead in the same existing
+  viewport/preparation owners: grow for fast scroll, shrink on slow/idle, cancel
+  obsolete work, bound resources and verify actual fast/reverse/idle paint.
+
 - Strategy correction2026-09-29: Tesla156 owns one coherent navigation/presentation
   integration, Carver153 first-open implementation and shared caller coordination.
   Exact live failure CommsScreen._load_content still calls deleted per-view
