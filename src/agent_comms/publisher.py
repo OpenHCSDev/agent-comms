@@ -491,13 +491,6 @@ class Publisher:
                     ) from error
             return stored
 
-    def publish_keyed_response(self, intent: PublicationIntents, *, conversation) -> Message:
-        """Default-OFF fsynced append; runtime owner fencing needs a coordinator."""
-        if self._private_response_writes is not True:
-            raise RelationViolationError("Private response publication is disabled.")
-        with self.log.locked():
-            return self._publish_keyed_response_unlocked(intent, conversation=conversation)
-
     def _publish_keyed_response_unlocked(
         self,
         intent: PublicationIntents,

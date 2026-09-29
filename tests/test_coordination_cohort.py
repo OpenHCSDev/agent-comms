@@ -32,7 +32,6 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
@@ -273,32 +272,24 @@ def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> N
 
 
 def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_path: Path) -> None:
-    comms, store, root_id, lookups = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "Alice", "one")
-    accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-    response_bus = MessageBus(
-        tmp_path / "comms" / "bus.jsonl", comms.registry, private_response_writes=True
-    )
-    expected = Message(sender="Alice", target="sender", body="reply", type=MessageType.INFO)
-    intent = _intent(expected)
-    from agent_comms.response_conversation import ResponseConversation
-    from agent_comms.audience_manifest import FrozenRecipient
+    from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
+    from test_coordination_response import _ready
 
-    source = comms.bus.log.read_delivery_cohort(root_id, sent.seq)
-    conversation = ResponseConversation(
-        FrozenRecipient(lookups["Alice"], "Alice"), "sender", (source,)
-    )
-    response = response_bus.publisher.publish_keyed_response(intent, conversation=conversation)
-    assert (
-        response_bus.publisher.publish_keyed_response(intent, conversation=conversation) == response
-    )
-    assert [message.seq for message in response_bus.log.full_history()] == [sent.seq, response.seq]
-    assert [
-        assignment.wire_seq for assignment in sealed_cohort_assignments(store, lookups["Alice"])
-    ] == [sent.seq]
-    delivery = response_bus.log.read_delivery_cohort(root_id, response.seq)
-    assert delivery.audience.canonical_members == {"sender"}
-    assert delivery.decisions[0].wake_mode.triage
+    case = _ready(tmp_path, direct=True)
+    try:
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+        ).value
+        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        first = case.bus.log.read_keyed_response(intent)
+        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        assert case.bus.log.read_keyed_response(intent) == first
+        assert [m.seq for m in case.bus.log.full_history()] == [case.origin_seq, first.seq]
+        delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)
+        assert delivery.audience.canonical_members == {"sender"}
+        assert delivery.decisions[0].wake_mode.triage
+    finally:
+        case.close()
 
 
 def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeable(
