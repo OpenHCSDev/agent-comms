@@ -1,5 +1,6 @@
 """Exercise the command against real Git commits, without mocking Git or ASTs."""
 
+import ast
 import json
 import subprocess
 import sys
@@ -243,7 +244,6 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
     source = '\n'.join([
         'import typing as t',
         'from typing import Literal as Choice',
-        'type Transport = t.Literal["stdio"]',
         'transport: Choice["stdio"]',
         'class Declaration:',
         '    transport: t.Literal["stdio"]',
@@ -252,9 +252,10 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
         '    return "stdio"',
         'async def asynchronous(value: Choice["stdio"]) -> Choice["stdio"]:',
         '    return "stdio"',
-        'def generic[T: t.Literal["stdio"]](value: T) -> T:',
-        '    return value',
     ]) + '\n'
+    if hasattr(ast, "TypeAlias"):
+        source += 'type Transport = t.Literal["stdio"]\n'
+        source += 'def generic[T: t.Literal["stdio"]](value: T) -> T:\n    return value\n'
     base = repo.commit({"boundary.py": ""})
     declarations = repo.commit({"boundary.py": source})
     status, report = repo.compare(base, declarations)
@@ -263,6 +264,7 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
     # Annotation spelling cannot conceal actual initializer/default/decorator/body reads.
     runtime = source + '\n'.join([
         'transport: Choice["stdio"] = payload["transport"]',
+        'dynamic_type: schema["type"]',
         '@decorators["render"]',
         'def read(value: Choice["stdio"] = defaults["transport"]) -> Choice["stdio"]:',
         '    return payload["transport"]',
@@ -270,4 +272,17 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
     changed = repo.commit({"boundary.py": runtime})
     status, report = repo.compare(declarations, changed)
     assert status == 1
-    assert report["delta"]["StringSubscript"] == 4
+    assert report["delta"]["StringSubscript"] == 5
+
+
+def test_typing_spelling_does_not_hide_shadowed_or_unresolved_read(repo: Repository) -> None:
+    base = repo.commit({"shadow.py": ""})
+    head = repo.commit({"shadow.py": '\n'.join([
+        'from typing import Literal',
+        'def read(Literal):',
+        '    return Literal["value"]',
+        'unknown: schema["type"]',
+    ]) + '\n'})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["delta"]["StringSubscript"] == 2

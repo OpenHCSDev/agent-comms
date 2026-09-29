@@ -1,8 +1,7 @@
 {
-  "repo": "/home/ts/wt/toad-first-fork-startup-sol-20260929",
   "base": "6a05d5e2",
   "head": "600d61d7",
-  "scope": "Actual seven changed Toad158 paths only; no global census",
+  "scope": "Only actual seven changed Toad158 source paths; no global scan",
   "delta": {
     "archive": 3,
     "fixed_packaged": -1

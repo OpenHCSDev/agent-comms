@@ -7,6 +7,7 @@ import argparse
 import ast
 import json
 import subprocess
+import typing
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -213,47 +214,115 @@ class CodecSubclass(PerFileOccurrenceMeasure):
         return 0
 
 
-class AnnotationSyntax(MroDispatch):
-    """Python's declared type-expression positions, not runtime record access.
+class TypingImports(MroDispatch):
+    """Resolve unshadowed module imports from the actual stdlib declarations.
 
-    Names do not decide this boundary: aliases, qualified typing constructors
-    and forward references share the same annotation grammar. Defaults,
-    decorators, assignment values and function bodies remain runtime syntax.
+    This bounded syntactic measure never executes inspected source. Nested
+    bindings conservatively disqualify a name rather than inferring its flow.
     """
 
-    def __init__(self) -> None:
-        self.nodes: set[ast.AST] = set()
+    def __init__(self, declarations: set[ast.AST]) -> None:
+        self.declarations = declarations
+        self.values: dict[str, object] = {}
+        self.shadowed: set[str] = set()
 
-    def include(self, expression: ast.AST | None) -> None:
-        if expression is not None:
-            self.nodes.update(ast.walk(expression))
+    def bind(self, node: ast.AST, name: str, value: object) -> None:
+        if node not in self.declarations or name in self.values:
+            self.shadowed.add(name)
+        self.values[name] = value
 
-    @handles(ast.AnnAssign, ast.arg)
-    def annotation(self, node) -> None:
-        self.include(node.annotation)
+    @handles(ast.Import)
+    def modules(self, node: ast.Import) -> None:
+        for item in node.names:
+            self.bind(node, item.asname or item.name.split(".")[0],
+                      typing if item.name == typing.__name__ else None)
 
-    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
-    def return_type(self, node) -> None:
-        self.include(node.returns)
+    @handles(ast.ImportFrom)
+    def members(self, node: ast.ImportFrom) -> None:
+        for item in node.names:
+            declaration = None
+            if node.level == 0 and node.module == typing.__name__:
+                declaration = vars(typing).get(item.name)
+            self.bind(node, item.asname or item.name, declaration)
 
-    @handles(ast.TypeAlias, ast.type_param)
-    def type_declaration(self, node) -> None:
-        self.include(node)
+    @handles(ast.Name)
+    def assignment(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.shadowed.add(node.id)
+
+    @handles(ast.Attribute)
+    def mutation(self, node: ast.Attribute) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            for descendant in ast.walk(node.value):
+                if isinstance(descendant, ast.Name):
+                    self.shadowed.add(descendant.id)
+
+    @handles(ast.arg)
+    def parameter(self, node: ast.arg) -> None:
+        self.shadowed.add(node.arg)
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    def named_binding(self, node) -> None:
+        self.shadowed.add(node.name)
+
+    @handles(ast.ExceptHandler)
+    def exception_binding(self, node: ast.ExceptHandler) -> None:
+        name = node.name
+        if name is not None:
+            self.shadowed.add(name)
+
+    # Honor the package's Python 3.11 contract without inventing parser nodes.
+    if hasattr(ast, "type_param"):
+        @handles(ast.type_param)
+        def type_parameter(self, node) -> None:
+            self.shadowed.add(node.name)
 
     @classmethod
-    def of(cls, tree: ast.AST) -> set[ast.AST]:
-        scope = cls()
+    def of(cls, tree: ast.Module) -> dict[str, object]:
+        imports = cls(set(tree.body))
         for node in ast.walk(tree):
-            scope.dispatch_sync(node)
-        return scope.nodes
+            imports.dispatch_sync(node)
+        if "*" in imports.values:
+            return {}  # A star import can replace any otherwise known binding.
+        return {name: value for name, value in imports.values.items()
+                if name not in imports.shadowed}
+
+
+class TypingReference(MroDispatch):
+    """One AST expression's resolved imported declaration, never evaluated code."""
+
+    def __init__(self, imports: dict[str, object]) -> None:
+        self.imports = imports
+        self.value: object = None
+
+    @handles(ast.Name)
+    def name(self, node: ast.Name) -> None:
+        self.value = self.imports.get(node.id)
+
+    @handles(ast.Attribute)
+    def member(self, node: ast.Attribute) -> None:
+        parent = TypingReference(self.imports)
+        parent.dispatch_sync(node.value)
+        if parent.value is typing:
+            self.value = vars(typing).get(node.attr)
+
+    def raw_access_count(self) -> int:
+        """Typing declarations contribute no raw-record operation; unknowns do."""
+        return int(getattr(self.value, "__module__", None) != typing.__name__)
 
 
 class StringSubscript(OccurrenceMeasure):
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
         tree = ast.parse(source, filename)
-        annotations = AnnotationSyntax.of(tree)
-        return sum(cls.occurrences(node) for node in ast.walk(tree) if node not in annotations)
+        imports = TypingImports.of(tree)
+        count = 0
+        for node in ast.walk(tree):
+            if cls.occurrences(node):
+                reference = TypingReference(imports)
+                reference.dispatch_sync(node.value)
+                count += reference.raw_access_count()
+        return count
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:

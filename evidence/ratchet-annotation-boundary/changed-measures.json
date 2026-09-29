@@ -2,19 +2,20 @@
   {
     "measure": "GodClassExcess",
     "delta": {
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::Measure": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::GitMeasure": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::LongBooleanChain": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::CodecSubclass": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::GodClassExcess": 0,
       "GodClassExcess:src/agent_comms/debt_ratchet.py::Comparison": 0,
       "GodClassExcess:src/agent_comms/debt_ratchet.py::PerFileOccurrenceMeasure": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::BooleanChainTerms": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::ForeignAbsenceProbe": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::GodClassExcess": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::StringSubscript": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::OccurrenceMeasure": 0,
       "GodClassExcess:src/agent_comms/debt_ratchet.py::TypeIdentity": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::AnnotationSyntax": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::CodecSubclass": 0,
-      "GodClassExcess:src/agent_comms/debt_ratchet.py::OccurrenceMeasure": 0
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::LongBooleanChain": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::BooleanChainTerms": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::TypingReference": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::TypingImports": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::StringSubscript": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::Measure": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::GitMeasure": 0,
+      "GodClassExcess:src/agent_comms/debt_ratchet.py::ForeignAbsenceProbe": 0
     },
     "positive": {}
   },
