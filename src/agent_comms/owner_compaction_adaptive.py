@@ -12,8 +12,8 @@ import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from .agent_events import AgentEvent
 from .backend import PersistentPiSession, _session_revision
-from .compaction_journal import CompactionJournalError
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
@@ -54,6 +54,7 @@ async def maybe_compact_owner_turn(
     input_text: str | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
     future_queue: FutureInputQueue | None = None,
+    on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
 ) -> bool:
     """Return False only for a clean trigger skip; errors never dispatch input.
 
@@ -198,6 +199,7 @@ async def maybe_compact_owner_turn(
                 expected_package=package,
                 tokens_before=prepared.tokens_before,
                 future_queue=future_queue,
+                on_event=on_event,
             )
             if result.summary is None:
                 if result.decline_reason in {"split_turn", "unsupported"}:
@@ -251,14 +253,10 @@ async def maybe_compact_owner_turn(
         pending_input_key=original_input_key,
         settings_paths=settings_paths,
         on_admission=on_admission,
+        on_event=on_event,
     )
     if operation is None:
         # Pi found no safe cut point. Do not disable the ordinary hard-context
         # backstop or turn this into a request to summarize again.
         return False
-    if not operation.state.committed:
-        raise CompactionJournalError(
-            f"Adaptive native operation {operation.commit_id} is {operation.state.declared_name}; "
-            "reconcile exact ID before any new input"
-        )
     return True

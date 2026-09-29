@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from .agent_events import AgentEvent, CompactionSummaryProgress
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession
 from .compaction_journal import CompactionJournal, SelectedSummarySource
 from .field_codec import FieldCodec
@@ -129,6 +131,7 @@ class SelectedSummarySlot:
         admission_generation: int | None = None,
         future_queue: FutureInputQueue | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
+        on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
     ) -> SelectedSummaryResult:
         """Reserve durably, exchange once, and leave settlement to the owner.
 
@@ -196,6 +199,8 @@ class SelectedSummarySlot:
                     if event.sequence > sequence:
                         sequence = event.sequence
                         deadline = loop.time() + idle_timeout_seconds
+                        if on_event is not None:
+                            await on_event(CompactionSummaryProgress(reason="adaptive"))
                 result = _summary_response(raw, request, tokens_before)
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
