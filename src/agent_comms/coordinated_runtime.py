@@ -9,6 +9,7 @@ journal, without cursor acknowledgements, monitoring or automatic resend.
 
 from __future__ import annotations
 
+from agent_comms.attempt_start import AttemptStart
 import asyncio
 import hashlib
 import json
@@ -51,13 +52,9 @@ from .coordination_response import (
     prepare_fenced_response,
     publish_fenced_response,
 )
-from .coordination_store import (
-    IdentityConflict,
-    MutationStore,
-    PublicationActivationBlocked,
-    StaleFence,
-    prepare_fence_token,
-)
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from agent_comms.coordinator import Coordination
+from agent_comms.owner_fence import prepare_fence_token
 from .diagnostics import record_terminal_failure
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
@@ -297,8 +294,8 @@ def _require_registry_owner(comms: Comms, owner: Thread, admission_generation: i
         raise StaleFence("recipient registry owner stopped or changed")
 
 
-def _require_owner(store: MutationStore, lookup: str, owner: Thread, generation: int) -> None:
-    participant = store._participant(lookup)
+def _require_owner(store: Coordination, lookup: str, owner: Thread, generation: int) -> None:
+    participant = store.participants.get(lookup)
     if (
         not participant.committed
         or participant.owner_thread != owner.name
@@ -469,7 +466,7 @@ class SelectedExecution:
             marker = self.bus.log._private_marker_unlocked()
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")
-        self.store = MutationStore(str(self.root / "coordination.sqlite3"))
+        self.store = Coordination(str(self.root / "coordination.sqlite3"))
 
     def _select(self):
         with self.bus.log.locked():
@@ -477,10 +474,10 @@ class SelectedExecution:
             if marker.root_id != self.wire_root_id:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(self.after_seq, marker.admission_after_seq)
-        with self.store._read_transaction():
-            assert_cohort_schema(self.store._connection)
-            _assert_response_schema(self.store._connection)
-            assert_native_runtime_schema(self.store._connection)
+        with self.store.session.read():
+            assert_cohort_schema(self.store.session._connection)
+            _assert_response_schema(self.store.session._connection)
+            assert_native_runtime_schema(self.store.session._connection)
         try:
             self.owner, self.owner_admission_generation = (
                 self.comms.registry.live_owner_with_admission(self.owner_name)
@@ -489,8 +486,8 @@ class SelectedExecution:
             raise StaleFence("recipient registry identity stopped or changed") from error
         _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
         self.lookup = stable_thread_lookup(self.owner.created_at)
-        self.participant = self.store.participant(self.lookup)
-        with self.store._read_transaction():
+        self.participant = self.store.participants.get(self.lookup)
+        with self.store.session.read():
             _require_owner(
                 self.store, self.lookup, self.owner, self.participant.participant_generation
             )
@@ -576,7 +573,7 @@ class SelectedExecution:
             # path-only or historical-session backfill is allowed. The wire
             # lock remains held across O_EXCL, file+parent fsync and journal
             # COMMIT+parent fsync, in wire→bus→registry→store→journal order.
-            with _response_boundary(self.bus) as registry, self.store._read_transaction():
+            with _response_boundary(self.bus) as registry, self.store.session.read():
                 actual = registry.threads.get(self.owner.name)
                 status = registry.statuses.get(self.owner.name)
                 if (
@@ -675,13 +672,13 @@ class SelectedExecution:
     def _engage(self):
         _require_registry_owner(self.comms, self.owner, self.owner_admission_generation)
         self.execution_id = self._engage_assignment()
-        snapshot = self.store.snapshot(self.execution_id)
+        snapshot = self.store.snapshots.get(self.execution_id)
         if snapshot.execution.lifecycle.queued:
-            snapshot = self.store.mark_pending(
+            snapshot = self.store.executions.mark_pending(
                 self.execution_id, expected_revision=snapshot.execution.revision
             ).value
         self.token = prepare_fence_token()
-        started = self.store.start_attempt(
+        started = self.store.attempts.start(AttemptStart(
             self.execution_id,
             1,
             self.owner.name,
@@ -689,9 +686,9 @@ class SelectedExecution:
             self.token,
             expected_execution_revision=snapshot.execution.revision,
             expected_pointer_revision=snapshot.pointer_revision,
-        ).value
+        )).value
         self.progress = DurableTurn(
-            self.store, started.fence, started.snapshot.pointer_revision, ""
+            self.store.attempts, started.fence, started.snapshot.pointer_revision, ""
         )
         selected = [
             assignment
@@ -967,9 +964,9 @@ class SelectedExecution:
             fence=self.fence,
         )
         if self.fence is not None:
-            snapshot = self.store.snapshot(self.fence.execution_id)
+            snapshot = self.store.snapshots.get(self.fence.execution_id)
             assert snapshot.attempt is not None
-            final = self.store.advance_attempt(
+            final = self.store.attempts.advance(
                 self.fence,
                 type(snapshot.attempt.lifecycle),
                 expected_pointer_revision=snapshot.pointer_revision,
@@ -977,7 +974,7 @@ class SelectedExecution:
                 process_dead=True,
                 reason_code="native_terminal_failure",
             ).value
-            self.store.settle_nonpublication(
+            self.store.attempts.settle_nonpublication(
                 final.fence,
                 expected_pointer_revision=final.snapshot.pointer_revision,
                 success=False,
@@ -1030,7 +1027,7 @@ class SelectedExecution:
         acquisition has no admission effect and can wait within the raw writer budget.
         """
         once = threading.Lock()
-        store_path = self.store.path
+        store_path = self.store.session.path
         # Prepare durable journal schema before the deadline-constrained raw
         # writer. A missing selected row must not mean a missing admission fence.
         journal = CompactionJournal(self.bus.log.path.parent / "compaction-commits.sqlite3")
@@ -1052,10 +1049,10 @@ class SelectedExecution:
             with ExitStack() as authority:
                 try:
                     admission_store = authority.enter_context(
-                        MutationStore(str(store_path), lock_timeout=0)
+                        Coordination(str(store_path), lock_timeout=0)
                     )
                     registry = authority.enter_context(_response_boundary(self.bus, blocking=False))
-                    db = authority.enter_context(admission_store.irreversible_admission())
+                    db = authority.enter_context(admission_store.session.irreversible_admission())
                 except BlockingIOError as error:
                     raise PromptAdmissionBusy("Native admission exclusion is busy") from error
                 except sqlite3.OperationalError as error:
@@ -1137,7 +1134,7 @@ class SelectedExecution:
                     None,
                 ):
                     raise StaleFence("native reservation changed before send")
-                current = admission_store.assignment(self.assignment.assignment_id)
+                current = admission_store.assignments.get(self.assignment.assignment_id)
                 if (
                     current.recipient_lookup,
                     current.recipient,
@@ -1159,7 +1156,7 @@ class SelectedExecution:
                     ):
                         raise StaleFence("triage claim changed before native send")
                 else:
-                    snapshot, attempt = admission_store._assert_fence(fence)
+                    snapshot, attempt = admission_store.attempts.require_fence(fence)
                     if (
                         not current.lifecycle.engaged
                         or not snapshot.execution.lifecycle.active
@@ -1291,7 +1288,7 @@ class SelectedExecution:
             != 1
         ):
             raise IdentityConflict("pending claim is not an original selected bus recipient")
-        with self.store._read_transaction():
+        with self.store.session.read():
             _require_owner(
                 self.store,
                 self.assignment.recipient_lookup,
@@ -1302,7 +1299,7 @@ class SelectedExecution:
 
     def _reserve_triage_input(self) -> tuple[str, str]:
         input_id, token = secrets.token_hex(16), secrets.token_hex(32)
-        with self.store._transaction() as db:
+        with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
             _require_owner(
                 self.store,
@@ -1310,7 +1307,7 @@ class SelectedExecution:
                 self.owner,
                 self.participant.participant_generation,
             )
-            current = self.store.assignment(self.assignment.assignment_id)
+            current = self.store.assignments.get(self.assignment.assignment_id)
             if (
                 current != self.assignment
                 or not current.lifecycle.mode.triage
@@ -1321,7 +1318,7 @@ class SelectedExecution:
                 db, where="assignment_id=?", parameters=(self.assignment.assignment_id,)
             ):
                 raise IdentityConflict("triage input was previously dispatched; no retry")
-            now = self.store._now(current.updated_at_ms)
+            now = self.store.session.now(current.updated_at_ms)
             # This CAS and the ID reservation commit together BEFORE the Pi launch.
             update = WakeAssignment.update(
                 db,
@@ -1379,15 +1376,15 @@ class SelectedExecution:
         # bytes. Check the committed prelaunch binding against this exact native
         # request digest before recording any live proof or settling the claim.
         # Failure after launch is UNKNOWN: the reserved input is never replayed.
-        with self.store._read_transaction():
-            assert_native_runtime_schema(self.store._connection)
+        with self.store.session.read():
+            assert_native_runtime_schema(self.store.session._connection)
             _require_owner(
                 self.store,
                 self.assignment.recipient_lookup,
                 self.owner,
                 self.participant.participant_generation,
             )
-            reserved = NativeRuntimeInput.one(self.store._connection, input_id=self.input_id)
+            reserved = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)
             binding = read_expected_prompt_binding(self.store, self.input_id)
             execution_id = None if fence is None else fence.execution_id
             ordinal = None if fence is None else fence.attempt_ordinal
@@ -1468,7 +1465,7 @@ class SelectedExecution:
         )
 
     def _record_triage_result(self, result: NativeTurnResult, decision: str) -> None:
-        with self.store._transaction() as db:
+        with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
             _require_owner(
                 self.store,
@@ -1476,7 +1473,7 @@ class SelectedExecution:
                 self.owner,
                 self.participant.participant_generation,
             )
-            current = self.store.assignment(self.assignment.assignment_id)
+            current = self.store.assignments.get(self.assignment.assignment_id)
             row = NativeRuntimeInput.one(db, input_id=self.input_id)
             if (
                 current.revision != self.assignment.revision + 1
@@ -1507,7 +1504,7 @@ class SelectedExecution:
             if decision == "IGNORE":
                 # Both declared SQL edges occur within this ONE transaction. A
                 # crash cannot expose TRIAGE_PENDING and trigger model replay.
-                now = self.store._now(current.updated_at_ms)
+                now = self.store.session.now(current.updated_at_ms)
                 WakeAssignment.update(
                     db,
                     where="assignment_id=?",
@@ -1522,14 +1519,14 @@ class SelectedExecution:
                     parameters=(self.assignment.assignment_id,),
                     lifecycle=IgnoredAssignment(),
                     revision=current.revision + 2,
-                    updated_at_ms=self.store._now(now),
+                    updated_at_ms=self.store.session.now(now),
                 )
 
     def _engage_assignment(self) -> str:
         target = derive_exact_reply_target(self.initial.message)
         if target is None:
             raise IdentityConflict("selected response has no exact original reply route")
-        with self.store._read_transaction():
+        with self.store.session.read():
             _require_owner(
                 self.store,
                 self.assignment.recipient_lookup,
@@ -1540,7 +1537,7 @@ class SelectedExecution:
         # Store owns the execution/claim/obligation transaction and its SQL
         # triggers. A concurrent generation change is checked again immediately
         # afterwards and before the fenced model attempt. Stale work never sends.
-        self.store.create_execution(
+        self.store.executions.create(
             execution_id,
             ExecutionOrigin.WIRE,
             self.assignment.recipient_lookup,
@@ -1549,7 +1546,7 @@ class SelectedExecution:
             assignment_ids=(self.assignment.assignment_id,),
             exact_target=target,
         )
-        with self.store._read_transaction():
+        with self.store.session.read():
             _require_owner(
                 self.store,
                 self.assignment.recipient_lookup,
@@ -1560,7 +1557,7 @@ class SelectedExecution:
 
     def _reserve_full_input(self, fence: OwnerFence) -> str:
         input_id = secrets.token_hex(16)
-        with self.store._transaction() as db:
+        with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
             _require_owner(
                 self.store,
@@ -1568,7 +1565,7 @@ class SelectedExecution:
                 self.owner,
                 self.participant.participant_generation,
             )
-            snapshot, attempt = self.store._assert_fence(fence)
+            snapshot, attempt = self.store.attempts.require_fence(fence)
             if (
                 snapshot.execution.execution_id != self.execution_id
                 or snapshot.pointer_revision < 1
@@ -1595,7 +1592,7 @@ class SelectedExecution:
         return input_id
 
     def _record_full_result(self, fence: OwnerFence, result: NativeTurnResult) -> None:
-        with self.store._transaction() as db:
+        with self.store.session.transaction() as db:
             assert_native_runtime_schema(db)
             _require_owner(
                 self.store,
@@ -1603,7 +1600,7 @@ class SelectedExecution:
                 self.owner,
                 self.participant.participant_generation,
             )
-            snapshot, _ = self.store._assert_fence(fence)
+            snapshot, _ = self.store.attempts.require_fence(fence)
             row = NativeRuntimeInput.one(db, input_id=self.input_id)
             if (
                 row is None
