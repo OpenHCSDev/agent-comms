@@ -10,7 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.threads import Thread
-from agent_comms.wire_watch import open_wire_watcher
+from agent_comms.wire_watch import WireChangeWatch, open_wire_watcher
 
 
 @pytest.mark.asyncio
@@ -27,7 +27,7 @@ async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     root_id = comms.messaging.initialize_private_initial_protocol()
     guard = PrivateRegistryGuard(comms.registry.store.path, root_id)
     watcher = open_wire_watcher(tmp_path)
-    if watcher is None:
+    if not isinstance(watcher, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
     try:
         for _ in range(10):
@@ -46,11 +46,21 @@ async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
 @pytest.mark.asyncio
 async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypatch):
     probe = open_wire_watcher(tmp_path)
-    if probe is None:
+    if not isinstance(probe, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
     probe.close()
 
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    comms = wire(tmp_path)
+    comms.registry.declare(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    agent = CommsAgent(comms, runtime_enabled=False)
+    agent.sessions.bindings["owner"] = "owner"
     calls = 0
     woke = asyncio.Event()
 
@@ -96,11 +106,21 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
 @pytest.mark.asyncio
 async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     probe = open_wire_watcher(tmp_path)
-    if probe is None:
+    if not isinstance(probe, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
     probe.close()
 
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    comms = wire(tmp_path)
+    comms.registry.declare(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    agent = CommsAgent(comms, runtime_enabled=False)
+    agent.sessions.bindings["owner"] = "owner"
     entered = asyncio.Event()
 
     async def drain(_session_id):

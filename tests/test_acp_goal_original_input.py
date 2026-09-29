@@ -10,6 +10,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms import agent_events as ae
+from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
@@ -22,7 +23,7 @@ async def owner(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+    monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
     updates = []
 
     class Client:

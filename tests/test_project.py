@@ -12,6 +12,7 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from delivery_owner_fixture import canonical_agent
+from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
@@ -114,7 +115,7 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.prompt(session, [{"type": "text", "text": "Change projects"}])
-        agent.inputs.schedule_wake(session)
+        WakeScheduleCheck(session_id=session, inputs=agent.inputs).schedule()
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=2)
         assert len(calls) == 2
         assert calls[0][0] == str(old)
