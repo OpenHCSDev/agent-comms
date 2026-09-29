@@ -334,6 +334,7 @@ class InputDrain(FutureInputQueue):
         # ordinary loop still synchronizes configuration and schedules goals.
         before = self._private_observation_revision(session_id, root_id)
         if self._idle_private_revisions.get(session_id) == before:
+            await self.effects._refresh_private_cursor(session_id)
             return 0
         self._idle_private_revisions.pop(session_id, None)
         result = await self.effects._drain_private_nk(session_id, root_id)

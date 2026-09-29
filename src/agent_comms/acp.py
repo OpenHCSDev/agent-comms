@@ -68,7 +68,6 @@ from .coordination_store import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from .field_codec import FieldCodec
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
@@ -133,7 +132,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._private_selected_tool_intent = private_selected_tool_intent
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
-        self._private_cursor_announced: dict[str, str] = {}
+        self._private_cursor_announced: dict[str, CursorEnvelope] = {}
         # Local ACP projection order, allocated before any async notification.
         # This is informational UI ordering, never a native input disposition.
         self._private_cursor_revisions: dict[str, int] = {}
@@ -449,12 +448,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             cursor = self._private_cursor_metadata(thread_name, session_id, defer_busy=True)
         except BlockingIOError:
+            self._private_cursor_announced.pop(session_id, None)
             return  # Read contention; the next poll refreshes this observation.
-        signature = json.dumps(
-            {key: value for key, value in FieldCodec.encode(cursor).items() if key != "revision"},
-            sort_keys=True,
-        )
-        if selected_status is None and self._private_cursor_announced.get(session_id) == signature:
+        announced = self._private_cursor_announced.get(session_id)
+        if selected_status is None and announced is not None and cursor.same_observation(announced):
             return
         fields = encode_updates(CursorAdvancedUpdate(cursor, selected_status))
         try:
@@ -463,8 +460,15 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 update=SessionInfoUpdate(session_update="session_info_update", field_meta=fields),
             )
         except (OSError, RuntimeError):
+            self._private_cursor_announced.pop(session_id, None)
             return  # A disconnected client can read a fresh trusted load later.
-        self._private_cursor_announced[session_id] = signature
+        self._private_cursor_announced[session_id] = cursor
+
+    async def _refresh_private_cursor(self, session_id: str) -> None:
+        """Retry unresolved read projections even when the input source is idle."""
+        announced = self._private_cursor_announced.get(session_id)
+        if announced is None or announced.observation.needs_refresh:
+            await self._publish_private_cursor(session_id, self.sessions.require(session_id))
 
     def _session_runtime_metadata(self, thread_name: str, session_id: str) -> tuple:
         # A trusted load supersedes any earlier broadcast, including when a

@@ -1,0 +1,10 @@
+[
+  {
+    "owned_derivative": ".artifacts/cursor-baseline",
+    "bytes_removed": 5679745
+  },
+  {
+    "owned_derivative": ".artifacts/cursor-candidate/test-data",
+    "bytes_removed": 463840
+  }
+]
