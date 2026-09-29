@@ -4,37 +4,37 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core4510dddf (289 registry race,287 nominal tools,
-280 wake visibility,283 proof decoding,284 framing), Toad08ee5aa (134 ready-message
-initialization fixing invisible retained native history,132 paired tool
-callers,128 attention,127 T4 and50 browser), Textualc9743801, native5fde.
-The immutable runtime-history-ready-20260928 is live. Core owners retain4510dddf;
-the UI-only134 installation did not restart them. Earlier four idle owners restarted;
-no store reset, session loss or input replay. Restart the user's Toad to load the
-new imports. Combined local checks38 passed; installed native wake/restart and
-feedback checks18 passed; actual native WebSocket1011 and mounted UI passed.
-The existing failed return152 remains uncertain and is not retried. NEW live
-diagnostic155 received exact reply156 LIVE_BUS_CONFIG_OK from nra-architecture
-through the actual bus/restarted owner/configured provider, then returned idle.
-The preceding pair passed six installed native config/rejection checks and the full
-installed native queue/reattach/DM/channel/stopped-owner UI pilot.
-New shipping batch:11 installed real drain/schema tests,2 mounted warning/recovery
-pilots with the merged framework,2 installed proof/reopen cases, then9 installed
-native cases including a2.1MB record, cancellation and EOF. All pass. All runtime
-stores and durable histories remain intact; executed activation operators deleted.
-Latest shipping batch:39 installed core checks, actual native send/inbox calls,
-installed current Toad context-menu/command-family pilots, and four fresh live
-ACP initialize/load attachments pass. Initial candidate caught a missed current
-Toad import;132 migrates it without aliases. First attachment harness hit its
-own asyncio line limit; reuse of the existing complete-record reader fixes the
-harness, and all four attachments pass. Failed outputs are retained honestly.
-User then reported native history hidden by the loading overlay. ACP attachment
-alone had not tested this boundary. Parent reproduced the actual retained PR95
-native view: history widgets existed, but AgentReady did not initialize its
-Textual Message base.134 replaces the misplaced presentation construction with
-super().__init__. Same installed live-session UI then reaches ready, mounts
-TranscriptHistory and removes loading; Agent.run completes without exception.
-No prompt or history mutation.134 merged and installed; restart existing Toad.
+Latest installed pair: core e6fa8feb (295 cursor recovery, 289 registry race,
+287 nominal tools), Toad c0d61fa5 (135 separate saved-history and bus-input
+verification, 133 initialization failure feedback, 131 detached controller,
+130 tab/clipboard, 134 retained-history ready fix), Textual c9743801, native5fde.
+Runtime runtime-cursor-recovery-20260928 is live through all five launchers.
+Four idle owners restarted using canonical lifecycle fencing. No store reset,
+history rewrite, or input replay. Existing Toad must reopen for new imports.
+
+Actual-path results for the latest user history failure:
+- Old installed core reproduces a stuck cursor after a contended trusted load:
+  real bus flock, real SQLite/owner identity, RuntimeServer over a TCP socket.
+  Recovery receive times out. New source and installed core pass the same test.
+- Latest log delivered 26 retained NRA events while bus verification was marked
+  unavailable. The old blanket History unavailable label was false about the
+  transcript.135 derives saved-page availability from mounted history ownership.
+- Actual installed Toad opened existing nra-architecture and PR95 native sessions
+  after activation: ready, retained TranscriptHistory mounted, loading overlay
+  absent, Saved history available, Agent.run completed without exception.
+- During concurrent fresh attachments NRA initially showed bus verification
+  unavailable alongside saved history; a fresh retained NRA view reported none
+  (no current verified input), correctly preserving saved history availability.
+  This is not a claim that a previously verified input survived owner restart.
+- All four fresh installed ACP initialize/load attachments pass. No prompt sent.
+- Core295 fixed trusted-load broadcast deduplication; Toad133 reports unexpected
+  initialization exceptions through AgentFail instead of silently hanging.
+
+Previous deployed native compaction, queue/reopen, bus155/156 configured-provider
+reply, tools, proof, large-record, and delivery feedback receipts remain below.
+The original uncertain return152 is never automatically replayed. Source-local,
+installed fixture, captured-ACP replay and actual live-session evidence are
+reported separately in evidence/cursor-load-recovery. Full goal remains active.
 
 ## Current shipping batch
 

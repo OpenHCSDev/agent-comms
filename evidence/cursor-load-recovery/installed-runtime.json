@@ -1,0 +1,50 @@
+{
+  "owners": [
+    {
+      "name": "agent-comms-ux",
+      "installed_worker": true,
+      "idle": true
+    },
+    {
+      "name": "pr95-selected-pi-summary-owner",
+      "installed_worker": true,
+      "idle": true
+    },
+    {
+      "name": "nra-architecture",
+      "installed_worker": true,
+      "idle": true
+    },
+    {
+      "name": "nra-domain-mapping",
+      "installed_worker": true,
+      "idle": true
+    }
+  ],
+  "packages": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "e6fa8febd943d5350f596d121557534aafde80ae",
+        "requested_revision": "e6fa8febd943d5350f596d121557534aafde80ae"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "c0d61fa55657732193b4d656bb0695ac48b7e0f4",
+        "requested_revision": "c0d61fa55657732193b4d656bb0695ac48b7e0f4"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "c9743801c98dc570f82f82e25915ecce89800f4b",
+        "requested_revision": "c9743801c98dc570f82f82e25915ecce89800f4b"
+      }
+    }
+  }
+}
