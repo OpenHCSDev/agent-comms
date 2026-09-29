@@ -293,13 +293,17 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
 
     from agent_comms.acp import CommsAgent
     from agent_comms.acp_extension import (
+        CompactionPublishedUpdate,
         InputDeliveryChangedUpdate,
         QueuePromptRequest,
         decode_updates,
         encode_request,
     )
     from agent_comms.comms import wire
+    from agent_comms.compaction_identity import SelectedCommitReference
+    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.errors import RelationViolationError
+    from agent_comms.field_codec import FieldCodec
     from agent_comms.goal_attempts import GoalAttemptStore
     from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 
@@ -322,10 +326,24 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         project.mkdir()
 
         updates = []
+        publications = []
 
         class Client:
             async def session_update(self, **kwargs):
                 updates.append(kwargs)
+                for event in decode_updates(kwargs["update"].field_meta):
+                    if isinstance(event, CompactionPublishedUpdate):
+                        # Actual ACP delivery must precede binding/writing this exact
+                        # selected original. Read its authority from the journal owner.
+                        journal = CompactionJournal(root / "compaction-commits.sqlite3")
+                        operation = journal.operations.get(event.publication.commit_id)
+                        reference = SelectedCommitReference.from_intent(json.loads(operation.intent_json))
+                        attempt = journal.summaries.get(reference.operation_id)
+                        source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json)).source
+                        assert source.pending_input_key is not None
+                        original = dispositions.read().lookup(source.pending_input_key)
+                        assert original.exists and not original.has_native_binding
+                        publications.append(event.publication.commit_id)
 
         agent = CommsAgent(
             comms,
@@ -468,6 +486,9 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
             assert attempt.state.declared_name == ("reserved" if correction else terminal_status)
             assert bool(journal.summaries.blocking(file)) is correction
             assert native_input_admitted(root, file) is not correction
+            if not correction and not clean_decline:
+                assert publications == [attempt.state.commit_id]
+                assert journal.publications.pending(file) == ()
             entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
             assert sum(row["type"] == "compaction" for row in entries) == (
                 0 if correction or clean_decline else 1

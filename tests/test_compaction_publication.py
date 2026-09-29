@@ -10,7 +10,6 @@ import sys
 
 import pytest
 
-from agent_comms import agent_events as ae
 from agent_comms import compaction_publication
 from agent_comms.acp_extension import CompactionPublishedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
@@ -84,37 +83,6 @@ async def test_local_delivery_requires_existing_owner_and_attached_transport(own
         assert await publish_pending_local(agent, "project", "project") == 0
         bus = comms.root / "bus.jsonl"
         assert not bus.exists() or b"private summary" not in bus.read_bytes()
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_pending_metadata_projects_before_next_owner_input_send(owner, tmp_path, monkeypatch):
-    agent, comms, session, journal, commit_id = owner
-    await agent.new_session(str(tmp_path / "project"))
-    agent.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
-    comms.threads.attach_session("project", str(session), pid=os.getpid())
-    updates = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update.model_dump(by_alias=True, exclude_none=True))
-
-    async def events(*args, **kwargs):
-        assert [event.commit_id for event in _publication_events(updates)] == [commit_id], (
-            "Local metadata projection must precede native provider send"
-        )
-        with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
-        yield ae.Done(ok=False, text="No provider invoked")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    agent.on_connect(Client())
-    try:
-        await agent.inputs.run_owned_input("project", "project", "distinct new input")
-        assert journal.publications.pending(str(session)) == ()
-        assert len(_publication_events(updates)) == 1
     finally:
         await agent.shutdown()
 
