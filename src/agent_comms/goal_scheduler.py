@@ -30,11 +30,11 @@ from .goal_attempts import (
     UnresolvedAttemptError,
 )
 from .goal_presentation import GoalExecution
-from .goal_schedule_rules import GoalScheduleCheck
 from .goals import Goal, GoalRevision
 from .native_input_owner import GoalLaunchOwner
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
+from .schedule_rules import GoalScheduleCheck
 from .store_files import _store_lock
 from .threads import Thread
 
@@ -97,13 +97,7 @@ class GoalScheduler:
             try:
                 generation = store.snapshot(goal.id)
                 if generation is None:
-                    self.comms.goals.block_goal_after_failed_turn(
-                        thread.name,
-                        started_goal=goal,
-                        expected_worktree=thread.worktree,
-                        diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
-                    )
-                    return
+                    raise UnresolvedAttemptError("Goal generation is absent")
                 generation.lifecycle.require_ready()
                 admission = self.comms.registry.snapshot().admission_generations[thread.name]
                 with _store_lock(self.comms._wire_lock_path):

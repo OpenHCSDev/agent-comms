@@ -11,14 +11,22 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True)
-class GoalScheduleCheck(RuleCheck):
+class SessionScheduleCheck(RuleCheck):
     session_id: str
     inputs: 'InputDrain'
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalScheduleCheck(SessionScheduleCheck):
     turn_busy: Callable[[str], bool]
 
 
-class ClosingGoalScheduleRule(ReservationRule):
-    check_type = GoalScheduleCheck
+class WakeScheduleCheck(SessionScheduleCheck):
+    pass
+
+
+class ClosingScheduleRule(ReservationRule):
+    check_type = SessionScheduleCheck
     explanation = "Input draining is closing."
 
     def violated(self, check):
@@ -41,8 +49,8 @@ class NativeInboxGoalScheduleRule(ReservationRule):
         return check.session_id in check.inputs.backend_inboxes
 
 
-class PendingWakeGoalScheduleRule(ReservationRule):
-    check_type = GoalScheduleCheck
+class PendingWakeScheduleRule(ReservationRule):
+    check_type = SessionScheduleCheck
     explanation = "A previously scheduled wake has not finished."
 
     def violated(self, check):
@@ -56,3 +64,19 @@ class PendingTurnGoalScheduleRule(ReservationRule):
 
     def violated(self, check):
         return bool(check.inputs.pending_turns.get(check.session_id))
+
+
+class DisabledWakeScheduleRule(ReservationRule):
+    check_type = WakeScheduleCheck
+    explanation = "Background waking is disabled by the input/runtime configuration."
+
+    def violated(self, check):
+        return check.inputs.background_wakes_disabled
+
+
+class EmptyWakeScheduleRule(ReservationRule):
+    check_type = WakeScheduleCheck
+    explanation = "No queued turn requires a background wake."
+
+    def violated(self, check):
+        return not check.inputs.pending_turns.get(check.session_id)

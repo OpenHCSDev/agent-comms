@@ -12,20 +12,31 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — parent deployment checkpoint
+## Current remaining mapping — PR365 source checkpoint
 
-Parent reports core350/351/352 merged at95a792, Toad158/159/161 merged at510716.
-The paired installed continuous native/MCP journeys passed; nine idle owners
-activated on identity-mcp, with nine fresh ACP loads passed. Saved UI paint was
-still being checked at this checkpoint; this census does not upgrade that claim.
+Parent reports361 merged at `d7745d0e` and the paired installed saved-history
+ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
+main5059. Canonical nine-idle-owner activation was in progress in that report;
+this document does not promote an activation-in-progress claim to completed.
 
-- Workspace156 is now160, with163 carrying proof; preserve that owner's files.
-- First-open153,154 and345 cutover are done.
--350/351 admission/response/awareness closure is merged;353 owns passive goal
-  failure identity/lifecycle and its shared reservation callers, ready for review.
--349/155 compaction feedback and152 process lifetime remain with their owners.
--162 is Noether's transcript filter;354 is Wegener's selected execution scope.
-- Whole S14 registration/scheduler and whole T4 still need their remaining owners.
+-350/351 admission/response/awareness,353 passive goal failure,354 selected
+  dispatch,357 registration boundaries and361 registry lifecycle are merged.
+  Their receipts identify deleted authorities and real affected paths.
+- Boyle365 owns goal scheduler/control and queued-input context/handoff closure.
+  TurnRunner's ledger/origin/projection state and all callers move to the actual
+  GoalScheduler owner; the input declaration owns its immutable acceptance context.
+  This is the remaining scheduler bite, not a claim that all S14 is finished.
+- Wegener retains current SelectedExecution/coordinated-runtime/startup work.
+  Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
+  Do not create competing work in those files.
+- Workspace156 mapping was superseded by160(+163 proof); first-open153,154 and345
+  cutover were reported complete. Later Toad167 is in the parent's paired test
+  above. The historical T4 and UI rows below are not fresh outstanding assignments;
+  the current named UI owners and Dalton audit own their exact remaining scope.
+- Remaining whole-plan claims: other native/event and whole T4 responsibilities
+  need their owners' remaining closure. Shared scheduling rules now also own the
+  InputDrain wake admission; no long condition remains in either scheduler file.
+  No scheduler/source receipt claims exhaustive full-plan completion.
 
 The dated measurements and old PR status rows below are retained as history.
 

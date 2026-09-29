@@ -35,8 +35,10 @@ from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
 from .queued_input import QueuedInput, QueuedInputContext
+from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
+from .schedule_rules import WakeScheduleCheck
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
@@ -323,15 +325,14 @@ class InputDrain(FutureInputQueue):
         self.schedule_wake(session_id)
         return pushed
 
+    @property
+    def background_wakes_disabled(self) -> bool:
+        return not self.auto_wake or not self.sessions.runtime_enabled
+
     def schedule_wake(self, session_id: str) -> None:
-        if (
-            self.closing
-            or not self.auto_wake
-            or not self.sessions.runtime_enabled
-            or not self.pending_turns.get(session_id)
-        ):
-            return
-        if session_id in self.wake_tasks and not self.wake_tasks[session_id].done():
+        try:
+            WakeScheduleCheck(session_id=session_id, inputs=self).require_valid()
+        except ReservationViolationError:
             return
 
         async def wake() -> None:
