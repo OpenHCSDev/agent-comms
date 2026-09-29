@@ -88,13 +88,7 @@ class TurnOutput:
             and not session.inputs.uncertain
             and not session.unresolved_inputs
         )
-        for cause in sorted(
-            failures.TurnFailure.members_with(failures.TerminalFailure),
-            key=lambda member: member.precedence,
-            reverse=True,
-        ):
-            if cause.detected(session, transport_ok):
-                self.record_failure(cause(cause.explanation(self)))
+        self.settle(session, transport_ok)
         return events.Done(
             text=self.terminal_text(success, stderr, session.proc.returncode),
             ok=success and self.failure is None and not session.session_identity_uncertain,
@@ -109,6 +103,21 @@ class TurnOutput:
                 ),
             },
         )
+
+    def settle(self, session: TurnSession, transport_ok: bool) -> None:
+        for cause in sorted(
+            failures.TurnFailure.members_with(failures.TerminalFailure),
+            key=lambda member: member.precedence,
+            reverse=True,
+        ):
+            if cause.detected(session, transport_ok):
+                self.record_failure(cause(cause.explanation(self)))
+
+    def permits_retention(self, session: TurnSession) -> bool:
+        # Called only after the native lifecycle has proved idle custody. Apply
+        # declaration-owned terminal evidence before handing the child back.
+        self.settle(session, transport_ok=True)
+        return self.clean
 
     def terminal_text(self, success: bool, stderr: str, returncode: int | None) -> str:
         if self.failure is not None:

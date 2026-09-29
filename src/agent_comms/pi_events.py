@@ -738,20 +738,18 @@ class ToolExecutionEnd(PiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         from .tool_results import ToolDiff
 
-        session.name = self.tool_name or "tool"
-        session.result = self.result
-        session.output = session.result.text() if session.result is not None else ""
-        session.is_ok = self.is_error is not True
-        session.tool_id = self.tool_call_id or session.name
-        session.active_tools.discard(session.tool_id)
+        name = self.tool_name or "tool"
+        is_ok = self.is_error is not True
+        tool_id = self.tool_call_id or name
+        session.active_tools.discard(tool_id)
         session.watchdog.tick()
         session.watchdog.progress()
         yield events.ToolEnd(
-            id=session.tool_id,
-            name=session.name,
-            ok=session.is_ok,
-            output=session.output,
-            diff=ToolDiff.from_result(session.name, session.result, session.is_ok),
+            id=tool_id,
+            name=name,
+            ok=is_ok,
+            output=self.result.text() if self.result is not None else "",
+            diff=ToolDiff.from_result(name, self.result, is_ok),
         )
 
 

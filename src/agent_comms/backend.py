@@ -701,8 +701,6 @@ class TurnSession:
             return
         if self.reused and self.persistent_session is not None:
             self.output.sensitive |= self.persistent_session.sensitive_diagnostics
-        if self.finished:
-            return
         async for event in self.initialize_rpc():
             yield event
         if self.finished:
@@ -1109,6 +1107,7 @@ class TurnSession:
             and isinstance(self.initial_session_file, str)
             and (self.initial_session_file == self.active_session_file)
             and (self.revision is not None)
+            and self.output.permits_retention(self)
         )
 
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
