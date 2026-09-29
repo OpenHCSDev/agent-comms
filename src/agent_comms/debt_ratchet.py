@@ -11,9 +11,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
+from .mro_dispatch import MroDispatch, handles
 
 
 class Measure(DeclaredFamily, affix="Measure"):
@@ -213,7 +213,48 @@ class CodecSubclass(PerFileOccurrenceMeasure):
         return 0
 
 
+class AnnotationSyntax(MroDispatch):
+    """Python's declared type-expression positions, not runtime record access.
+
+    Names do not decide this boundary: aliases, qualified typing constructors
+    and forward references share the same annotation grammar. Defaults,
+    decorators, assignment values and function bodies remain runtime syntax.
+    """
+
+    def __init__(self) -> None:
+        self.nodes: set[ast.AST] = set()
+
+    def include(self, expression: ast.AST | None) -> None:
+        if expression is not None:
+            self.nodes.update(ast.walk(expression))
+
+    @handles(ast.AnnAssign, ast.arg)
+    def annotation(self, node) -> None:
+        self.include(node.annotation)
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def return_type(self, node) -> None:
+        self.include(node.returns)
+
+    @handles(ast.TypeAlias, ast.type_param)
+    def type_declaration(self, node) -> None:
+        self.include(node)
+
+    @classmethod
+    def of(cls, tree: ast.AST) -> set[ast.AST]:
+        scope = cls()
+        for node in ast.walk(tree):
+            scope.dispatch_sync(node)
+        return scope.nodes
+
+
 class StringSubscript(OccurrenceMeasure):
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        tree = ast.parse(source, filename)
+        annotations = AnnotationSyntax.of(tree)
+        return sum(cls.occurrences(node) for node in ast.walk(tree) if node not in annotations)
+
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         return int(

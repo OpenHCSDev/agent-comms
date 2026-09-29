@@ -237,3 +237,37 @@ class OwnedCodec:
     assert status == 1
     assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 3
     assert report["head"][f"CodecSubclass:{repo.root}/boundary.py"] == 1
+
+
+def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Repository) -> None:
+    source = '\n'.join([
+        'import typing as t',
+        'from typing import Literal as Choice',
+        'type Transport = t.Literal["stdio"]',
+        'transport: Choice["stdio"]',
+        'class Declaration:',
+        '    transport: t.Literal["stdio"]',
+        'def render(value: Choice["stdio"]) -> t.Literal["stdio"]:',
+        '    local: Choice["stdio"]',
+        '    return "stdio"',
+        'async def asynchronous(value: Choice["stdio"]) -> Choice["stdio"]:',
+        '    return "stdio"',
+        'def generic[T: t.Literal["stdio"]](value: T) -> T:',
+        '    return value',
+    ]) + '\n'
+    base = repo.commit({"boundary.py": ""})
+    declarations = repo.commit({"boundary.py": source})
+    status, report = repo.compare(base, declarations)
+    assert status == 0
+    assert report["head"]["StringSubscript"] == 0
+    # Annotation spelling cannot conceal actual initializer/default/decorator/body reads.
+    runtime = source + '\n'.join([
+        'transport: Choice["stdio"] = payload["transport"]',
+        '@decorators["render"]',
+        'def read(value: Choice["stdio"] = defaults["transport"]) -> Choice["stdio"]:',
+        '    return payload["transport"]',
+    ]) + '\n'
+    changed = repo.commit({"boundary.py": runtime})
+    status, report = repo.compare(declarations, changed)
+    assert status == 1
+    assert report["delta"]["StringSubscript"] == 4
