@@ -28,9 +28,9 @@ No C1 type needs custom `WireValue`: existing field metadata and declared famili
 
 ## Deletion and ownership accounting
 
-Relative to integrated current main `ab3397a6`: **506 production lines deleted across 25 changed production files**, with 1,086 added declaration/effect lines. This is deletion of replaced dispatch and ownership code, not a claim of net line reduction. `git diff origin/main --numstat -- src/agent_comms` is the exact file-by-file receipt. Recompute if main changes before integration.
+Relative to integrated current main `697bba42`: **506 production lines deleted across 25 changed production files**, with 1,086 added declaration/effect lines. This is deletion of replaced dispatch and ownership code, not a claim of net line reduction. `git diff origin/main --numstat -- src/agent_comms` is the exact file-by-file receipt. Recompute if main changes before integration.
 
-Final committed package-ratchet result against `ab3397a6`: 10 fewer string-dispatch subjects / 36 fewer arms; 2 fewer type-switch subjects / 7 fewer arms; 42 fewer foreign absence probes, with no increased measure. All measured deltas are nonpositive. This is a syntactic debt measurement, not live acceptance.
+Final committed package-ratchet result against `697bba42`: 10 fewer string-dispatch subjects / 36 fewer arms; 2 fewer type-switch subjects / 7 fewer arms; 42 fewer foreign absence probes, with no increased measure. All measured deltas are nonpositive. This is a syntactic debt measurement, not live acceptance.
 
 ## Coordination and resources
 
@@ -43,10 +43,8 @@ Owned scratch: `/home/ts/.cache/agent-scratch/comms-cleanup-c1-pi-vocabulary-202
 | File | Added | Deleted |
 | --- | ---: | ---: |
 | `src/agent_comms/backend.py` | 76 | 2 |
-| `src/agent_comms/child_process.py` | 1 | 2 |
 | `src/agent_comms/config_options.py` | 4 | 3 |
 | `src/agent_comms/coordinated_runtime.py` | 2 | 1 |
-| `src/agent_comms/field_codec.py` | 11 | 43 |
 | `src/agent_comms/fresh_private_session.py` | 3 | 2 |
 | `src/agent_comms/import_records.py` | 366 | 0 |
 | `src/agent_comms/importing.py` | 31 | 134 |
@@ -55,16 +53,12 @@ Owned scratch: `/home/ts/.cache/agent-scratch/comms-cleanup-c1-pi-vocabulary-202
 | `src/agent_comms/native_pi.py` | 2 | 1 |
 | `src/agent_comms/owner_compaction_adaptive.py` | 2 | 23 |
 | `src/agent_comms/owner_compaction_manual.py` | 3 | 10 |
-| `src/agent_comms/pending_requests.py` | 1 | 3 |
 | `src/agent_comms/pi_commands.py` | 2 | 1 |
 | `src/agent_comms/pi_events.py` | 71 | 181 |
 | `src/agent_comms/pi_payloads.py` | 133 | 27 |
-| `src/agent_comms/pi_rpc.py` | 1 | 2 |
 | `src/agent_comms/pi_summary_payloads.py` | 128 | 8 |
 | `src/agent_comms/pi_vocabulary.py` | 199 | 0 |
 | `src/agent_comms/private_send_admission.py` | 2 | 1 |
-| `src/agent_comms/read_ledger.py` | 1 | 2 |
-| `src/agent_comms/sealed.py` | 0 | 21 |
 | `src/agent_comms/selected_pi_summary_rpc.py` | 6 | 59 |
 | `src/agent_comms/session_lifecycle.py` | 2 | 1 |
 | `src/agent_comms/threads.py` | 5 | 11 |
@@ -97,3 +91,7 @@ C1 implementation scope is complete, with no compatibility properties, aliases o
 - Actual cold retained manual compaction: 1 passed in 13.54s; 49,238 source bytes, 11,518 tokens before, one localhost provider request, native journal commit, strict reopen, zero new user inputs, owner idle. A first source candidate had a single 2.1MB final answer that cannot fit the selected272k atomic-retention budget; it was correctly refused. The existing fixture now takes an optional keepRecent setting through its one PiCompactionSettings owner, enabling a realistic49k two-turn retained source without changing production policy.
 
 All native fixture children were reaped. The serial fixture slot was released directly to the208 owner. No paid calls, live owners, default package pins or owner history were mutated. Exact compact manual receipt and final test summaries are retained under evidence/cleanup-c1-pi-vocabulary. Owned disposable synthetic fixture roots are cleaned after copying these receipts.
+
+## Current-main C0 integration
+
+Merged `697bba42` normally as `ac7dfe47`. Current production diff contains exactly the25 C1 files: 1,086 added and506 deleted lines. Sealed/FieldCodec/pending-request/read-ledger main changes remain integrated and are not counted as C1 deletions. Provider-free Pi/import/FieldCodec/seal ownership gates: **127 passed in 3.00s**. Current-main package ratchet has zero increased measures. Actual native/ACP/manual semantic cases are unchanged and were not repeated solely for these seals, per owner instruction. Published branch is ready for normal parent merge; optional CI remains deferred.

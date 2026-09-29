@@ -1,6 +1,6 @@
 {
-  "base_revision": "ab3397a6faaec148418dc82c87db4f02bd943a36",
-  "head_revision": "7e593e0ad13312d42ba745e7924554c99e551eff",
+  "base_revision": "697bba42f5f03e169ff8eae9490090cbd0d0b89e",
+  "head_revision": "ac7dfe4733a8dbdaf57a8ccfff11ff18ddf2241a",
   "root": "src/agent_comms/",
   "paths": [
     "src/agent_comms/backend.py",
