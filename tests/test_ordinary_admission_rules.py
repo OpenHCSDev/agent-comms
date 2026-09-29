@@ -108,7 +108,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goal_waits import GoalWait
     from agent_comms.goals import Goal
-    from agent_comms.messages import Message
+    from agent_comms.messages import Message, MessageType
     from agent_comms.threads import Thread
     from agent_comms.turn_goal_permission import ContinuationGoalPermission
     from agent_comms.turn_input_source import DependencyOriginalInput, RoutedOriginalInput
@@ -118,7 +118,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     comms.threads.register(peer)
     peer = comms.registry.require("peer")
     goal = Goal("Wait for peer", "goal")
-    message = Message(seq=2, sender="peer", target="owner", body="Result")
+    message = Message(seq=2, sender="peer", target="owner", body="Result", type=MessageType.INFO)
     wait = GoalWait(
         goal_id=goal.id,
         wait_id="wait",
