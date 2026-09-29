@@ -74,7 +74,7 @@ SDK proof and passing post-upgrade native Read acceptance:
 `evidence/native-tool-declarations/HANDOFF.md`. Native Read -> official ACP passed with343 d396. Parent owns final paired
 installation; no CI gate.
 
-## Native launch selection boundary — native sidecar, active draft
+## Native launch selection boundary — native sidecar, PR346
 
 NativeArguments and its declaration family replace backend's four independent
 provider/model/thinking readers/replacers plus the RPC-mode interpreter. Session,

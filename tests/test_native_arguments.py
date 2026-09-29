@@ -12,6 +12,7 @@ from agent_comms.native_arguments import (
     OptionArgument,
     ValueArgument,
 )
+from test_backend_native_lifecycle import native_backend as native_backend
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -84,3 +85,79 @@ def test_backend_cannot_reintroduce_independent_launch_option_readers():
         assert not any(
             isinstance(node, ast.FunctionDef) and node.name in removed for node in ast.walk(tree)
         )
+
+
+async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
+    native_backend, monkeypatch
+):
+    import asyncio
+    from dataclasses import replace
+
+    from acp.agent.router import build_agent_router
+
+    from agent_comms.comms import Comms
+    from delivery_owner_fixture import canonical_agent
+
+    native = native_backend
+    assert (await native.run("Retain this launch-selection history"))[-1].ok
+    await native.persistent.close()
+    history = native.session.read_bytes()
+    proof_path = native.session.with_suffix(native.session.suffix + ".input-proof")
+    proof = proof_path.read_bytes()
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+    owner = canonical_agent(
+        Comms(native.root),
+        auto_wake=False,
+        agent_args=[
+            "--provider=response-local",
+            "--model=fixture",
+            "--thinking=low",
+            "--thinking=off",
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--no-tools",
+        ],
+    )
+    router = build_agent_router(owner)
+    try:
+        async with asyncio.timeout(25):
+            created = await router(
+                "session/new", {"cwd": str(native.project), "mcpServers": []}, False
+            )
+            sid = created.session_id
+            thread = owner._comms.registry.require(sid)
+            assert thread.model == "response-local/fixture" and thread.thinking_level == "off"
+            # Seed the representative saved-thread binding through the existing store.
+            owner._comms.registry.register(replace(thread, auto_title_pending=False))
+            owner._comms.threads.attach_session(sid, str(native.session))
+            await router(
+                "session/load",
+                {"cwd": str(native.project), "sessionId": sid, "mcpServers": []},
+                False,
+            )
+            thread = owner._comms.registry.require(sid)
+            state = await owner.turns.prepare_selected_session(sid, thread)
+            assert state.model == "response-local/fixture"
+            assert native.session.read_bytes() == history and proof_path.read_bytes() == proof
+            child = owner.turns.persistent_backends[sid].custody.child
+            assert child.attestation.state.thinking_level == "off"
+            response = await router(
+                "session/prompt",
+                {
+                    "sessionId": sid,
+                    "prompt": [{"type": "text", "text": "One new launch-selection input"}],
+                },
+                False,
+            )
+            await asyncio.gather(*tuple(owner.turns.turn_tasks.values()))
+            assert response.stop_reason == "end_turn"
+            assert native.session.read_bytes().startswith(history)
+            assert proof_path.read_bytes().startswith(proof)
+            assert len(native.saved_inputs()) == 2 and native.provider.posts == 2
+            assert not owner.turns.active_turns
+    finally:
+        await owner.shutdown()
+    assert not owner.turns.persistent_backends
