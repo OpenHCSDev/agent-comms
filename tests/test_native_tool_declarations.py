@@ -142,7 +142,11 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     starts = [event for event in records if isinstance(event, events.ToolStart)]
     ends = [event for event in records if isinstance(event, events.ToolEnd)]
     assert len(starts) == len(ends) == 1
-    assert starts[0].kind == "read" and starts[0].title == f"Read {source}"
+    # Activity captions have an existing 120-character detail budget. The
+    # external rawInput must still retain the entire native argument below.
+    detail = str(source)
+    expected_title = "Read " + detail[:120] + ("…" if len(detail) > 120 else "")
+    assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
     assert len(native.starts) == len(native.saved_inputs()) == 1
     assert native.provider.posts == 2 and source.read_text() == "ACTUAL_READ_CONTENT\n"
@@ -154,7 +158,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     assert isinstance(update, ToolCallStart)
     assert (update.kind, update.title, update.raw_input) == (
         "read",
-        f"Read {source}",
+        expected_title,
         {"path": str(source)},
     )
 

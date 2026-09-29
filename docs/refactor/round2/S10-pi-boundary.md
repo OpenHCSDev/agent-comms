@@ -70,6 +70,6 @@ The coding capability still derives its restricted admitted membership; title an
 ACP kind use those same declarations with shared path behavior. Backend's parallel
 kind roster/title switch and Pi event scratch fields are deleted. No native
 producer, checkpoint schema or Toad AgentProcess changes. Exact scope, physical
-SDK proof and pending post-upgrade native acceptance:
-`evidence/native-tool-declarations/HANDOFF.md`. Parent owns final native/install
-verification after the host package upgrade; no CI gate.
+SDK proof and passing post-upgrade native Read acceptance:
+`evidence/native-tool-declarations/HANDOFF.md`. Native Read -> official ACP passed with343 d396. Parent owns final paired
+installation; no CI gate.

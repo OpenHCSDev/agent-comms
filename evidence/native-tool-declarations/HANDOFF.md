@@ -1,6 +1,28 @@
-# Native tool declaration closure — draft
+# Native tool declaration closure — ready
 
-105 production lines deleted, 132 added; 7 test lines deleted, 219 added. Net code growth supplies declaration-owned behavior and an actual native/official-SDK proof; the old dispatch and coding declarations are removed, not duplicated. Original S2 tool presentation / round2 S10. Based on ready PR343 ad3c50c7 (itself current-main9251b823); no native package changes. Parent owns integration/deployment.
+## Current readiness — post-upgrade native acceptance
+
+Actual pinned native Read -> production event projection -> official ACP SDK
+byte transport PASS: 1 test,3.70s, with PR343 immutable d396 package and PR344
+production atbac70669. Only test correction since that source: caption assertion
+honors existing120-character detail truncation; complete absolute path remains
+asserted in ACP rawInput. First post-upgrade run completed actual read/answer but
+failed that incorrect full-caption expectation; its log remains failed and saved.
+
+Verified one original native input saved/started, exactly one successful real file
+read, exactly two localhost provider requests, final success, unchanged read file,
+and correct ACP tool kind/title/full rawInput. Fixture cleanup reaped native children
+and ACP connections; own disposable test roots removed after process-reference
+check. No paid provider, live runtime change, native package rebuild, or CI wait.
+Full343 prefix(ad3c50c7),340(1f6bc389), and main9251b823 are ancestors. No local
+implementation blocker remains. Parent owns paired install; no painted-UI claim.
+
+Receipts: native-read-after-upgrade.log (caption assertion FAIL),
+native-read-caption-corrected.log (PASS), native-read-cleanup.json. Historical
+upgrade-era limits below describe their original attempts and are superseded here.
+
+
+105 production lines deleted, 132 added; 7 test lines deleted, 223 added. Net code growth supplies declaration-owned behavior and an actual native/official-SDK proof; the old dispatch and coding declarations are removed, not duplicated. Original S2 tool presentation / round2 S10. Based on ready PR343 ad3c50c7 (itself current-main9251b823); no native package changes. Parent owns integration/deployment.
 
 IMPL-4/5, MEMB-1, BOUND-2: existing coding tool declarations are generalized under NativeTool. Their capability subclass CodingTool continues to derive exactly its existing admitted tool list. Shared PathTool behavior removes repeated read/write/edit title parsing. Native tool start produces title, raw args and ACP kind once; ACP consumes that event directly. Unknown extension names remain displayable without CodingTool admission. Deleted backend kind map/title switch/helpers and Pi-event transient session.name/args/tool_id writes. No checkpoint, producer/token, fork or AgentProcess edits.
 
