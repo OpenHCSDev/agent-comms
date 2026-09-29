@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from .errors import RelationViolationError, UnregisteredThreadError
+from .child_process import ProcessIdentity
 from .field_codec import FieldCodec
 from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
@@ -343,3 +344,12 @@ class RegistrySnapshot:
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
         return self.threads[canonical].owner_identity(self.owner_generations[canonical])
+
+    def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
+        """A read attachment retains its owner lease across startup, not across restart."""
+        if not owner.incarnation.current(self):
+            raise RelationViolationError("Thread incarnation changed during owner attachment")
+        thread = self.require_active(owner.incarnation.name)
+        if self.owner_generations[thread.name] != owner.generation:
+            raise RelationViolationError("Owner lease changed during attachment")
+        thread.require_local_process(process)
