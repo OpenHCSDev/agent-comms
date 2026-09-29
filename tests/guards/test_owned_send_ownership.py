@@ -40,3 +40,17 @@ def test_admission_components_own_state_without_capturing_runner():
                 assert node.id not in {"OwnedTurn", "TurnRunner"}, (path, node.lineno)
             if isinstance(node, ast.Attribute):
                 assert node.attr != "runner", (path, node.lineno)
+
+
+def test_ordinary_admission_preserves_named_rule_dispatch_until_callback():
+    tree = ast.parse(inspect.getsource(OwnedSendAdmission))
+    assert not any(
+        isinstance(node, ast.FunctionDef) and node.name in {"_current_owner", "_accepted"}
+        for node in ast.walk(tree)
+    )
+    assert not any(
+        isinstance(node, ast.BoolOp) and len(node.values) >= 4 for node in ast.walk(tree)
+    )
+    assert not any(
+        isinstance(node, ast.Name) and node.id in {"owner_ok", "allowed"} for node in ast.walk(tree)
+    )

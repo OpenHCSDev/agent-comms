@@ -1,15 +1,26 @@
-"""Ordinary owner-turn input admission, held through the native stdin write."""
+"""Ordinary owner-turn admission: named checks held through native stdin.write."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .goal_attempt_phase import ClaimedAttempt
-from .goal_attempts import Generation, LaunchPermit
-from .goal_generation import ReservedGeneration
+from .ordinary_admission_rules import (
+    AcceptedInputCheck,
+    InputKeysCheck,
+    MissingAcceptedInputCheck,
+    MissingTurnOwnerCheck,
+    OrdinaryContextCheck,
+    OrdinaryGoalGrantCheck,
+    OrdinaryJournalCheck,
+    OrdinaryOwnerCheck,
+    UnboundOrdinaryInputRule,
+    UnconsumedDependencyRule,
+)
+from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import TurnId
@@ -24,11 +35,13 @@ from .turn_input_source import (
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goal_attempts import GoalAttemptStore
+    from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_waits import GoalWait
     from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,31 +73,42 @@ class OwnedSendAdmission:
             keys=keys, accepted_id=public_id, goal_permission=self.original.goal_permission
         )
 
-    def _current_owner(
-        self, current: Thread | None, registry: RegistrySnapshot, canonical: str
-    ) -> bool:
-        return (
-            current is not None
-            and self.thread.incarnation.current(registry)
-            and registry.statuses[canonical].running
-            and registry.admission_generations.get(canonical) == self.admission
-            and current.process_identity == self.thread.process_identity
-            and current.worktree == self.thread.worktree
-            and current.active_turn is not None
-            and TurnId(current.active_turn.id) == self.turn
-        )
-
-    def _accepted(self, source: TurnInputSource, current: Thread, wait: GoalWait | None) -> bool:
+    def _check_owner(
+        self,
+        current: Thread | None,
+        snapshot: RegistrySnapshot,
+        canonical: str,
+        source: TurnInputSource,
+        text: str,
+        wait: GoalWait | None,
+    ) -> None:
+        if current is None:
+            MissingTurnOwnerCheck().require_valid()
+        OrdinaryOwnerCheck(
+            expected=self.thread,
+            current=current,
+            registry=snapshot,
+            canonical=canonical,
+            admission=self.admission,
+            turn=self.turn,
+        ).require_valid()
+        InputKeysCheck(source=source, text=text).require_valid()
         if source.accepted_id is None:
-            return True
+            return
         accepted = self.inputs.queued_inputs.get(self.session_id, {}).get(source.accepted_id)
-        return (
-            accepted is not None
-            and accepted.current(current, self.admission, wait)
-            and source.keys == (f"acp:{source.accepted_id}",)
-            and self.inputs.steering_input_keys.get(self.session_id, {}).get(source.accepted_id)
-            == source.keys[0]
-        )
+        if accepted is None:
+            MissingAcceptedInputCheck().require_valid()
+        AcceptedInputCheck(
+            receipt=accepted,
+            current=current,
+            admission=self.admission,
+            wait=wait,
+            input_id=source.accepted_id,
+            keys=source.keys,
+            steering_key=self.inputs.steering_input_keys.get(self.session_id, {}).get(
+                source.accepted_id
+            ),
+        ).require_valid()
 
     def _binding(self, source: TurnInputSource) -> TurnInputBinding:
         selected = source.selected_admission(self.inputs, self.session_id)
@@ -97,67 +121,79 @@ class OwnedSendAdmission:
             inputs=self.inputs,
         )
 
-    def _goal_launch_current(self, source: TurnInputSource) -> bool:
-        if source.bypasses_goal_permit or self.goal_permit is None:
-            return True
-        attempt = self.goal_permit.reservation
-        assert self.goal_store is not None
-        return self.goal_store._is_attempt(
-            attempt,
-            ClaimedAttempt(),
-            Generation(
-                attempt.goal_id, attempt.generation, ReservedGeneration(), attempt.attempt_id
-            ),
+    def _require_context(
+        self,
+        source: TurnInputSource,
+        current: Thread,
+        wait: GoalWait | None,
+        snapshot: RegistrySnapshot,
+        binding: TurnInputBinding,
+    ) -> None:
+        OrdinaryContextCheck(
+            source=source, goal=current.goal, wait=wait, registry=snapshot
+        ).require_valid()
+        OrdinaryJournalCheck(binding=binding, current=current).require_valid()
+        if not source.bypasses_goal_permit and self.goal_permit is not None:
+            assert self.goal_store is not None
+            OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()
+
+    def _refusal(self, rule: ReservationRule, defer: bool) -> bool | None:
+        _LOG.info(
+            "Ordinary input %s: %s",
+            "deferred" if defer else "refused",
+            ReservationViolationError(rule),
         )
+        return None if defer else False
 
     @contextmanager
     def __call__(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
     ) -> Iterator[bool | None]:
-        # No await/provider/ACK while held: this same lock spans final checks and write.
+        # No await/provider/ACK while held: the same lock spans final checks and write.
         with _store_lock(self.comms._wire_lock_path):
             self.comms.owners.maintenance.assert_open_unlocked()
             snapshot = self.comms.registry.snapshot()
             canonical = snapshot.aliases.get(self.thread.name, self.thread.name)
             current = snapshot.threads.get(canonical)
-            goal = current.goal if current is not None else None
             wait = self.comms.goals.goal_wait(canonical) if current is not None else None
             source = self.source(public_id)
             binding = self._binding(source)
-            owner_ok = (
-                self._current_owner(current, snapshot, canonical)
-                and source.valid_keys(sent_text)
-                and self._accepted(source, current, wait)
-            )
-            defer_for_goal = owner_ok and source.defers_for_goal(self.thread.goal, goal)
-            allowed = (
-                owner_ok
-                and source.allows_context(goal, wait, snapshot)
-                and binding.available(current)
-                and self._goal_launch_current(source)
-            )
-            if not allowed:
+            try:
+                self._check_owner(current, snapshot, canonical, source, sent_text, wait)
+            except ReservationViolationError as error:
                 binding.invalidate()
-            else:
-                allowed = binding.bind(
-                    current=current,
-                    keys=source.keys,
-                    admission=self.admission,
-                    turn=self.turn,
-                    native_id=native_id,
-                    text=sent_text,
-                    already_bound=already_bound,
-                )
-            if allowed:
-                allowed = source.consume_wait(self.comms, canonical, wait)
-            if allowed:
-                self.comms.transcripts.routes.record_input_display(
-                    native_id,
-                    source.display(self.inputs.dispositions, sent_text),
-                    sent_text=sent_text,
-                    routing=TurnRouting(source.origins, None) if source.origins else None,
-                )
-            yield True if allowed else None if defer_for_goal else False
+                yield self._refusal(error.rule, False)
+                return
+            defer = source.defers_for_goal(self.thread.goal, current.goal)
+            try:
+                self._require_context(source, current, wait, snapshot, binding)
+            except ReservationViolationError as error:
+                binding.invalidate()
+                yield self._refusal(error.rule, defer)
+                return
+            # Binding/journal failures may be uncertain. Exceptions here still propagate;
+            # never reinterpret a failed durable operation as a retryable policy refusal.
+            if not binding.bind(
+                current=current,
+                keys=source.keys,
+                admission=self.admission,
+                turn=self.turn,
+                native_id=native_id,
+                text=sent_text,
+                already_bound=already_bound,
+            ):
+                yield self._refusal(UnboundOrdinaryInputRule(), defer)
+                return
+            if not source.consume_wait(self.comms, canonical, wait):
+                yield self._refusal(UnconsumedDependencyRule(), defer)
+                return
+            self.comms.transcripts.routes.record_input_display(
+                native_id,
+                source.display(self.inputs.dispositions, sent_text),
+                sent_text=sent_text,
+                routing=TurnRouting(source.origins, None) if source.origins else None,
+            )
+            yield True
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)

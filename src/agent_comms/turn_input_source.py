@@ -29,10 +29,14 @@ class TurnInputSource(ABC):
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1
 
+    def dependency_current(self, wait: GoalWait | None) -> bool:
+        return True
+
     @abstractmethod
-    def allows_context(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool: ...
+    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool: ...
+
+    @abstractmethod
+    def allows_goal_input(self, goal: Goal | None) -> bool: ...
 
     @abstractmethod
     def display(self, dispositions: InputDispositions, text: str) -> str | None: ...
@@ -72,42 +76,29 @@ class OriginalTurnInput(TurnInputSource):
             or comms.goals.consume_goal_wait(canonical, wait.wait_id)
         )
 
-    def allows_context(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool:
-        return (
-            self.goal_permission.allows(goal)
-            and (
-                self.dependency_wait_id is None
-                or (wait is not None and wait.wait_id == self.dependency_wait_id)
-            )
-            and self.allows_wait(goal, wait, registry)
+    def dependency_current(self, wait: GoalWait | None) -> bool:
+        return self.dependency_wait_id is None or (
+            wait is not None and wait.wait_id == self.dependency_wait_id
         )
-
-    @abstractmethod
-    def allows_wait(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool: ...
 
 
 class OwnerOriginalInput(OriginalTurnInput):
-    def allows_wait(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool:
+    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        return True
+
+    def allows_goal_input(self, goal: Goal | None) -> bool:
         return True
 
 
 class RoutedOriginalInput(OriginalTurnInput):
-    def allows_wait(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool:
+    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        return wait is None or (
+            wait.wait_id == self.dependency_wait_id
+            and any(wait.matches(origin, registry) for origin in self.direct_origins)
+        )
+
+    def allows_goal_input(self, goal: Goal | None) -> bool:
         return (
-            wait is None
-            or (
-                wait.wait_id == self.dependency_wait_id
-                and any(wait.matches(origin, registry) for origin in self.direct_origins)
-            )
-        ) and (
             not self.keys
             or goal is None
             or not goal.state.active
@@ -131,19 +122,17 @@ class FollowingTurnInput(TurnInputSource):
 class AcceptedFollowingInput(FollowingTurnInput):
     bypasses_goal_permit = True
 
-    def allows_context(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool:
-        # QueuedInput.current additionally verifies the exact accepted goal/wait.
-        return self.goal_permission.allows(goal)
+    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        # QueuedInput.current separately proves the exact accepted wait.
+        return True
+
+    def allows_goal_input(self, goal: Goal | None) -> bool:
+        return True
 
 
 class RoutedFollowingInput(FollowingTurnInput):
-    def allows_context(
-        self, goal: Goal | None, wait: GoalWait | None, registry: RegistrySnapshot
-    ) -> bool:
-        return (
-            self.goal_permission.allows(goal)
-            and wait is None
-            and (not self.keys or goal is None or not goal.state.active)
-        )
+    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        return wait is None
+
+    def allows_goal_input(self, goal: Goal | None) -> bool:
+        return not self.keys or goal is None or not goal.state.active
