@@ -23,6 +23,7 @@ from agent_comms.coordination_store import MutationStore, RecoveryBlocked, Recov
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
@@ -38,7 +39,7 @@ def unknown_owner(directory, admitted, output, exit_allowed):
             await fake(*args, **kwargs)
         raise NativePiUnavailable("UNKNOWN before admission receipt")
 
-    runtime.run_native_pi_turn = fail
+    runtime.TrackedTurnSession.execute = fail
     try:
         asyncio.run(
             runtime.SelectedExecution(
@@ -134,7 +135,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
     ).run()
@@ -228,7 +229,9 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
 
 
 @pytest.mark.asyncio
-async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, monkeypatch):  # noqa: F811
+async def test_real_local_rpc_failure_reaps_child_and_releases_slot(
+    tmp_path, monkeypatch
+):  # noqa: F811
     from agent_comms import native_pi
     from agent_comms.durable_turn import DurableTurn
 
@@ -289,7 +292,7 @@ print(json.dumps({"type":"response", "id":request["id"],
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
@@ -306,7 +309,7 @@ async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatc
         comms.registry.unregister("beta")
         raise NativePiUnavailable("original uncertain failure")
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", revoke_then_fail)
+    monkeypatch.setattr(TrackedTurnSession, "execute", revoke_then_fail)
     with pytest.raises(NativePiUnavailable, match="original uncertain failure"):
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path

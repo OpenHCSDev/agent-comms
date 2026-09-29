@@ -1,0 +1,107 @@
+...................FFFFFF..F.....F..........F..........F................ [ 36%]
+...................
+=================================== FAILURES ===================================
+_______ test_acp_session_selected_native_pipeline_never_uses_legacy_ack ________
+tests/test_acp_private_nk_delivery.py:540: in test_acp_session_selected_native_pipeline_never_uses_legacy_ack
+    before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'privateNativeCursor'
+_______ test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot ________
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: in wait
+    await fut
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests/test_acp_private_nk_delivery.py:629: in test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot
+    await asyncio.wait_for(entered.wait(), timeout=5)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: in __aexit__
+    raise TimeoutError from exc_val
+E   TimeoutError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:212 Optional awareness omitted; original delivered alone (ValueError)
+_______ test_observed_mid_session_admission_change_invalidates_old_proof _______
+tests/test_acp_private_nk_delivery.py:669: in test_observed_mid_session_admission_change_invalidates_old_proof
+    proven = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'privateNativeCursor'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:212 Optional awareness omitted; original delivered alone (ValueError)
+_____________ test_unavailable_cursor_metadata_retains_owner_scope _____________
+tests/test_acp_private_nk_delivery.py:689: in test_unavailable_cursor_metadata_retains_owner_scope
+    before = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'privateNativeCursor'
+____ test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof _____
+tests/test_acp_private_nk_delivery.py:720: in test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+    assert updates[-1]["status"] == "proven"
+           ^^^^^^^^^^^
+E   IndexError: list index out of range
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:212 Optional awareness omitted; original delivered alone (ValueError)
+________ test_contended_cursor_refresh_still_invalidates_replaced_owner ________
+tests/test_acp_private_nk_delivery.py:749: in test_contended_cursor_refresh_still_invalidates_replaced_owner
+    scope = updates[-1]["scope"]
+            ^^^^^^^^^^^
+E   IndexError: list index out of range
+__________ test_acp_private_no_wake_has_delivery_receipt_but_no_model __________
+tests/test_acp_private_nk_delivery.py:819: in test_acp_private_no_wake_has_delivery_receipt_but_no_model
+    cursor = agent.sessions.metadata("beta")["agentComms"]["privateNativeCursor"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'privateNativeCursor'
+_________ test_acp_mismatched_root_and_bad_package_cannot_accept_claim _________
+tests/test_acp_private_nk_delivery.py:990: in test_acp_mismatched_root_and_bad_package_cannot_accept_claim
+    with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'explicit matching root'
+E     Actual message: 'private N/K ACP root does not match configuration'
+_ test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource _
+tests/test_cohort_foreground.py:253: in test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource
+    await foreground.run_foreground_once(
+src/agent_comms/cohort_foreground.py:188: in run_foreground_once
+    result = await SelectedExecution(
+src/agent_comms/coordinated_runtime.py:402: in run
+    self._open()
+src/agent_comms/coordinated_runtime.py:447: in _open
+    _trusted_package(self.native_package)  # fail BEFORE any claim is reserved
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:568: in _trusted_package
+    raise NativePiUnavailable("Canonical native Pi package layout is required")
+E   agent_comms.native_pi.NativePiUnavailable: Canonical native Pi package layout is required
+____________ test_private_native_raw_prompt_refused_after_pause_ack ____________
+tests/test_maintenance_native_boundary.py:70: in test_private_native_raw_prompt_refused_after_pause_ack
+    patch.object(native_pi, "NativePiRpcLaunch.tracked", launch),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/unittest/mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/unittest/mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'agent_comms.native_pi' from '/home/ts/wt/comms-selected-cold-compaction-native-20260928/src/agent_comms/native_pi.py'> does not have the attribute 'NativePiRpcLaunch.tracked'
+=============================== warnings summary ===============================
+tests/test_native_failure_recovery.py: 12 warnings
+  /home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_fork.py:70: DeprecationWarning: This process (pid=2228205) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_session_selected_native_pipeline_never_uses_legacy_ack
+FAILED tests/test_acp_private_nk_delivery.py::test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot
+FAILED tests/test_acp_private_nk_delivery.py::test_observed_mid_session_admission_change_invalidates_old_proof
+FAILED tests/test_acp_private_nk_delivery.py::test_unavailable_cursor_metadata_retains_owner_scope
+FAILED tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+FAILED tests/test_acp_private_nk_delivery.py::test_contended_cursor_refresh_still_invalidates_replaced_owner
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_no_wake_has_delivery_receipt_but_no_model
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_mismatched_root_and_bad_package_cannot_accept_claim
+FAILED tests/test_cohort_foreground.py::test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource
+FAILED tests/test_maintenance_native_boundary.py::test_private_native_raw_prompt_refused_after_pause_ack
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:132: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+10 failed, 81 passed, 12 warnings in 101.88s (0:01:41)

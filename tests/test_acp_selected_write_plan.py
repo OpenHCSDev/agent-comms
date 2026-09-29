@@ -37,6 +37,7 @@ from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.selected_write_plan import SelectedWritePlans
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(
@@ -203,7 +204,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         fake, calls = _fake_model(
             decision="FULL", fail_on=1 if scenario == "native_failure" else None
         )
-        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
         if scenario == "native_failure":
             with pytest.raises(NativePiUnavailable):
                 await agent._drain_private_nk("beta", root_id)

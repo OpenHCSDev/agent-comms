@@ -1,0 +1,163 @@
+FFFFFFFFFFFFFFFFFFFF                                                     [100%]
+=================================== FAILURES ===================================
+______ test_selected_turn_accepts_and_starts_fresh_input_once[True-none] _______
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:67: in test_selected_turn_accepts_and_starts_fresh_input_once
+    receipt = response.field_meta["agentComms"]["inputDisposition"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+_____ test_selected_turn_accepts_and_starts_fresh_input_once[True-active] ______
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:67: in test_selected_turn_accepts_and_starts_fresh_input_once
+    receipt = response.field_meta["agentComms"]["inputDisposition"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+_____ test_selected_turn_accepts_and_starts_fresh_input_once[True-standby] _____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:67: in test_selected_turn_accepts_and_starts_fresh_input_once
+    receipt = response.field_meta["agentComms"]["inputDisposition"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+______ test_selected_turn_accepts_and_starts_fresh_input_once[False-none] ______
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:67: in test_selected_turn_accepts_and_starts_fresh_input_once
+    receipt = response.field_meta["agentComms"]["inputDisposition"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+_____ test_selected_turn_accepts_and_starts_fresh_input_once[False-active] _____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:67: in test_selected_turn_accepts_and_starts_fresh_input_once
+    receipt = response.field_meta["agentComms"]["inputDisposition"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+____ test_selected_turn_accepts_and_starts_fresh_input_once[False-standby] _____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:67: in test_selected_turn_accepts_and_starts_fresh_input_once
+    receipt = response.field_meta["agentComms"]["inputDisposition"]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+___________ test_selected_pending_input_never_replays_unknown[clear] ___________
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:121: in test_selected_pending_input_never_replays_unknown
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+________ test_selected_pending_input_never_replays_unknown[missing_key] ________
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:121: in test_selected_pending_input_never_replays_unknown
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+________ test_selected_pending_input_never_replays_unknown[foreign_key] ________
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:121: in test_selected_pending_input_never_replays_unknown
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+__________ test_selected_pending_input_never_replays_unknown[cancel] ___________
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:121: in test_selected_pending_input_never_replays_unknown
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+___ test_selected_handoff_rechecks_authority_at_native_write[goal_revision] ____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+___ test_selected_handoff_rechecks_authority_at_native_write[goal_replaced] ____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+____ test_selected_handoff_rechecks_authority_at_native_write[goal_paused] _____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+____ test_selected_handoff_rechecks_authority_at_native_write[wait_cleared] ____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+___ test_selected_handoff_rechecks_authority_at_native_write[owner_replaced] ___
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+___ test_selected_handoff_rechecks_authority_at_native_write[owner_stopped] ____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+____ test_selected_handoff_rechecks_authority_at_native_write[missing_key] _____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+____ test_selected_handoff_rechecks_authority_at_native_write[foreign_key] _____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:239: in test_selected_handoff_rechecks_authority_at_native_write
+    input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+___ test_selected_handoff_keeps_images_controller_and_future_input_receipts ____
+.artifacts/tracked-baseline/tests/test_selected_owner_followup.py:461: in test_selected_handoff_keeps_images_controller_and_future_input_receipts
+    response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'inputDisposition'
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:211 Optional awareness omitted; original delivered alone (ValueError)
+________ test_explicit_stop_is_not_falsely_reported_as_registry_stopped ________
+.artifacts/tracked-baseline/tests/test_nk_foreground.py:340: in test_explicit_stop_is_not_falsely_reported_as_registry_stopped
+    assert not (root / "coordination.sqlite3").exists()
+E   AssertionError: assert not True
+E    +  where True = exists()
+E    +    where exists = (PosixPath('/var/tmp/ac-nk-foreground-fgaeqo5m/private') / 'coordination.sqlite3').exists
+=========================== short test summary info ============================
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-none]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-active]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-standby]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[False-none]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[False-active]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[False-standby]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_pending_input_never_replays_unknown[clear]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_pending_input_never_replays_unknown[missing_key]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_pending_input_never_replays_unknown[foreign_key]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_pending_input_never_replays_unknown[cancel]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[goal_revision]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[goal_replaced]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[goal_paused]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[wait_cleared]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[owner_replaced]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[owner_stopped]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[missing_key]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[foreign_key]
+FAILED .artifacts/tracked-baseline/tests/test_selected_owner_followup.py::test_selected_handoff_keeps_images_controller_and_future_input_receipts
+FAILED .artifacts/tracked-baseline/tests/test_nk_foreground.py::test_explicit_stop_is_not_falsely_reported_as_registry_stopped
+20 failed, 6 deselected in 13.63s

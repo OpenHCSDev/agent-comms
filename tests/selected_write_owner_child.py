@@ -24,7 +24,7 @@ async def main(base: Path) -> None:
     cohort_foreground._trusted_package = lambda _: None
     coordinated_runtime._trusted_package = lambda _: None
     fake, calls = _fake_model(decision="FULL")
-    coordinated_runtime.run_native_pi_turn = fake
+    coordinated_runtime.TrackedTurnSession.execute = fake
     original_load = acp.CommsAgent.load_session
     InputDrain.ensure_live_drain = lambda self, _: None  # fixture-only dispatch hold
 

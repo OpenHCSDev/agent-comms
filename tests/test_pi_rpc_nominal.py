@@ -196,3 +196,39 @@ def test_turn_runner_and_duplicate_pi_decoders_are_retired():
         assert 'kind == "' not in text
         assert 'phase = "' not in text
     assert "json.loads(raw" not in (root / "native_pi.py").read_text()
+
+
+def test_tracked_execution_uses_declared_handlers_without_procedural_entrypoints():
+    import ast
+
+    root = Path(__file__).parents[1] / "src/agent_comms"
+    retired = {"run_native_pi_turn", "prepare_native_pi_rpc_launch"}
+    for path in root.glob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                assert node.name not in retired
+            elif isinstance(node, ast.ImportFrom):
+                assert retired.isdisjoint(alias.name for alias in node.names)
+    tree = ast.parse((root / "tracked_turn.py").read_text())
+    turn = next(node for node in tree.body if isinstance(node, ast.ClassDef))
+    handlers = [
+        method
+        for method in turn.body
+        if isinstance(method, ast.AsyncFunctionDef) and method.decorator_list
+    ]
+    assert handlers
+    for method in handlers:
+        # Event identities belong to the declarations, never another if/elif dispatcher.
+        assert not any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "isinstance"
+            and any(
+                isinstance(part, ast.Attribute)
+                and isinstance(part.value, ast.Name)
+                and part.value.id == "pi"
+                for part in ast.walk(node)
+            )
+            for node in ast.walk(method)
+        )

@@ -38,6 +38,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -163,7 +164,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
+        monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
             assert thread.pid == os.getpid()
@@ -207,7 +208,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
+        monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
             assert resource.read_bytes() == b"before\n"
@@ -368,7 +369,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
+        monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
             with MutationStore(str(root / "coordination.sqlite3")) as store:
@@ -408,7 +409,7 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "run_native_pi_turn", _fake_pi(calls))
+        monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
         ready_names: set[str] = set()
 
         def ready(thread: Thread) -> None:
@@ -545,7 +546,7 @@ from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
 f._trusted_package = _fake_package
 r._trusted_package = _fake_package
-r.run_native_pi_turn = _fake_pi([])
+r.TrackedTurnSession.execute = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
 """
         child = subprocess.Popen(
@@ -630,7 +631,7 @@ from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
 f._trusted_package = _fake_package
 r._trusted_package = _fake_package
-r.run_native_pi_turn = _fake_pi([])
+r.TrackedTurnSession.execute = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
 """
         env = {
@@ -735,7 +736,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
             calls.append(input_id)
             raise RuntimeError("model opportunity uncertain; manual disposition")
 
-        monkeypatch.setattr(runtime, "run_native_pi_turn", uncertain)
+        monkeypatch.setattr(TrackedTurnSession, "execute", uncertain)
         with pytest.raises(RuntimeError, match="manual disposition"):
             await foreground.run_foreground_once(
                 root,
