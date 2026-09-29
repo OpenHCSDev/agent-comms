@@ -1,0 +1,576 @@
+{
+  "removed_clean_unused_old_uv_source_copies": [
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/d350fc49"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/6bd8c423"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/8ad034a6"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/1906e94f"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/0931c47d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/c338e8ab"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/0a1f126d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/0a1f126"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/c338e8a"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/b77db61"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/664623a"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/420476a"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/03b6f9f"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e2191bb"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e6fa8fe"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/4510ddd"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/451cc42"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/6abddc4"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/487ebb9"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/fc2df02"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/a2f57bf"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/46b729c"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/7685558"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/b64014d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/66e8fa1"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/8536305"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/aa41387"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/7acdb80"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/bb8a660"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/ff5d5a7"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/5620e29"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/78adae3"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/fc5dd38"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e9ed3c3"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/c885a0b"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/2f26174"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/ba08f65"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/1853503"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/618b9c9"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e542fe8"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/2bfbdb2"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/c3e7252"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e320080"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/492e26d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/a8e0d43"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/1b98037"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/5f3957c"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/3aefef1"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/b407c18"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/b3a9c06"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/3996e82"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/ab98c19"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/fdfab5f"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/0c63715"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/c895ff0"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/f7716d5"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/83b4f8d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/065a4da"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/ae0545d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/89314b0"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/054028b"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/8300308"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/48f2ee6"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/27aee9a"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/8f2ed0c"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/7282164"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/4216214"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/f5ddd74"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/ee994e1"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/3889a22"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/829ce55"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e751d10"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/2f01780"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/492bff0"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/3683792"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/0309f7b"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/b1e5bfd"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/b4132c0"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/a822a8d"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/8842a62"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/5cb68bb"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/49553ba"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/c3aa7b2"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/bf7980b"
+    },
+    {
+      "package": "agent-comms",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/3749cf90a90c59f5/e2fd9d8"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/19de70c"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/4147eb1"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/e46f8cb"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/436514d"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/06003af"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/5983adb"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/c0d61fa"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/08ee5aa"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/b4bdae1"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/b472e48"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/08d464b"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/c3f7b63"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/67ddc9e"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/e6c5227"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/df0a758"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/98e9e2d"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/1d8bf47"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/6662485"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/60a87e0"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/cc2d35c"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/43e57c9"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/7a279b0"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/a27814f"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/7766c46"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/0f093ea"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/16b0697"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/8adfcad"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/14310b9"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/884bba4"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/d9422d4"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/a4ca07a"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/0f647c4"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/1256f14"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/f3f161e"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/9fa7bac"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/93f8c68"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/10679b5"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/686005f"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/1456af6"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/63426fc"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/837e2a2"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/9861dcd"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/33dbf56"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/8c735a9"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/2fe84dd"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/32de161"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/0894005"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/b78ff44"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/447afa6"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/b4dcfce"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/299145d"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/c3cdc46"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/e2379bf"
+    },
+    {
+      "package": "batrachian-toad",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/e0d6980a492da0bf/f44a75f"
+    },
+    {
+      "package": "textual",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/58395aa9353f46e6/6ac3cdd91"
+    },
+    {
+      "package": "textual",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/58395aa9353f46e6/4fa6a9c44"
+    },
+    {
+      "package": "textual",
+      "path": "/home/ts/.cache/uv/git-v0/checkouts/58395aa9353f46e6/ace9226c6"
+    }
+  ],
+  "skipped": [],
+  "free_bytes_delta": 2760368128,
+  "allowed_untracked_metadata": "Only the empty regular .ok checkout completion marker; every other uncommitted file was protected",
+  "preserved": "installed runtimes, native package, live source, all worktrees, current pins and five newest cache copies per repository"
+}
