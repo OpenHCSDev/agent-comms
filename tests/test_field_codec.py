@@ -1,10 +1,70 @@
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation
+
+
+def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
+    from datetime import UTC, datetime
+    from pathlib import Path
+    from agent_comms.typed_table import Column, SqlStorage, TypedTable
+    import sqlite3
+
+    class HexInteger(TextRepresentation):
+        @classmethod
+        def encode(cls, value):
+            if type(value) is not int:
+                raise TypeError("Expected an integer")
+            return hex(value)
+
+        @classmethod
+        def from_text(cls, value):
+            return int(value, 16)
+
+    @dataclass(frozen=True)
+    class Scalars:
+        path: Annotated[Path | None, PathText]
+        timestamp: Annotated[datetime, TimestampText]
+        count: Annotated[int, HexInteger]
+
+    value = Scalars(Path("/saved/history"), datetime.now(UTC), 31)
+    encoded = FieldCodec.encode(value)
+    assert encoded == {"path": "/saved/history", "timestamp": value.timestamp.isoformat(), "count": "0x1f"}
+    assert FieldCodec.decode(Scalars, encoded) == value
+    assert FieldCodec.project(value, "status") == encoded
+    assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
+        "anyOf": [{"type": "string"}, {"type": "null"}]
+    }
+    assert FieldCodec.decode(Scalars, {**encoded, "path": None}).path is None
+    for key in encoded:
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(Scalars, {**encoded, key: 7})
+    with pytest.raises(TypeError):
+        FieldCodec.encode(value.timestamp)
+
+    class HexStorage(SqlStorage):
+        sql_type = "TEXT"
+
+        @classmethod
+        def accepts(cls, annotation):
+            return False
+
+        @classmethod
+        def to_sql(cls, value):
+            return FieldCodec.encode(value, Annotated[int, HexInteger])
+
+    @dataclass(frozen=True)
+    class ScalarRow(TypedTable, declared_name="field_representation_rows"):
+        count: Annotated[int, HexInteger] = field(metadata={"sql": Column(storage=HexStorage)})
+
+    with sqlite3.connect(":memory:") as db:
+        ScalarRow.create(db)
+        ScalarRow(31).insert(db)
+        assert db.execute("SELECT count FROM field_representation_rows").fetchone() == ("0x1f",)
+        assert ScalarRow.read(db.execute("SELECT count FROM field_representation_rows")) == [ScalarRow(31)]
 
 
 class Choice(DeclaredFamily, affix="Choice"):
