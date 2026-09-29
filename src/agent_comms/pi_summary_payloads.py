@@ -155,14 +155,6 @@ class SummaryDeclinedData(SelectedSummaryData, declared_name="summary_declined")
     def response(self, request, tokens_before):
         return self
 
-    @property
-    def summary(self):
-        return None
-
-    @property
-    def decline_reason(self):
-        return self.reason
-
     def settle(self, journal):
         if self.reason not in {"split_turn", "unsupported"}:
             journal.summaries.refuse(self.operation_id, self.reason)
@@ -239,16 +231,6 @@ class SummarySummarizedData(WitnessedSummaryData, declared_name="summary_summari
         ):
             raise ValueError("Selected summary result source changed")
         return self
-
-    @property
-    def summary(self):
-        from .owner_compaction_provider import NativeSummary
-
-        return NativeSummary(self.result.summary, self.result.details, self.result.usage)
-
-    @property
-    def decline_reason(self):
-        return None
 
     def manual_summary(self, journal):
         from .owner_compaction_manual import ManualSelectedSummary

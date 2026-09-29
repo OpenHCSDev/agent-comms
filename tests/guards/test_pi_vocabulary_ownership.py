@@ -24,7 +24,9 @@ def test_pi_spellings_are_not_compared_by_consumers():
             subjects = [node.left, *node.comparators]
             has_vocabulary = any(
                 isinstance(part, ast.Attribute)
-                and part.attr in {"stop_reason", "thinking_level", "selected_thinking_level"}
+                and part.attr in {
+                    "stop_reason", "compaction_reason", "thinking_level", "selected_thinking_level"
+                }
                 for part in subjects
             )
             has_spelling = any(
@@ -41,6 +43,7 @@ def test_summary_members_own_the_response_contract():
     assert SelectedSummaryData.__abstractmethods__ == frozenset({"response"})
     members = SelectedSummaryData.members_with(SelectedSummaryData)
     assert members and all("response" in vars(member) for member in members)
+    assert all(not hasattr(member, name) for member in members for name in ("summary", "decline_reason"))
     source = ast.parse((SOURCE / "selected_pi_summary_rpc.py").read_text())
     decoder = next(
         node
