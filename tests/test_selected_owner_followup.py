@@ -8,6 +8,7 @@ from agent_comms import agent_events as events
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.input_attempt import NotSentInput, ReservedInput
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
@@ -369,13 +370,13 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     parked_wait = comms.goals.goal_wait("beta")
     agent._private_nk_native_package = Path(package)
     agent.turns.adaptive_compaction_enabled = False
-    agent.turns.agent_args = [
+    agent.turns.agent_args = NativeArguments.parse([
         "--no-extensions",
         "--no-skills",
         "--no-context-files",
         "--session-dir",
         str(tmp_path / "owner-sessions"),
-    ]
+    ])
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", package)

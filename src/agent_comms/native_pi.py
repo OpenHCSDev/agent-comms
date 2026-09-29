@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .field_codec import FieldCodec
+from .native_arguments import NativeArguments
 from .native_entries import NativeEntry, SessionEntry
 from .selected_tool_broker import NativeToolMode
 
@@ -294,24 +295,6 @@ class NativePiRpcLaunch:
         _trusted_package(package)
         return package
 
-    @staticmethod
-    def rpc_arguments(arguments: tuple[str, ...]) -> tuple[str, ...]:
-        """Validate the external CLI mode once, without executable inference."""
-        result = []
-        iterator = iter(arguments)
-        for argument in iterator:
-            if argument == "--mode":
-                if next(iterator, None) != "rpc":
-                    raise NativePiUnavailable("Managed Pi requires RPC mode")
-            elif argument.startswith("--mode="):
-                if argument != "--mode=rpc":
-                    raise NativePiUnavailable("Managed Pi requires RPC mode")
-            elif argument in {"--print", "-p", "--help", "-h", "--version", "-v"}:
-                raise NativePiUnavailable("Managed Pi cannot run a one-shot CLI command")
-            else:
-                result.append(argument)
-        return (*result, "--mode", "rpc")
-
     @classmethod
     def managed(
         cls,
@@ -324,7 +307,10 @@ class NativePiRpcLaunch:
         fork_session: bool = False,
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution; native receipts remain separate."""
-        arguments = cls.rpc_arguments(arguments)
+        try:
+            arguments = NativeArguments.parse(arguments).rpc()
+        except ValueError as error:
+            raise NativePiUnavailable(str(error)) from error
         package = cls.package_for_command(command)
         cli = package / "dist" / "cli.js"
         cwd = worktree.resolve(strict=True)
