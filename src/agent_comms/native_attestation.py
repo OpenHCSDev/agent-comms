@@ -96,18 +96,10 @@ class ObservedAttestation(NativeAttestation):
 
     @property
     def identity(self):
-        if self.state.session_id and self.state.session_file:
-            return NativeSessionIdentity(self.state.session_id, self.state.session_file)
-        return None
+        return self.state.identity
 
     def conflicts(self, data):
-        if self.state.session_id and data.session_id and self.state.session_id != data.session_id:
-            return True
-        return bool(
-            self.state.session_file
-            and data.session_file
-            and self.state.session_file != data.session_file
-        )
+        return self.state.conflicts(data)
 
 
 class LostAttestation(NativeAttestation):

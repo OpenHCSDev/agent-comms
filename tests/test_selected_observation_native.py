@@ -1,13 +1,17 @@
 """Actual selected settings observation is read-only; cancelled receipt grants nothing."""
 
 import asyncio
+import json
 import os
 from pathlib import Path
 
 import pytest
 
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.selected_pi_route import read_selected_compaction_decision
+from agent_comms.selected_pi_route import (
+    SelectedPiProbeUnknownError,
+    read_selected_compaction_decision,
+)
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -22,12 +26,13 @@ async def test_actual_selected_observation_retirement_without_input_replay(
     model = retained.child.attestation.state.model
     assert model is not None
     before = native.session.read_bytes()
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
 
-    async def observe():
+    async def observe(expected_package=package):
         return await read_selected_compaction_decision(
             native.persistent,
             session_file=str(native.session),
-            expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            expected_package=expected_package,
             provider=model.provider,
             model_id=model.id,
             context_window=model.context_window,
@@ -35,6 +40,11 @@ async def test_actual_selected_observation_retirement_without_input_replay(
 
     decision = await observe()
     assert not decision.enabled
+    assert native.persistent.custody.idle() is retained
+    assert native.provider.posts == 1
+    assert native.session.read_bytes() == before
+    with pytest.raises(SelectedPiProbeUnknownError, match="stale"):
+        await observe(package / "foreign-package")
     assert native.persistent.custody.idle() is retained
     assert native.provider.posts == 1
     assert native.session.read_bytes() == before
@@ -86,3 +96,70 @@ async def test_actual_selected_observation_retirement_without_input_replay(
         release.set()
         attempt.cancel()
         await asyncio.gather(attempt, return_exceptions=True)
+
+
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (("id",), "uncorrelated-response"),
+        (("data", "sessionId"), "foreign-session"),
+        (("data", "selected", "provider"), "foreign-provider"),
+        (("data", "selected", "contextWindow"), True),
+        (("data", "decision", "reserveTokens"), True),
+        (("data", "decision", "trigger"), "yes"),
+        (("data", "decision", "keepRecentTokens"), 0),
+        (("data", "summary"), "unauthorized extra field"),
+        ((), None),  # Received from native, but not delivered before the deadline.
+    ],
+    ids=[
+        "correlation",
+        "session",
+        "model",
+        "window",
+        "reserve",
+        "trigger",
+        "keep",
+        "extra",
+        "timeout",
+    ],
+)
+async def test_actual_selected_observation_untrusted_receipt_retires_without_replay(
+    native_backend, monkeypatch, path, value
+):
+    native = native_backend
+    assert (await native.run("Seed before observation transport fault"))[-1].ok
+    retained = native.persistent.custody.idle()
+    model = retained.child.attestation.state.model
+    before = native.session.read_bytes()
+    read = retained.child.reader.readline
+    receipts = []
+
+    async def damaged_receipt(**options):
+        raw = await read(**options)
+        receipts.append(raw)
+        if not path:
+            await asyncio.Event().wait()
+        record = json.loads(raw)
+        target = record
+        for component in path[:-1]:
+            target = target[component]
+        target[path[-1]] = value
+        return json.dumps(record).encode() + b"\n"
+
+    monkeypatch.setattr(retained.child.reader, "readline", damaged_receipt)
+    with pytest.raises(SelectedPiProbeUnknownError):
+        await read_selected_compaction_decision(
+            native.persistent,
+            session_file=str(native.session),
+            expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            provider=model.provider,
+            model_id=model.id,
+            context_window=model.context_window,
+            timeout=1,
+        )
+    assert len(receipts) == 1  # A real pinned-native response, not a fake host.
+    assert not retained.child.proc.alive()
+    assert not native.persistent.available
+    assert native.persistent.custody.session_file == str(native.session)
+    assert native.provider.posts == len(native.saved_inputs()) == 1
+    assert native.session.read_bytes() == before

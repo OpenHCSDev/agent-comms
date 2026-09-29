@@ -14,6 +14,7 @@ from typing import Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .native_session_reopen import NativeSessionIdentity
 
 
 def wire_field(name: str, default=None):
@@ -605,9 +606,33 @@ class EmptyData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class StateData(PiResponseData):
+class NativeSessionSnapshot(PiPayload):
+    """External snapshots may report only part of a saved session's identity."""
+
     session_id: str | None = wire_field("sessionId")
     session_file: str | None = wire_field("sessionFile")
+
+    def _known_identity(self) -> dict[str, str]:
+        return {
+            component.name: value
+            for component in fields(NativeSessionIdentity)
+            if (value := getattr(self, component.name))
+        }
+
+    @property
+    def identity(self) -> NativeSessionIdentity | None:
+        known = self._known_identity()
+        if len(known) != len(fields(NativeSessionIdentity)):
+            return None
+        return NativeSessionIdentity(**known)
+
+    def conflicts(self, other: NativeSessionSnapshot) -> bool:
+        known, observed = self._known_identity(), other._known_identity()
+        return any(known[key] != observed[key] for key in known.keys() & observed.keys())
+
+
+@dataclass(frozen=True)
+class StateData(NativeSessionSnapshot, PiResponseData):
     session_name: str | None = wire_field("sessionName")
     native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
     model: PiModel | None = None
@@ -623,9 +648,7 @@ class StateData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class SessionStatsData(PiResponseData):
-    session_id: str | None = wire_field("sessionId")
-    session_file: str | None = wire_field("sessionFile")
+class SessionStatsData(NativeSessionSnapshot, PiResponseData):
     context_usage: PiContextUsage | None = wire_field("contextUsage")
 
 
