@@ -40,6 +40,11 @@ class NativeAttestation(ABC):
     def observed(self) -> bool: ...
 
     uncertain = False
+
+    @property
+    def trustworthy(self):
+        return not self.uncertain
+
     state = None
     identity = None
 
@@ -102,7 +107,7 @@ class ObservedAttestation(NativeAttestation):
         return self.state.identity
 
     def admits_extension_input(self, inputs) -> bool:
-        return self.identity is not None and inputs.permits_extension_ui
+        return self.identity is not None and inputs.permits_admission
 
     def conflicts(self, data):
         return self.state.conflicts(data)

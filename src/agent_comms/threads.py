@@ -11,6 +11,7 @@ from .channel_targets import Tag
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
+from .pi_vocabulary import ThinkingLevel
 from .goals import Goal, GoalRevision
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
@@ -51,7 +52,7 @@ class Thread:
         default=None, metadata={"registration_inheritance": InheritMissing}
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    thinking_level: str | None = field(
+    thinking_level: type[ThinkingLevel] | None = field(
         default=None, metadata={"registration_inheritance": InheritMissing}
     )
     goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
@@ -120,16 +121,9 @@ class Thread:
             raise ValueError("Thread worktree cannot be empty.")
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
-        if self.thinking_level is not None and self.thinking_level not in {
-            "off",
-            "minimal",
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max",
-        }:
-            raise ValueError("Unknown thinking level.")
+        if self.thinking_level is not None:
+            object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
+
 
     @property
     def pid(self) -> int:
