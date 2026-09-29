@@ -4,16 +4,23 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core0931c47d, Toad19de70c (146 permission ownership,
-147 preview navigation), Textualc974/native5fde. All five launchers point to
-runtime-preview-permissions-20260928. Core workers keep the same0931 package
-in runtime-send-admission; no worker restart, reset, replay or history rewrite.
-Actual final installed saved-log link/scroll/selection/wrap/resize/close/reopen,
-paging/read recovery and ordinary Unicode file paint PASS. PR95 retained history
-paints105matching phrases, ready/noerrors. Combined installed physical native
-Pi/ACP/Toad permission removal/rebind/grant executes tool exactly once; actual
-pending-mount cancellation/replacement and inline/diff lifecycle PASS,2guardsPASS.
-Executed activation operator deleted. Fresh ACP attachments recorded separately.
+Latest installed pair: core1906e94f (326 channel identity fix), Toad19de70c
+(146 permission ownership,147 preview navigation), Textualc974/native5fde.
+All five launchers and four idle-restarted owners use
+runtime-channel-participants-20260928. Four fresh actual ACP attachments pass.
+No runtime store reset, history rewrite or input resend. Ordinary publication now
+registers the entire frozen audience from the registry before append, including
+stopped/unstarted recipients. Production bootstrap/register/publish/inbox regression
+reproduces exact installed0931 IdentityConflict; final installed1906 passes27checks.
+Live #nra originals157/158 accepted for all5recipients; domain-mapping completed
+both bounded-triage deliveries. Missing4identities restored from registry once.
+Existing fixture setup manually registered recipients and hid this production gap.
+Actual installed mounted domain-mapping shows Ready, no inbox error and21saved
+phrase matches after cutover. Zero prompts. Recursion remains below.
+
+Previous UI acceptance remains: actual saved-log navigation/scroll/wrap/recovery;
+PR95 retained105painted phrases; physicalPi/ACP/Toad permission exactly-once tool
+execution and mounted pending-permission cancellation/replacement.
 
 User reports a new RecursionError in running Toad; no traceback in latest ACP
 logs. Both previously observed user Toad processes exited; version/cause not
