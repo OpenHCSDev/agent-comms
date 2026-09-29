@@ -1,3 +1,4 @@
+
 """Standby liveness preserves goal authority and never replays an input."""
 
 import asyncio
@@ -20,6 +21,7 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.goal_waits import GoalWaits
+from agent_comms.message_page import MessagePageRequest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from goal_owner_fixture import activate_empty_source
@@ -97,18 +99,18 @@ def test_optional_reply_read_failure_after_terminal_commit_never_releases_or_fai
     comms, goal = _waiting(tmp_path)
     fence = _finish(comms, "child", "child-turn")
     assert fence is not None and comms.registry.require("child").active_turn is None
-    original = comms.bus._history_page
+    original = MessagePageRequest.read
 
     def unavailable(*_args, **_kwargs):
         raise OSError("injected optional direct-reply read failure")
 
-    monkeypatch.setattr(comms.bus, "_history_page", unavailable)
+    monkeypatch.setattr(MessagePageRequest, "read", unavailable)
     assert comms.goals.release_waits_after_terminal_turn(fence) == ()
     assert comms.registry.require("child").active_turn is None
     assert comms.registry.require("owner").goal.state.active
     assert comms.registry.require("owner").goal.id == goal.id
     assert comms.goals.goal_wait("owner") is not None
-    monkeypatch.setattr(comms.bus, "_history_page", original)
+    monkeypatch.setattr(MessagePageRequest, "read", original)
     assert comms.goals.release_waits_after_terminal_turn(fence) == ("owner",)
 
 
@@ -264,7 +266,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
         comms.messaging.send_message("child", "owner", "Late direct reply")
         sent.set()
 
-    real_history = comms.bus._history_page
+    real_history = MessagePageRequest.read
     sender = threading.Thread(target=late_send)
 
     def interpose(*args, **kwargs):
@@ -272,7 +274,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
         assert checked.wait(timeout=2)
         return real_history(*args, **kwargs)
 
-    monkeypatch.setattr(comms.bus, "_history_page", interpose)
+    monkeypatch.setattr(MessagePageRequest, "read", interpose)
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
     sender.join(timeout=2)
     assert sent.is_set()
@@ -430,7 +432,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 
-    original_history_page = comms.bus._history_page
+    original_history_page = MessagePageRequest.read
 
     def unavailable(*args, **kwargs):
         if not terminal:
@@ -441,7 +443,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    monkeypatch.setattr(comms.bus, "_history_page", unavailable)
+    monkeypatch.setattr(MessagePageRequest, "read", unavailable)
     try:
         await agent.turns.run_agent_turn(child, child, "Finish work")
         assert terminal == ["settled"]
