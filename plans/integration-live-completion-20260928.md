@@ -135,8 +135,8 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   pinned native host path and prove ordinary/private one-original admission,
   correction/queued input/refusal without replay.274 merged actual fixtures and
   retained-proof production fix;277 completes private queue/native rejection.
-- [x] Tesla/parent:129 functional workspace/resource scope preserving complete
-  116/126 ancestry and136/139 sidebar work merged e46f8cb5 and installed. One rich
+- [x] Tesla/parent:129 functional workspace/resource scope preserving126 and
+  earlier116 work plus136/139 sidebar work merged e46f8cb5 and installed. One rich
   Conversation, original editor/Agent/PTY ownership, actual returned text verified.
   126 closed after its complete head was verified an ancestor of main.
   Parent combined129+140/core301 actual native64 passes: one rich view,8 inputs,
@@ -149,6 +149,11 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   App's cursor caller and fixed precreated checkpoint coroutine cancellation.
 - [ ] Tesla142: full116/110 persistent WorkspaceScreen/source rebinding,
   30–40ms median and worst-case spike improvement. Functional129 does not close it.
+  Current116fe5493b carries unique viewport15e4f93 paint/recent-body work not in
+  main129. Its measured rapid PageDown/End and recent-source behavior must migrate
+  to142's WorkspaceScreen owner; old screen/pool plumbing must not be restored.
+  116 remains draft as provenance.110 investigation itself is merged; this does
+  not prove its proposed runtime/performance target complete.
 - [x] Noether: finish50 authenticated loopback browser path. Merged and installed;
   actual Chromium/ACP initialization/keyboard/authentication/streamed downloads pass.
   No external exposure and no model-turn claim from the browser-only acceptance.
