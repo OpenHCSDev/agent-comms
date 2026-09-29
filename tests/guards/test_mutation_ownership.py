@@ -19,9 +19,9 @@ def test_no_mutation_aggregate_or_compatibility_dispatch():
     failures = []
     for path in SOURCE.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Name) and node.id == "Coordination":
+            if isinstance(node, ast.Name) and node.id == "MutationStore":
                 failures.append((path, node.lineno))
-            if isinstance(node, ast.ClassDef) and node.name == "Coordination":
+            if isinstance(node, ast.ClassDef) and node.name == "MutationStore":
                 failures.append((path, node.lineno))
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 if (
@@ -29,7 +29,7 @@ def test_no_mutation_aggregate_or_compatibility_dispatch():
                     and node.module in {"coordination_store", "agent_comms.coordination_store"}
                     or any(
                         alias.name
-                        in {"Coordination", "agent_comms.coordination_store", "coordination_store"}
+                        in {"MutationStore", "agent_comms.coordination_store", "coordination_store"}
                         for alias in node.names
                     )
                 ):

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
+from agent_comms.coordination_errors import IdentityConflict
 
 from .child_process import ProcessIdentity
 from .registration import Registration
@@ -175,9 +176,8 @@ class ThreadManagement:
         Repeating this operation repairs an interrupted coordinator registration
         without replacing existing owners or importing historical delivery state.
         """
-        from agent_comms.coordinator import Coordination
-
         from .bus_publication import stable_thread_lookup
+        from .coordinator import Coordination
 
         selected = tuple(dict.fromkeys(names))
         with _store_lock(self._wire_lock_path):
@@ -399,10 +399,8 @@ class ThreadManagement:
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
 
-        from agent_comms.coordination_errors import IdentityConflict
-        from agent_comms.coordinator import Coordination
-
         from .bus_publication import stable_thread_lookup
+        from .coordinator import Coordination
 
         before = self.registry.require(name)
         private_meta = self.root / "bus_meta.json"

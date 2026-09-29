@@ -41,8 +41,12 @@ from agent_comms.coordinated_runtime_schema import (
     install_native_runtime_schema,
 )
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult

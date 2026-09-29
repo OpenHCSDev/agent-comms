@@ -39,8 +39,14 @@ from acp.schema import (
     TextContentBlock,
 )
 
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_errors import (
+    CoordinationError,
+    IdentityConflict,
+    PublicationActivationBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
 from . import manual_compaction_bridge
@@ -62,8 +68,6 @@ from .cohort_foreground import _accept_visible_initials
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from agent_comms.coordinator import Coordination
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus

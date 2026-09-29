@@ -342,7 +342,7 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch): 
             raise RuntimeError("settlement interrupted")
 
         with monkeypatch.context() as interrupted:
-            interrupted.setattr(store, "_settle", fail_settlement)
+            interrupted.setattr(store.attempts, "settle_checked", fail_settlement)
             with pytest.raises(RuntimeError, match="settlement interrupted"):
                 store.attempts.fail_unknown(fence, expected_pointer_revision=before.pointer_revision)
         assert store.snapshots.get(fence.execution_id) == before  # replay + finality rolled back too.

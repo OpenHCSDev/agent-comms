@@ -9,7 +9,6 @@ journal, without cursor acknowledgements, monitoring or automatic resend.
 
 from __future__ import annotations
 
-from agent_comms.attempt_start import AttemptStart
 import asyncio
 import hashlib
 import json
@@ -25,9 +24,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.attempt_start import AttemptStart
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    StaleFence,
+)
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin
-from agent_comms.owner_fence import OwnerFence
+from agent_comms.coordinator import Coordination
+from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.tracked_turn import TrackedTurnSession
 
 from .activity import ActivityState
@@ -52,9 +58,6 @@ from .coordination_response import (
     prepare_fenced_response,
     publish_fenced_response,
 )
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from agent_comms.coordinator import Coordination
-from agent_comms.owner_fence import prepare_fence_token
 from .diagnostics import record_terminal_failure
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
