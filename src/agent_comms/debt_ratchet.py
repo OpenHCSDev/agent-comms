@@ -22,11 +22,6 @@ class Measure(DeclaredFamily, affix="Measure"):
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         """Return independent before/after measurements for this declaration."""
 
-    @staticmethod
-    def difference(before: int | None, after: int) -> int | None:
-        return None if before is None else after - before
-
-
 class GitMeasure(Measure):
     """Shared Git collection and alignment for declaration-owned snapshots."""
 
@@ -40,7 +35,7 @@ class GitMeasure(Measure):
         """Measure the selected source declarations."""
 
     @classmethod
-    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int | None], dict[str, int]]:
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         return base, head
 
     @classmethod
@@ -68,8 +63,24 @@ class OccurrenceMeasure(GitMeasure):
         return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
 
 
-class ClassSize(GitMeasure):
-    """Independent lexical line spans for every class, never summed together."""
+class PerFileOccurrenceMeasure(OccurrenceMeasure):
+    """An improvement in one file cannot hide a regression in another."""
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        return {f"{cls.__name__}:{path}": cls.count(source, path) for path, source in sources}
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+        identities = sorted(base.keys() | head.keys())
+        return ({key: base.get(key, 0) for key in identities},
+                {key: head.get(key, 0) for key in identities})
+
+
+class GodClassExcess(GitMeasure):
+    """Independent class lines beyond 500, including newly introduced classes."""
+
+    threshold = 500
 
     @classmethod
     def scope(cls, changed: set[str], present: set[str]) -> set[str]:
@@ -85,7 +96,7 @@ class ClassSize(GitMeasure):
                 case ast.ClassDef(name=name, lineno=start, end_lineno=end, decorator_list=decorators):
                     scope = (*scope, name)
                     start = min([start, *(decorator.lineno for decorator in decorators)])
-                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = end - start + 1
+                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = max(0, end - start + 1 - cls.threshold)
                 case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                     scope = (*scope, name)
             for child in ast.iter_child_nodes(node):
@@ -95,7 +106,7 @@ class ClassSize(GitMeasure):
         return values
 
     @classmethod
-    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int | None], dict[str, int]]:
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         def names(values):
             result = {}
             for identity in values:
@@ -115,9 +126,8 @@ class ClassSize(GitMeasure):
                 matched[identity] = base[previous[0]]
                 consumed.add(previous[0])
             else:
-                # A new owner has no main baseline yet; its measured size
-                # becomes that baseline once merged. Do not fabricate zero.
-                matched[identity] = None
+                # A new declaration must not introduce any god-class excess.
+                matched[identity] = 0
         current = dict(head)
         for identity in base.keys() - consumed:
             matched[identity] = base[identity]
@@ -148,9 +158,59 @@ class TypeIdentity(OccurrenceMeasure):
 
 
 class LongBooleanChain(OccurrenceMeasure):
+    minimum_terms = 4
+
     @staticmethod
     def occurrences(node: ast.AST) -> int:
-        return int(isinstance(node, ast.BoolOp) and len(node.values) >= 4)
+        match node:
+            case ast.BoolOp(values=values):
+                return int(len(values) >= LongBooleanChain.minimum_terms)
+        return 0
+
+
+class BooleanChainTerms(PerFileOccurrenceMeasure):
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.BoolOp(values=values) if len(values) >= LongBooleanChain.minimum_terms:
+                return len(values)
+        return 0
+
+
+class ForeignAbsenceProbe(PerFileOccurrenceMeasure):
+    @staticmethod
+    def foreign(owner: ast.AST) -> int:
+        match owner:
+            case ast.Name(id="self"):
+                return 0
+        return 1
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.Compare(left=ast.Attribute(value=owner), ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
+                return ForeignAbsenceProbe.foreign(owner)
+            case ast.UnaryOp(op=ast.Not(), operand=ast.Attribute(value=owner)):
+                return ForeignAbsenceProbe.foreign(owner)
+        return 0
+
+
+class CodecSubclass(PerFileOccurrenceMeasure):
+    """TIME-9 census measure; the sealed FieldCodec guard also resolves aliases."""
+
+    @staticmethod
+    def codec_base(node: ast.AST) -> bool:
+        match node:
+            case ast.Name(id=name) | ast.Attribute(attr=name):
+                return name.endswith("Codec")
+        return False
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.ClassDef(bases=bases):
+                return int(any(CodecSubclass.codec_base(base) for base in bases))
+        return 0
 
 
 class StringSubscript(OccurrenceMeasure):
@@ -187,16 +247,16 @@ class Comparison:
     base_revision: str
     head_revision: str
     paths: tuple[str, ...]
-    base: dict[str, int | None]
+    base: dict[str, int]
     head: dict[str, int]
 
     @projected(view="report")
-    def delta(self) -> dict[str, int | None]:
-        return {name: Measure.difference(self.base[name], value) for name, value in self.head.items()}
+    def delta(self) -> dict[str, int]:
+        return {name: value - self.base[name] for name, value in self.head.items()}
 
     @property
     def increased(self) -> bool:
-        return any(value is not None and value > 0 for value in self.delta.values())
+        return any(value > 0 for value in self.delta.values())
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:

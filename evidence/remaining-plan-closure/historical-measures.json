@@ -1,0 +1,151 @@
+{
+  "installed_module": "/home/ts/wt/comms-remaining-plan-closure-20260929/.venv/lib/python3.14/site-packages/agent_comms/debt_ratchet.py",
+  "scope": "Selected historical source paths only; no full-package scan or replay equivalence claim.",
+  "cases": [
+    {
+      "base": "a1d24d3aa8556c7af7d77be0cd314784a59bccd3",
+      "head": "c1c4ee6090ae055803d6dac2731cfbee73ca2b03",
+      "paths": [
+        "src/agent_comms/turn_input_binding.py",
+        "src/agent_comms/turn_input_source.py"
+      ],
+      "measure": "BooleanChainTerms",
+      "before": {
+        "BooleanChainTerms:src/agent_comms/turn_input_binding.py": 0,
+        "BooleanChainTerms:src/agent_comms/turn_input_source.py": 0
+      },
+      "after": {
+        "BooleanChainTerms:src/agent_comms/turn_input_binding.py": 4,
+        "BooleanChainTerms:src/agent_comms/turn_input_source.py": 4
+      },
+      "delta": {
+        "BooleanChainTerms:src/agent_comms/turn_input_binding.py": 4,
+        "BooleanChainTerms:src/agent_comms/turn_input_source.py": 4
+      }
+    },
+    {
+      "base": "a1d24d3aa8556c7af7d77be0cd314784a59bccd3",
+      "head": "c1c4ee6090ae055803d6dac2731cfbee73ca2b03",
+      "paths": [
+        "src/agent_comms/turn_input_binding.py",
+        "src/agent_comms/turn_input_source.py"
+      ],
+      "measure": "ForeignAbsenceProbe",
+      "before": {
+        "ForeignAbsenceProbe:src/agent_comms/turn_input_binding.py": 0,
+        "ForeignAbsenceProbe:src/agent_comms/turn_input_source.py": 0
+      },
+      "after": {
+        "ForeignAbsenceProbe:src/agent_comms/turn_input_binding.py": 3,
+        "ForeignAbsenceProbe:src/agent_comms/turn_input_source.py": 3
+      },
+      "delta": {
+        "ForeignAbsenceProbe:src/agent_comms/turn_input_binding.py": 3,
+        "ForeignAbsenceProbe:src/agent_comms/turn_input_source.py": 3
+      }
+    },
+    {
+      "base": "c1c4ee6090ae055803d6dac2731cfbee73ca2b03",
+      "head": "076e81d86ac801bd0593ebe6d7526d5b8a841067",
+      "paths": [
+        "src/agent_comms/turn_input_binding.py",
+        "src/agent_comms/turn_input_source.py"
+      ],
+      "measure": "BooleanChainTerms",
+      "before": {
+        "BooleanChainTerms:src/agent_comms/turn_input_binding.py": 4,
+        "BooleanChainTerms:src/agent_comms/turn_input_source.py": 4
+      },
+      "after": {
+        "BooleanChainTerms:src/agent_comms/turn_input_binding.py": 0,
+        "BooleanChainTerms:src/agent_comms/turn_input_source.py": 0
+      },
+      "delta": {
+        "BooleanChainTerms:src/agent_comms/turn_input_binding.py": -4,
+        "BooleanChainTerms:src/agent_comms/turn_input_source.py": -4
+      }
+    },
+    {
+      "base": "b5ec95ac6c464cd0b2e9108394d85d291461417a",
+      "head": "bc698f375cb12b99507566e006997ea74ee29853",
+      "paths": [
+        "src/agent_comms/messages.py"
+      ],
+      "measure": "CodecSubclass",
+      "before": {
+        "CodecSubclass:src/agent_comms/messages.py": 0
+      },
+      "after": {
+        "CodecSubclass:src/agent_comms/messages.py": 1
+      },
+      "delta": {
+        "CodecSubclass:src/agent_comms/messages.py": 1
+      }
+    },
+    {
+      "base": "a8dff8eaea2aba28c79daa273e3319ad8057104c",
+      "head": "5128f233faadf21765c371333a919a6095096d63",
+      "paths": [
+        "src/agent_comms/messages.py"
+      ],
+      "measure": "CodecSubclass",
+      "before": {
+        "CodecSubclass:src/agent_comms/messages.py": 1
+      },
+      "after": {
+        "CodecSubclass:src/agent_comms/messages.py": 0
+      },
+      "delta": {
+        "CodecSubclass:src/agent_comms/messages.py": -1
+      }
+    },
+    {
+      "base": "a8dff8eaea2aba28c79daa273e3319ad8057104c",
+      "head": "5128f233faadf21765c371333a919a6095096d63",
+      "paths": [
+        "src/agent_comms/envelope_claim_transitions.py"
+      ],
+      "measure": "GodClassExcess",
+      "before": {
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimTransitionError": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimConflict": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::FileClaimPath": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ExistingFileClaim": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::WritableFileClaim": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::WakeAdmission": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimRelease": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimTransition": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimOwner": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimProjection": 0
+      },
+      "after": {
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimTransitionError": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimConflict": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::FileClaimPath": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ExistingFileClaim": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::WritableFileClaim": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::WakeAdmission": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimRelease": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimTransition": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimOwner": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimProjection": 0
+      },
+      "delta": {
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimTransitionError": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimConflict": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::FileClaimPath": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ExistingFileClaim": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::WritableFileClaim": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::WakeAdmission": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimRelease": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimTransition": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimOwner": 0,
+        "GodClassExcess:src/agent_comms/envelope_claim_transitions.py::ClaimProjection": 0
+      },
+      "raw_claim_transition_spans": [
+        37,
+        39
+      ]
+    }
+  ]
+}
