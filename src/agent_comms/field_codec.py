@@ -90,7 +90,7 @@ class FieldCodec:
     def encode(cls, value: object) -> Any:
         if is_dataclass(value) and not isinstance(value, type):
             result = (
-                {value.family_discriminator: type(value).wire_tag()}
+                {value.family_discriminator: value.declared_name}
                 if isinstance(value, DeclaredFamily)
                 else {}
             )
@@ -277,7 +277,9 @@ class FieldCodec:
                 raise ValueError("Expected a family object.")
             tag = target.family_discriminator
             name = data.get(tag)
-            target = target.decode_wire_tag(name)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
             data = {key: value for key, value in data.items() if key != tag}
         if isinstance(target, type) and is_dataclass(target):
             if not isinstance(data, dict):

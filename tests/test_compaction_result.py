@@ -1,4 +1,4 @@
-"""The existing socket shape decodes once into declaration-owned effects."""
+"""The current internal socket reply decodes once into declaration-owned effects."""
 
 from dataclasses import dataclass
 
@@ -16,41 +16,14 @@ from agent_comms.field_codec import FieldCodec
 
 
 @pytest.mark.parametrize(
-    "result,wire",
+    "result",
     [
-        (
-            CommittedCompactionResult("retained summary", "actual-commit"),
-            {"ok": True, "summary": "retained summary", "commitId": "actual-commit"},
-        ),
-        (
-            RefusedCompactionResult("provider disconnected; no replay"),
-            {"ok": False, "error": "provider disconnected; no replay"},
-        ),
+        CommittedCompactionResult("retained summary", "actual-commit"),
+        RefusedCompactionResult("provider disconnected; no replay"),
     ],
 )
-def test_exact_external_shape_and_typed_roundtrip(result, wire):
-    assert FieldCodec.encode(result) == wire
-    assert FieldCodec.decode(CompactionResult, wire) == result
-
-
-@pytest.mark.parametrize("tag", [0, 1, None, "true", "committed"])
-def test_boolean_discriminator_is_not_coerced(tag):
-    with pytest.raises(ValueError):
-        FieldCodec.decode(CompactionResult, {"ok": tag, "error": "refused"})
-
-
-@pytest.mark.parametrize(
-    "wire",
-    [
-        {"ok": True, "summary": "summary"},
-        {"ok": False},
-        {"ok": False, "error": 42},
-        {"ok": True, "summary": "summary", "commitId": "commit", "error": "extra"},
-    ],
-)
-def test_wrong_case_fields_fail_at_boundary(wire):
-    with pytest.raises((ValueError, TypeError)):
-        FieldCodec.decode(CompactionResult, wire)
+def test_typed_result_roundtrip(result):
+    assert FieldCodec.decode(CompactionResult, FieldCodec.encode(result)) == result
 
 
 def test_result_owns_terminal_and_acp_semantics():
@@ -72,10 +45,6 @@ def test_new_member_owns_wire_and_behavior_without_dispatch_edits(monkeypatch):
     @dataclass(frozen=True)
     class ObservedCompactionResult(CompactionResult):
         detail: str
-
-        @classmethod
-        def wire_tag(cls):
-            return "observed-test-case"
 
         def terminal_event(self):
             return ManualCompactionEnd(aborted=True, summary=self.detail)

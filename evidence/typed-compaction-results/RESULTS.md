@@ -11,10 +11,11 @@ committed transcript invalidation and ACP response; RefusedCompactionResult owns
 aborted event and ACP error. The worker encodes once; the attached ACP caller decodes
 once. Direct callers retain the typed object throughout.
 
-FieldCodec remains the only codec. DeclaredFamily owns external discriminator hooks;
-ordinary string families retain their existing projection. Boolean `ok` in the existing
-socket response is preserved exactly, including commitId spelling. No schema/history
-migration, compatibility adapter, parallel member roster, or automatic retry is added.
+The runtime compact reply is OUR internal protocol, not an external contract.
+It uses the ordinary CompactionResult derived `kind` and `commit_id` field through
+unchanged FieldCodec/DeclaredFamily. External ACP PromptResponse/update semantics
+are unchanged. No format reset is required: this reply is transient, not a store.
+No compatibility reader, boolean wire tag or shared codec extension remains.
 
 Deleted: raw reply dictionaries, bridge result.get/boolean effect dispatch, ACP shape
 probing/fallback recasts, retired real_host fixture option, and the old launch-alias test
@@ -28,8 +29,8 @@ Own noneditable package: .artifacts/paired-installed/lib/python3.14/site-package
 Native bundle: /home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent.
 Actual local HTTP provider, actual Node native process and SQLite journal; no paid calls.
 
-- ownership.log: 15 passed, including canonical codec guard, strict external field
-  validation, no bool/int coercion and a declaration-only new-case extension.
+- ownership.log: 15 passed, including canonical codec guard, initial (superseded) boolean projection
+  checks and a declaration-only new-case extension.
 - native-manual-current.log: 4 passed in 13.11s; real selected summary commits without
   inventing original input, known refusal recovery, reserved/unknown attempts preserved.
 - installed.log: 57 passed / 6 failed in 123.32s. Passing tests include selected original
@@ -65,3 +66,14 @@ missing configured package, and obsolete pre-summary kill assertion. These were 
 migrations; product native/ordinary-send logic was not changed. Final current installed
 acceptance is passing. No remaining blocker for this scoped result/caller closure.
 Parent owns review/integration/deployment; broader plan acceptance claims remain scoped.
+
+## Owner review correction
+
+Parent identified the mistaken external classification of CompactRuntimeRequest ->
+RuntimeProxy -> CommsAgent. Removed the unnecessary DeclaredFamily wire_tag/decode_wire_tag
+hooks, FieldCodec edits, CompactionResult boolean discriminator/overrides and commitId
+projection. Removed internal wire goldens and redundant boolean validation tests. Runtime
+acceptance now decodes the ordinary family and checks the typed result; ACP acceptance
+still protects its real external response semantics. Earlier receipts are historical
+and do not certify this corrected head; internal-kind-installed.log is its installed
+current-path acceptance. Native journal/settings/session contracts are unchanged.

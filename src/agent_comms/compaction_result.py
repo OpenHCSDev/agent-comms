@@ -1,7 +1,7 @@
 """Manual/worker compaction reply ownership, distinct from durable journal state."""
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from acp.exceptions import RequestError
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
@@ -12,16 +12,6 @@ from .declared_family import DeclaredFamily
 
 
 class CompactionResult(DeclaredFamily, affix="CompactionResult"):
-    family_discriminator = "ok"
-
-    @classmethod
-    def decode_wire_tag(cls, value: object):
-        for member in cls.members_with(cls):
-            expected = member.wire_tag()
-            if type(value) is type(expected) and value == expected:
-                return member
-        raise ValueError("Unknown compaction result discriminator")
-
     @abstractmethod
     def terminal_event(self) -> ManualCompactionEnd: ...
 
@@ -35,11 +25,7 @@ class CompactionResult(DeclaredFamily, affix="CompactionResult"):
 @dataclass(frozen=True)
 class CommittedCompactionResult(CompactionResult):
     summary: str
-    commit_id: str = field(metadata={"wire_name": "commitId"})
-
-    @classmethod
-    def wire_tag(cls):
-        return True
+    commit_id: str
 
     def terminal_event(self):
         return ManualCompactionEnd(aborted=False, summary=self.summary)
@@ -64,10 +50,6 @@ class CommittedCompactionResult(CompactionResult):
 @dataclass(frozen=True)
 class RefusedCompactionResult(CompactionResult):
     error: str
-
-    @classmethod
-    def wire_tag(cls):
-        return False
 
     def terminal_event(self):
         return ManualCompactionEnd(aborted=True, summary=self.error)
