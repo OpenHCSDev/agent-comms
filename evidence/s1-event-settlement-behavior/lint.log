@@ -1,0 +1,12 @@
+E501 Line too long (108 > 100)
+   --> tests/test_s1_event_behavior.py:385:101
+    |
+383 |         async with asyncio.timeout(40):
+384 |             result = await compact_context(owner.turns, session.session_id)
+385 |         print("manual_bridge_result", enabled, result["ok"], native.provider.posts, result.get("error", ""))
+    |                                                                                                     ^^^^^^^^
+386 |         assert type(result["ok"]) is bool
+387 |         assert comms.registry.require(name).active_turn is None
+    |
+
+Found 2 errors (1 fixed, 1 remaining).
