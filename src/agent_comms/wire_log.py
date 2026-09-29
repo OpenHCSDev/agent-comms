@@ -242,45 +242,10 @@ class WireLog:
                         or private["version"] != 1
                     ):
                         raise ValueError("Unsupported private bus record.")
-                    if set(private) == {"version", "initial"}:
-                        try:
-                            initial = validate_delivery_record(record, metadata.root_id)
-                        except (KeyError, TypeError, ValueError, OverflowError) as error:
-                            raise RelationViolationError(
-                                "Malformed private initial bus sideband."
-                            ) from error
-                        if on_row is not None:
-                            on_row(offset, line, existing, None, initial)
-                        yield existing, None, initial
-                        continue
-                    if set(private) != {"version", "initial", "response"}:
-                        raise RelationViolationError(
-                            "Conflicting or malformed private bus receipt."
-                        )
-                    receipt = private["response"]
-                    if not isinstance(receipt, dict) or set(receipt) != {
-                        "wire_root_id",
-                        "execution_id",
-                        "publication_key",
-                        "envelope_digest",
-                    }:
-                        raise RelationViolationError(
-                            "Conflicting or malformed private bus receipt."
-                        )
-                    if (
-                        public_envelope_digest(public) != receipt["envelope_digest"]
-                        or receipt["wire_root_id"] != metadata.root_id
-                        or not isinstance(receipt["execution_id"], str)
-                        or not isinstance(receipt["publication_key"], str)
-                        or receipt["publication_key"]
-                        != canonical_publication_key(receipt["execution_id"], existing.target)
-                        or receipt["publication_key"] in seen_keys
-                    ):
-                        raise RelationViolationError(
-                            "Conflicting or malformed private bus receipt."
-                        )
                     initial = validate_delivery_record(record, metadata.root_id)
-                    seen_keys.add(receipt["publication_key"])
+                    receipt = private.get("response")
+                    if receipt is not None:
+                        seen_keys.add(receipt["publication_key"])
                     if on_row is not None:
                         on_row(offset, line, existing, receipt, initial)
                     yield existing, receipt, initial
@@ -565,9 +530,6 @@ class WireLog:
             return int(row["seq"])
         except (ValueError, UnicodeError) as error:
             raise RelationViolationError("Malformed last bus row blocks publication.") from error
-
-
-
 
     def claim_gate_enabled(self) -> bool:
         # _store_lock is also used for registry, channels, and marker files.

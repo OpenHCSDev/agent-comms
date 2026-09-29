@@ -13,6 +13,8 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.audience_manifest import FrozenRecipient
@@ -21,10 +23,16 @@ from agent_comms.bus_publication import (
     initial_sideband,
     validate_delivery_record,
 )
+from agent_comms.checkpoint_seals import FinalSeal, file_revision
 from agent_comms.coordinator import Coordination
 from agent_comms.delivery_policy import ResponseDeliveryPolicy
 from agent_comms.messages import Message
-from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+from agent_comms.private_bus_checkpoint import (
+    PrefixCertificate,
+    _connect,
+    _saved,
+    install_private_bus_checkpoint,
+)
 from agent_comms.response_conversation import ResponseConversation
 from agent_comms.store_files import _store_lock
 from agent_comms.wake import ControlClassification
@@ -113,8 +121,25 @@ def convert(root: Path, old_python: Path):
             install_private_bus_checkpoint(staged_bus)
             # Stage certified inode-bound artifacts on the same filesystem.
             # Until marker publishes last, old seal mismatch fails closed.
-            for path in paths:
+            for path in paths[:-1]:
                 os.replace(stage / path.name, path)
+            # Rename changes ctime. Seal final in-place inode revisions, using
+            # the already verified staged digest and unchanged bytes.
+            checkpoint = root / "private_bus_checkpoint.sqlite3"
+            with closing(_connect(checkpoint)) as db:
+                saved = _saved(db)
+                info = bus.path.stat()
+                witness = replace(saved, revision=file_revision(info))
+                with db:
+                    PrefixCertificate.capture(
+                        marker.root_id,
+                        info,
+                        saved.through_seq,
+                        bytes.fromhex(saved.digest),
+                        saved.tail,
+                    ).upsert(db)
+            marker.seal_with(FinalSeal.capture(witness, checkpoint))
+            bus.write_metadata_unlocked(marker)
             descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(descriptor)
