@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from .agent_events import AgentEvent, CompactionStart, ManualCompactionEnd
+from .agent_events import AgentEvent, CompactionStart, CompactionSkipped
 from .backend import PersistentPiSession
 from .compaction_journal import CompactionOperation, SelectedSummaryAttempt
 from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
@@ -54,10 +54,10 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
     reason: str
 
     @property
-    def completion_event(self) -> ManualCompactionEnd:
-        return ManualCompactionEnd(
-            reason="adaptive", aborted=True,
-            summary=f"Selected native compaction skipped: {self.reason}. Original context preserved.",
+    def completion_event(self) -> CompactionSkipped:
+        return CompactionSkipped(
+            reason="adaptive",
+            explanation=f"Selected native compaction skipped: {self.reason}. Original context preserved.",
         )
 
     async def commit_with(

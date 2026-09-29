@@ -178,6 +178,31 @@ class CompactionEnd(CompactionEvent):
     def phase(self) -> str:
         return "abort" if self.aborted else "end"
 
+    @property
+    def result_label(self) -> str:
+        return "Compaction aborted" if self.aborted else "Context compacted"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionSkipped(CompactionEnd):
+    explanation: str
+
+    @property
+    def phase(self) -> str:
+        return "skip"
+
+    @property
+    def result_label(self) -> str:
+        return "Compaction skipped"
+
+    @property
+    def publication_summary(self) -> str:
+        return self.explanation
+
+    @property
+    def summary_label(self) -> str:
+        return ""
+
 
 @dataclass(frozen=True)
 class ManualCompactionEnd(CompactionEnd):
