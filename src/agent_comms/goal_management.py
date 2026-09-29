@@ -10,10 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
-from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
-from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalReplyScope, GoalWait, GoalWaits
 from .registration import Registration
 
@@ -375,21 +373,11 @@ class Goals:
                 thread.worktree != expected_worktree
                 or current is None
                 or current.id != started_goal.id
-                or not isinstance(current.state, (ActiveGoal, PausedGoal, CompletedGoal))
             ):
                 return current
-            if current.state.protected:
-                # Preserve this exact owner-authored pause. The caller still
-                # records the failed private attempt and terminal diagnostic;
-                # preserving intent grants neither resume nor replay authority.
+            blocked = current.after_failed_turn(diagnostic)
+            if blocked is current:
                 return current
-            progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
-            blocked = replace(
-                current,
-                state=BlockedGoal(_required_block_reason(diagnostic)),
-                progress=progress,
-                revision=current.revision + 1,
-            )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
 
@@ -405,18 +393,10 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             current = thread.goal
-            if (
-                thread.worktree != expected_worktree
-                or current is None
-                or current != expected_goal
-                or not isinstance(current.state, CompletedGoal)
-            ):
+            if thread.worktree != expected_worktree or current is None or current != expected_goal:
                 return current
-            blocked = replace(
-                current,
-                state=BlockedGoal(_required_block_reason(diagnostic)),
-                progress=diagnostic,
-                revision=current.revision + 1,
-            )
+            blocked = current.after_unverified_completion(diagnostic)
+            if blocked is current:
+                return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked

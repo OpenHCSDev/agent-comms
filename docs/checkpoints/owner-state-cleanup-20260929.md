@@ -20,7 +20,7 @@ Close all five family sites:
 - thread_status.py: command capabilities own control eligibility.
 - acp_failure.py: external payload shapes decode once and own detail rendering.
 
-Parent owns canonical TurnProgress/OwnedTurn backend state and Core/Toad
+Arendt Core425/Toad211 now owns canonical TurnProgress/OwnedTurn backend state and Core/Toad
 permission/status/cancel integration. Coordinate backend.py, goal_actions.py and
 thread_status.py against that contract at its implementation checkpoint. No private
 active_turn probes, reserved-flag projections or symptom branches. Independent
@@ -76,3 +76,32 @@ Remaining files and both remaining families above stay assigned here.
 The concrete cross-runtime restart queue blocker is a separate C2 followthrough
 PR: exact source identity proof and reviewed target runtime must be distinct.
 No live queue activation belongs to this source checkpoint.
+
+## Further tested owner operations
+
+External error shapes use existing MroDispatch declarations at one decode
+boundary; internal published receipts still use FieldCodec. No custom WireValue
+is needed.22 presentation/diagnostic checks pass. Goal/GoalState own failure
+blocking and provisional-completion revocation; owner pause, progress and exact
+goal/worktree gates remain.61 durable checks and23 focused block/resume checks
+pass. Eight fake-stream caller cases require public RequestError expectations,
+reproduced on main697b plus Core424; Arendt425 has the caller-closure evidence.
+
+Actual saved native history -> normal ACP input -> autonomous native503 -> typed
+published failure receipt -> blocked goal -> passive reopen/noReplay passes in
+18.67s (actual-goal-failure.log, native7817). UNKNOWN original remains unchanged.
+
+OwnerReleaseReceipt owns source/admission release proof; RegistrySnapshot owns
+fenced stopping identity and delegates executable process proof to Thread.
+33 release/process/turn-lease/restart/error checks pass28.07s, including actual
+release-before-exit, grace/escalation and stale birth/admission/missing receipt.
+The obsolete expected_incarnations fixture now uses OwnerRestartSelection.
+A redundant retired startup refusal sentence was deleted; actual private trace,
+PublicationActivationBlocked type and owner identity assertions remain.
+Watchdog reads existing NativeAttestation.observed rather than reconstructing
+attestation from a nullable state field.
+
+Remaining canonical turn/activity/control consumers await Arendt's reviewed425
+contract; f05a62e7 is an importable source checkpoint, not full acceptance.
+The owner prioritizes the separate sender outbound relation contribution to
+Schrodinger210. C3 full acceptance remains tracked here, no scope discarded.

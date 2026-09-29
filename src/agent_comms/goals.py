@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 from abc import abstractmethod
 
@@ -182,6 +182,20 @@ class Goal:
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
+
+    def after_failed_turn(self, diagnostic: str) -> Goal:
+        progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
+        return self._failure_projection(self.state.after_failed_turn(diagnostic), progress)
+
+    def after_unverified_completion(self, diagnostic: str) -> Goal:
+        return self._failure_projection(
+            self.state.after_unverified_completion(diagnostic), diagnostic
+        )
+
+    def _failure_projection(self, state: GoalState, progress: str) -> Goal:
+        if state is self.state:
+            return self
+        return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
