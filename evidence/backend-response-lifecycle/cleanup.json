@@ -1,0 +1,34 @@
+{
+  "removed_owned_disposable": [
+    {
+      "path": ".artifacts/backend-response/native-source",
+      "bytes": 1310637
+    },
+    {
+      "path": ".artifacts/backend-response/native-corrected",
+      "bytes": 2537684
+    },
+    {
+      "path": ".artifacts/backend-response/native-admissible",
+      "bytes": 2539630
+    },
+    {
+      "path": ".artifacts/backend-response/native-installed",
+      "bytes": 8038293
+    },
+    {
+      "path": ".artifacts/backend-response/compaction-installed",
+      "bytes": 78005
+    },
+    {
+      "path": ".artifacts/backend-response/nra-cache",
+      "bytes": 82631336
+    }
+  ],
+  "preserved": [
+    "source and branch",
+    "immutable native5fde",
+    "final wheel and installed candidate",
+    "all failed and passed receipts"
+  ]
+}

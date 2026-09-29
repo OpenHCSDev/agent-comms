@@ -1,0 +1,34 @@
+F..
+=================================== FAILURES ===================================
+____ test_actual_native_queued_settlement_large_reuse_and_validated_reopen _____
+tests/test_backend_native_lifecycle.py:36: in run
+    async for event in backend.stream_agent_events(
+src/agent_comms/backend.py:570: in stream_agent_events
+    async for event in stream:
+src/agent_comms/backend.py:771: in run
+    async for event in self.receive_record():
+src/agent_comms/backend.py:842: in receive_record
+    self.line = await self.read_rpc_line(self.read_timeout)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/backend.py:661: in read_rpc_line
+    done, _ = await asyncio.wait(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:432: in wait
+    return await _wait(fs, timeout, return_when, loop)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:521: in _wait
+    await waiter
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests/test_backend_native_lifecycle.py:155: in test_actual_native_queued_settlement_large_reuse_and_validated_reopen
+    first = await owner.run("first", followup="queued followup")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_backend_native_lifecycle.py:35: in run
+    async with asyncio.timeout(25):
+               ^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: in __aexit__
+    raise TimeoutError from exc_val
+E   TimeoutError
+=========================== short test summary info ============================
+FAILED tests/test_backend_native_lifecycle.py::test_actual_native_queued_settlement_large_reuse_and_validated_reopen
+1 failed, 2 passed in 31.29s
