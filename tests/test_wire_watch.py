@@ -10,7 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.threads import Thread
-from agent_comms.wire_watch import open_wire_watcher
+from agent_comms.wire_watch import WireChangeWatch, open_wire_watcher
 
 
 @pytest.mark.asyncio
@@ -27,7 +27,7 @@ async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     root_id = comms.messaging.initialize_private_initial_protocol()
     guard = PrivateRegistryGuard(comms.registry.store.path, root_id)
     watcher = open_wire_watcher(tmp_path)
-    if watcher is None:
+    if not isinstance(watcher, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
     try:
         for _ in range(10):
@@ -46,11 +46,21 @@ async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
 @pytest.mark.asyncio
 async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypatch):
     probe = open_wire_watcher(tmp_path)
-    if probe is None:
+    if not isinstance(probe, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
     probe.close()
 
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    comms = wire(tmp_path)
+    comms.registry.declare(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    agent = CommsAgent(comms, runtime_enabled=False)
+    agent.sessions.bindings["owner"] = "owner"
     calls = 0
     woke = asyncio.Event()
 
@@ -96,11 +106,21 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
 @pytest.mark.asyncio
 async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     probe = open_wire_watcher(tmp_path)
-    if probe is None:
+    if not isinstance(probe, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
     probe.close()
 
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    comms = wire(tmp_path)
+    comms.registry.declare(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    agent = CommsAgent(comms, runtime_enabled=False)
+    agent.sessions.bindings["owner"] = "owner"
     entered = asyncio.Event()
 
     async def drain(_session_id):
@@ -118,3 +138,67 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     await asyncio.wait_for(entered.wait(), timeout=1)
     await asyncio.sleep(0)
     await asyncio.wait_for(agent.shutdown(), timeout=1)
+
+
+async def test_native_watch_invalidation_and_polling_own_resource_cleanup(tmp_path):
+    from agent_comms.wire_watch import PollingWireWatch
+
+    root = tmp_path / "wire"
+    root.mkdir()
+    watch = open_wire_watcher(root)
+    if not isinstance(watch, WireChangeWatch):
+        pytest.skip("Native file notifications are unavailable")
+    descriptor = watch.fd
+    try:
+        await watch.prepare()
+        root.rename(tmp_path / "moved")
+        await asyncio.wait_for(watch.changed.wait(), 1)
+        assert watch.invalid
+        polling = await watch.wait()
+        assert isinstance(polling, PollingWireWatch)
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+        # The actual unavailable-root factory has the same concrete behavior.
+        absent = open_wire_watcher(root)
+        assert isinstance(absent, PollingWireWatch)
+        for source in (polling, absent):
+            await asyncio.wait_for(source.prepare(), 1)
+            assert await source.wait() is source
+            source.close()
+    finally:
+        watch.close()
+
+
+async def test_observation_cancellation_releases_actual_descriptor(tmp_path, monkeypatch):
+    from contextlib import aclosing
+    from agent_comms import wire_watch
+
+    opened = []
+    original = wire_watch.open_wire_watcher
+
+    def capture(root):
+        actual = original(root)
+        opened.append(actual)
+        return actual
+
+    monkeypatch.setattr(wire_watch, "open_wire_watcher", capture)
+    observed = asyncio.Event()
+
+    async def observe():
+        async with aclosing(wire_watch.WireWatch.observations(tmp_path)) as changes:
+            async for _ in changes:
+                observed.set()
+
+    task = asyncio.create_task(observe())
+    try:
+        await asyncio.wait_for(observed.wait(), 1)
+        if not isinstance(opened[0], WireChangeWatch):
+            pytest.skip("Native file notifications are unavailable")
+        descriptor = opened[0].fd
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

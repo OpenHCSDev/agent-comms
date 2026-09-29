@@ -6,7 +6,7 @@ import asyncio
 import os
 import sqlite3
 import time
-from contextlib import suppress
+from contextlib import aclosing
 from typing import Any
 
 from acp import RequestError
@@ -34,7 +34,6 @@ from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
 from .queued_input import InitialInput, QueuedInput
-from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import WakeScheduleCheck
@@ -44,12 +43,9 @@ from .store_files import _store_lock, file_revision
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
-from .wake import derive_exact_reply_target
-from .wire_watch import open_wire_watcher
+from .wire_watch import WireWatch
 
 AGENT_PREFIX = "!agent "
-LIVE_DRAIN_INTERVAL = 0.05
-WATCH_POLL_INTERVAL = 1.0
 GOAL_WAIT_RECHECK_INTERVAL = 60.0
 
 
@@ -214,71 +210,50 @@ class InputDrain(FutureInputQueue):
         if session_id in self.drain_tasks and not self.drain_tasks[session_id].done():
             return
 
-        async def loop() -> None:
-            watcher = open_wire_watcher(self.comms.root)
-            next_goal_wait_check = 0.0
-            try:
-                while True:
-                    if watcher is None:
-                        await asyncio.sleep(LIVE_DRAIN_INTERVAL)
-                    else:
-                        watcher.changed.clear()
-                    thread = self.sessions.require(session_id)
-                    owner = self.comms.registry.snapshot().owner_identity(thread)
-                    try:
-                        await self.drain_inbox(session_id)
-                        await self.sessions.config.sync_thread(session_id)
-                        if time.monotonic() >= next_goal_wait_check:
-                            self.comms.goals.recover_closed_goal_wait(session_id)
-                            next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
-                        self.effects.turns.goals.schedule_goal(session_id)
-                        await self.sessions.config.refresh_auth_models()
-                    except asyncio.CancelledError:
-                        raise
-                    except (
-                        OSError,
-                        ValueError,
-                        sqlite3.Error,
-                        CoordinationError,
-                        RequestError,
-                    ) as error:
-                        self.comms.agents.set_drain_diagnostic(
-                            thread,
-                            owner,
-                            UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        )
-                    except Exception as error:
-                        self.comms.agents.set_drain_diagnostic(
-                            thread,
-                            owner,
-                            StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        )
-                        raise
-                    else:
-                        if (
-                            not self.comms.registry.require(thread).executing
-                            and session_id not in self.effects.turns.turn_tasks
-                            and session_id not in self.backend_inboxes
-                        ):
-                            self.comms.agents.set_drain_diagnostic(thread, owner, None)
-                    if watcher is not None:
-                        if watcher.invalid:
-                            watcher.close()
-                            watcher = None
-                        else:
-                            with suppress(TimeoutError):
-                                async with asyncio.timeout(WATCH_POLL_INTERVAL):
-                                    await watcher.changed.wait()
-            finally:
-                if watcher is not None:
-                    watcher.close()
+        self.drain_tasks[session_id] = self.runtime.background(self.observe(session_id))
 
-        context = self.runtime.controller.set(UNBOUND_CONTROLLER)
-        try:
-            task = asyncio.create_task(loop())
-        finally:
-            self.runtime.controller.reset(context)
-        self.drain_tasks[session_id] = task
+    async def observe(self, session_id: str) -> None:
+        next_goal_wait_check = 0.0
+        async with aclosing(WireWatch.observations(self.comms.root)) as observations:
+            async for _ in observations:
+                thread = self.sessions.require(session_id)
+                owner = self.comms.registry.snapshot().owner_identity(thread)
+                try:
+                    await self.drain_inbox(session_id)
+                    await self.sessions.config.sync_thread(session_id)
+                    if time.monotonic() >= next_goal_wait_check:
+                        self.comms.goals.recover_closed_goal_wait(session_id)
+                        next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
+                    self.effects.turns.goals.schedule_goal(session_id)
+                    await self.sessions.config.refresh_auth_models()
+                except asyncio.CancelledError:
+                    raise
+                except (
+                    OSError,
+                    ValueError,
+                    sqlite3.Error,
+                    CoordinationError,
+                    RequestError,
+                ) as error:
+                    self.comms.agents.set_drain_diagnostic(
+                        thread,
+                        owner,
+                        UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
+                    )
+                except Exception as error:
+                    self.comms.agents.set_drain_diagnostic(
+                        thread,
+                        owner,
+                        StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
+                    )
+                    raise
+                else:
+                    if (
+                        not self.comms.registry.require(thread).executing
+                        and session_id not in self.effects.turns.turn_tasks
+                        and session_id not in self.backend_inboxes
+                    ):
+                        self.comms.agents.set_drain_diagnostic(thread, owner, None)
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
@@ -320,80 +295,12 @@ class InputDrain(FutureInputQueue):
     async def drain_owned_inbox(self, session_id: str) -> int:
         private_root = self.effects._private_nk_marker()
         pushed = await self._drain_private_if_changed(session_id, private_root)
-        self.schedule_wake(session_id)
+        WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
         return pushed
 
     @property
     def background_wakes_disabled(self) -> bool:
         return not self.auto_wake or not self.sessions.runtime_enabled
-
-    def schedule_wake(self, session_id: str) -> None:
-        try:
-            WakeScheduleCheck(session_id=session_id, inputs=self).require_valid()
-        except ReservationViolationError:
-            return
-
-        async def wake() -> None:
-            while self.pending_turns.get(session_id) and not self.closing:
-                async with self.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
-                    pending = self.pending_turns.pop(session_id, [])
-                    owner = self.comms.registry.require(self.sessions.require(session_id))
-                    if not self.comms.registry.status(owner.name).running:
-                        continue
-                    goal = owner.goal
-                    if goal is not None and goal.state.active:
-                        pending = [turn for turn in pending if turn.goal_id == goal.id]
-                    if not pending:
-                        continue
-                    pending, remaining = ScheduledTurn.take_batch(pending)
-                    if remaining:
-                        self.pending_turns[session_id] = remaining
-                    self.effects.turns.turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
-                    try:
-                        await self.effects.turns.run_agent_turn(
-                            session_id,
-                            self.sessions.require(session_id),
-                            "\n\n".join(turn.prompt for turn in pending),
-                            reply_targets=tuple(
-                                dict.fromkeys(
-                                    target
-                                    for turn in pending
-                                    if (target := derive_exact_reply_target(turn.origin))
-                                )
-                            ),
-                            origins=tuple(
-                                turn.origin for turn in pending if turn.origin is not None
-                            ),
-                            autonomous_goal=bool(
-                                len(pending) == 1
-                                and pending[0].goal_id is not None
-                                and pending[0].origin is None
-                            ),
-                            dependency_wait_id=pending[0].goal_wait_id,
-                        )
-                    except RequestError:
-                        if pending[0].goal_wait_id is None or goal is None:
-                            raise
-                        self.comms.goals.block_goal_after_failed_turn(
-                            owner.name,
-                            started_goal=goal,
-                            expected_worktree=owner.worktree,
-                            diagnostic=(
-                                "Standby wake launch authority unavailable; inspect the UNKNOWN "
-                                "input before explicit Retry. No input was replayed."
-                            ),
-                        )
-                        await self.effects.turns.goals.sync_goal_execution(session_id, owner.name)
-                    finally:
-                        self.effects.turns.turn_tasks.pop(session_id, None)
-
-        # Background work must not inherit a human controller from the task
-        # that happened to schedule it. Only its own ACP prompt may bind one.
-        context = self.runtime.controller.set(UNBOUND_CONTROLLER)
-        try:
-            self.wake_tasks[session_id] = asyncio.create_task(wake())
-        finally:
-            self.runtime.controller.reset(context)
 
     async def drain_count(self, session_id: str) -> int:
         return await self.drain_inbox(session_id)

@@ -1,0 +1,243 @@
+........FF.............................................................. [ 67%]
+.......s..........................                                       [100%]
+=================================== FAILURES ===================================
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[activated] _
+
+self = InitialInput(text='admitted before goal change', echo=False, context=QueuedInputContext(owner=OwnerIdentity(incarnatio...854180915009b9852c7d7c', prompt='admitted before goal change', images=(), controller=<object object at 0x7f28879826a0>)
+turns = <agent_comms.turn_runner.TurnRunner object at 0x7f288440a150>
+session_id = 'project', name = 'project'
+
+    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+        """Transfer this live acceptance under current authority; never recover disk work."""
+        inputs = turns.inputs
+        try:
+            with _store_lock(inputs.comms._wire_lock_path):
+                self.require_live_source(inputs, session_id)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+>               self.require_handoff(
+                    snapshot,
+                    canonical,
+                    inputs.comms.goals.goal_wait(canonical),
+                    inputs.dispositions.read().lookup(self.key),
+                    self.input_id,
+                )
+
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = InitialInput(text='admitted before goal change', echo=False, context=QueuedInputContext(owner=OwnerIdentity(incarnatio...854180915009b9852c7d7c', prompt='admitted before goal change', images=(), controller=<object object at 0x7f28879826a0>)
+snapshot = RegistrySnapshot(threads={'project': Thread(name='project', tags=frozenset({'acp'}), worktree='/home/ts/wt/.wake-calle...een={'project': 1790681990.213575}, aliases={}, owner_generations={'project': 1}, admission_generations={'project': 1})
+name = 'project', wait = None
+row = ReservedInput(key='acp:aa69e17f7d854180915009b9852c7d7c', sequence=None, owner='project', admission=1, target='project', source_text='admitted before goal change', notice_dismissed=False, goal_reviews={})
+input_id = 'aa69e17f7d854180915009b9852c7d7c'
+
+    def require_handoff(
+        self,
+        snapshot: RegistrySnapshot,
+        name: str,
+        wait: GoalWait | None,
+        row: InputAttempt,
+        input_id: str,
+    ) -> None:
+        owner = snapshot.require_active(name)
+        snapshot.statuses[owner.name].require_running()
+        owner.require_local_process(ProcessIdentity.capture(os.getpid()))
+        owner.require_idle()
+        admission = snapshot.admission_generations[owner.name]
+        if not self.current(owner, admission, wait):
+>           raise RelationViolationError("Queued input acceptance context changed")
+E           agent_comms.errors.RelationViolationError: Queued input acceptance context changed
+
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:195: RelationViolationError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/.wake-callers/test_changed_goal_before_origi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2885c428f0>
+existing_goal = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.goals.open_goal_store()
+        if existing_goal:
+            comms.goals.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
+        original_emit = agent.inputs.emit_input_disposition
+        replacement = None
+        backend_calls = 0
+    
+        async def activate_after_admission(session_id, row):
+            nonlocal replacement
+            await original_emit(session_id, row)
+            if replacement is None:
+                replacement = comms.goals.update_goal(
+                    "project", SetGoalAction(text="New authority"), owner_store=store
+                )
+    
+        async def events(*args, **kwargs):
+            nonlocal backend_calls
+            backend_calls += 1
+            yield ae.Done(ok=False, text="Must not reach backend")
+    
+        monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            with pytest.raises(RequestError) as refused:
+>               await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
+
+tests/test_acp_goal_original_input.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/input_drain.py:505: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = InitialInput(text='admitted before goal change', echo=False, context=QueuedInputContext(owner=OwnerIdentity(incarnatio...854180915009b9852c7d7c', prompt='admitted before goal change', images=(), controller=<object object at 0x7f28879826a0>)
+turns = <agent_comms.turn_runner.TurnRunner object at 0x7f288440a150>
+session_id = 'project', name = 'project'
+
+    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+        """Transfer this live acceptance under current authority; never recover disk work."""
+        inputs = turns.inputs
+        try:
+            with _store_lock(inputs.comms._wire_lock_path):
+                self.require_live_source(inputs, session_id)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+                self.require_handoff(
+                    snapshot,
+                    canonical,
+                    inputs.comms.goals.goal_wait(canonical),
+                    inputs.dispositions.read().lookup(self.key),
+                    self.input_id,
+                )
+        except RelationViolationError as error:
+>           raise InputHandoffRefused(str(error)) from error
+E           agent_comms.queued_input.InputHandoffRefused: Queued input acceptance context changed
+
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:161: InputHandoffRefused
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced] __
+
+self = InitialInput(text='admitted before goal change', echo=False, context=QueuedInputContext(owner=OwnerIdentity(incarnatio...1744dcb1ab48b29f6e1ff2', prompt='admitted before goal change', images=(), controller=<object object at 0x7f28879826a0>)
+turns = <agent_comms.turn_runner.TurnRunner object at 0x7f2884421450>
+session_id = 'project', name = 'project'
+
+    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+        """Transfer this live acceptance under current authority; never recover disk work."""
+        inputs = turns.inputs
+        try:
+            with _store_lock(inputs.comms._wire_lock_path):
+                self.require_live_source(inputs, session_id)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+>               self.require_handoff(
+                    snapshot,
+                    canonical,
+                    inputs.comms.goals.goal_wait(canonical),
+                    inputs.dispositions.read().lookup(self.key),
+                    self.input_id,
+                )
+
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = InitialInput(text='admitted before goal change', echo=False, context=QueuedInputContext(owner=OwnerIdentity(incarnatio...1744dcb1ab48b29f6e1ff2', prompt='admitted before goal change', images=(), controller=<object object at 0x7f28879826a0>)
+snapshot = RegistrySnapshot(threads={'project': Thread(name='project', tags=frozenset({'acp'}), worktree='/home/ts/wt/.wake-calle...seen={'project': 1790681990.46445}, aliases={}, owner_generations={'project': 1}, admission_generations={'project': 1})
+name = 'project', wait = None
+row = ReservedInput(key='acp:ac187a47981744dcb1ab48b29f6e1ff2', sequence=None, owner='project', admission=1, target='project', source_text='admitted before goal change', notice_dismissed=False, goal_reviews={})
+input_id = 'ac187a47981744dcb1ab48b29f6e1ff2'
+
+    def require_handoff(
+        self,
+        snapshot: RegistrySnapshot,
+        name: str,
+        wait: GoalWait | None,
+        row: InputAttempt,
+        input_id: str,
+    ) -> None:
+        owner = snapshot.require_active(name)
+        snapshot.statuses[owner.name].require_running()
+        owner.require_local_process(ProcessIdentity.capture(os.getpid()))
+        owner.require_idle()
+        admission = snapshot.admission_generations[owner.name]
+        if not self.current(owner, admission, wait):
+>           raise RelationViolationError("Queued input acceptance context changed")
+E           agent_comms.errors.RelationViolationError: Queued input acceptance context changed
+
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:195: RelationViolationError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/.wake-callers/test_changed_goal_before_origi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2885b59640>
+existing_goal = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.goals.open_goal_store()
+        if existing_goal:
+            comms.goals.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
+        original_emit = agent.inputs.emit_input_disposition
+        replacement = None
+        backend_calls = 0
+    
+        async def activate_after_admission(session_id, row):
+            nonlocal replacement
+            await original_emit(session_id, row)
+            if replacement is None:
+                replacement = comms.goals.update_goal(
+                    "project", SetGoalAction(text="New authority"), owner_store=store
+                )
+    
+        async def events(*args, **kwargs):
+            nonlocal backend_calls
+            backend_calls += 1
+            yield ae.Done(ok=False, text="Must not reach backend")
+    
+        monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            with pytest.raises(RequestError) as refused:
+>               await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
+
+tests/test_acp_goal_original_input.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/input_drain.py:505: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = InitialInput(text='admitted before goal change', echo=False, context=QueuedInputContext(owner=OwnerIdentity(incarnatio...1744dcb1ab48b29f6e1ff2', prompt='admitted before goal change', images=(), controller=<object object at 0x7f28879826a0>)
+turns = <agent_comms.turn_runner.TurnRunner object at 0x7f2884421450>
+session_id = 'project', name = 'project'
+
+    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+        """Transfer this live acceptance under current authority; never recover disk work."""
+        inputs = turns.inputs
+        try:
+            with _store_lock(inputs.comms._wire_lock_path):
+                self.require_live_source(inputs, session_id)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.aliases.get(name, name)
+                self.require_handoff(
+                    snapshot,
+                    canonical,
+                    inputs.comms.goals.goal_wait(canonical),
+                    inputs.dispositions.read().lookup(self.key),
+                    self.input_id,
+                )
+        except RelationViolationError as error:
+>           raise InputHandoffRefused(str(error)) from error
+E           agent_comms.queued_input.InputHandoffRefused: Queued input acceptance context changed
+
+.artifacts/input-wake-lifetime/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:161: InputHandoffRefused
+=========================== short test summary info ============================
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[activated]
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced]
+2 failed, 103 passed, 1 skipped in 29.15s

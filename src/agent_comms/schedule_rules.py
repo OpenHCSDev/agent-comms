@@ -1,10 +1,17 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
+import asyncio
+
+from acp import RequestError
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .reservation_rules import ReservationRule, RuleCheck
+from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
+from .routing import ScheduledTurn
+from .errors import RelationViolationError
+from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
     from .input_drain import InputDrain
@@ -13,7 +20,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class SessionScheduleCheck(RuleCheck):
     session_id: str
-    inputs: 'InputDrain'
+    inputs: "InputDrain"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -22,7 +29,72 @@ class GoalScheduleCheck(SessionScheduleCheck):
 
 
 class WakeScheduleCheck(SessionScheduleCheck):
-    pass
+    """Validated wake admission and execution under the existing turn lock.
+
+    A queued wake never carries a stale owner grant across a lock wait. The
+    current owner and active goal are read only after acquiring the turn lock.
+    """
+
+    def schedule(self) -> None:
+        try:
+            self.require_valid()
+        except ReservationViolationError:
+            return
+        self.inputs.wake_tasks[self.session_id] = self.inputs.runtime.background(self.run())
+
+    async def run(self) -> None:
+        inputs, session_id = self.inputs, self.session_id
+        while inputs.pending_turns.get(session_id):
+            if ClosingScheduleRule().violated(self):
+                return
+            async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+                pending = inputs.pending_turns.pop(session_id, [])
+                owner = inputs.comms.registry.require(inputs.sessions.require(session_id))
+                try:
+                    inputs.comms.registry.status(owner.name).require_running()
+                except RelationViolationError:
+                    continue
+                goal = owner.goal
+                if goal is not None and goal.state.active:
+                    pending = [turn for turn in pending if turn.goal_id == goal.id]
+                if not pending:
+                    continue
+                pending, remaining = ScheduledTurn.take_batch(pending)
+                if remaining:
+                    inputs.pending_turns[session_id] = remaining
+                inputs.effects.turns.turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
+                try:
+                    await inputs.effects.turns.run_agent_turn(
+                        session_id,
+                        inputs.sessions.require(session_id),
+                        "\n\n".join(turn.prompt for turn in pending),
+                        reply_targets=tuple(
+                            dict.fromkeys(
+                                target
+                                for turn in pending
+                                if (target := derive_exact_reply_target(turn.origin))
+                            )
+                        ),
+                        origins=tuple(origin for turn in pending for origin in turn.origins),
+                        autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
+                        dependency_wait_id=pending[0].goal_wait_id,
+                    )
+                except RequestError as error:
+                    if goal is None:
+                        raise
+                    pending[0].require_dependency_wake(error)
+                    inputs.comms.goals.block_goal_after_failed_turn(
+                        owner.name,
+                        started_goal=goal,
+                        expected_worktree=owner.worktree,
+                        diagnostic=(
+                            "Standby wake launch authority unavailable; inspect the UNKNOWN "
+                            "input before explicit Retry. No input was replayed."
+                        ),
+                    )
+                    await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
+                finally:
+                    inputs.effects.turns.turn_tasks.pop(session_id, None)
 
 
 class ClosingScheduleRule(ReservationRule):

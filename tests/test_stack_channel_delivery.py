@@ -10,10 +10,10 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.input_drain import InputDrain
 from agent_comms.threads import Thread
 
 
@@ -24,6 +24,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires prepared native Pi stack")
+    schedule_wake = WakeScheduleCheck.schedule
     with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
         root = Path(directory)
         requests = []
@@ -104,7 +105,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         comms = wire(root / "wire")
         agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-        monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+        monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         project = root / "worker"
         project.mkdir()
         turn = None
@@ -156,7 +157,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 release.set()
                 await asyncio.wait_for(turn, 20)
             elif case != "reopen":
-                InputDrain.schedule_wake(agent.inputs, "worker")
+                schedule_wake(WakeScheduleCheck(session_id="worker", inputs=agent.inputs))
                 await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 20)
             success = case in {"deliver", "batch", "steer", "rename", "batch_rename"}
             assert len(requests) == (2 if success else 1)
