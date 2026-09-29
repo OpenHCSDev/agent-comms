@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_waits import GoalWait
     from .goals import Goal
-    from .input_drain import QueuedInput
+    from .queued_input import QueuedInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .turn_input_binding import TurnInputBinding

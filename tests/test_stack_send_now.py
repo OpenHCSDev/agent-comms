@@ -317,7 +317,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 owner._comms.goals.update_goal(
                     "project",
                     SetGoalAction(text="Continue useful work"),
-                    owner_store=owner.turns.open_goal_store(),
+                    owner_store=owner.turns.goals.open_goal_store(),
                 )
 
         async def collect():

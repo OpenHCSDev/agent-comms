@@ -151,7 +151,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
         created = await proxy.request("set_goal", text="Continue the owner objective")
         goal_id = created["goal"]["id"]
-        store = owner.turns.open_goal_store()
+        store = owner.turns.goals.open_goal_store()
         owner.inputs.dispositions.record(
             "acp:uncertain-sentinel",
             seq=None,

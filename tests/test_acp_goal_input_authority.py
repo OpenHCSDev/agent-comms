@@ -123,7 +123,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             public_id, command = await queue_followup(agent, kwargs)
         goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
-        assert agent.turns.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()
+        assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()
         if not queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
         observed.update(goal=goal, public_id=public_id)
@@ -145,7 +145,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
         )
         assert comms.registry.require("project").goal.state.active
-        state = agent.turns.goal_store.snapshot(observed["goal"].id)
+        state = agent.turns.goals.goal_store.snapshot(observed["goal"].id)
         assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
         row = InputDispositions(comms.root / InputDispositions.filename).read().lookup(key)
@@ -167,7 +167,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 ):
     caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
-    store = agent.turns.open_goal_store()
+    store = agent.turns.goals.open_goal_store()
     original_goal = comms.goals.update_goal(
         "project", SetGoalAction(text="Read files until stopped"), owner_store=store
     )

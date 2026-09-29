@@ -359,7 +359,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         private.mkdir(mode=0o700)
         store = GoalAttemptStore.initialize(private)
         store.create_goal("goal-acp")
-        agent.turns.goal_store = store
+        agent.turns.goals.goal_store = store
         agent.turns.persistent_backends["proj"] = persistent
         dispositions = InputDispositions(root / InputDispositions.filename)
         if private_session:

@@ -200,10 +200,10 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     await value.assert_effect(execution, progress)
     # Public goal synchronization follows observed events and leaves the actual
     # execution signature current; no assertion about collaborator call counts.
-    assert execution.session_id in runner.goal_execution_signatures
+    assert execution.session_id in runner.goals.goal_execution_signatures
     assert (
         comms.goals.goal_changed(
-            execution.thread_name, runner.goal_execution_signatures[execution.session_id]
+            execution.thread_name, runner.goals.goal_execution_signatures[execution.session_id]
         )
         is None
     )

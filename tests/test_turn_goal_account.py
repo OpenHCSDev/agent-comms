@@ -47,7 +47,7 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
     execution, progress = owner_turn
     runner = execution.runner
     goal = runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text="new work"))
-    store = runner.open_goal_store()
+    store = runner.goals.open_goal_store()
 
     def lost_claim(_reservation):
         raise GoalAttemptError("claim outcome unavailable")
@@ -61,4 +61,4 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
         runner.comms.registry.require(execution.thread_name).goal.state.reason
         == "Goal origin turn did not finish successfully."
     )
-    assert execution.thread_name not in runner.pending_goal_origins
+    assert execution.thread_name not in runner.goals.pending_goal_origins

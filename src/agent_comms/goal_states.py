@@ -52,6 +52,11 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
 
+    def require_active(self) -> None:
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("The executing goal is not active")
+
     def failure_projection(self, reason: str) -> tuple[str, str]:
         raise FailureNotObserved("owner_or_goal_changed")
 
@@ -112,6 +117,9 @@ class OpenGoal(GoalState):
 @dataclass(frozen=True)
 class ActiveGoal(OpenGoal, FromOpenGoal):
     active = True
+
+    def require_active(self) -> None:
+        pass
 
     @property
     def toggle(self) -> type[GoalAction]:

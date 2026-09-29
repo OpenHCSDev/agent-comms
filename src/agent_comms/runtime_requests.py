@@ -255,7 +255,7 @@ class EditGoalRuntimeRequest(
     GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
 ):
     async def change(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.server.agent.turns.edit_goal(
+        await ctx.server.agent.turns.goals.edit_goal(
             ctx.session_id, self.goal_id, self.expected_revision, self.text
         )
 
@@ -265,7 +265,7 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
     status: str | None = None
 
     async def change(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.server.agent.turns.update_goal(
+        await ctx.server.agent.turns.goals.update_goal(
             ctx.session_id, self.status, self.goal_id, self.expected_revision
         )
 
@@ -273,7 +273,7 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        goal = await ctx.server.agent.turns.retry_goal(
+        goal = await ctx.server.agent.turns.goals.retry_goal(
             ctx.session_id, self.goal_id, self.expected_revision
         )
         return {"goal": goal.to_wire()}
@@ -282,5 +282,5 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        goal = await ctx.server.agent.turns.set_goal(ctx.session_id, self.text)
+        goal = await ctx.server.agent.turns.goals.set_goal(ctx.session_id, self.text)
         return {"goal": goal.to_wire()}

@@ -146,7 +146,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         owner.on_connect(Client())
         (root / "project").mkdir()
         session = (await owner.new_session(str(root / "project"))).session_id
-        store = owner.turns.open_goal_store()
+        store = owner.turns.goals.open_goal_store()
         goal = comms.goals.update_goal(
             session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
         )

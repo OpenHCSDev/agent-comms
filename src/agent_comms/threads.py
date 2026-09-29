@@ -146,6 +146,21 @@ class Thread:
         if turn is None or TurnId(turn.id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
 
+    def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
+        if self.goal_checkpoint != checkpoint:
+            raise ValueError("The goal changed; refresh its state.")
+        assert self.goal is not None
+        return self.goal
+
+    def require_active_goal(self, goal_id: str) -> Goal:
+        goal = self.goal
+        if goal is None:
+            raise RelationViolationError("The executing goal is absent")
+        if goal.id != goal_id:
+            raise RelationViolationError("The executing goal was replaced")
+        goal.state.require_active()
+        return goal
+
     @property
     def goal_checkpoint(self) -> GoalRevision | None:
         return self.goal.checkpoint if self.goal is not None else None

@@ -1,11 +1,11 @@
 """Declared goal dependencies control scheduling without changing legacy registry rows."""
 
 import os
+from contextlib import nullcontext
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
@@ -21,38 +21,43 @@ from agent_comms.goal_presentation import GoalExecutionState, GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 
 
-@pytest.mark.parametrize("changed", ["admission", "pid"])
+@pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
-    agent = CommsAgent(comms, agent_bin="pi")
+    agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    store = agent.turns.open_goal_store()
+    store = agent.turns.goals.open_goal_store()
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"), owner_store=store)
     owner = comms.registry.require("parent")
     admission = comms.registry.snapshot().admission_generations["parent"]
     if changed == "admission":
         admission += 1
+    elif changed == "pid":
+        owner = replace(owner, process_identity=ProcessIdentity(owner.pid + 1, owner.process_identity.start_time))
+    elif changed == "process_birth":
+        owner = replace(owner, process_identity=ProcessIdentity(owner.pid, owner.process_identity.start_time + 1))
     else:
-        owner = replace(
-            owner,
-            process_identity=ProcessIdentity(owner.pid + 1, owner.process_identity.start_time),
-        )
+        comms.registry.rename("parent", "renamed")
     old_grant = store.ready_grant(goal.id, 1)
     try:
         with (
             _store_lock(comms._wire_lock_path),
-            pytest.raises(StaleAttemptError, match="owner changed"),
+            pytest.raises(StaleAttemptError, match="owner changed") if changed != "rename" else nullcontext(),
         ):
-            agent.turns.ready_goal_grant_locked(
+            agent.turns.goals.ready_goal_grant_locked(
                 owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
             )
-        assert store.ready_grant(goal.id, 1) == old_grant
+        if changed != "rename":
+            assert store.ready_grant(goal.id, 1) == old_grant
+        else:
+            assert store.snapshot(goal.id).lifecycle.ready
     finally:
         await agent.shutdown()
 

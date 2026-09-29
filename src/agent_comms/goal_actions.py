@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
+from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
@@ -51,12 +52,12 @@ class GoalPrecondition:
     goal_id: str | None = None
     expected_status: str | None = None
     expected_goal: Goal | None = None
-    expected_owner_pid: int | None = None
+    expected_owner: ProcessIdentity | None = None
 
     def check(self, ctx: GoalActionContext) -> None:
         thread, goal = ctx.thread, ctx.thread.goal
-        if self.expected_owner_pid is not None and (
-            thread.pid != self.expected_owner_pid
+        if self.expected_owner is not None and (
+            thread.process_identity != self.expected_owner
             or not ctx.goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
@@ -176,7 +177,7 @@ class ActiveGoalAction(
 
     def check_grant(self, ctx: GoalActionContext) -> None:
         if ctx.owner_store is not None and (
-            ctx.actor is not OwnerInvocable or self.expect.expected_owner_pid is None
+            ctx.actor is not OwnerInvocable or self.expect.expected_owner is None
         ):
             super().check_grant(ctx)
 
@@ -433,7 +434,7 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
     """Explicit owner retry; existing store grants still fence every attempt."""
 
     def check_grant(self, ctx: GoalActionContext) -> None:
-        if ctx.owner_store is None or self.expect.expected_owner_pid is None:
+        if ctx.owner_store is None or self.expect.expected_owner is None:
             raise ValueError("Retry requires the executing owner's private goal authority.")
 
     def change(self, ctx: GoalActionContext) -> Goal:

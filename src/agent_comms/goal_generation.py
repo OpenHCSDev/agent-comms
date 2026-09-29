@@ -32,6 +32,11 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         if not attempt_id:
             raise ValueError("This generation requires an attempt identity.")
 
+    def require_ready(self) -> None:
+        from .goal_attempts import UnresolvedAttemptError
+
+        raise UnresolvedAttemptError("Goal attempt unresolved; inspect diagnostics before Retry.")
+
     def require_failure(self) -> None:
         raise FailureNotObserved("missing_binding")
 
@@ -50,6 +55,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 @dataclass(frozen=True)
 class ReadyGeneration(GenerationState):
     ready = True
+
+    def require_ready(self) -> None:
+        pass
 
     def validate_attempt(self, attempt_id: str | None) -> None:
         if attempt_id is not None:

@@ -1,6 +1,7 @@
 """Saved native history -> ACP goal failure -> passive read, without replay."""
 
 import asyncio
+import os
 from dataclasses import replace
 
 import pytest
@@ -10,7 +11,8 @@ from agent_comms.comms import Comms
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 from agent_comms.goal_failure_observation import read_failed_turn_projection
-from agent_comms.goal_generation import BlockedGeneration
+from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
+from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend as native_backend
 
@@ -23,7 +25,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(native.root)
     agent = canonical_agent(
-        comms, auto_wake=False,
+        comms, auto_wake=False, runtime_enabled=True,
         agent_args=[
             "--provider=response-local", "--model=fixture", "--thinking=off", "--offline",
             "--no-extensions", "--no-skills", "--no-context-files",
@@ -45,7 +47,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert response.stop_reason == "end_turn"
             assert len(native.saved_inputs()) == 2
             goal = comms.goals.update_goal(sid, SetGoalAction(text="Exercise one explicit failed attempt"))
-            store = agent.turns.open_goal_store()
+            store = agent.turns.goals.open_goal_store()
             store.create_goal(goal.id)
             admission = comms.registry.snapshot().admission_generations[sid]
             key = "acp:retained-unknown"
@@ -78,9 +80,31 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert store.path.read_bytes() == before
             with pytest.raises(UnresolvedAttemptError):
                 GoalAttemptStore(store.root).resume(goal.id, 1)
-            agent.turns.schedule_goal(sid)
+            agent.turns.goals.schedule_goal(sid)
             assert not agent.inputs.pending_turns.get(sid)
             assert len(native.saved_inputs()) == 3
-            print(f"native_failed_goal_projection={projected.to_primitive()} provider_posts={native.provider.posts}")
+            # Explicit owner Retry traverses the socket control, new scheduler,
+            # existing wake runner and native journal. The failed/UNKNOWN input
+            # above is retained; only one new goal continuation is dispatched.
+            native.provider.status = 200
+            agent.inputs.auto_wake = True
+            blocked = comms.registry.require(sid).goal
+            proxy = RuntimeProxy(agent, sid, socket_path(comms.root, os.getpid()))
+            try:
+                await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
+                await agent.inputs.wake_tasks[sid]
+                agent.inputs.auto_wake = False  # bound this isolated journey to one retry
+            finally:
+                await proxy.close()
+            assert store.snapshot(goal.id).number == 3
+            assert store.snapshot(goal.id).lifecycle == ReadyGeneration()  # verified native progress
+            assert len(native.saved_inputs()) == 4
+            assert native.saved_inputs()[-1]["content"][0]["text"].endswith(
+                "Continue working toward the active goal."
+            )
+            assert native.session.read_bytes().startswith(history)
+            assert agent.inputs.dispositions.read().rows[key] == unknown
+            assert not agent.inputs.pending_turns.get(sid)
+            print(f"native_failed_goal_projection={projected.to_primitive()} provider_posts={native.provider.posts} retry_generation=2 next_ready_generation=3 saved_inputs=4")
     finally:
         await agent.shutdown()
