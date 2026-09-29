@@ -1,0 +1,63 @@
+{
+  "skill": "/home/ts/.local/share/agent-comms/skills/refactor-audit-20260928-2216/refactor-audit",
+  "path": "tests/test_stack_persistent_compaction.py",
+  "baseline": 0,
+  "current": 0,
+  "increase": 0,
+  "chains": [
+    {
+      "line": 249,
+      "terms": 2,
+      "dominant": "IDEN-3",
+      "kinds": "absence 2"
+    },
+    {
+      "line": 270,
+      "terms": 2,
+      "dominant": "IMPL-14",
+      "kinds": "rule 2"
+    },
+    {
+      "line": 286,
+      "terms": 2,
+      "dominant": "IMPL-1",
+      "kinds": "literal 1, rule 1"
+    },
+    {
+      "line": 307,
+      "terms": 2,
+      "dominant": "IDEN-3",
+      "kinds": "absence 1, literal 1"
+    },
+    {
+      "line": 328,
+      "terms": 2,
+      "dominant": "IDEN-3",
+      "kinds": "absence 2"
+    },
+    {
+      "line": 342,
+      "terms": 2,
+      "dominant": "IDEN-3",
+      "kinds": "absence 1, rule 1"
+    },
+    {
+      "line": 291,
+      "terms": 3,
+      "dominant": "IMPL-14",
+      "kinds": "rule 3"
+    },
+    {
+      "line": 304,
+      "terms": 2,
+      "dominant": "BOUND-1",
+      "kinds": "type 2"
+    },
+    {
+      "line": 294,
+      "terms": 2,
+      "dominant": "BOUND-1",
+      "kinds": "type 2"
+    }
+  ]
+}
