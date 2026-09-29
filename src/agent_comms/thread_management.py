@@ -527,13 +527,13 @@ class ThreadManagement:
         child = self.registry._declare_unlocked(child)
         self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
-        key = f"acp:{uuid4().hex}"
+        key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
         try:
             owned = self.owners._launch_owner_unlocked(
                 replace(child, model=self.resolve_thread_model(child.name)),
                 pi_bin, startup_input_key=key,
             )
-            if spec.initial_prompt:
+            if key is not None:
                 InputDispositions(self.root / InputDispositions.filename).record(
                     key, seq=None, owner=owned.name, target=owned.name,
                     admission=self.registry.snapshot().admission_generations[owned.name],
