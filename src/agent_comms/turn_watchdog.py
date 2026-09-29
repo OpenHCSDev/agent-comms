@@ -158,6 +158,13 @@ class ProgressWatchdog:
                 tasks, timeout=self.read_timeout(session), return_when=asyncio.FIRST_COMPLETED
             )
             if not done:
+                # A busy owner loop can resume its deadline before the pipe
+                # reader's already-ready continuation. Settle queued callbacks
+                # before cancelling that read; this grants no additional wait
+                # budget and leaves attestation with its existing owner.
+                await asyncio.sleep(0)
+                done = {task for task in tasks if task.done()}
+            if not done:
                 raise TimeoutError
             if read_task in done:
                 return read_task.result()
