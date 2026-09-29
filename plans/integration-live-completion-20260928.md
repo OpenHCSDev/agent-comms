@@ -6,6 +6,67 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ## Current urgent fixes and shipping batch
 
+### Latest LIVE paired checkpoint, 2026-09-29
+
+- LIVE `runtime-native-witness-app-20260929`: core f0358239, Toad c28e74f4,
+  Textual609b74bf, unchanged native9213. Merged core382/383/384/386/387/
+  388/390/392 and Toad181/182/183/184/186/187 are now installed.
+- Installed continuous normal App/native/ACP/wire/UI journey PASS: saved history,
+  real OSlock-delivered native page, channel/participant clicks, A/B/A13/17/13
+  original bodies and raw0/0/0, unchanged idle60->60/provider3->3/work[]/
+  pending0, velocity/reverse/End, physical fork before first reply, automatic
+  channel reply/status/notification. Installed native12PASS79.98s; physical
+  settings Ctrl-Q filesystem rejection/paint/stay-open/retry PASS.
+- Nine idle owners canonically restarted with metadata preserved except process
+  identity; all five default launchers aligned. Existing route/native/history/
+  UNKNOWN/proof stores unchanged, no original input replay or store reset.
+  Fresh nine actual ACP loads PASS with zero prompts. Actual default-App saved
+  #comms/#nra/#openhcs/participant/native/config/editor navigation PASS.
+- Exact reported OpenHCS message and recipient reply exist; actual installed
+  #openhcs message row paints `Responded (1)` and recipient detail with zero
+  new input. This proves sender-side status, not the reported receiver-side
+  failure: inbound channel messages do not always appear in recipient tabs.
+  Receiver visibility needs a real multi-recipient channel UI/native check.
+  Existing open Toad process uses older runtime and must be reopened to load
+  installed UI; it was preserved. See
+  [live receipt](../evidence/native-witness-app-deployment/README.md).
+- Remaining active surfaces: Toad185 sidebar, core389 HistoryViews, core391
+  wire records, final116 larger cohort/latency and receiver inbound visibility.
+  CI and final50ms are not checkpoint merge gates. Resource warning remains.
+
+### Current merged batch under installed acceptance, 2026-09-29
+
+- Core382/383/384 and Toad181/182/183 are merged. Candidate
+  `runtime-selected-admission-app-20260929` loads core40b66442,
+  Toadc649aeba, Textual609b74bf and existing immutable native9213.
+- Current-source integration87PASS39.07s; actual installed native tools,
+  terminal refusal/EOF UNKNOWN, fresh enrollment and compaction/queued input:
+  12PASS79.99s. No assertions weakened, no original input replay.
+- Full installed maintained UI journey proves saved startup/history,
+  actual native page while status OSlock held, channel/participant opening,
+  A/B/A13/17/13 bodies and raw0/0/0. It then FAILS exact idle preparation
+  assertion64->65/native calls3->3: one unchanged gamma unavailable-cursor
+  validation. Carver owns actual producer/publication correction and the full
+  unchanged journey gate. Candidate is NOT live; previous live pair preserved.
+- App quit filesystem rejection/retry acceptance FAILED waiting for actual
+  painted save-error feedback; Noether owns diagnosis and the unchanged
+  failure/stay-open/retry contract. The cursor correction392 is now merged;
+  Carver's installed full maintained journey passes idle58->58/provider3->3.
+  Existing runtime schemas/native package are unchanged; no proof conversion
+  or reset is scheduled. The candidate is still NOT live.
+- Core386 process custody and387 attempt records are now merged after source
+  review and normal integration. Parent process checks22PASS24.99s; one native
+  setup failure lacked the package environment, retained for the final installed
+  owner gate. These merges are queued for the next paired installation.
+- Fork report: original open GUI uses runtime-workspace-navigation; its actual
+  ACP rejects current native9213 before initialize. Current LIVE ACP initializes
+  and loads the same saved41MB fork successfully with zero prompts. Wegener
+  owns the current-runtime fork/first-input check; attachment is not a reply test.
+- Next separate drafts:389 HistoryViews,390 wake lifetime,391 wire records,
+  186 mounted chat history,184/core388
+  witnessed loaded-history/latency,185 shared sidebar. Six useful owners continue;
+  final50ms and CI do not hold tested useful checkpoints.
+
 ### Latest LIVE indexed proof/context/control checkpoint, 2026-09-29
 
 - LIVE runtime-indexed-proof-controls-20260929: tested core19e5a0ad (merged381), Toad262e3a9b, Textual609b74bf, combined immutable native9213ee71479d1b20. Includes core367/375/376/378/379/380/381 andToad173/175/176/177/178/179/180. Allfive launchers aligned, nine canonical idle owners restarted. Existing READY12; zero input replay, reset or native chat rewrite.
@@ -13,7 +74,7 @@ No feature is complete merely because a draft exists or a PR was merged.
 -18 actual installed ACP/native summary cases pass, including four previously failing valid declines and cold-overbudget refusal before binding. Whole installed normal App/Pilot/native/wire saved-state journey passes warm13/17/13, raw0/0/0, unchangedidle65->65/3->3/work[]/pending0, velocity/reverse/End, physical fork first input/reply and automatic channel reply-author notification.
 -Fresh nine actual LIVE ACP initialize/load calls and actual default-App saved #comms/#nra/participant/native history/configuration/draft/Document/undo pass with zero prompts. Existing open user GUI was preserved; restart Toad to load the UI.
 -45 obsolete unused installed venvs removed after reference checks, recovering1.64GiB. Resources stillwarn; history/worktrees/current/GUI/rollback/native packages retained.
--Remaining:181 App442,382/182 MessageBus412 (actual installed idle gate now passing),383 InputDrain,384 SelectedExecution and183 Agent377 checkpoints await parent review/merge. Six owners continue HistoryViews, attempt stores, process custody, sidebar and final116 latency; parent owns paired shipping and reconciliation. Entire goal incomplete; final50ms and CI do not hold useful checkpoints.
+-Remaining:181 App442,182 MessageBus caller,183 Agent377 and core382/383/384 are merged and under current paired installed acceptance above. Six owners continue HistoryViews, attempt stores, process custody, sidebar and final116 latency; parent owns paired shipping and reconciliation. Entire goal incomplete; final50ms and CI do not hold useful checkpoints.
 [Installed/live receipt](../evidence/indexed-proof-context-deployment/README.md).
 
 ### Previous checkpoint (historical)
