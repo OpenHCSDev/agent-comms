@@ -1,0 +1,25 @@
+{
+  "source": "664623a3",
+  "context": "entire src/agent_comms with --context-root src",
+  "timing": {
+    "parse_seconds": 2.189,
+    "analysis_seconds": 35.203,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.099,
+    "analysis_cache_status": "miss",
+    "total_seconds": 37.491
+  },
+  "raw_count": 22,
+  "detectors": {
+    "repeated_builder_calls": 1,
+    "semantic_mirror_without_descent": 21
+  },
+  "scan_status": null,
+  "coverage_note": "CLI omits scan_status and analyzed/omitted detector counts; no complete detector-coverage or zero-debt claim.",
+  "R1": {
+    "mapping_read": 0,
+    "unmodeled_record_shape": 0,
+    "redundant_type_check": 0
+  },
+  "changed_owner_findings": []
+}

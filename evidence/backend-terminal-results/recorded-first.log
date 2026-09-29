@@ -1,0 +1,95 @@
+........................FF.............................................. [ 29%]
+............................FFFF........................FFF............. [ 59%]
+.................F.....F................................................ [ 88%]
+...........................                                              [100%]
+=================================== FAILURES ===================================
+_____________________ TestRpcParsing.test_full_rpc_stream ______________________
+tests/test_backend.py:413: in test_full_rpc_stream
+    assert types == [
+E   AssertionError: assert [<class 'agen...oolEnd'>, ...] == [<class 'agen...oolEnd'>, ...]
+E     
+E     At index 6 diff: <class 'agent_comms.agent_events.Done'> != <class 'agent_comms.agent_events.Chunk'>
+E     Right contains 2 more items, first extra item: <class 'agent_comms.agent_events.StreamSettled'>
+E     Use -v to get more diff
+___ TestRpcParsing.test_tool_use_progress_requires_committed_assistant_text ____
+tests/test_backend.py:486: in test_tool_use_progress_requires_committed_assistant_text
+    assert events[-1].ok is True
+E   AssertionError: assert False is True
+E    +  where False = Done(text='Pi RPC returned an invalid event; this turn was not completed.', ok=False, reason_code='pi_invalid_rpc_event', diagnostic=None).ok
+_ TestRpcParsing.test_outbound_session_mutation_rejected_before_write_but_a_continues[new_session] _
+tests/test_backend.py:1084: in test_outbound_session_mutation_rejected_before_write_but_a_continues
+    assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
+E   AssertionError: assert [] == ['A-before ', 'A-after']
+E     
+E     Right contains 2 more items, first extra item: 'A-before '
+E     Use -v to get more diff
+_ TestRpcParsing.test_outbound_session_mutation_rejected_before_write_but_a_continues[switch_session] _
+tests/test_backend.py:1084: in test_outbound_session_mutation_rejected_before_write_but_a_continues
+    assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
+E   AssertionError: assert [] == ['A-before ', 'A-after']
+E     
+E     Right contains 2 more items, first extra item: 'A-before '
+E     Use -v to get more diff
+_ TestRpcParsing.test_outbound_session_mutation_rejected_before_write_but_a_continues[fork] _
+tests/test_backend.py:1084: in test_outbound_session_mutation_rejected_before_write_but_a_continues
+    assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
+E   AssertionError: assert [] == ['A-before ', 'A-after']
+E     
+E     Right contains 2 more items, first extra item: 'A-before '
+E     Use -v to get more diff
+_ TestRpcParsing.test_outbound_session_mutation_rejected_before_write_but_a_continues[clone] _
+tests/test_backend.py:1084: in test_outbound_session_mutation_rejected_before_write_but_a_continues
+    assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
+E   AssertionError: assert [] == ['A-before ', 'A-after']
+E     
+E     Right contains 2 more items, first extra item: 'A-before '
+E     Use -v to get more diff
+_________ TestRpcParsing.test_watchdog_never_times_out_an_active_tool __________
+tests/test_backend.py:1895: in test_watchdog_never_times_out_an_active_tool
+    assert events[-1] == ae.Done(ok=True, text="done after tool", diagnostic={"exit_code": 0})
+E   AssertionError: assert Done(text='Pi...agnostic=None) == Done(text='do...xit_code': 0})
+E     
+E     Differing attributes:
+E     ['text', 'ok', 'reason_code', 'diagnostic']
+E     
+E     Drill down into differing attribute text:
+E       text: 'Pi RPC returned an invalid event; this turn was not completed.' != 'done after tool'
+E       - done after tool...
+E     
+E     ...Full output truncated (10 lines hidden), use '-vv' to show
+_________ TestRpcParsing.test_stall_after_tool_is_failed_without_retry _________
+tests/test_backend.py:1943: in test_stall_after_tool_is_failed_without_retry
+    assert "no RPC progress" in events[-1].text
+E   AssertionError: assert 'no RPC progress' in 'Pi RPC returned an invalid event; this turn was not completed.'
+E    +  where 'Pi RPC returned an invalid event; this turn was not completed.' = Done(text='Pi RPC returned an invalid event; this turn was not completed.', ok=False, reason_code='pi_invalid_rpc_event', diagnostic=None).text
+_________ TestRpcParsing.test_failed_tool_does_not_fail_recovered_turn _________
+tests/test_backend.py:1958: in test_failed_tool_does_not_fail_recovered_turn
+    assert events[-1].ok is True
+E   AssertionError: assert False is True
+E    +  where False = Done(text='Pi RPC returned an invalid event; this turn was not completed.', ok=False, reason_code='pi_invalid_rpc_event', diagnostic=None).ok
+____________________ TestPrRpcParsing.test_full_rpc_stream _____________________
+tests/test_backend.py:2950: in test_full_rpc_stream
+    assert types == [
+E   AssertionError: assert [<class 'agen...oolEnd'>, ...] == [<class 'agen...oolEnd'>, ...]
+E     
+E     At index 6 diff: <class 'agent_comms.agent_events.Done'> != <class 'agent_comms.agent_events.Chunk'>
+E     Right contains 2 more items, first extra item: <class 'agent_comms.agent_events.StreamSettled'>
+E     Use -v to get more diff
+________ TestPrRpcParsing.test_failed_tool_does_not_fail_recovered_turn ________
+tests/test_backend.py:3141: in test_failed_tool_does_not_fail_recovered_turn
+    assert events[-1].ok is True
+E   AssertionError: assert False is True
+E    +  where False = Done(text='Pi RPC returned an invalid event; this turn was not completed.', ok=False, reason_code='pi_invalid_rpc_event', diagnostic=None).ok
+=========================== short test summary info ============================
+FAILED tests/test_backend.py::TestRpcParsing::test_full_rpc_stream - Assertio...
+FAILED tests/test_backend.py::TestRpcParsing::test_tool_use_progress_requires_committed_assistant_text
+FAILED tests/test_backend.py::TestRpcParsing::test_outbound_session_mutation_rejected_before_write_but_a_continues[new_session]
+FAILED tests/test_backend.py::TestRpcParsing::test_outbound_session_mutation_rejected_before_write_but_a_continues[switch_session]
+FAILED tests/test_backend.py::TestRpcParsing::test_outbound_session_mutation_rejected_before_write_but_a_continues[fork]
+FAILED tests/test_backend.py::TestRpcParsing::test_outbound_session_mutation_rejected_before_write_but_a_continues[clone]
+FAILED tests/test_backend.py::TestRpcParsing::test_watchdog_never_times_out_an_active_tool
+FAILED tests/test_backend.py::TestRpcParsing::test_stall_after_tool_is_failed_without_retry
+FAILED tests/test_backend.py::TestRpcParsing::test_failed_tool_does_not_fail_recovered_turn
+FAILED tests/test_backend.py::TestPrRpcParsing::test_full_rpc_stream - Assert...
+FAILED tests/test_backend.py::TestPrRpcParsing::test_failed_tool_does_not_fail_recovered_turn
+11 failed, 232 passed in 32.33s
