@@ -19,7 +19,7 @@ from . import turn_failure as failures
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .pi_events import MessageStart
+    from .pi_events import MessageStart, Response
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,11 @@ class InputForwarding:
     generation: int = 0
     started: bool = False
     uncertain: bool = False
+
+    def acknowledge(self, response: Response) -> None:
+        if response.success is True and any(item[0] == response.id for item in self.pending):
+            self.accepted.add(response.id)
+        self.changed.set()
 
     async def forward(self, session: TurnSession) -> None:
         while True:

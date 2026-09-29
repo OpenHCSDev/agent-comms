@@ -39,6 +39,27 @@ class PiEvent(PiPayload, DeclaredFamily):
         except ValueError:
             return UnknownPiEvent
 
+    async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        """Apply shared progress and phase behavior around this event's meaning."""
+        session.now = session.loop.time()
+        if session.retry_recovery_pending and self.retry_progress:
+            session.output_started |= self.output_progress
+            session.tool_ever_started |= self.tool_progress
+            session.retry_recovery_pending = False
+            yield session.turn_state(
+                "recovered", session.retry_recovery_reason, 0, event_phase="model_wait"
+            )
+        if self.accepts_prompt:
+            session.prompt_accepted = True
+            if self.invalidates_stop:
+                session.final_assistant_stop = False
+            session.last_model_progress = session.now
+            if not session.active_tools:
+                session.phase = session.phase.model_progress()
+        async for event in self.apply(session):
+            yield event
+        session.phase = session.phase.on(self, session.active_tools)
+
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
             yield
@@ -616,6 +637,14 @@ class Response(PiEvent):
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
+    async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        if self.command.invalidates_identity(self, session):
+            async for event in session.invalidate_identity():
+                yield event
+            return
+        async for event in super().consume(session):
+            yield event
+
     def rejection_details(self) -> dict:
         """Private diagnostic projection, excluding response data and prompt content."""
         return {
@@ -637,17 +666,25 @@ class Response(PiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        owner = session.response_command or self.command
+        owner = session.reader.correlate(self) or self.command
         async for event in owner.on_response(self, session):
             yield event
 
 
 class SteeringInterruptCompleted(PiEvent):
-    pass
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.explicit_interrupt = False
+        session.text_parts.clear()
+        session.error_message = None
+        session.final_assistant_stop = False
+        yield events.SteeringInterrupted()
 
 
 class SteeringInterruptStarted(PiEvent):
-    pass
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.explicit_interrupt = True
+        if False:
+            yield
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -592,6 +592,10 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
     wire_tag = None
     opaque: ClassVar[bool] = False
 
+    @property
+    def session_busy(self) -> bool:
+        return False
+
     @classmethod
     def wire_member(cls, value):
         return cls if cls is not PiResponseData else cls.decode(value.get("kind"))
@@ -613,6 +617,10 @@ class StateData(PiResponseData):
     pending_message_count: int | None = wire_field("pendingMessageCount")
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
+
+    @property
+    def session_busy(self) -> bool:
+        return self.is_streaming is True or self.is_compacting is True
 
 
 @dataclass(frozen=True)
