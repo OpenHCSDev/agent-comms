@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.pi_commands import PiCommand
+from agent_comms.pi_commands import CatalogQuery, PiCommand
 from agent_comms.pi_payloads import ModelsData
 from agent_comms.pi_rpc import PiRpcChannel
 
@@ -16,7 +16,7 @@ async def test_new_command_uses_existing_correlation_and_cleans_pending(ending, 
     monkeypatch.setattr(PiCommand, "__registry__", dict(PiCommand.__registry__))
 
     @dataclass(frozen=True, kw_only=True)
-    class CatalogAuditQuery(PiCommand):
+    class CatalogAuditQuery(CatalogQuery):
         response_payload = ModelsData
 
     received, peers = [], []
@@ -69,9 +69,9 @@ async def test_new_command_uses_existing_correlation_and_cleans_pending(ending, 
         async with asyncio.timeout(5):
             if ending in {"eof", "malformed"}:
                 with pytest.raises(EOFError if ending == "eof" else ValueError):
-                    await channel.request(CatalogAuditQuery(), writer)
+                    await CatalogAuditQuery().exchange(channel, writer)
             else:
-                response = await channel.request(CatalogAuditQuery(), writer)
+                response = await CatalogAuditQuery().exchange(channel, writer)
                 assert response.command is CatalogAuditQuery
                 if ending == "matched":
                     assert response.data.models[0].id == "x" * 200000

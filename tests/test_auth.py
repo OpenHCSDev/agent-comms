@@ -1,9 +1,10 @@
 import pytest
+from acp.schema import SessionConfigSelectOption
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.config_options import Model, ModelConfigOption
+from agent_comms.config_options import ModelConfigOption
 from agent_comms.login import run_login
 from delivery_owner_fixture import canonical_agent
 
@@ -46,9 +47,9 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     monkeypatch.setattr(backend, "auth_revision", lambda: (revision[0], 0))
 
     async def discover(*args):
-        models = [Model("test/base", "Base")]
+        models = [SessionConfigSelectOption(value="test/base", name="Base")]
         if revision[0]:
-            models.append(Model("openai-codex/test", "Subscription"))
+            models.append(SessionConfigSelectOption(value="openai-codex/test", name="Subscription"))
         return models
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)

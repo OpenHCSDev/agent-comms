@@ -2,14 +2,16 @@
 
 import asyncio
 import json
+from dataclasses import replace
 
 import pytest
 
 from agent_comms import backend
 from agent_comms.child_process import AttachedChild
 from agent_comms.comms import Comms
-from agent_comms.config_options import ModelConfigOption
+from agent_comms.config_options import ModelConfigOption, ThinkingLevelConfigOption
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -54,17 +56,21 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     native = native_backend
     config = owner.sessions.config
     session = await owner.new_session(str(native.project))
-    models = await config.models_for(session.session_id)
-    assert "response-local/fixture" in {model.id for model in models}
-    assert await config.thinking_levels_for("response-local/fixture") == ["off"]
+    thread = owner._comms.registry.require(session.session_id)
+    model_catalog = config.catalog_for(ModelConfigOption)
+    thinking_catalog = config.catalog_for(ThinkingLevelConfigOption)
+    models = await model_catalog.choices(thread)
+    assert "response-local/fixture" in {model.value for model in models}
+    assert [choice.value for choice in await thinking_catalog.choices(thread)] == ["off"]
     assert len(children) == 2 and all(not child.alive() for child in children)
     # A cache hit does not launch another native process.
-    assert await config.models_for(session.session_id) is models
+    assert await model_catalog.choices(thread) is models
     assert len(children) == 2
     auth = native.config / "auth.json"
     auth.write_text("{}\n")
-    unavailable = await config.models_for(session.session_id)
-    assert "response-local/fixture" in {model.id for model in unavailable}
+    unavailable = await model_catalog.describe(config, thread)
+    assert unavailable.current_value == "response-local/fixture"
+    assert "response-local/fixture" in {choice.value for choice in unavailable.options}
     assert len(children) == 3
     assert owner._comms.registry.require(session.session_id).model == "response-local/fixture"
     # Restore this fixture's credential and add another local model. Discovery
@@ -76,12 +82,15 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     )
     path.write_text(json.dumps(document))
     auth.write_text(json.dumps({"response-local": {"type": "api_key", "key": "local-only"}}))
-    refreshed = await config.models_for(session.session_id)
-    assert {model.id for model in refreshed if model.id.startswith("response-local/")} == {
+    refreshed = await model_catalog.choices(thread)
+    assert {model.value for model in refreshed if model.value.startswith("response-local/")} == {
         "response-local/fixture",
         "response-local/second",
     }
-    assert "medium" in await config.thinking_levels_for("response-local/second")
+    assert "medium" in {
+        choice.value
+        for choice in await thinking_catalog.choices(replace(thread, model="response-local/second"))
+    }
     assert owner._comms.registry.require(session.session_id).model == "response-local/fixture"
     assert all(not child.alive() for child in children)
     print(f"actual_catalog_children_reaped={len(children)} provider_calls={native.provider.posts}")
@@ -94,14 +103,17 @@ async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_ba
     models = document["providers"]["response-local"]["models"]
     models.extend({"id": f"large-{i}-" + "x" * 2048, "name": str(i)} for i in range(70))
     path.write_text(json.dumps(document))
-    result = await ModelConfigOption.discover(owner.sessions.config, "response-local/fixture")
-    assert len([model for model in result if model.id.startswith("response-local/")]) == 71
-    assert sum(len(model.id) for model in result) > 2 * 65536
+    thread = Thread(
+        "catalog", frozenset(), str(native_backend.project), model="response-local/fixture"
+    )
+    result = await owner.sessions.config.catalog_for(ModelConfigOption).choices(thread)
+    assert len([model for model in result if model.value.startswith("response-local/")]) == 71
+    assert sum(len(model.value) for model in result) > 2 * 65536
     assert len(children) == 1 and not children[0].alive()
-    print(f"actual_catalog_identifier_bytes={sum(len(model.id) for model in result)}")
+    print(f"actual_catalog_identifier_bytes={sum(len(model.value) for model in result)}")
 
 
-async def test_actual_catalog_cancellation_reaps_child(catalog_owner, monkeypatch):
+async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_backend, monkeypatch):
     owner, children = catalog_owner
     reading = asyncio.Event()
     receive = PiRpcChannel.receive
@@ -112,7 +124,8 @@ async def test_actual_catalog_cancellation_reaps_child(catalog_owner, monkeypatc
         return await receive(channel, **options)
 
     monkeypatch.setattr(PiRpcChannel, "receive", pause_read)
-    task = asyncio.create_task(ModelConfigOption.discover(owner.sessions.config, None))
+    thread = Thread("catalog", frozenset(), str(native_backend.project))
+    task = asyncio.create_task(owner.sessions.config.catalog_for(ModelConfigOption).choices(thread))
     try:
         await asyncio.wait_for(reading.wait(), 10)
         assert len(children) == 1 and children[0].alive()
