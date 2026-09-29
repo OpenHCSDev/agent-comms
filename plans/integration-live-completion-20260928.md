@@ -6,6 +6,18 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ## Current urgent fixes and shipping batch
 
+### Latest LIVE indexed proof/context/control checkpoint, 2026-09-29
+
+- LIVE runtime-indexed-proof-controls-20260929: tested core19e5a0ad (merged381), Toad262e3a9b, Textual609b74bf, combined immutable native9213ee71479d1b20. Includes core367/375/376/378/379/380/381 andToad173/175/176/177/178/179/180. Allfive launchers aligned, nine canonical idle owners restarted. Existing READY12; zero input replay, reset or native chat rewrite.
+-87 durable proof journals converted in place after87 disposable-copy preflights. Completed one-shot converter and legacy fixtures deleted after verified live acceptance; current native saved recovery/dedup/UNKNOWN and schema guard retained. Original proofs retain independent private backups. Current runtime uses indexed transactional evidence; no lifetime cap, scan or parallel legacy reader.
+-18 actual installed ACP/native summary cases pass, including four previously failing valid declines and cold-overbudget refusal before binding. Whole installed normal App/Pilot/native/wire saved-state journey passes warm13/17/13, raw0/0/0, unchangedidle65->65/3->3/work[]/pending0, velocity/reverse/End, physical fork first input/reply and automatic channel reply-author notification.
+-Fresh nine actual LIVE ACP initialize/load calls and actual default-App saved #comms/#nra/participant/native history/configuration/draft/Document/undo pass with zero prompts. Existing open user GUI was preserved; restart Toad to load the UI.
+-45 obsolete unused installed venvs removed after reference checks, recovering1.64GiB. Resources stillwarn; history/worktrees/current/GUI/rollback/native packages retained.
+-Remaining:181 App442,382/182 MessageBus412 (actual installed idle gate now passing),383 InputDrain,384 SelectedExecution and183 Agent377 checkpoints await parent review/merge. Six owners continue HistoryViews, attempt stores, process custody, sidebar and final116 latency; parent owns paired shipping and reconciliation. Entire goal incomplete; final50ms and CI do not hold useful checkpoints.
+[Installed/live receipt](../evidence/indexed-proof-context-deployment/README.md).
+
+### Previous checkpoint (historical)
+
 ### Latest verified checkpoint, 2026-09-29
 
 - LIVE `runtime-idle-warm-source-20260929`: core efcdf493, Toad c4492593,

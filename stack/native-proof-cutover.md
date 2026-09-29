@@ -1,4 +1,18 @@
-# Indexed native proof cutover (parent-owned, not executed live)
+# Indexed native proof cutover — completed 2026-09-29
+
+The matched indexed-proof runtime is live. All 87 existing proof journals were
+converted after disposable-copy preflight. Nine idle owners restarted through
+their canonical lifecycle; all nine fresh ACP loads and the actual default-App
+saved-history journey passed. Native JSONL, UNKNOWN dispositions and coordination
+stores were preserved. Independent old-proof backups remain private.
+
+The one-shot converter and its retired-format fixtures are deleted. Git history
+in PR378 retains the completed tool; ordinary runtime reads accept only indexed
+proof. Do not repeat this conversion on current journals. The actual cutover and
+its verification limits are recorded in
+[the installed/live receipt](../evidence/indexed-proof-context-deployment/README.md).
+
+The procedure below is retained as the history of that cutover.
 
 ## Boundary
 
@@ -16,7 +30,8 @@ format; conversion is a temporary operator tool outside `src/`.
 2. Inventory existing `.input-proof` files belonging to the installation being
    upgraded. Match each with its native session JSONL. Record both names and the
    verified stopped runtime; do not act on other installations' files.
-3. With the candidate core available, run `tools/cutover/native_proof_journal.py
+3. With the candidate core available, the now-retired tool was run as
+   `tools/cutover/native_proof_journal.py
    SESSION_JSONL NEW_BACKUP_PATH` for each old proof. Backups must be on persistent
    storage with sufficient space. The tool takes the existing exclusive native
    writer fence; it never steals a stale fence. It verifies every prior row and
@@ -62,7 +77,11 @@ No automatic rollback, input replay, migration on ordinary reads, or cap increas
 `tests/test_native_proof_recovery.py` uses the actual pinned CLI, normal saved
 sessions and local HTTP provider. It covers proof growth past128MiB, cold reopen,
 SIGKILL at commit/schema publication boundaries, old accepted IDs and UNKNOWN
-claims, and the real one-shot conversion followed by exact-ID dedup and a new
-input. `tests/test_native_proof_conversion.py` checks killed conversion and invalid
-prior proof. These complement installed saved ACP/new-input and selected four-tool
-publication paths. Results/limits live in `evidence/native-proof-checkpoint/HANDOFF.md`.
+claims, exact-ID dedup after saved recovery and a new explicit input. The former
+conversion-only tests and child helper were retired with the converter after
+live acceptance. The current declaration/schema drift guard remains in
+`tests/test_native_proof_streaming_guards.py`; no current native recovery,
+uncertain-input or crash invariant was removed. These complement installed
+saved ACP/new-input and selected four-tool publication paths. Historical growth
+and converter results remain in `evidence/native-proof-checkpoint/HANDOFF.md`;
+the current live receipt linked above records completed activation.
