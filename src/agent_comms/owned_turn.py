@@ -26,7 +26,7 @@ from .turn_goal_permission import (
     InactiveGoalPermission,
     OwnerGoalPermission,
 )
-from .turn_input_source import OwnerOriginalInput, RoutedOriginalInput
+from .turn_input_source import DependencyOriginalInput, OwnerOriginalInput, RoutedOriginalInput
 from .turn_progress import TurnProgress
 
 if TYPE_CHECKING:
@@ -363,7 +363,12 @@ class OwnedTurn:
             permission = ContinuationGoalPermission(self.goal)
         else:
             permission = InactiveGoalPermission()
-        source_type = OwnerOriginalInput if self.original_owner_input else RoutedOriginalInput
+        if self.original_owner_input:
+            source_type = OwnerOriginalInput
+        elif self.dependency_wait_id is not None:
+            source_type = DependencyOriginalInput
+        else:
+            source_type = RoutedOriginalInput
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
