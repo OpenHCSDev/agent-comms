@@ -609,13 +609,14 @@ class ThreadManagement:
                 f"Parent thread {spec.parent!r} has no session file to fork."
             )
 
+        session = fork_native_session(parent.session_file, parent.worktree, pi_bin)
         child = Thread(
             name=spec.name,
             tags=spec.tags,
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
-            session_file=fork_native_session(parent.session_file, parent.worktree, pi_bin).session_file,
+            session_file=session.session_file,
             process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,

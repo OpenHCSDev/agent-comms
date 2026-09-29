@@ -1,6 +1,6 @@
 # Production fork first input
 
-Deleted raw PI_PROMPT startup publication, one-shot --print launch arguments,
+24 production lines deleted (including replaced lines): raw PI_PROMPT startup publication, one-shot --print launch arguments,
 and delayed parent-session lookup/fork at send time. No compatibility path added.
 
 Current production fork captures native history before registering/launching the
@@ -43,3 +43,38 @@ and ReservedInput.queued_for instead of reconstructed boolean identity chains.
 No FieldCodec subclass, parallel status store, native budget inflation or codec.
 The actual native/ACP regression catches the removed launch failures. Independent
 source audit/ratchet results appended when available; no CI wait.
+
+
+## Final ownership follow-through
+
+Existing ThreadManagement.resolve_thread_model now resolves selection from the
+already captured child; removed a new redundant absence check rather than
+replicating its authority. Native helper accepts the already validated saved path
+and worktree; it does not re-probe the parent Thread. Latest archive census:
+no chain terms, codec subclass or foreign absence probe increases; each touched
+Python file has foreign-probe delta0. Existing per-class ratchet has no positive
+existing measure (also satisfies the stricter former class-size measure).
+
+Full package-context NRA scan reporting native_fork/thread_management/owner_lifecycle/
+worker produced0 findings. Its current JSON does not expose scan_status or omitted
+counts; this is not a zero-omission certification. Existing real ownership plus
+actual behavior evidence remains the basis for this correction.
+
+Final installed fork rerun passed after model-authority/signature closure; receipt
+actual-installed-fork-final.log. Focused private launch rejection/fence tests5pass,
+14deselected; rawPI_PROMPT remains refused. No optional full-suite or CI gate.
+
+
+## Current main integration
+
+Merged current main b39a3f4c (includes340/337/341/342). Only conflict was the
+add/add native regression file: retained340's expanded ordinary/fork cases once.
+No production conflict, alternate path, manifest downgrade or live change.
+Noneditable current merged wheel: actual native fork + launch guards6passed,
+14deselected in16.24s. Current-main census remains no foreign probe/chain growth;
+existing ratchet delta has no positive measure. Source merge commit495d5f3e.
+
+The complete native package remains at
+/home/ts/wt/comms-fork-first-input-compaction-20260929/.native-candidate/node_modules/@earendil-works/pi-coding-agent
+with complete digest4ffbd0b851b4d762f5e7a631bfd617952a83fd446b97a9be23057fcb21369918.
+Parent is copying this reviewed package to its immutable deployment root.

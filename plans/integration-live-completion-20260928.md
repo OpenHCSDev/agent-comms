@@ -6,12 +6,49 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ## Current urgent fixes and shipping batch
 
-- Automatic channel replies: actual native A question -> B reply reproduces the
-  missing return notification. Boyle owns canonical reply admission; Dalton owns
-  PR330's real A -> B -> A regression, ACP feedback, awareness and no replay/loop.
-  Initial-only admission and awareness currently exclude keyed responses. Candidate
-  passes an actual native round trip; strict receipt validation and derived-kind
-  corrections plus history conversion and the final rerun remain before deployment.
+- LIVE 2026-09-29: all five launchers and eight restored owners select
+  runtime-automatic-reply-20260928, core3f06022f (331/332), Toadc2534676,
+  Textual1738abd8/native5fde. Automatic channel replies are installed.
+  Actual live history conversion preserved all184 public messages, root identity
+  and admission floor149; sixteen recent keyed replies gained frozen delivery
+  manifests from retained executions. Thirty-eight retired private response
+  receipts below the existing floor retain their public history and original
+  backup, without invented delivery authority. Candidate index rebuilt in four
+  bounded batches. Eight idle owners restarted with settings/native sessions
+  preserved; no active turn interrupted or uncertain input replayed.
+  Eight fresh ACP attachments and eight configured native attestations pass.
+  Actual saved PR95 viewport paints38 matching phrases, Ready/no app or delivery
+  error. Reopen Toad to load the new installation.
+- Automatic channel replies:331 merged3f06022f, strict receipt validation and
+  declaration-derived delivery kinds included. Actual final installed native/
+  ACP/candidate/cleanup acceptance39passed37.45s.330's real A -> B -> A regression
+  merged into its feature base after331; parent integration2c39f28c carries its
+  complete tests and receipts to main. No claim those tests were already on main.
+- Restored context / fork first input: user reports the parent was24%, later35%,
+  full at fork. Actual first
+  prompt was refused as requiring compaction and recorded bound_unknown; later
+  attempts report unsettled input/compaction not dispatched. Boyle owns current
+  selected-leaf/budget/input-state fix, Dalton real normal-fork/first-send regression,
+  Carver blank first-open/readiness/title/history paint. Goal is to avoid spurious
+  compaction; file size is not current context usage. UNKNOWN inputs stay preserved.
+  After cutover, fresh fork greeting succeeds only after a hidden native compaction;
+  ordinary nra-architecture also compacted on a simple test. Concrete pinned5fde
+  source bug: CompactionPolicy.contextFits sums serialized JSON bytes but compares
+  against inputBytes derived from a token window. SessionContext.restore converts
+  that refusal into CompactionContext and the selected RPC unconditionally triggers
+  compaction. Boyle owns this common admission fix, Dalton actual normal fork and
+  cold-restart tests, Carver compaction phase/context usage/first-open UI. The new
+  fork admitted usage is null at load and only becomes available after the response.
+  Do not claim successful forced compaction proves first-send correctness.
+- Repeated nra-architecture Checking after conversion: durable claims show distinct
+  recent keyed replies167–171,174,183 checked then ignored. No evidence these checks
+  replayed the same message or formed an ACK loop. New reply notification delivery
+  now reaches the original author, including previously never-admitted replies.
+- Cutover lock incident: initial parent operator recursively took the registry
+  lock before snapshot, blocking launcher reads. Owned operator stopped before
+  any live changes; ordinary launcher recovered. Corrected operator uses one
+  RegistryEdit and unlocked canonical launch under the wire lock. Actual isolated
+  owner retirement/conversion/restore passed before the successful live cutover.
 - Toad recursion: user supplied an authentic trace from the installed 9830 runtime:
   ViewportPresentation.prepare calls _refresh_layout while preparing paint, which
   reenters SessionView/Textual layout. Carver owns the urgent root fix and real UI
@@ -58,9 +95,19 @@ No feature is complete merely because a draft exists or a PR was merged.
 - Comms332 merged082a3f35: active native cleanup belongs to TurnSession rather
   than three copied handle maps. 35 production lines deleted/22 added. Actual
   interruption, cancellation, reuse, cold preparation and owner-stop checks pass.
-  Install will share the upcoming331 core cutover; current core6bd unchanged.
+  Installed with331 in the current automatic-reply runtime.
 
-PR142 recent-source return and latency acceptance remain Tesla's independent work.
+PR142 recent-source return and latency work remain Tesla's independent work.
+The owner now authorizes shipping substantial verified performance progress before
+the final target and continuing remaining work in a follow-up PR. Current64-source
+fixed-source median133.38ms/max229.53ms; target30–40ms remains unmet. Do not hold
+useful ready progress for that target or claim the full116/110 scope complete.
+Toad151 typed Plan merged4985a19e (191 product lines deleted/142 added);142 owns
+retained plan restoration for detached Agents. Core337 original event time merged
+4291e947 (2 lines deleted/22 added);142 owns consumption and return paint. Both
+will join the next installed pair; the current live pair is named above. Small
+correct owners may absorb behavior under the latest audit skill's principle13;
+the guard measures god-class growth beyond500 lines, not every class addition.
 The full original/round-two refactor goal remains active.
 
 Previous installed pair: core8ad034a6 (322 native catalog/admission/typed compaction

@@ -1,9 +1,12 @@
-// Real native parent -> fork -> first local-provider reply. No paid calls.
+// Real restored/forked native context -> first local-provider reply. No paid calls.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 
+const mode=process.argv[2] ?? 'fork';
+const percent=Number(process.argv[3] ?? 24);
+assert.ok(['fork','restore'].includes(mode));
 const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Matched installed native bundle required');
 const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true});
@@ -43,18 +46,23 @@ try {
     parent.appendMessage({role:'user',content:'PARENT_BRANCH_FACT '+ 'repeatable history '.repeat(18000),timestamp:1});
     parent.appendMessage({role:'assistant',content:[{type:'text',text:'parent response'}],api:model.api,
         provider:model.provider,model:model.id,stopReason:'stop',timestamp:2,
-        usage:{input:1000,output:1000,cacheRead:22000,cacheWrite:0,totalTokens:24000,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+        usage:{input:1000,output:1000,cacheRead:percent*1000-2000,cacheWrite:0,totalTokens:percent*1000,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
     const leaf=parent.getLeafId();
-    child=pi.SessionManager.forkFrom(parent.getSessionFile(),root,join(root,'child'));
+    if(mode==='fork') {
+        child=pi.SessionManager.forkFrom(parent.getSessionFile(),root,join(root,'child'));
+        parent.appendMessage({role:'user',content:'AFTER_FORK_MUST_NOT_APPEAR',timestamp:3});
+    } else {
+        const file=parent.getSessionFile();parent.entryStore.close();parent=undefined;
+        child=pi.SessionManager.open(file);
+    }
     const captured=readFileSync(child.getSessionFile());
-    parent.appendMessage({role:'user',content:'AFTER_FORK_MUST_NOT_APPEAR',timestamp:3});
     assert.equal(child.getLeafId(),leaf);
     assert.equal(readFileSync(child.getSessionFile()).equals(captured),true);
     ({session}=await pi.createAgentSession({cwd:root,agentDir:root,modelRuntime:runtime,model,
         sessionManager:child,settingsManager:settings,resourceLoader:loader,noTools:'all'}));
     const before=session.getContextUsage();
-    assert.equal(before.tokens,24000);assert.equal(before.percent,24);
-    assert.equal(session.storedContext.requiresCompaction(),false,'24% token context must not use summary byte allowance');
+    assert.equal(before.tokens,percent*1000);assert.equal(before.percent,percent);
+    assert.equal(session.storedContext.requiresCompaction(),false,`${percent}% token context must not use summary byte allowance`);
     assert.equal(child.entryStore.latest(child.getLeafId(),'compaction'),undefined);
     await session.prompt('FIRST_CHILD_INPUT');
     assert.equal(requests.length,1,'No summary or replay call');
@@ -64,7 +72,7 @@ try {
     assert.ok(!requestText.includes('AFTER_FORK_MUST_NOT_APPEAR'));
     assert.equal(child.entryStore.latest(child.getLeafId(),'compaction'),undefined);
     assert.equal(child.getLeafEntry().message.content[0].text,'FIRST_CHILD_REPLY');
-    console.log(JSON.stringify({nativeParentLeaf:leaf,parentPercent:before.percent,contextWindow:before.contextWindow,
+    console.log(JSON.stringify({mode,nativeParentLeaf:leaf,parentPercent:before.percent,contextWindow:before.contextWindow,
         nativeTokens:before.tokens,capturedBytes:captured.length,providerRequests:requests.length,
         compactionEntries:0,firstReply:'FIRST_CHILD_REPLY',parentAfterForkExcluded:true},null,2));
 } finally {
