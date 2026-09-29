@@ -22,9 +22,9 @@ from agent_comms.claim_admission import (
 )
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination import ExecutionOrigin
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import IdentityConflict, MutationStore, prepare_fence_token
+from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
 from agent_comms.threads import Thread

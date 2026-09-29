@@ -39,6 +39,9 @@ from acp.schema import (
     TextContentBlock,
 )
 
+from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_tables.assignments import WakeAssignment
+
 from . import agent_events as events
 from . import manual_compaction_bridge
 from .acp_extension import (
@@ -58,7 +61,6 @@ from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_initials
 from .comms import Comms, wire
 from .coordinated_runtime import SelectedExecution
-from .coordination import CoordinationError, WakeAssignment
 from .coordination_cohort import next_sealed_assignment
 from .coordination_store import (
     IdentityConflict,

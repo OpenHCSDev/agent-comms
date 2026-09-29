@@ -13,18 +13,17 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination import (
-    MessageAudience,
-    PublicationIntents,
-    WakeAssignment,
-    canonical_publication_key,
-)
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import AlreadyApplied, Applied, IdentityConflict, MutationStore
+from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+from agent_comms.coordination_tables.publications import (
+    PublicationIntents,
+    canonical_publication_key,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
@@ -248,11 +247,11 @@ def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> N
     row = json.loads(original)
     row[PRIVATE_WIRE_FIELD]["initial"]["decisions"][0]["recipient_lookup"] = "imposter"
     bus_path.write_text(json.dumps(row) + "\n")
-    with pytest.raises(RelationViolationError, match="initial"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     assert store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0] == 0
     bus_path.write_bytes(original[:-1])
-    with pytest.raises(RelationViolationError, match="Incomplete bus row"):
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
         accept_initial_cohort(comms.bus, root_id, sent.seq, store)
     bus_path.write_bytes(original)
 

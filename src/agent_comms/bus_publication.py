@@ -131,7 +131,7 @@ def initial_sideband(
     control: str,
 ) -> dict[str, object]:
     """Serialize once at the committed-bus boundary; no independent sidecar."""
-    from .coordination import POLICY_VERSION, RESOLVER_VERSION
+    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 
     if len(decisions) != len(audience.recipients):
         raise ValueError("Every frozen recipient requires a selected or no-wake decision.")
@@ -154,8 +154,9 @@ def validate_initial_record(record: Mapping[str, object], wire_root_id: str) -> 
     This alone is not authority: only MessageBus.read_initial_cohort calls it
     after checking the owner-only marker and scanning the original bus inode.
     """
+    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+
     from .audience_manifest import FrozenRecipient, freeze_audience
-    from .coordination import POLICY_VERSION, RESOLVER_VERSION
     from .messages import Message
     from .wake import ControlClassification, resolve_wake_cohort
 

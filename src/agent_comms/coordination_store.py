@@ -17,48 +17,52 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from .assignment_states import AssignmentState, EngagedAssignment
-from .attempt_states import (
+from agent_comms.assignment_states import AssignmentState, EngagedAssignment
+from agent_comms.attempt_states import (
     AttemptFailedAttempt,
     AttemptState,
     PromptStartingAttempt,
     SucceededAttempt,
 )
-from .coordination import (
+from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     MAX_REASON_CODE_CHARS,
     MAX_SANITIZED_DETAIL_CHARS,
     POLICY_VERSION,
     RESOLVER_VERSION,
-    ACPClientConnectivity,
-    AttemptRecord,
-    ConnectivityFacet,
+)
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import (
     CoordinationError,
-    CoordinationStore,
+    IdentityConflict,
+    IntegrityViolationError,
+)
+from agent_comms.coordination_snapshot import RecoverySnapshot, retry_disposition_authorized
+from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
-    ExecutionAssignmentLink,
     ExecutionOrigin,
     ExecutionRecord,
-    IntegrityViolationError,
-    OwnerConnectivity,
-    OwnerFence,
+)
+from agent_comms.coordination_tables.participants import (
     OwnerGenerations,
     ParticipantAliases,
     Participants,
-    PrivateRuntimeSchema,
+)
+from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     PublicationReceipt,
     PublicationReceipts,
-    RecoveryAudit,
-    RecoverySnapshot,
-    ReplayAssessments,
-    ReplayFact,
-    ResponseObligation,
-    WakeAssignment,
-    retry_disposition_authorized,
 )
-from .coordination_errors import IdentityConflict
-from .execution_states import (
+from agent_comms.coordination_tables.recovery import (
+    ACPClientConnectivity,
+    ConnectivityFacet,
+    OwnerConnectivity,
+    RecoveryAudit,
+)
+from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
     DeferredExecution,
@@ -66,14 +70,16 @@ from .execution_states import (
     PendingExecution,
     QueuedExecution,
 )
-from .native_runtime_input import NativeRuntimeInput
-from .obligation_states import (
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.obligation_states import (
     DeferredResponse,
     FailedResponse,
     PendingResponse,
     SilentResponse,
 )
-from .recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
+from agent_comms.owner_fence import OwnerFence
+from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.recovery_states import DeferredRecovery, FailedRecovery, RecoveryCondition
 
 T = TypeVar("T")
 INITIAL_LEASE_POLICY_VERSION = "initial-lease-v1"
@@ -167,10 +173,10 @@ class VerifiedOwnerLoss:
         not proof that the input was unsent. Lease expiry or a replaced PID alone
         is insufficient.
         """
-        from .bus_publication import stable_thread_lookup
-        from .comms import Comms
-        from .coordinated_runtime_schema import assert_native_runtime_schema
-        from .coordination_response import _response_boundary
+        from agent_comms.bus_publication import stable_thread_lookup
+        from agent_comms.comms import Comms
+        from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
+        from agent_comms.coordination_response import _response_boundary
 
         if store.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
@@ -1498,9 +1504,9 @@ class RecoveryMonitorCapability:
         reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
         to replay. An unfinished journal or unresolved publication is refused.
         """
-        from .native_entries import MessageEntry, NativeEntry
-        from .native_pi import NativeContextProof
-        from .native_prompt_binding import (
+        from agent_comms.native_entries import MessageEntry, NativeEntry
+        from agent_comms.native_pi import NativeContextProof
+        from agent_comms.native_prompt_binding import (
             expected_prompt_matches_journal,
             read_expected_prompt_binding,
         )

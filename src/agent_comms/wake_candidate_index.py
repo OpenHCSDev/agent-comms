@@ -18,6 +18,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from agent_comms.coordination_errors import CoordinationError
+from agent_comms.coordination_tables.publications import PublicationReceipt
+
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     _canonical,
@@ -26,7 +29,6 @@ from .bus_publication import (
     unique_wire_object,
     validate_initial_record,
 )
-from .coordination import CoordinationError, PublicationReceipt
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .messages import Message

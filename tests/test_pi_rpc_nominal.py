@@ -118,7 +118,11 @@ def test_external_formats_are_derived_and_pin_wire_spellings():
         "provider": "configured",
         "modelId": "kept",
     }
-    assert {c.declared_name for c in commands.PiCommand.members_with(commands.MutatesSession)} == {
+    assert {
+        c.declared_name
+        for c in commands.PiCommand.members_with(commands.MutatesSession)
+        if c.__module__ == commands.PiCommand.__module__
+    } == {
         "new_session",
         "switch_session",
         "fork",

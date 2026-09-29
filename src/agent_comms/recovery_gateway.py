@@ -27,14 +27,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .child_process import BoundedRun, ParentLifeline
-from .coordination import (
+from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
-    ExecutionRecord,
-    OwnerGenerations,
-    SchemaMeta,
 )
+from agent_comms.coordination_tables.executions import ExecutionRecord
+from agent_comms.coordination_tables.metadata import SchemaMeta
+from agent_comms.coordination_tables.participants import OwnerGenerations
+
+from .child_process import BoundedRun, ParentLifeline
 from .field_codec import FieldCodec
 from .recovery_projection import RecoveryRequest, read_recovery_projection
 from .typed_table import SQLiteJournalMode, SQLiteUserVersion

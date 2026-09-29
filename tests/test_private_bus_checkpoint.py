@@ -14,7 +14,10 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination import PublicationIntents, canonical_publication_key
+from agent_comms.coordination_tables.publications import (
+    PublicationIntents,
+    canonical_publication_key,
+)
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_bus import MessageBus

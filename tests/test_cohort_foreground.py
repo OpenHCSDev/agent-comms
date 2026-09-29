@@ -32,6 +32,7 @@ from agent_comms.coordination_store import (
     PublicationActivationBlocked,
 )
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.native_prompt_send import _enter_admission
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -241,25 +242,32 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
 async def test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource(
     tmp_path: Path, monkeypatch
 ) -> None:
+    package = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+    if not package:
+        pytest.skip("Requires actual prepared native package for reviewed layout preflight")
     with TemporaryDirectory(prefix="ac-selected-preflight-", dir="/var/tmp") as dirname:
         base = Path(dirname)
         base.chmod(0o700)
         resource = base / "module.py"
         resource.write_bytes(b"before\n")
-        root, root_id, comms = _wire(base)
-        monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
+        root = base / "wire"
+        root.mkdir(mode=0o700)
+        comms = Comms(root, private_initial_writes=True)
+        root_id = "0" * 32  # No issuer has initialized this root yet.
         plan = runtime.SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
-        with pytest.raises(PublicationActivationBlocked, match="private claim protocol"):
+        with pytest.raises(RelationViolationError, match="no durable protocol marker"):
             await foreground.run_foreground_once(
                 root,
                 wire_root_id=root_id,
                 name="alpha",
                 worktree=base,
                 tags=frozenset(),
-                native_package=tmp_path,
+                native_package=Path(package),
+                wait_seconds=0,
                 selected_existing_file_write=plan,
             )
         assert "alpha" not in comms.registry and resource.read_bytes() == b"before\n"
+        root_id = comms.messaging.initialize_private_initial_protocol()
         external = tmp_path / "external.py"
         external.write_bytes(b"external\n")
         with pytest.raises(ValueError, match="inside the worktree"):
@@ -269,7 +277,8 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 name="alpha",
                 worktree=base,
                 tags=frozenset(),
-                native_package=tmp_path,
+                native_package=Path(package),
+                wait_seconds=0,
                 selected_existing_file_write=runtime.SelectedExistingFileWrite(
                     ExistingFileClaim(Path(external)), b"forbidden\n"
                 ),

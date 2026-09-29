@@ -14,8 +14,6 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.assignment_states import FullPendingAssignment
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordination import ReplayFact
 from agent_comms.coordination_store import (
     MutationStore,
     RecoveryBlocked,
@@ -23,6 +21,7 @@ from agent_comms.coordination_store import (
     VerifiedOwnerLoss,
     _owner_loss_verified,
 )
+from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput

@@ -26,23 +26,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .attempt_states import SucceededAttempt
-from .bus_publication import stable_thread_lookup
-from .cohort_schema import assert_cohort_schema
-from .coordination import (
-    AttemptRecord,
-    CurrentExecutions,
-    ExecutionRecord,
-    OwnerFence,
-    PrivateRuntimeSchema,
-    PublicationIntents,
-    PublicationReceipts,
-    RecoverySnapshot,
-    ResponseObligation,
-    WakeAssignment,
-    canonical_publication_key,
-)
-from .coordination_store import (
+from agent_comms.attempt_states import SucceededAttempt
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.cohort_schema import assert_cohort_schema
+from agent_comms.coordination_snapshot import RecoverySnapshot
+from agent_comms.coordination_store import (
     AlreadyApplied,
     Applied,
     IdentityConflict,
@@ -53,16 +41,33 @@ from .coordination_store import (
     StaleFence,
     _digest,
 )
-from .execution_states import CompletedExecution
-from .message_bus import MessageBus
-from .messages import Message, MessageType
-from .obligation_states import PublishedResponse, PublishingResponse
-from .registry_document import RegistrySnapshot
-from .store_files import _store_lock
-from .thread_identity import ThreadRole
-from .turn_lease import ActiveTurn
-from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
-from .wake import WakeDecision, derive_exact_reply_target
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord
+from agent_comms.coordination_tables.publications import (
+    PublicationIntents,
+    PublicationReceipts,
+    canonical_publication_key,
+)
+from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.execution_states import CompletedExecution
+from agent_comms.message_bus import MessageBus
+from agent_comms.messages import Message, MessageType
+from agent_comms.obligation_states import PublishedResponse, PublishingResponse
+from agent_comms.owner_fence import OwnerFence
+from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.store_files import _store_lock
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.turn_lease import ActiveTurn
+from agent_comms.typed_table import (
+    Column,
+    SQLiteForeignKeys,
+    SQLiteSchemaObject,
+    TypedRow,
+    TypedTable,
+)
+from agent_comms.wake import WakeDecision, derive_exact_reply_target
 
 
 class ResponseTable:

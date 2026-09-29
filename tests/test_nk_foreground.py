@@ -338,7 +338,11 @@ def test_explicit_stop_is_not_falsely_reported_as_registry_stopped(
     assert [row["status"] for row in events] == ["ready", "go_declined"]
     assert events[-1]["registration"] == "retained_for_manual_disposition"
     assert comms.registry.require("beta").pid == os.getpid()
-    assert not (root / "coordination.sqlite3").exists()
+    # Registration now initializes the canonical store. STOP must still leave
+    # it with no selected execution or attempt, rather than requiring no file.
+    with MutationStore(str(root / "coordination.sqlite3")) as store:
+        assert store._connection.execute("SELECT COUNT(*) FROM executions").fetchone()[0] == 0
+        assert store._connection.execute("SELECT COUNT(*) FROM attempts").fetchone()[0] == 0
 
 
 def test_partial_go_frame_times_out_without_provider(monkeypatch: pytest.MonkeyPatch) -> None:

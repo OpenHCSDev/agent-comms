@@ -17,18 +17,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .attempt_states import AttemptState
-from .coordination import (
+from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
-    ACPClientConnectivity,
+)
+from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
     ExecutionOrigin,
     ExecutionRecord,
-    OwnerConnectivity,
-    OwnerGenerations,
-    SchemaMeta,
 )
+from agent_comms.coordination_tables.metadata import SchemaMeta
+from agent_comms.coordination_tables.participants import OwnerGenerations
+from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
+
+from .attempt_states import AttemptState
 from .execution_states import ExecutionState
 from .obligation_states import ResponseState
 from .recovery_states import RecoveryCondition

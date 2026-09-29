@@ -18,9 +18,9 @@ from agent_comms.bus_publication import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination import canonical_publication_key
 from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
 from agent_comms.coordination_store import MutationStore
+from agent_comms.coordination_tables.publications import canonical_publication_key
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (

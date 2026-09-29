@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.coordination import CoordinationStore
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.recovery_gateway import RecoveryGateway
 from agent_comms.recovery_gateway_client import read_gateway_projection
 

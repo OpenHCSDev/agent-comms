@@ -33,16 +33,6 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     SucceededAttempt,
 )
-from agent_comms.coordination import (
-    ACPClientConnectivity,
-    ExecutionOrigin,
-    MessageAudience,
-    OwnerConnectivity,
-    PublicationIntents,
-    ReplayFact,
-    WakeAssignment,
-    canonical_publication_key,
-)
 from agent_comms.coordination_store import (
     _MONITOR_GRANT,
     INITIAL_LEASE_DURATION_MS,
@@ -60,6 +50,14 @@ from agent_comms.coordination_store import (
     VerifiedOwnerLoss,
     prepare_fence_token,
 )
+from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.publications import (
+    PublicationIntents,
+    canonical_publication_key,
+)
+from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -124,7 +122,7 @@ def started(db: MutationStore) -> tuple[str, object]:
 
 
 def final_evidence(db: MutationStore, fence: object, pointer_revision: int = 1) -> object:
-    from agent_comms.coordination import OwnerFence
+    from agent_comms.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
     result = db.advance_attempt(

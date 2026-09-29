@@ -213,3 +213,115 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         messages[4].seq,
     }
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+
+
+@pytest.mark.parametrize("seed", [7, 31, 99])
+def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_path, seed):
+    """A recorded read must have an actual paint in the same participant incarnation."""
+    import os
+    import subprocess
+    import sys
+
+    rng = random.Random(seed)
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    for target in (viewer, "#team"):
+        comms.messaging.send("alice", target, "initial unread")
+    painted, acknowledged = set(), set()
+    pending = []
+
+    def record(basis):
+        return {
+            (sequence, tuple((p.name, p.created_at) for p in item.conversation.participants))
+            for item in basis.conversations
+            for sequence in item.sequences
+        }
+
+    def current_sequences(facts):
+        threads = comms.registry.snapshot().threads
+        return {
+            sequence
+            for sequence, participants in facts
+            if all(
+                name in threads and threads[name].created_at == creation
+                for name, creation in participants
+            )
+        }
+
+    # Every run includes each operation, in shuffled order, rather than relying
+    # on a random draw to happen to exercise a restart or identity replacement.
+    operations = ["send", "display", "mark", "mode", "rebind", "crash"] * 6
+    rng.shuffle(operations)
+    for index, operation in enumerate(operations):
+        if operation == "send":
+            comms.messaging.send("alice", rng.choice([viewer, "#team", "bob"]), f"row {index}")
+        elif operation == "mode":
+            comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
+        elif operation == "display":
+            if rng.choice([True, False]):
+                page = comms.views.dm_display_page("alice", worktree=str(tmp_path), limit=3)
+                basis = page.display_basis.displayed
+                kind, target = "dm", "alice"
+                proof = page.display_basis
+            else:
+                target = rng.choice(["#team", "#any"])
+                page = comms.views.channel_display_page(target, worktree=str(tmp_path), limit=3)
+                basis = page.display_scope.displayed
+                kind, proof = "channel", page.display_scope
+            selected = {m.seq for m in page.messages if rng.choice([True, False])}
+            basis = basis.select(selected)
+            painted.update(record(basis))
+            if page.newest_seq is not None:
+                pending.append((kind, target, page.newest_seq, replace(proof, displayed=basis)))
+        elif operation == "mark" and pending:
+            kind, target, through, proof = rng.choice(pending)
+            try:
+                if kind == "dm":
+                    comms.views.mark_dm_view_read(
+                        target,
+                        worktree=str(tmp_path),
+                        through=through,
+                        expected_display_basis=proof,
+                    )
+                else:
+                    comms.views.mark_channel_view_read(
+                        target, worktree=str(tmp_path), through=through, expected_scope=proof
+                    )
+            except ValueError as error:
+                # A stale incarnation is a refused paint, not permission to
+                # acknowledge a new peer using an old page.
+                stale_participant = any(
+                    not p.current(comms.registry.snapshot())
+                    for item in proof.displayed.conversations
+                    for p in item.conversation.participants
+                )
+                changed_projection = kind == "channel" and str(error).startswith(
+                    "Channel display changed"
+                )
+                assert stale_participant or changed_projection, str(error)
+            else:
+                acknowledged.update(record(proof.displayed.through(through)))
+        elif operation == "rebind":
+            comms.registry.unregister("alice")
+            comms.registry.remove("alice")
+            comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        elif operation == "crash":
+            # The child loads the actual durable store, then exits without
+            # Python cleanup. No synthetic read document or mocked reopen.
+            child = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    "import os,sys; from agent_comms.comms import wire; "
+                    "wire(sys.argv[1]).bus.reads.read(); os._exit(9)",
+                    str(tmp_path),
+                ],
+                env=dict(os.environ),
+                capture_output=True,
+                timeout=15,
+            )
+            assert child.returncode == 9, child.stderr.decode()
+            comms = wire(tmp_path)
+        seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+        assert seen <= current_sequences(painted), (seed, index, operation)
+        assert seen == current_sequences(acknowledged), (seed, index, operation)

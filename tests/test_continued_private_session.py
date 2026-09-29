@@ -1,17 +1,17 @@
 """Continued private history must join every user to independent live evidence."""
 
 import json
-import os
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.backend import _session_revision
 from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_sidecar import native_request_digest
+from selected_summary_cases import admission_identity, refresh_source
 
 
 @pytest.fixture
@@ -41,11 +41,10 @@ def continued(tmp_path):
     inputs.started("acp:old", turn_id="old-turn", native_id=native_id, text="old")
     inputs.record("acp:new", seq=None, owner="owner", admission=2, target="owner", text="new")
     source = dict(
-        source=dict(
-            ownerName="owner",
-            ownerPid=os.getpid(),
-            ingressKey="acp:new",
-            reservedRevision=json.loads(json.dumps(_session_revision(str(session)))),
+        source=FieldCodec.encode(
+            admission_identity(
+                session, text="new", key="acp:new", turn="new-turn", owner="owner", admission=2
+            ).source
         ),
         selected=dict(provider="fixture", modelId="fixture", contextWindow=1000),
         settings=dict(reserveTokens=100, keepRecentTokens=10),
@@ -116,9 +115,7 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     inputs.path.write_text(json.dumps(saved))
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     if damage != "revision":
-        source["source"]["reservedRevision"] = json.loads(
-            json.dumps(_session_revision(str(session)))
-        )
+        refresh_source(source, session)
     with pytest.raises((CompactionJournalError, ValueError)):
         journal.reserve_selected_summary(str(session), source)
     assert journal.unresolved_selected_summary(str(session)) == ()
@@ -131,8 +128,8 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
 def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
     from agent_comms.assignment_states import TriagePendingAssignment
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-    from agent_comms.coordination import MessageAudience, WakeAssignment
     from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
     from agent_comms.native_runtime_input import NativeRuntimeInput
 
     journal, session, inputs, source = continued
@@ -200,7 +197,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
                 ),
                 verdict="ignore",
             ).insert(db)
-    source["source"]["reservedRevision"] = json.loads(json.dumps(_session_revision(str(session))))
+    refresh_source(source, session)
     if damage in {"context", "unsettled", "foreign"}:
         with pytest.raises(CompactionJournalError, match="coverage floor"):
             journal.reserve_selected_summary(str(session), source)

@@ -13,9 +13,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination import PrivateRuntimeSchema, WakeAssignment
 from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
 from .native_runtime_input import NativeRuntimeInput

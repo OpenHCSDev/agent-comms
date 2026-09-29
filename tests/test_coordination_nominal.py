@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordination as c
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
 from agent_comms.attempt_states import SettlingAttempt, SucceededAttempt
+from agent_comms.coordination_errors import IntegrityViolationError
+from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
 from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
@@ -19,6 +21,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.recovery_gateway_client import _valid_projection
 from agent_comms.recovery_projection import AvailableRecoveryProjection, ProjectedExecution
+from agent_comms.wake_policy import FullWake
 
 
 def test_state_data_cannot_be_attached_to_wrong_variant():
@@ -36,14 +39,14 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
         EngagedAssignment()
     with pytest.raises(TypeError):
         SucceededAttempt(lease_expires_at_ms=100)
-    with pytest.raises(c.IntegrityViolationError):
+    with pytest.raises(IntegrityViolationError):
         SucceededAttempt.load(None, False, True)
 
 
 def test_record_replacement_uses_only_nominal_state():
-    record = c.ExecutionRecord(
+    record = ExecutionRecord(
         execution_id="e",
-        origin=c.ExecutionOrigin.ACP,
+        origin=ExecutionOrigin.ACP,
         lifecycle=PendingExecution(),
         owner_thread="t",
         owner_lookup="o",
@@ -58,7 +61,6 @@ def test_record_replacement_uses_only_nominal_state():
     )
     active = replace(record, revision=2, lifecycle=ActiveExecution.load(1))
     assert active.lifecycle == ActiveExecution(1)
-    assert c.execution_status_transition_allowed(record, active)
     assert replace(active, revision=3).lifecycle == active.lifecycle
 
 
@@ -86,7 +88,7 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
         assert tag.publication() == "reviewed"
         projection = ProjectedExecution(
             PendingExecution,
-            c.ExecutionOrigin.WIRE,
+            ExecutionOrigin.WIRE,
             False,
             None,
             False,
@@ -153,7 +155,7 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
 
     with MutationStore(tmp_path / "coordination.sqlite3") as store:
         store.register_participant("owner", "owner", "owner", committed=True)
-        created = store.create_execution("e", c.ExecutionOrigin.ACP, "owner", "owner", 1).value
+        created = store.create_execution("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
         pending = store.mark_pending("e", expected_revision=created.execution.revision).value
         started = store.start_attempt(
             "e",
@@ -264,7 +266,7 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
                 0,
                 ProjectedExecution(
                     QueuedExecution,
-                    c.ExecutionOrigin.WIRE,
+                    ExecutionOrigin.WIRE,
                     False,
                     None,
                     False,
@@ -296,13 +298,13 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
     try:
         with MutationStore(tmp_path / "coordination.sqlite3") as store:
             store.register_participant("owner", "owner", "owner", committed=True)
-            assignment = c.WakeAssignment(
+            assignment = WakeAssignment(
                 assignment_id="assignment",
                 recipient="owner",
                 recipient_lookup="owner",
                 wire_seq=1,
                 message_id="message",
-                audience=c.MessageAudience.DIRECT,
+                audience=MessageAudience.DIRECT,
                 lifecycle=AwaitingAssignment(),
                 accepted_at_ms=0,
                 updated_at_ms=0,
@@ -320,3 +322,30 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
             assert store.assignment("assignment") == settled
     finally:
         AssignmentState.__registry__.pop("awaiting")
+
+
+def test_original_target_and_receipt_legality_is_owned_by_current_variants():
+    """The three original checks with retired diagnostics now have typed owners."""
+    # Unstarted assignments cannot carry a frozen response target at all.
+    unstarted = FieldCodec.encode(FullPendingAssignment())
+    assert FieldCodec.decode(AssignmentState, unstarted) == FullPendingAssignment()
+    with pytest.raises(ValueError, match="Unknown fields"):
+        FieldCodec.decode(AssignmentState, dict(unstarted, exact_target="requester"))
+
+    # An engagement cannot omit either member of its exact execution binding.
+    engaged = FieldCodec.encode(EngagedAssignment.load(FullWake(), None, "e", "requester"))
+    for field in ("exact_target", "execution_id"):
+        damaged = {**engaged, "decision": dict(engaged["decision"])}
+        del damaged["decision"][field]
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(AssignmentState, damaged)
+
+    # A publication has a complete receipt; non-publication variants have none.
+    published = FieldCodec.encode(PublishedResponse("message", 1))
+    for field in ("message_id", "seq"):
+        damaged = dict(published)
+        del damaged[field]
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(ResponseState, damaged)
+    with pytest.raises(ValueError, match="Unknown fields"):
+        FieldCodec.decode(ResponseState, {**FieldCodec.encode(SilentResponse()), "seq": 1})

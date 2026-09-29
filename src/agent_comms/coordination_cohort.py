@@ -12,8 +12,8 @@ import logging
 import sqlite3
 from dataclasses import dataclass, field
 
-from .bus_publication import CommittedInitial
-from .cohort_schema import (
+from agent_comms.bus_publication import CommittedInitial
+from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchMembers,
     ClaimBatchReceipts,
@@ -21,23 +21,18 @@ from .cohort_schema import (
     assert_cohort_schema,
     assert_optional_awareness_schema,
 )
-from .coordination import (
-    POLICY_VERSION,
-    RESOLVER_VERSION,
-    IntegrityViolationError,
-    OwnerGenerations,
-    Participants,
-    SchemaVersionError,
-    WakeAssignment,
-)
-from .coordination_store import (
+from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
+from agent_comms.coordination_store import (
     AlreadyApplied,
     Applied,
     IdentityConflict,
     MutationStore,
 )
-from .message_bus import MessageBus
-from .wake import NoWakeDecision, WakeDecision
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
+from agent_comms.message_bus import MessageBus
+from agent_comms.wake import NoWakeDecision, WakeDecision
 
 _LOG = logging.getLogger(__name__)
 

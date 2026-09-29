@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.cohort_schema import CohortSchemaMeta
 from agent_comms.comms import Comms
-from agent_comms.coordination import SchemaVersionError
+from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_store import MutationStore
 from agent_comms.threads import Thread
 
