@@ -1,0 +1,144 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 10 items
+
+tests/test_s1_event_behavior.py EEEEEEEEEF                               [100%]
+
+==================================== ERRORS ====================================
+_ ERROR at setup of test_current_stream_effects_then_terminal_release[normal] __
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+__ ERROR at setup of test_current_stream_effects_then_terminal_release[tool] ___
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+_ ERROR at setup of test_current_stream_effects_then_terminal_release[compaction] _
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+_ ERROR at setup of test_current_stream_effects_then_terminal_release[settings] _
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+_ ERROR at setup of test_current_stream_effects_then_terminal_release[diagnostic_failure] _
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+_ ERROR at setup of test_current_stream_effects_then_terminal_release[reason_failure] _
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+_ ERROR at setup of test_current_stream_effects_then_terminal_release[interrupted] _
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+_ ERROR at setup of test_transport_error_still_releases_real_wait_once[False] __
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+__ ERROR at setup of test_transport_error_still_releases_real_wait_once[True] __
+tests/test_s1_event_behavior.py:84: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+=================================== FAILURES ===================================
+______ test_actual_native_stream_reaches_current_consumer_and_settlement _______
+tests/test_s1_event_behavior.py:191: in test_actual_native_stream_reaches_current_consumer_and_settlement
+    session = await owner.new_session(cwd=str(native.project),mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:492: in _private_nk_marker
+    raise PublicationActivationBlocked(
+E   agent_comms.coordination_store.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+=========================== short test summary info ============================
+FAILED tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[normal]
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[tool]
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[compaction]
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[settings]
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[diagnostic_failure]
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[reason_failure]
+ERROR tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[interrupted]
+ERROR tests/test_s1_event_behavior.py::test_transport_error_still_releases_real_wait_once[False]
+ERROR tests/test_s1_event_behavior.py::test_transport_error_still_releases_real_wait_once[True]
+========================= 1 failed, 9 errors in 1.28s ==========================
