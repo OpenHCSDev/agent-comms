@@ -24,6 +24,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
+    def require_active(self) -> None:
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("live owner is stopped or unavailable")
+
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
 
@@ -55,6 +60,9 @@ class ActiveThreadPresence:
 
     active = True
     visible = True
+
+    def require_active(self) -> None:
+        pass
 
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         return True

@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
+from dataclasses import replace
 from pathlib import Path
 
-from .child_process import ProcessIdentity
 from .compaction_publication_lease import publication_identity_fence
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import UnregisteredThreadError
+from .field_codec import FieldCodec
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
+from .native_input_owner import RegistryOwner
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryStore
 from .routing import TurnRouting
 from .store_files import file_revision
+from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
@@ -135,96 +137,30 @@ class Registration:
         even if the declaration, PID, and status return to their earlier values.
         """
         with self.store.reading() as document:
-            canonical = document.aliases.get(name, name)
-            owner = document.threads.get(canonical)
-            status = document.statuses.get(canonical)
-            generation = document.owners.generations.get(canonical)
-            if (
-                owner is None
-                or status is None
-                or not status.active
-                or owner.process_identity != ProcessIdentity.capture(os.getpid())
-                or not owner.role.executable
-                or generation is None
-                or (
-                    owner is not None
-                    and owner.active_turn is not None
-                    and not owner.active_turn.current(
-                        document.admissions.generations[canonical], owner.turn_generation
-                    )
-                )
-            ):
-                raise RelationViolationError("live owner is stopped or unavailable")
-            return owner, generation
+            snapshot = document.snapshot()
+            owner = RegistryOwner.capture_local(snapshot, name)
+            return owner.thread, snapshot.owner_identity(owner.thread.name).generation
 
     def live_owner_with_admission(self, name: str) -> tuple[Thread, int]:
         """Read the durable process admission, independent of metadata revisions."""
         with self.store.reading() as document:
-            canonical = document.aliases.get(name, name)
-            owner = document.threads.get(canonical)
-            status = document.statuses.get(canonical)
-            generation = document.admissions.generations.get(canonical)
-            if (
-                owner is None
-                or status is None
-                or not status.active
-                or owner.process_identity != ProcessIdentity.capture(os.getpid())
-                or not owner.role.executable
-                or generation is None
-                or (
-                    owner is not None
-                    and owner.active_turn is not None
-                    and not owner.active_turn.current(generation, owner.turn_generation)
-                )
-            ):
-                raise RelationViolationError("live owner is stopped or unavailable")
-            return owner, generation
+            owner = RegistryOwner.capture_local(document.snapshot(), name)
+            return owner.thread, owner.admission_generation
 
     def lease_live_turn_with_admission(
         self, expected: Thread, turn_id: str, *, expected_generation: int
     ) -> tuple[Thread, int]:
-        """Claim a turn against stable owner authority under the registry lock."""
-        if (
-            type(expected) is not Thread
-            or type(turn_id) is not str
-            or not 0 < len(turn_id) <= 128
-            or type(expected_generation) is not int
-            or expected_generation < 1
-        ):
-            raise ValueError("live owner turn requires exact admission and bounded ID")
+        """Claim a turn against stable admission, allowing unrelated metadata changes."""
+        Thread.require_declaration(expected)
+        turn = TurnId.for_registration(turn_id)
+        generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
-            document = edit.document
-            current = document.threads.get(expected.name)
-            status = document.statuses.get(expected.name)
-            if (
-                document.admissions.generations.get(expected.name) != expected_generation
-                or current is None
-                or status is None
-                or not status.active
-                or current.process_identity != ProcessIdentity.capture(os.getpid())
-                or not current.role.executable
-                or current.active_turn is not None
-                or current.goal != expected.goal
-                or (
-                    current.name,
-                    current.created_at,
-                    current.process_identity,
-                    current.role,
-                    current.worktree,
-                )
-                != (
-                    expected.name,
-                    expected.created_at,
-                    expected.process_identity,
-                    expected.role,
-                    expected.worktree,
-                )
-            ):
-                raise RelationViolationError("live owner stopped or changed before turn claim")
+            owner = RegistryOwner.capture_local(edit.document.snapshot(), expected.name)
+            owner.require_claim(expected, generation)
             self._assert_maintenance_open_unlocked()
-            leased, _owner_generation = document.lease_turn(current, turn_id, None)
+            leased, _ = edit.document.lease_turn(owner.thread, turn.value, None)
             edit.commit()
-            return leased, expected_generation
+            return leased, generation
 
     def lease_live_turn_with_generation(
         self,
@@ -234,36 +170,17 @@ class Registration:
         expected_owner_generation: int,
         routing: TurnRouting | None = None,
     ) -> tuple[Thread, int]:
-        """Atomically claim a fresh turn and return its turn with stable owner generation.
-
-        Never sample the generation in a second read: an owner may stop and register
-        the same declaration between that read and the claim's return.
-        """
-        if (
-            type(expected) is not Thread
-            or type(turn_id) is not str
-            or not 0 < len(turn_id) <= 128
-            or type(expected_owner_generation) is not int
-            or expected_owner_generation < 1
-        ):
-            raise ValueError("live owner turn requires exact identity, generation and bounded ID")
+        """Claim against the exact captured declaration and stable owner generation."""
+        Thread.require_declaration(expected)
+        turn = TurnId.for_registration(turn_id)
+        generation = GenerationCounter.require_positive(expected_owner_generation)
         with self.store.editing() as edit:
-            document = edit.document
-            current = document.threads.get(expected.name)
-            status = document.statuses.get(expected.name)
-            if (
-                document.owners.generations.get(expected.name) != expected_owner_generation
-                or current != expected
-                or status is None
-                or not status.active
-                or current is None
-                or current.process_identity != ProcessIdentity.capture(os.getpid())
-                or not current.role.executable
-                or current.active_turn is not None
-            ):
-                raise RelationViolationError("live owner stopped or changed before turn claim")
+            snapshot = edit.document.snapshot()
+            owner = RegistryOwner.capture_local(snapshot, expected.name)
+            owner.require_exact(snapshot, expected, generation)
+            owner.thread.require_idle()
             self._assert_maintenance_open_unlocked()
-            result = document.lease_turn(current, turn_id, routing)
+            result = edit.document.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
 
@@ -320,72 +237,25 @@ class Registration:
         disk revision) is echoed unverified; the native writer CAS is the only
         authority for those values.
         """
-        if (
-            type(expected) is not Thread
-            or type(expected_owner_generation) is not int
-            or expected_owner_generation < 1
-            or type(turn_id) is not str
-            or not 0 < len(turn_id) <= 128
-            or ((expected_goal_id is None) != (expected_goal_revision is None))
-            or (
-                expected_goal_id is not None
-                and (
-                    type(expected_goal_id) is not str
-                    or not expected_goal_id
-                    or type(expected_goal_revision) is not int
-                    or expected_goal_revision < 0
-                )
-            )
-            or type(session_file) is not str
-            or not session_file
-            or type(session_leaf) is not str
-            or not session_leaf
-            or type(session_revision) is not str
-            or not session_revision
-        ):
-            raise ValueError("owner compaction attestation requires bounded exact expectations")
+        Thread.require_declaration(expected)
+        # Decode the existing attestation declaration once at this call boundary.
+        # The registry revision is filled only under the held canonical lock.
+        receipt = FieldCodec.decode(OwnerCompactionAttestation, dict(
+            thread=expected.name,
+            owner_epoch=expected_owner_generation,
+            turn_id=turn_id,
+            goal_id=expected_goal_id,
+            goal_revision=expected_goal_revision,
+            session_file=session_file,
+            session_leaf=session_leaf,
+            session_revision=session_revision,
+            registry_revision=None,
+        ))
         with self.store.locked() as authority_fd:
-            document = self.store._read_unlocked()
-            canonical = document.aliases.get(expected.name, expected.name)
-            owner = document.threads.get(canonical)
-            status = document.statuses.get(canonical)
-            generation = document.owners.generations.get(canonical)
-            goal = owner.goal if owner is not None else None
-            if (
-                owner is None
-                or status is None
-                or not status.active
-                or owner != expected
-                or generation != expected_owner_generation
-                or owner.process_identity != ProcessIdentity.capture(os.getpid())
-                or not owner.role.executable
-                or owner.active_turn is None
-                or owner.active_turn.id != turn_id
-                or not owner.active_turn.current(
-                    document.admissions.generations[canonical], owner.turn_generation
-                )
-                or (goal.id if goal is not None else None) != expected_goal_id
-                or (goal.revision if goal is not None else None) != expected_goal_revision
-            ):
-                raise RelationViolationError(
-                    "canonical owner attestation unavailable for compaction commit"
-                )
-            from .owner_compaction_gate import OwnerCompactionAttestation
-
-            yield (
-                OwnerCompactionAttestation(
-                    thread=owner.name,
-                    owner_generation=generation,
-                    turn_id=turn_id,
-                    goal_id=goal.id if goal is not None else None,
-                    goal_revision=goal.revision if goal is not None else None,
-                    session_file=session_file,
-                    session_leaf=session_leaf,
-                    session_revision=session_revision,
-                    registry_revision=file_revision(self.store.path),
-                ),
-                authority_fd,
-            )
+            snapshot = self.store._read_unlocked().snapshot()
+            owner = RegistryOwner.capture_local(snapshot, expected.name)
+            receipt.require_current(owner, snapshot, expected)
+            yield replace(receipt, registry_revision=file_revision(self.store.path)), authority_fd
 
     def _assert_maintenance_open_unlocked(self) -> None:
         from .maintenance_barrier import MaintenanceBarrier
@@ -396,24 +266,12 @@ class Registration:
         self, name: str, turn_id: str, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
-        if type(turn_id) is not str or not 0 < len(turn_id) <= 128:
-            raise ValueError("live owner turn requires a bounded ID")
+        turn = TurnId.for_registration(turn_id)
         with self.store.editing() as edit:
-            document = edit.document
-            canonical = document.aliases.get(name, name)
-            current = document.threads.get(canonical)
-            status = document.statuses.get(canonical)
-            if (
-                current is None
-                or status is None
-                or not status.active
-                or current.process_identity != ProcessIdentity.capture(os.getpid())
-                or not current.role.executable
-                or current.active_turn is not None
-            ):
-                raise RelationViolationError("live owner is stopped or unavailable")
+            owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
+            owner.thread.require_idle()
             self._assert_maintenance_open_unlocked()
-            result = document.lease_turn(current, turn_id, routing)
+            result = edit.document.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
 
@@ -435,7 +293,6 @@ class Registration:
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read this owner's recorded transitions, reconciling crash cuts first."""
-        from .goal_history import GoalHistoryStore
 
         with self.store.locked():
             document = self.store._read_unlocked()

@@ -34,6 +34,15 @@ class ThreadIncarnation:
 class TurnId:
     value: str
 
+    @classmethod
+    def for_registration(cls, value: str) -> TurnId:
+        from .field_codec import FieldCodec
+
+        value = FieldCodec.decode(str, value)
+        if not 0 < len(value) <= 128:
+            raise ValueError("live owner turn requires a bounded ID")
+        return cls(value)
+
     def __post_init__(self) -> None:
         if not self.value:
             raise ValueError("Turn ID cannot be empty")
@@ -68,6 +77,15 @@ class GenerationCounter:
             )
         ):
             raise ValueError("invalid registry generation counter")
+
+    @staticmethod
+    def require_positive(value: int) -> int:
+        from .field_codec import FieldCodec
+
+        value = FieldCodec.decode(int, value)
+        if value < 1:
+            raise ValueError("live owner requires a positive generation")
+        return value
 
     def advance(self, name: str) -> int:
         self.counter += 1

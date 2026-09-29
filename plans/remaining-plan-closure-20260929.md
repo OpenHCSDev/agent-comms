@@ -29,6 +29,15 @@ still being checked at this checkpoint; this census does not upgrade that claim.
 
 The dated measurements and old PR status rows below are retained as history.
 
+## Registration followthrough — PR357
+
+Main `1dbb318d` includes353/354/355. PR357 replaces the remaining registration
+live/claim/compaction authority chains using existing owners; [receipt](../evidence/s14-registration/README.md)
+records214 production lines deleted and actual installed saved-history ACP/native
+summary/original-input delivery. Parent retains live activation. Native startup/
+watchdog and NotSent presentation remain with parent/Carver356; no overlapping
+implementation. Whole S14 and T4 still require their other remaining surfaces.
+
 ## S14 followthrough checkpoint — PR350 / PR351
 
 PR347 is merged. PR350 implements the admission/response identity slice with
