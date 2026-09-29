@@ -42,7 +42,13 @@ in Toad210; Mendel contributes the durable wire/routing/index/source closure.
 The pr159 reply at 19:27:10 to codex-bootstrap is visible in IRC but absent from
 its sender DM. Both views must project the same original durable record once,
 chronologically, through immediate updates, A/B/A and cold reopening. No second
-message store or sender-only append is accepted. Existing426 owner binding
+message store or sender-only append is accepted. The latest reproducer shows
+records arriving on opening a window: verify live source invalidation with both
+sender and recipient views open before sending, without any reopen. Outbound
+handling describes the recipient's handling of the original message, derived
+from its existing assignment/execution and original message/recipient identity.
+An inbound reply's handling describes a different message. Both DM and IRC must
+show those canonical facts as they change; no sender-local status copy. Existing426 owner binding
 recovery remains with Schrodinger; canonical lifecycle425/211 remains Arendt.
 
 ## Complete-surface assignments

@@ -70,17 +70,15 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         # the last trusted owner snapshot. After release, no duplicate should
         # reach the socket and schedule idle reader preparation.
         with _store_lock(comms.root / "bus.jsonl"):
-            await agent._publish_private_cursor(owner.name, owner.name)
-        await agent._publish_private_cursor(owner.name, owner.name)
+            await agent.cursors.publish(owner.name, owner.name)
+        await agent.cursors.publish(owner.name, owner.name)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(receive(), 0.05)
         # A settled turn cannot lose its cursor update to the same lock. The
         # idle observer must revisit the durable row once contention clears.
         with _store_lock(comms.root / "bus.jsonl"):
-            await agent._publish_private_cursor(
-                owner.name, owner.name, selected_status="unavailable"
-            )
-        await agent._refresh_private_cursor(owner.name)
+            await agent.cursors.publish(owner.name, owner.name, selected_status="unavailable")
+        await agent.cursors.refresh(owner.name, owner.name)
         before = await receive(before.revision)
         assert before.observation.status == "none"
         with pytest.raises(TimeoutError):
@@ -88,12 +86,12 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         with _store_lock(comms.root / "bus.jsonl"):
             loaded = next(
                 update.envelope
-                for update in agent._session_runtime_metadata(owner.name, owner.name)
+                for update in agent.cursors.trusted_metadata(owner.name, owner.name)
                 if isinstance(update, CursorAdvancedUpdate)
             )
             assert loaded.observation.status == "unavailable"
             assert loaded.scope == before.scope
-            await agent._publish_private_cursor(owner.name, owner.name)
+            await agent.cursors.publish(owner.name, owner.name)
         agent.inputs.ensure_live_drain(owner.name)
         recovered = await receive(loaded.revision)
         assert recovered.observation.status == "none"
@@ -103,10 +101,10 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
             task.cancel()
         await asyncio.gather(*agent.inputs.drain_tasks.values(), return_exceptions=True)
         await agent.inputs.drain_inbox(owner.name)
-        settled_revision = agent._private_cursor_revisions[owner.name]
+        settled_revision = agent.cursors.delivery(owner.name).revision
         for _ in range(20):
             await agent.inputs.drain_inbox(owner.name)
-        assert agent._private_cursor_revisions[owner.name] == settled_revision
+        assert agent.cursors.delivery(owner.name).revision == settled_revision
         assert comms.views.full_history() == []  # No input submitted or replayed.
     finally:
         for task in agent.inputs.drain_tasks.values():

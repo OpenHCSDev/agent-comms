@@ -23,3 +23,37 @@ consumer must accompany class-size closure. Mere relocation is not completion.
 The parent owns this draft. Arendt owns complete turn lifecycle425/211,
 Schrodinger owns ThreadPresentation identity binding426/210, and existing
 shared-file owners must coordinate directly before overlapping edits.
+
+## Working implementation checkpoint
+
+Current main7995bc5a is integrated normally. CommsAgent now owns420 lines
+(before formatting), down from549. HistoryViews remains478 and is not carved up.
+The connection-owned CursorPublication reads the original NativeSourceCursor
+and publishes the existing CursorEnvelope. A CursorDelivery holds only local
+transport revision and last successful publication for its one session: these
+are delivery bookkeeping, not another native proof, input or message store.
+Its public predicates own equality and refresh policy; two parallel session
+maps and six CommsAgent helper/abstract entrypoints are deleted with all callers.
+SessionLifecycle derives queue metadata from InputDrain and cursor metadata
+from the publication owner. InputDrain refreshes the same publication owner.
+No compatibility methods or retained old helper names remain.
+
+Adding a transport observer no longer requires a CommsAgent subclass or its
+turn/input effects: it consumes CursorPublication with the original Comms and
+session-update transport. The underlying native proof and observation family
+still own evidence and variants. This is responsibility/state closure, not a
+claim that merely moving observation code is polymorphic factoring.
+
+Verification so far: 24 focused cases passed, including real TCP publication
+and real flock contention/recovery. One mocked selected-send assertion fails
+because covered_seq is2 rather than original seq1; the identical committed
+current-main assertion fails in1.75s. This suite is not reported green.
+The existing source ownership guard passes2 cases in0.65s and now prevents
+retired cursor helpers and dictionaries from returning. Static undefined/import
+checks pass. The initial attempt removed a NativeSourceCursor import still
+needed by input advancement; it was restored before the final24/1 result.
+
+An installed artifact and actual source-projection attachment remain required
+before readiness or merge. No default package or live owner was changed here.
+The staged Toad208+202 environment likewise remains inactive while its concrete
+late reader-jump failure is corrected by its owners.
