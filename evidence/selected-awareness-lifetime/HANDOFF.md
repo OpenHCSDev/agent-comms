@@ -22,3 +22,11 @@ Claim sent directly on Boyle361. Boyle retains registration_change, registry_doc
 - `measures.json`:all declaration-owned measures for both touched production files, no increase including per-file chain terms, foreign absence, codec subclasses and independent class lines above500. Scoped measurement; no resource-heavy whole-project NRA scan or completeness claim.
 
 Pending at draft: noneditable-wheel affected native case and final parent integration/live acceptance. Existing schema/history untouched; this is an in-memory ownership change, no cutover/migration needed.
+
+## Installed checkpoint
+
+Noneditable wheel actual native case PASS1test3.19s, source/history prompts sent only to the loopback provider. `installed-imports.json` verifies changed owner bytes and all loaded core modules come from the candidate; inherited PYTHONPATH was explicitly cleared. The first installed setup refused inherited PYTHONPATH before running any test (`installed-setup-first.log`), preserved as failure.
+
+Measured touched-source debt: god-class excess315→305, exact-type checks13→9, long chains4→3, chain terms18→12, foreign absence11→9, string subscripts6→3, codec subclasses0. Per-file increases absent. These are scoped numbers, not a claim the whole refactor is finished.
+
+Boyle now owns goal scheduler/controls too. Preserved incomplete262546bd implementation/handoff sent directly; no parallel goal-control continuation. PR363 remains limited to awareness.
