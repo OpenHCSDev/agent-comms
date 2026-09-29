@@ -4,41 +4,117 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Literal
+from abc import abstractmethod
+
+from .declared_family import DeclaredFamily
+from .thread_identity import ThreadIncarnation
 
 from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
 
 
-@dataclass(frozen=True, slots=True)
-class GoalMentionBinding:
-    """An exact goal token resolved once, never rebound by a later name reuse."""
+@dataclass(frozen=True, kw_only=True)
+class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
+    """One current stored resolution family; each member owns its projection."""
 
+    family_discriminator = "resolution"
     token: str
-    resolution: str
-    peer_name: str | None = None
-    peer_created_at: float | None = None
 
-    def __post_init__(self) -> None:
-        if not self.token or self.resolution not in {
-            "resolved",
-            "self",
-            "unknown",
-            "alias",
-            "malformed",
-            "limit_exceeded",
-            "non_executable",
-        }:
-            raise ValueError("Invalid goal mention binding.")
-        if self.resolution == "resolved":
-            if (
-                not self.peer_name
-                or not isinstance(self.peer_created_at, (float, int))
-                or isinstance(self.peer_created_at, bool)
-                or not math.isfinite(self.peer_created_at)
-            ):
-                raise ValueError("Resolved goal mention requires a stable peer incarnation.")
-        elif self.peer_name is not None or self.peer_created_at is not None:
-            raise ValueError("Unresolved goal mention cannot name a peer incarnation.")
+    def __post_init__(self):
+        if not self.token:
+            raise ValueError("Goal mention requires a token")
+
+    @property
+    def resolution(self):
+        return self.declared_name
+
+    @abstractmethod
+    def project(self, registry, owner, goal, source): ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnresolvedMention:
+    """Shared diagnostic capability; never a separately registered state."""
+
+    peer_name: Literal[None] = None
+    peer_created_at: Literal[None] = None
+
+    def project(self, registry, owner, goal, source):
+        from .relationships import GoalMentionDiagnostic
+
+        return (), (
+            GoalMentionDiagnostic(
+                owner.name, goal.id, source.text_revision, self.token, self.declared_name
+            ),
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelfMentionBinding(UnresolvedMention, GoalMentionBinding):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnknownMentionBinding(UnresolvedMention, GoalMentionBinding):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class AliasMentionBinding(UnresolvedMention, GoalMentionBinding):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class MalformedMentionBinding(UnresolvedMention, GoalMentionBinding):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class LimitExceededMentionBinding(UnresolvedMention, GoalMentionBinding):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class NonExecutableMentionBinding(UnresolvedMention, GoalMentionBinding):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class ResolvedMentionBinding(GoalMentionBinding):
+    peer_name: str
+    peer_created_at: float
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not self.peer_name or not math.isfinite(self.peer_created_at):
+            raise ValueError("Resolved goal mention requires a stable peer incarnation")
+
+    @property
+    def peer(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.peer_name, self.peer_created_at)
+
+    def project(self, registry, owner, goal, source):
+        from .relationships import GoalDerivedContact, GoalMentionDiagnostic
+
+        diagnostic = GoalMentionDiagnostic(
+            owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"
+        )
+        if not self.peer.current(registry):
+            return (), (diagnostic,)
+        peer = registry.threads[self.peer.resolved(registry).name]
+        if not peer.role.executable or peer.created_at == owner.created_at:
+            return (), (diagnostic,)
+        return (
+            GoalDerivedContact(
+                owner.name,
+                owner.created_at,
+                peer.name,
+                peer.created_at,
+                goal.id,
+                source.text_revision,
+            ),
+        ), ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +140,17 @@ class GoalMentionSource:
             or not math.isfinite(self.owner_created_at)
         ):
             raise ValueError("Invalid goal mention source.")
+
+    def matches(self, goal, owner, registry) -> bool:
+        if self.goal_id != goal.id or self.text_revision > goal.revision:
+            return False
+        from .text_digest import TextDigest
+
+        incarnation = ThreadIncarnation(self.owner_name, self.owner_created_at)
+        return (
+            self.text_digest == TextDigest.of(goal.text).value
+            and incarnation.resolved(registry) == owner.incarnation
+        )
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,8 @@ from threading import RLock
 from typing import TYPE_CHECKING, Literal
 
 from .channel_targets import is_channel_target
+from .command import Command
+from .declared_family import DeclaredFamily
 from .display_order import ThreadSort
 from .errors import UnregisteredThreadError
 from .locked_store import LockedStore
@@ -228,71 +230,125 @@ class RelationshipDocument:
             orders=tuple(row.resolved(registry) for row in self.orders),
         )
 
-    def edit(
-        self, first: Thread, peer: str, second: Thread | None, action: str, note: str
-    ) -> tuple[RelationshipDocument, Collaboration | None]:
-        pairs = tuple(
-            edge
-            for edge in self.collaborations
-            if {edge.owner, edge.peer} == {first.name, peer} and edge.incident(first)
-        )
-        active = next(
-            (
-                edge
-                for edge in pairs
-                if second is not None and edge.counterpart(first) == second.incarnation
-            ),
-            None,
-        )
-        unavailable = next((edge for edge in pairs if edge is not active), None)
-        existing = active or unavailable
-        if action == "remove":
-            if existing is None:
-                return self, None
-            return (
-                replace(
-                    self,
-                    collaborations=tuple(
-                        edge
-                        for edge in self.collaborations
-                        if edge.pair_identity != existing.pair_identity
-                    ),
-                ),
-                None,
-            )
-        if second is None:
-            raise UnregisteredThreadError(f"Thread {peer!r} is not registered.")
-        if not second.role.executable:
-            raise ValueError("Collaborations relate agent threads")
-        if first.name == second.name:
-            raise ValueError("A thread cannot collaborate with itself")
-        if unavailable and active is None:
-            raise ValueError(
-                "Peer identity was replaced; explicitly remove the unavailable "
-                "collaboration before adding a new one"
-            )
-        if action == "update" and active is None:
-            raise ValueError("Collaboration does not exist")
-        if action == "add" and active is not None:
-            return self, active.oriented(first)
-        now = time.time()
-        changed = (
-            active.updated(note, now)
-            if active
-            else Collaboration(
-                first.name, second.name, first.created_at, second.created_at, note, now, now
-            )
-        )
-        return replace(
-            self,
-            collaborations=tuple(edge for edge in self.collaborations if edge is not active)
-            + (changed,),
-        ), changed.oriented(first)
-
     def ordered(self, owner: Thread, group: str, order: ThreadSort) -> RelationshipDocument:
         row = RelationshipOrder(owner.name, owner.created_at, group, order)
         rows = tuple(saved for saved in self.orders if saved.identity != row.identity)
         return replace(self, orders=(*rows, row))
+
+
+@dataclass(frozen=True)
+class RelationshipEditContext:
+    document: RelationshipDocument
+    first: Thread
+    peer_name: str
+    second: Thread | None
+
+    @property
+    def pairs(self) -> tuple[Collaboration, ...]:
+        return tuple(
+            edge
+            for edge in self.document.collaborations
+            if {edge.owner, edge.peer} == {self.first.name, self.peer_name}
+            and edge.incident(self.first)
+        )
+
+    @property
+    def active(self) -> Collaboration | None:
+        return next(
+            (
+                edge
+                for edge in self.pairs
+                if self.second is not None
+                and edge.counterpart(self.first) == self.second.incarnation
+            ),
+            None,
+        )
+
+    @property
+    def existing(self) -> Collaboration | None:
+        return self.active or next(iter(self.pairs), None)
+
+    def require_peer(self) -> Thread:
+        if self.second is None:
+            raise UnregisteredThreadError(f"Thread {self.peer_name!r} is not registered.")
+        self.second.role.require_executable()
+        if self.first.name == self.second.name:
+            raise ValueError("A thread cannot collaborate with itself")
+        if self.existing is not None and self.active is None:
+            raise ValueError(
+                "Peer identity was replaced; explicitly remove the unavailable "
+                "collaboration before adding a new one"
+            )
+        return self.second
+
+    def publish(self, changed: Collaboration):
+        active = self.active
+        if changed is active:
+            return self.document, changed.oriented(self.first)
+        return replace(
+            self.document,
+            collaborations=tuple(
+                edge for edge in self.document.collaborations if edge is not active
+            )
+            + (changed,),
+        ), changed.oriented(self.first)
+
+
+@dataclass(frozen=True)
+class RelationshipEdit(Command, DeclaredFamily, affix="RelationshipEdit"):
+    note: str = ""
+
+    def __post_init__(self):
+        if len(self.note) > 2000:
+            raise ValueError("Collaboration notes are limited to 2000 characters")
+
+    @abstractmethod
+    def apply(self, ctx: RelationshipEditContext): ...
+
+
+class RetainingRelationshipEdit(RelationshipEdit):
+    def apply(self, ctx: RelationshipEditContext):
+        peer = ctx.require_peer()
+        return ctx.publish(self.change(ctx, peer))
+
+    @abstractmethod
+    def change(self, ctx: RelationshipEditContext, peer: Thread) -> Collaboration: ...
+
+
+class AddRelationshipEdit(RetainingRelationshipEdit):
+    def change(self, ctx: RelationshipEditContext, peer: Thread) -> Collaboration:
+        if ctx.active is not None:
+            return ctx.active
+        now = time.time()
+        return Collaboration(
+            ctx.first.name, peer.name, ctx.first.created_at, peer.created_at, self.note, now, now
+        )
+
+
+class UpdateRelationshipEdit(RetainingRelationshipEdit):
+    def change(self, ctx: RelationshipEditContext, peer: Thread) -> Collaboration:
+        active = ctx.active
+        if active is None:
+            raise ValueError("Collaboration does not exist")
+        return active.updated(self.note, time.time())
+
+
+class RemoveRelationshipEdit(RelationshipEdit):
+    def apply(self, ctx: RelationshipEditContext):
+        existing = ctx.existing
+        if existing is None:
+            return ctx.document, None
+        return (
+            replace(
+                ctx.document,
+                collaborations=tuple(
+                    edge
+                    for edge in ctx.document.collaborations
+                    if edge.pair_identity != existing.pair_identity
+                ),
+            ),
+            None,
+        )
 
 
 class RelationshipStore(LockedStore[RelationshipDocument]):
@@ -357,55 +413,12 @@ class ThreadRelationships:
             # Missing historical evidence grants no contact or current-name binding.
             if source is None:
                 continue
-            if (
-                source.goal_id != goal.id
-                or source.text_digest != hashlib.sha256(goal.text.encode("utf-8")).hexdigest()
-                or source.owner_created_at != owner.created_at
-                or registry.aliases.get(source.owner_name, source.owner_name) != owner.name
-                or source.text_revision > goal.revision
-            ):
+            if not source.matches(goal, owner, registry):
                 continue
             for binding in source.bindings:
-                if binding.resolution != "resolved":
-                    diagnostics.append(
-                        GoalMentionDiagnostic(
-                            owner.name,
-                            goal.id,
-                            source.text_revision,
-                            binding.token,
-                            binding.resolution,
-                        )
-                    )
-                    continue
-                bound_name = binding.peer_name
-                name = registry.aliases.get(bound_name, bound_name) if bound_name else None
-                peer = registry.threads.get(name) if name is not None else None
-                if (
-                    peer is None
-                    or peer.created_at != binding.peer_created_at
-                    or not peer.role.executable
-                    or peer.created_at == owner.created_at
-                ):
-                    diagnostics.append(
-                        GoalMentionDiagnostic(
-                            owner.name,
-                            goal.id,
-                            source.text_revision,
-                            binding.token,
-                            "stale_incarnation",
-                        )
-                    )
-                    continue
-                contacts.append(
-                    GoalDerivedContact(
-                        owner.name,
-                        owner.created_at,
-                        peer.name,
-                        peer.created_at,
-                        goal.id,
-                        source.text_revision,
-                    )
-                )
+                projected, issues = binding.project(registry, owner, goal, source)
+                contacts.extend(projected)
+                diagnostics.extend(issues)
         return tuple(contacts), tuple(diagnostics)
 
     def goal_contacts(
@@ -466,11 +479,10 @@ class ThreadRelationships:
                 tuple(row for row in diagnostics if row.owner == thread.name),
             )
 
-    def edit(self, owner: str, action: str, peer: str, note: str = "") -> Collaboration | None:
-        if action not in {"add", "update", "remove"}:
-            raise ValueError("Expected add, update or remove")
-        if len(note) > 2000:
-            raise ValueError("Collaboration notes are limited to 2000 characters")
+    def edit(
+        self, owner: str, action: type[RelationshipEdit], peer: str, note: str = ""
+    ) -> Collaboration | None:
+        command = action(note)
         with _store_lock(self._wire_lock_path):
             first = self.registry.require(owner)
             if not first.role.executable:
@@ -482,8 +494,8 @@ class ThreadRelationships:
             def change(document: RelationshipDocument) -> RelationshipDocument:
                 nonlocal result
                 resolved = document.resolved(registry)
-                changed, result = resolved.edit(
-                    first, peer, registry.threads.get(peer), action, note
+                changed, result = command.apply(
+                    RelationshipEditContext(resolved, first, peer, registry.threads.get(peer))
                 )
                 return document if changed == document else changed
 

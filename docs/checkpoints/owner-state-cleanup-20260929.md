@@ -1,7 +1,7 @@
 # C3 owner-state cleanup
 
 Owner: Mendel. Receiving scope from Core419 C2, based on its tested 8c4afabe
-checkpoint. Source assignment: cleanup-2026-09-29.zip README/C0/C3. PR414 test
+checkpoint, now merged350b14a9. Source assignment: cleanup-2026-09-29.zip README/C0/C3. PR414 test
 cleanup is merged; C2 is independently reviewable. No new workers.
 
 ## Full acceptance tracked here
@@ -28,10 +28,12 @@ families continue while that contract is implemented.
 
 ## Authorities and exclusions
 
-Reuse parent Core418 WireValue checkpoint 11748ae3 through a normal merge for
-external error decoding: to_wire/from_wire, optional wire_schema; FieldCodec
-consults that capability. Do not mark recursive FieldCodec-on-self adapters.
-Scalar FieldRepresentation remains canonical.
+Parent replaced withdrawn Core418 checkpoint11748ae3 with4951d8d4.
+The published API is agent_comms.field_codec.WireValue, inheriting
+FieldRepresentation with abstract to_wire/from_wire and optional schema().
+The existing representation owner handles encoding; no new codec or type switch.
+No production code here depends on either checkpoint yet. Do not mark recursive
+FieldCodec-on-self adapters. Scalar FieldRepresentation remains canonical.
 
 Parent owns sealed.py and FieldCodec/PendingRequests/ReadLedger/PiRpcChannel/
 ChildProcess seals, typed_table A13 review and C4. Einstein Core417 owns C1 Pi
@@ -57,3 +59,20 @@ live-root mutation, global install or owner restart. Scratch owner Mendel:
 
 Independent obsolete selected-summary child fixture cleanup is a separate
 tests-only follow-up; no production compatibility export will be added.
+
+## Tested source checkpoint
+
+Independent families implemented: relationship commands, maintenance lifecycle,
+goal mention contact/diagnostic projection. Response publication admission,
+preparation and frozen-intent checks now consult the existing RecoverySnapshot,
+execution, attempt and obligation declarations. Stored mention keys remain the
+current format; unresolved members declare constant absent identity fields.
+
+Serial evidence: response-goal-maintenance-final.log has47 passing checks in7.95s;
+relationship-family.log has19 passing checks with3 resource-heavy concurrency
+cases deselected. These are source checks, not full C3 native acceptance.
+Remaining files and both remaining families above stay assigned here.
+
+The concrete cross-runtime restart queue blocker is a separate C2 followthrough
+PR: exact source identity proof and reviewed target runtime must be distinct.
+No live queue activation belongs to this source checkpoint.

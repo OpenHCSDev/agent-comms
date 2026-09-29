@@ -26,6 +26,7 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal, PausedGoal
 from .messages import MessageType
+from .relationships import RelationshipEdit
 from .restart_queue import cancel as cancel_restart
 from .restart_queue import enqueue as enqueue_restart
 from .restart_queue import status as restart_status
@@ -577,7 +578,7 @@ class CommsCollaborationTool(ToolRequest):
         "collaboration lists. This persistent metadata does not message, wake or fork "
         "either agent."
     )
-    action: Literal["add", "update", "remove"] = tool_field("Relationship change")
+    action: type[RelationshipEdit] = tool_field("Relationship change")
     peer: str = tool_field("Collaborating agent thread name or alias")
     note: str = tool_field("Short description of ongoing work", default="")
 
