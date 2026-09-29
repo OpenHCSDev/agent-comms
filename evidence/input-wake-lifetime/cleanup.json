@@ -40,5 +40,11 @@
     "logical_bytes": 41805457,
     "process_refs": [],
     "removed": true
+  },
+  {
+    "root": "/home/ts/wt/.wake-merged",
+    "logical_bytes": 1094,
+    "process_refs": [],
+    "removed": true
   }
 ]

@@ -67,7 +67,8 @@ RuntimeServer owns controller isolation; WireWatch owns notification/polling and
 resource release. The existing private revision observation and durable input
 ledger remain sole authorities. Boyle386 process interfaces are disjoint and
 coordinated; startup/proof/SelectedExecution are excluded. [Receipt](../evidence/input-wake-lifetime/README.md).
-Installed native acceptance is pending; parent owns paired UI/live integration.
+Installed saved-native/ACP/socket-Retry wake acceptance passed13.33s; current-main
+source guards passed. Parent owns paired UI/live integration;390 is not yet live.
 
 The dated measurements and old PR status rows below are retained as history.
 

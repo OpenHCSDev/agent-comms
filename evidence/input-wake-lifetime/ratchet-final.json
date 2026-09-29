@@ -1,7 +1,7 @@
 {
   "root": "src/agent_comms/",
-  "base_revision": "40b66442b1d6915297f551ddb09200a9c828bf39",
-  "head_revision": "cf0ebb8203a1175b21b6af85c6422db6138626f2",
+  "base_revision": "e8865563d8315c0c361eca0cec640aa5a879fa0e",
+  "head_revision": "17376df3c9f5b54800f33527d3af66c6fdd85653",
   "paths": [
     "src/agent_comms/goal_scheduler.py",
     "src/agent_comms/input_drain.py",

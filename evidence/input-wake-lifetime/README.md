@@ -46,7 +46,7 @@ in comment5889382288 before edits.
   HTTP post; fork-to-reply10.93s/test11.94s. Source unchanged, child stopped, no
   input retry or replay. Controlled provider proof, not configuredSol or painted
   UI proof. Parent owns the separate stale GUI manifest mismatch and fresh UI gate.
-- Ratchet: InputDrain547->454lines, god-class excess47->0; no increased measure;
+- Ratchet: InputDrain543->454lines, measured god-class excess43->0; no increased measure;
   foreign absence probes reduced5, no new chains/codec subclasses.
 
 Production:152lines deleted/200added. Net growth is the explicit shared watcher
@@ -57,3 +57,11 @@ Cleanup: seven owned disposable run directories removed after process-reference
 checks; source, wheel/runtime candidate, branch and receipts retained. No live
 process changes, original history writes or native package changes. Parent owns
 paired painted/live activation; this receipt does not claim PR390 installed live.
+
+## Current-main integration
+
+Merged e8865563 (including386/387/389) normally at17376df3. All six390 production
+files are unchanged from installed cf0ebb82. The combined source lifecycle/guard
+check passed7tests0.69s; ratchet still reports no increase. Existing installed
+native receipt is for cf0ebb82, current LIVE retained-fork receipt for19e5. Parent
+will exercise the combined installed/live pair; no repeated unchanged native matrix.
