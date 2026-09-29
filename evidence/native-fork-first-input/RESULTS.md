@@ -137,3 +137,31 @@ correct owners24lines maximum, no500threshold crossing/godclass growth.
 Full actual native/provider behavior is UNEXECUTED for this correction pending
 healthy host; do not treat collection/static measures as runtime acceptance.
 No OS/live/provider changes and no repeated native runs during upgrade.
+
+## Healthy host, complete current fixture: actual final acceptance
+
+Currentc9c1 test plus its REQUIRED updated tests/compaction_loopback.py executed
+on noneditable installed main9251 core, complete native4230 package, healthy
+hostNode26.10.0. PYTHONPATH=tests only; agent_comms imported from own.venv
+site-packages (not source root). Actual Pi children/localHTTP provider/installed
+RuntimeServer+CommsClient used; no mocked endpoint/nativeevents or live sessions.
+
+PASS2tests26.48s. Ordinary actualfirst answer7.1781s; fork normaljournaled
+startupfirst answer9.6850s (including ownerlaunch/attach). Physical ordinary
+parent21013/32768tokens, fork7888/32768tokens; actualreserve2048 andtriggerFalse.
+Both require distinct nativeassistant FIRST_OWNER_ANSWER, exactlyone heyBoss
+userinput, exactly2 providercalls, actuallastproviderrequest retaining physical
+parentcontext+newinput, preservedsource/history, no nativecompactionentry,
+noACPcompaction start/commit/publication, no replay after1.2s and childcleanup.
+Receipt: healthy9251-complete-fixture.log. No further code changes in this run.
+
+Parent corrected run failed AFTER actualnative answers with AttributeError
+LoopbackProvider.requests because only testcase copied. Required paired fixture
+is tests/compaction_loopback.py (3added/1deletedline HTTPbodycapture), NOT
+test_backend_native_lifecycle.py. Full repository PR includes both; copy them
+together for isolated external acceptance. Do not weakenprovidercontext proof.
+
+This closes current bounded ordinary/fork firstinput acceptance on realnative
+localprovider path. It does not certify arbitrary hugebranched journals, live
+selectedpaidprovider behavior or independentToadpaint; parent owns separate
+installedUIreceipt and deployment. No host/live changes or userattempt replay.
