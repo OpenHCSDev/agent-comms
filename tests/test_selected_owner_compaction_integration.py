@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms import agent_events as events
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -214,6 +215,11 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         info,
     ):
         admitted = []
+        observed = []
+
+        async def observe(event):
+            observed.append(event)
+
         assert (
             await maybe_compact_owner_turn(
                 registry,
@@ -225,10 +231,15 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
                 persistent,
                 input_text="Continue",
                 on_admission=admitted.append,
+                on_event=observe,
             )
             is True
         )
         assert len(admitted) == 1
+        assert isinstance(observed[0], events.CompactionStart)
+        assert isinstance(observed[-1], events.CompactionEnd) and not observed[-1].aborted
+        assert any(isinstance(event, events.CompactionSummaryProgress) for event in observed)
+
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         rows = journal.blocking_selected_summary(file)
         assert len(rows) == 1 and rows[0].state.declared_name == "linked"

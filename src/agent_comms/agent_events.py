@@ -159,6 +159,15 @@ class CompactionStart(CompactionEvent):
 
 
 @dataclass(frozen=True)
+class CompactionSummaryProgress(CompactionEvent):
+    """The selected native model is alive; no chunk completion is implied."""
+
+    @property
+    def phase(self) -> str:
+        return "progress"
+
+
+@dataclass(frozen=True)
 class CompactionEnd(CompactionEvent):
     aborted: bool = False
     summary: str | None = None
@@ -168,6 +177,31 @@ class CompactionEnd(CompactionEvent):
     @property
     def phase(self) -> str:
         return "abort" if self.aborted else "end"
+
+    @property
+    def result_label(self) -> str:
+        return "Compaction aborted" if self.aborted else "Context compacted"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionSkipped(CompactionEnd):
+    explanation: str
+
+    @property
+    def phase(self) -> str:
+        return "skip"
+
+    @property
+    def result_label(self) -> str:
+        return "Compaction skipped"
+
+    @property
+    def publication_summary(self) -> str:
+        return self.explanation
+
+    @property
+    def summary_label(self) -> str:
+        return ""
 
 
 @dataclass(frozen=True)

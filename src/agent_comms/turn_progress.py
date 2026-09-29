@@ -173,7 +173,7 @@ class TurnProgress(events.AgentEventConsumer):
             self.comms.agents.set_activity(self.thread_name, *self.compaction_resume_activity)
             self.compaction_resume_activity = None
 
-    @handles(events.CompactionEvent)
+    @handles(events.CompactionStart, events.CompactionEnd)
     async def invalidate_context(self, event: events.CompactionEvent) -> None:
         info = self.comms.agents.agent_info_of(self.thread_name)
         self.comms.agents.set_agent_info(

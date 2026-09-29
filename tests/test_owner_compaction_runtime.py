@@ -109,3 +109,18 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
     assert finished.is_set() and not turn_lock.locked()
     await asyncio.wait_for(following, 2)
     assert next_entered.is_set()
+
+
+@pytest.mark.asyncio
+async def test_unresolved_native_write_has_no_completion_observation():
+    from agent_comms.compaction_journal import CompactionJournalError, CompactionOperation
+    from agent_comms.compaction_states import UnknownOperation
+
+    operation = CompactionOperation("exact-commit", "saved-session", "{}", UnknownOperation(), None)
+
+    async def writer(summary):
+        return operation
+
+    summary = NativeSummary("selected output", None, None)
+    with pytest.raises(CompactionJournalError, match="reconcile exact ID"):
+        await summary.commit_with(writer)

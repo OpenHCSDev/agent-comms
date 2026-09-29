@@ -38,6 +38,14 @@ class OperationState(DeclaredFamily, LifecycleState, affix="Operation"):
     terminal: ClassVar[bool] = False
     committed: ClassVar[bool] = False
 
+    def require_committed(self, commit_id: str) -> None:
+        from .compaction_journal import CompactionJournalError
+
+        raise CompactionJournalError(
+            f"Native compaction operation {commit_id} is {self.declared_name}; "
+            "reconcile exact ID before any new input"
+        )
+
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[OperationState], ...]: ...
@@ -66,6 +74,9 @@ class TerminalOperation:
 
 class CommittedOperation(TerminalOperation, OperationState):
     committed = True
+
+    def require_committed(self, commit_id: str) -> None:
+        return None
 
 
 class RefusedOperation(TerminalOperation, OperationState):
