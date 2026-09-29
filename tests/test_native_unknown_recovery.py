@@ -168,7 +168,9 @@ def test_abandon_refuses_live_native_process(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        session_dir = root / "native-sessions" / store.snapshots.get(execution_id).execution.owner_lookup
+        session_dir = (
+            root / "native-sessions" / store.snapshots.get(execution_id).execution.owner_lookup
+        )
         child = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(30)", "--session-dir", str(session_dir)]
         )
@@ -342,10 +344,14 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch): 
             raise RuntimeError("settlement interrupted")
 
         with monkeypatch.context() as interrupted:
-            interrupted.setattr(store.attempts, "settle_checked", fail_settlement)
+            interrupted.setattr(type(before), "settle", fail_settlement)
             with pytest.raises(RuntimeError, match="settlement interrupted"):
-                store.attempts.fail_unknown(fence, expected_pointer_revision=before.pointer_revision)
-        assert store.snapshots.get(fence.execution_id) == before  # replay + finality rolled back too.
+                store.attempts.fail_unknown(
+                    fence, expected_pointer_revision=before.pointer_revision
+                )
+        assert (
+            store.snapshots.get(fence.execution_id) == before
+        )  # replay + finality rolled back too.
         after = store.attempts.fail_unknown(
             fence, expected_pointer_revision=before.pointer_revision
         ).value

@@ -301,3 +301,7 @@ The ratchet patch is source/tooling only. Its affected installed entrypoint is
 matrix. This census neither changes the live stack nor asserts all current open
 PRs are installed. Parent owns integration/activation. Owned disposable `.scratch`
 and test environment are retired after receipts; source/history remain in `~/wt`.
+
+## Assigned attempt ownership closure — 2026-09-29
+
+Parent reassigned remaining GoalAttemptStore/AttemptStore to Wegener (replaces prior parent ownership). Existing goal reservation/permit, schema records, attempt phases, replay proof and recovery snapshot own their behavior; stores retain actual transaction/capability custody. Whole caller/deletion batch in `refactor/attempt-journal-ownership-20260929`; [working receipt](../evidence/review384-attempt-ownership/README.md). Boyle owns SelectedExecution/coordinated_runtime; Dalton owns MessageBus/history. No live edit or duplicate mechanism. Draft until installed affected saved-state paths pass.
