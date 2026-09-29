@@ -1,0 +1,351 @@
+.F.FFFF...F                                                              [100%]
+=================================== FAILURES ===================================
+_ test_same_child_ui_reply_is_correlated_and_denied_without_controller[confirm-choice0-answer0] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-565/test_same_child_ui_reply_is_co0')
+method = 'confirm', choice = ConfirmedUiChoice(confirmed=True)
+answer = {'confirmed': True}
+
+    @pytest.mark.parametrize(
+        "method,choice,answer",
+        [
+            ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
+            ("confirm", None, {"cancelled": True}),
+            ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
+            ("select", pi.ValueUiChoice("one"), {"value": "one"}),
+            ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
+        ],
+    )
+    async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
+        tmp_path, method, choice, answer
+    ):
+        marker = tmp_path / "received.json"
+        program = stub(
+            tmp_path,
+            f"""
+    import json, sys
+    send = lambda row: print(json.dumps(row), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
+          "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
+                    "sessionId": "fixture-pi-session"}}}})
+    prompt = json.loads(sys.stdin.readline())
+    send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+    send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
+          "inputId": prompt["inputId"]}}}})
+    send({
+                json.dumps(
+                    {
+                        "type": "extension_ui_request",
+                        "id": "owned-ui-1",
+                        "method": method,
+                        "title": "Run one operation?",
+                        "message": "exact request",
+                        "options": ["one", "two"],
+                    }
+                )
+            })
+    reply = json.loads(sys.stdin.readline())
+    with open({str(marker)!r}, "w") as output: json.dump(reply, output)
+    send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
+    send({{"type": "agent_settled"}})
+    """,
+        )
+        requests = []
+    
+        async def controller(request):
+            requests.append(request)
+            return choice
+    
+        events = await asyncio.wait_for(
+            collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
+        )
+        assert marker.exists()
+>       assert json.loads(marker.read_text()) == {
+            "type": "extension_ui_response",
+            "id": "owned-ui-1",
+            **answer,
+        }
+E       AssertionError: assert {'id': 'owned..._ui_response'} == {'type': 'ext...firmed': True}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'cancelled': True}
+E         Right contains 1 more item:
+E         {'confirmed': True}
+E         Use -v to get more diff
+
+tests/test_mcp_relay.py:129: AssertionError
+_ test_same_child_ui_reply_is_correlated_and_denied_without_controller[confirm-choice2-answer2] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-565/test_same_child_ui_reply_is_co2')
+method = 'confirm', choice = ValueUiChoice(value='forged')
+answer = {'cancelled': True}
+
+    @pytest.mark.parametrize(
+        "method,choice,answer",
+        [
+            ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
+            ("confirm", None, {"cancelled": True}),
+            ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
+            ("select", pi.ValueUiChoice("one"), {"value": "one"}),
+            ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
+        ],
+    )
+    async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
+        tmp_path, method, choice, answer
+    ):
+        marker = tmp_path / "received.json"
+        program = stub(
+            tmp_path,
+            f"""
+    import json, sys
+    send = lambda row: print(json.dumps(row), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
+          "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
+                    "sessionId": "fixture-pi-session"}}}})
+    prompt = json.loads(sys.stdin.readline())
+    send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+    send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
+          "inputId": prompt["inputId"]}}}})
+    send({
+                json.dumps(
+                    {
+                        "type": "extension_ui_request",
+                        "id": "owned-ui-1",
+                        "method": method,
+                        "title": "Run one operation?",
+                        "message": "exact request",
+                        "options": ["one", "two"],
+                    }
+                )
+            })
+    reply = json.loads(sys.stdin.readline())
+    with open({str(marker)!r}, "w") as output: json.dump(reply, output)
+    send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
+    send({{"type": "agent_settled"}})
+    """,
+        )
+        requests = []
+    
+        async def controller(request):
+            requests.append(request)
+            return choice
+    
+        events = await asyncio.wait_for(
+            collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
+        )
+        assert marker.exists()
+        assert json.loads(marker.read_text()) == {
+            "type": "extension_ui_response",
+            "id": "owned-ui-1",
+            **answer,
+        }
+>       assert len(requests) == (0 if choice is None else 1)
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_mcp_relay.py:134: AssertionError
+_ test_same_child_ui_reply_is_correlated_and_denied_without_controller[select-choice3-answer3] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-565/test_same_child_ui_reply_is_co3')
+method = 'select', choice = ValueUiChoice(value='one')
+answer = {'value': 'one'}
+
+    @pytest.mark.parametrize(
+        "method,choice,answer",
+        [
+            ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
+            ("confirm", None, {"cancelled": True}),
+            ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
+            ("select", pi.ValueUiChoice("one"), {"value": "one"}),
+            ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
+        ],
+    )
+    async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
+        tmp_path, method, choice, answer
+    ):
+        marker = tmp_path / "received.json"
+        program = stub(
+            tmp_path,
+            f"""
+    import json, sys
+    send = lambda row: print(json.dumps(row), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
+          "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
+                    "sessionId": "fixture-pi-session"}}}})
+    prompt = json.loads(sys.stdin.readline())
+    send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+    send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
+          "inputId": prompt["inputId"]}}}})
+    send({
+                json.dumps(
+                    {
+                        "type": "extension_ui_request",
+                        "id": "owned-ui-1",
+                        "method": method,
+                        "title": "Run one operation?",
+                        "message": "exact request",
+                        "options": ["one", "two"],
+                    }
+                )
+            })
+    reply = json.loads(sys.stdin.readline())
+    with open({str(marker)!r}, "w") as output: json.dump(reply, output)
+    send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
+    send({{"type": "agent_settled"}})
+    """,
+        )
+        requests = []
+    
+        async def controller(request):
+            requests.append(request)
+            return choice
+    
+        events = await asyncio.wait_for(
+            collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
+        )
+        assert marker.exists()
+>       assert json.loads(marker.read_text()) == {
+            "type": "extension_ui_response",
+            "id": "owned-ui-1",
+            **answer,
+        }
+E       AssertionError: assert {'id': 'owned..._ui_response'} == {'type': 'ext...value': 'one'}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Left contains 1 more item:
+E         {'cancelled': True}
+E         Right contains 1 more item:
+E         {'value': 'one'}
+E         Use -v to get more diff
+
+tests/test_mcp_relay.py:129: AssertionError
+_ test_same_child_ui_reply_is_correlated_and_denied_without_controller[select-choice4-answer4] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-565/test_same_child_ui_reply_is_co4')
+method = 'select', choice = ValueUiChoice(value='forged')
+answer = {'cancelled': True}
+
+    @pytest.mark.parametrize(
+        "method,choice,answer",
+        [
+            ("confirm", pi.ConfirmedUiChoice(True), {"confirmed": True}),
+            ("confirm", None, {"cancelled": True}),
+            ("confirm", pi.ValueUiChoice("forged"), {"cancelled": True}),
+            ("select", pi.ValueUiChoice("one"), {"value": "one"}),
+            ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
+        ],
+    )
+    async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
+        tmp_path, method, choice, answer
+    ):
+        marker = tmp_path / "received.json"
+        program = stub(
+            tmp_path,
+            f"""
+    import json, sys
+    send = lambda row: print(json.dumps(row), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
+          "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
+                    "sessionId": "fixture-pi-session"}}}})
+    prompt = json.loads(sys.stdin.readline())
+    send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+    send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
+          "inputId": prompt["inputId"]}}}})
+    send({
+                json.dumps(
+                    {
+                        "type": "extension_ui_request",
+                        "id": "owned-ui-1",
+                        "method": method,
+                        "title": "Run one operation?",
+                        "message": "exact request",
+                        "options": ["one", "two"],
+                    }
+                )
+            })
+    reply = json.loads(sys.stdin.readline())
+    with open({str(marker)!r}, "w") as output: json.dump(reply, output)
+    send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
+    send({{"type": "agent_settled"}})
+    """,
+        )
+        requests = []
+    
+        async def controller(request):
+            requests.append(request)
+            return choice
+    
+        events = await asyncio.wait_for(
+            collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
+        )
+        assert marker.exists()
+        assert json.loads(marker.read_text()) == {
+            "type": "extension_ui_response",
+            "id": "owned-ui-1",
+            **answer,
+        }
+>       assert len(requests) == (0 if choice is None else 1)
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_mcp_relay.py:134: AssertionError
+________ test_owner_permission_only_for_bound_live_subscriber_and_turn _________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-565/test_owner_permission_only_for0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1ba8935550>
+
+    async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path, monkeypatch):
+>       agent = canonical_agent(wire(tmp_path / "wire"))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_mcp_relay.py:148: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...PYTEST_CURRENT_TEST': 'tests/test_mcp_relay.py::test_owner_permission_only_for_bound_live_subscriber_and_turn (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+______ test_private_subscriber_token_routes_only_active_prompt_permission ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-565/test_private_subscriber_token_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1ba7ddb350>
+
+    async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
+>       owner = canonical_agent(wire(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_mcp_relay.py:309: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...riber_token_routes_only_active_prompt_permission (call)', 'AGENT_COMMS_AGENT_MODELS': 'openrouter/z-ai/glm-5.3-flash'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_mcp_relay.py::test_same_child_ui_reply_is_correlated_and_denied_without_controller[confirm-choice0-answer0]
+FAILED tests/test_mcp_relay.py::test_same_child_ui_reply_is_correlated_and_denied_without_controller[confirm-choice2-answer2]
+FAILED tests/test_mcp_relay.py::test_same_child_ui_reply_is_correlated_and_denied_without_controller[select-choice3-answer3]
+FAILED tests/test_mcp_relay.py::test_same_child_ui_reply_is_correlated_and_denied_without_controller[select-choice4-answer4]
+FAILED tests/test_mcp_relay.py::test_owner_permission_only_for_bound_live_subscriber_and_turn
+FAILED tests/test_mcp_relay.py::test_private_subscriber_token_routes_only_active_prompt_permission
+6 failed, 5 passed in 1.55s

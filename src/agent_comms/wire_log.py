@@ -355,19 +355,8 @@ class WireLog:
                 if receipt.execution_id != intent.execution_id:
                     raise RelationViolationError("Response publication identity conflicts.")
                 matched = existing
-        if matched is not None:
-            expected = intent.expected_message
-            if (
-                matched.sender != intent.sender
-                or matched.target != intent.exact_target
-                or matched.body != expected.body
-                or matched.type is not expected.type
-                or matched.timestamp != expected.timestamp
-                or matched.notice != expected.notice
-                or matched.membership != expected.membership
-                or matched.message_id != intent.expected_message_id
-            ):
-                raise RelationViolationError("Response publication intent conflicts.")
+        if matched is not None and not intent.matches_publication(matched):
+            raise RelationViolationError("Response publication intent conflicts.")
         return matched, previous_sequence, metadata
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:

@@ -49,6 +49,9 @@ class NativeAttestation(ABC):
     def invalidate(self) -> NativeAttestation:
         return LostAttestation()
 
+    def admits_extension_input(self, inputs) -> bool:
+        return False
+
     def conflicts(self, data) -> bool:
         return False
 
@@ -97,6 +100,9 @@ class ObservedAttestation(NativeAttestation):
     @property
     def identity(self):
         return self.state.identity
+
+    def admits_extension_input(self, inputs) -> bool:
+        return self.identity is not None and inputs.permits_extension_ui
 
     def conflicts(self, data):
         return self.state.conflicts(data)
