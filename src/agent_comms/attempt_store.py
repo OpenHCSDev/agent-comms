@@ -53,7 +53,7 @@ from agent_comms.obligation_states import (
     PendingResponse,
     SilentResponse,
 )
-from agent_comms.owner_fence import OwnerFence, _digest
+from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
 from agent_comms.recovery_states import RecoveryCondition
@@ -84,17 +84,10 @@ class AttemptStore:
 
     def require_fence(self, fence: OwnerFence) -> tuple[RecoverySnapshot, AttemptRecord]:
         snapshot = self.snapshots.get(fence.execution_id)
-        attempt = snapshot.attempt
+        attempt = snapshot.require_current_attempt()
         if (
-            not snapshot.is_current
-            or attempt is None
-            or attempt.attempt_ordinal != fence.attempt_ordinal
-            or attempt.owner_thread != fence.owner_thread
-            or attempt.owner_generation != fence.owner_generation
-            or attempt.owner_token_digest != _digest(fence.token)
-            or self.participants.get(attempt.owner_lookup).participant_generation
-            != fence.owner_generation
-            or self.participants.get(attempt.owner_lookup).owner_thread != fence.owner_thread
+            attempt.authority != fence.authority
+            or self.participants.get(attempt.owner_lookup).owner_identity != attempt.owner_identity
         ):
             raise StaleFence("attempt fence is not current")
         if attempt.revision != fence.revision:

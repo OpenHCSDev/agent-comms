@@ -19,6 +19,14 @@ class ActiveTurn:
     admission_generation: int | None = None
     turn_generation: int | None = None
 
+    def owned_by(self, pid: int, admission_generation: int) -> bool:
+        """This turn's local process and registry admission witness agree."""
+        return (
+            self.owner_pid == pid
+            and self.admission_generation == admission_generation
+            and admission_generation > 0
+        )
+
     def current(self, admission_generation: int, turn_generation: int) -> bool:
         """Compare persisted turn witnesses with the current registry authority."""
         return (

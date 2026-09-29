@@ -1,0 +1,4 @@
+{
+  "agent_comms.claim_admission": "/home/ts/wt/comms-remaining-plan-closure-20260929/.venv/lib/python3.14/site-packages/agent_comms/claim_admission.py",
+  "agent_comms.coordination_response": "/home/ts/wt/comms-remaining-plan-closure-20260929/.venv/lib/python3.14/site-packages/agent_comms/coordination_response.py"
+}

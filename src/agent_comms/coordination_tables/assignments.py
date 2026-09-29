@@ -17,7 +17,9 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.field_codec import projected
+from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
@@ -34,6 +36,17 @@ class MessageAudience(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
+    @property
+    def source(self) -> MessageReference:
+        return MessageReference(self.wire_seq, self.message_id)
+
+    def require_engaged_binding(self) -> AssignmentBinding:
+        engagement = self.lifecycle.require_engagement()
+        return AssignmentBinding(
+            self.assignment_id, self.revision, self.recipient_lookup,
+            self.source, engagement.execution_id,
+        )
+
     assignment_id: str = dataclass_field(
         metadata={
             "wire_name": "claim_id",

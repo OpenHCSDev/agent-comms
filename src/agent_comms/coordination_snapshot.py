@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
-from agent_comms.coordination_errors import IntegrityViolationError
+from agent_comms.coordination_errors import IntegrityViolationError, StaleFence
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
@@ -57,6 +57,16 @@ class RecoverySnapshot:
     pointer_revision: int
     is_current: bool
     snapshot_version: int = COORDINATION_SNAPSHOT_VERSION
+
+    def require_attempt(self) -> AttemptRecord:
+        if self.attempt is None:
+            raise StaleFence("execution has no admitted attempt")
+        return self.attempt
+
+    def require_current_attempt(self) -> AttemptRecord:
+        if not self.is_current:
+            raise StaleFence("attempt fence is not current")
+        return self.require_attempt()
 
     def __post_init__(self) -> None:
         if self.pointer_revision < 0:

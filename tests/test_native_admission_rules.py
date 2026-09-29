@@ -52,7 +52,7 @@ async def test_durable_private_admission_names_each_changed_authority(
             prompt_digest=TextDigest(native_request_digest(admission.prompt)),
         )
         current, generation = comms.registry.live_owner_with_admission(owner.name)
-        registry = rules.RegistryAdmissionCheck(
+        registry = rules.GoalRegistryAdmissionCheck(
             actual=current,
             expected=current,
             admission=generation,
