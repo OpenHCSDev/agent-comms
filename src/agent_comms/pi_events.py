@@ -41,24 +41,11 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
-        session.now = session.loop.time()
-        if session.retry_recovery_pending and self.retry_progress:
-            session.output_started |= self.output_progress
-            session.tool_ever_started |= self.tool_progress
-            session.retry_recovery_pending = False
-            yield session.turn_state(
-                "recovered", session.retry_recovery_reason, 0, event_phase="model_wait"
-            )
-        if self.accepts_prompt:
-            session.prompt_accepted = True
-            if self.invalidates_stop:
-                session.final_assistant_stop = False
-            session.last_model_progress = session.now
-            if not session.active_tools:
-                session.phase = session.phase.model_progress()
+        async for update in session.watchdog.observe(self, session):
+            yield update
         async for event in self.apply(session):
             yield event
-        session.phase = session.phase.on(self, session.active_tools)
+        session.watchdog.transition(self, session.active_tools)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
@@ -109,8 +96,9 @@ class AgentSettled(PiEvent):
             return
         session.agent_settled_seen = True
         if not session.stats.requested:
-            session.last_model_progress = session.loop.time()
-            session.phase = phases.SettlingStatsPhase()
+            session.watchdog.tick()
+            session.watchdog.progress()
+            session.watchdog.phase = phases.SettlingStatsPhase()
             if session.persistent_session is not None:
                 await session.stats.request(session)
             else:
@@ -137,14 +125,14 @@ class AutoRetryEnd(PiEvent):
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.last_model_progress = session.now
+        session.watchdog.progress()
         if self.success:
             session.error_message = None
         else:
-            session.retry_recovery_pending = False
+            session.watchdog.retry_recovery_pending = False
             session.error_message = "Provider retry attempts were exhausted."
-            yield session.turn_state(
-                "failed", "provider_retry_exhausted", 0, event_phase="model_wait"
+            yield session.watchdog.state(
+                session, "failed", "provider_retry_exhausted", 0, event_phase="model_wait"
             )
 
 
@@ -155,14 +143,17 @@ class AutoRetryStart(PiEvent):
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.final_assistant_stop = False
-        session.prompt_accepted = True
-        session.retry_recovery_pending = True
-        session.retry_recovery_reason = "provider_auto_retry_progress"
-        session.elapsed_ms = round((session.now - session.last_model_progress) * 1000)
-        session.last_model_progress = session.now
+        session.watchdog.prompt_accepted = True
+        session.watchdog.retry_recovery_pending = True
+        session.watchdog.retry_recovery_reason = "provider_auto_retry_progress"
+        session.elapsed_ms = round(
+            (session.watchdog.now - session.watchdog.last_model_progress) * 1000
+        )
+        session.watchdog.progress()
         session.current = self.attempt
         session.maximum = self.max_attempts
-        yield session.turn_state(
+        yield session.watchdog.state(
+            session,
             "retrying",
             "provider_auto_retry",
             session.elapsed_ms,
@@ -179,9 +170,9 @@ class CompactionEnd(PiEvent):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import PROMPT_START_TIMEOUT_SECONDS, compaction_summary
+        from .backend import compaction_summary
 
-        session.last_model_progress = session.now
+        session.watchdog.progress()
         session.result = self.result
         session.completed = self.aborted is False and session.result is not None
         if (
@@ -190,12 +181,8 @@ class CompactionEnd(PiEvent):
             and session.result.usage is not None
         ):
             yield session.usage.charge(session.result.usage)
-        if (
-            session.completed
-            and (not session.initial_input_started)
-            and (session.prompt_start_deadline is not None)
-        ):
-            session.prompt_start_deadline = session.now + PROMPT_START_TIMEOUT_SECONDS
+        if session.completed:
+            session.watchdog.compacted(session.initial_input_started)
         session.usage.invalidate()
         yield session.context_info()
         session.reason = self.reason
@@ -217,18 +204,18 @@ class CompactionEnd(PiEvent):
                     "Context compaction failed before this input started; inspect ACP diagnostics."
                 )
             )
-            yield session.turn_state(
-                "failed", "prestart_compaction_failed", 0, event_phase="compaction"
+            yield session.watchdog.state(
+                session, "failed", "prestart_compaction_failed", 0, event_phase="compaction"
             )
             await session.proc.stop()
             session.finished = True
             return
         if self.will_retry:
             session.final_assistant_stop = False
-            session.retry_recovery_pending = True
-            session.retry_recovery_reason = "overflow_retry_progress"
-            yield session.turn_state(
-                "retrying", "overflow_compaction_retry", 0, event_phase="model_wait"
+            session.watchdog.retry_recovery_pending = True
+            session.watchdog.retry_recovery_reason = "overflow_retry_progress"
+            yield session.watchdog.state(
+                session, "retrying", "overflow_compaction_retry", 0, event_phase="model_wait"
             )
 
 
@@ -241,7 +228,7 @@ class CompactionProgress(PiEvent):
     usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.last_model_progress = session.now
+        session.watchdog.progress()
         session.chunk_index = self.chunk_index
         session.provider_usage = self.usage
         if session.provider_usage is not None:
@@ -274,9 +261,9 @@ class CompactionStart(PiEvent):
     reason: str | None = field(default=None, metadata={"wire_name": "reason"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.compaction_started = True
+        session.watchdog.compaction_started = True
         session.usage.compaction_recorded = False
-        session.last_model_progress = session.now
+        session.watchdog.progress()
         session.usage.invalidate()
         yield session.context_info()
         session.reason = self.reason
@@ -289,7 +276,7 @@ class CompactionStart(PiEvent):
         )
 
     def observe_abort(self, session: TurnSession) -> None:
-        session.compaction_started = True
+        session.watchdog.compaction_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -626,7 +613,7 @@ class MessageUpdate(PiEvent):
 
     def observe_abort(self, session: TurnSession) -> None:
         if self.delta_progress:
-            session.output_started = True
+            session.watchdog.output_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -693,12 +680,15 @@ class SummarizationRetryAttemptStart(PiEvent):
     max_attempts: int | None = field(default=None, metadata={"wire_name": "maxAttempts"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.compaction_started = True
-        session.elapsed_ms = round((session.now - session.last_model_progress) * 1000)
-        session.last_model_progress = session.now
+        session.watchdog.compaction_started = True
+        session.elapsed_ms = round(
+            (session.watchdog.now - session.watchdog.last_model_progress) * 1000
+        )
+        session.watchdog.progress()
         session.current = self.attempt
         session.maximum = self.max_attempts
-        yield session.turn_state(
+        yield session.watchdog.state(
+            session,
             "retrying",
             "summarization_retry",
             session.elapsed_ms,
@@ -707,7 +697,7 @@ class SummarizationRetryAttemptStart(PiEvent):
         )
 
     def observe_abort(self, session: TurnSession) -> None:
-        session.compaction_started = True
+        session.watchdog.compaction_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -716,10 +706,10 @@ class SummarizationRetryFinished(PiEvent):
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.last_model_progress = session.now
+        session.watchdog.progress()
         if self.success or self.result:
-            yield session.turn_state(
-                "recovered", "summarization_retry_succeeded", 0, event_phase="model_wait"
+            yield session.watchdog.state(
+                session, "recovered", "summarization_retry_succeeded", 0, event_phase="model_wait"
             )
 
 
@@ -729,12 +719,15 @@ class SummarizationRetryScheduled(PiEvent):
     max_attempts: int | None = field(default=None, metadata={"wire_name": "maxAttempts"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.compaction_started = True
-        session.elapsed_ms = round((session.now - session.last_model_progress) * 1000)
-        session.last_model_progress = session.now
+        session.watchdog.compaction_started = True
+        session.elapsed_ms = round(
+            (session.watchdog.now - session.watchdog.last_model_progress) * 1000
+        )
+        session.watchdog.progress()
         session.current = self.attempt
         session.maximum = self.max_attempts
-        yield session.turn_state(
+        yield session.watchdog.state(
+            session,
             "retrying",
             "summarization_retry",
             session.elapsed_ms,
@@ -743,7 +736,7 @@ class SummarizationRetryScheduled(PiEvent):
         )
 
     def observe_abort(self, session: TurnSession) -> None:
-        session.compaction_started = True
+        session.watchdog.compaction_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -762,7 +755,8 @@ class ToolExecutionEnd(PiEvent):
         session.is_ok = self.is_error is not True
         session.tool_id = self.tool_call_id or session.name
         session.active_tools.discard(session.tool_id)
-        session.last_model_progress = session.loop.time()
+        session.watchdog.tick()
+        session.watchdog.progress()
         yield events.ToolEnd(
             id=session.tool_id,
             name=session.name,
@@ -784,8 +778,8 @@ class ToolExecutionStart(PiEvent):
         session.name = self.tool_name or "tool"
         session.args = self.args or {}
         session.tool_id = self.tool_call_id or session.name
-        session.prompt_accepted = True
-        session.tool_ever_started = True
+        session.watchdog.prompt_accepted = True
+        session.watchdog.tool_ever_started = True
         session.active_tools.add(session.tool_id)
         yield events.ToolStart(
             id=session.tool_id,
@@ -801,7 +795,7 @@ class ToolExecutionStart(PiEvent):
         return True
 
     def observe_abort(self, session: TurnSession) -> None:
-        session.tool_ever_started = True
+        session.watchdog.tool_ever_started = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -821,7 +815,7 @@ class ToolExecutionUpdate(PiEvent):
         )
 
     def observe_abort(self, session: TurnSession) -> None:
-        session.tool_ever_started = True
+        session.watchdog.tool_ever_started = True
 
 
 @dataclass(frozen=True, kw_only=True)

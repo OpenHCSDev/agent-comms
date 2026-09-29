@@ -1,5 +1,6 @@
 """Opt-in local SDK fixture using the same typed native launch boundary."""
 
+import json
 import os
 import sys
 from dataclasses import replace
@@ -9,7 +10,9 @@ from agent_comms.native_package import verify_native_package
 from agent_comms.native_pi import NativePiRpcLaunch
 
 
-def install_event_host(monkeypatch, launcher, origin, *, delay_settlement=None, comms_tools=False):
+def install_event_host(
+    monkeypatch, launcher, origin, *, delay_settlement=None, comms_tools=False, native_settings=None
+):
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     verify_native_package(package)
     host = Path(__file__).with_suffix(".mjs")
@@ -29,6 +32,11 @@ def install_event_host(monkeypatch, launcher, origin, *, delay_settlement=None, 
             S1_LOCAL_ORIGIN=origin,
             S1_PYTHON=sys.executable,
         )
+        if native_settings is not None:
+            # Exercise Pi's own excursions explicitly; managed owners disable
+            # automatic retry/compaction and remain covered by CLI acceptance.
+            env["PI_CODING_AGENT_DIR"] = env.pop("AGENT_COMMS_NATIVE_CONFIG_DIR")
+            env["S1_NATIVE_SETTINGS"] = json.dumps(native_settings)
         if delay_settlement is not None:
             env["S1_DELAY_SETTLEMENT"] = str(delay_settlement)
         if comms_tools:

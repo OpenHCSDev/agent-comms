@@ -15,8 +15,9 @@ from compaction_loopback import LoopbackProvider
 
 
 class NativeBackendFixture:
-    def __init__(self, root, project, session, provider):
+    def __init__(self, root, project, session, provider, config):
         self.root, self.project, self.session, self.provider = root, project, session, provider
+        self.config = config
         self.persistent = backend.PersistentPiSession()
         self.starts = []
         self.children = []
@@ -29,8 +30,8 @@ class NativeBackendFixture:
             self.children.append(child)
         return True
 
-    async def run(self, text, *, followup=None):
-        queue = asyncio.Queue()
+    async def run(self, text, *, followup=None, queue=None, **options):
+        queue = queue if queue is not None else asyncio.Queue()
         result = []
         async with asyncio.timeout(25):
             async for event in backend.stream_agent_events(
@@ -55,6 +56,7 @@ class NativeBackendFixture:
                 persistent_session=self.persistent,
                 steering_queue=queue,
                 native_start=self.started,
+                **options,
             ):
                 result.append(event)
                 self.observed.append(event)
@@ -142,7 +144,7 @@ async def native_backend(tmp_path, monkeypatch):
         "PI_CODING_AGENT_DIR": str(config),
     }.items():
         monkeypatch.setenv(key, value)
-    owner = NativeBackendFixture(root, project, session, provider)
+    owner = NativeBackendFixture(root, project, session, provider, config)
     try:
         yield owner
     finally:
