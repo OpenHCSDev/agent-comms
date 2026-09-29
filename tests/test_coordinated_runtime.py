@@ -50,7 +50,7 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, NativeTurnResult
-from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.publisher import Publisher
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -815,9 +815,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
     assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        cursor = read_current_native_cursor(
-            comms.bus, store, wire_root_id=root_id, owner_name="beta"
-        )
+        cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
         assert cursor is not None and cursor.input_id == outcome.input_id
         assert cursor.covered_seq == 102 and cursor.injected_seq == _initial.message.seq
 
@@ -949,7 +947,7 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
         ).fetchall()
         assert len(rows) == 1 and tuple(rows[0]) == (None, None)
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="beta")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
             is None
         )
     assert (
@@ -1068,7 +1066,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="beta")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
             is None
         )
 

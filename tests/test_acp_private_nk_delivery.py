@@ -29,6 +29,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.participant_store import ParticipantStore
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
@@ -278,7 +279,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     def fail_before_sql(*args, **kwargs):
         raise OSError("synthetic SQL rename CAS outage")
 
-    monkeypatch.setattr(Coordination, "advance_owner_generation", fail_before_sql)
+    monkeypatch.setattr(ParticipantStore, "advance_generation", fail_before_sql)
     with pytest.raises(OSError, match="synthetic SQL rename CAS outage"):
         comms.threads._rename_thread("beta", "gamma")
     assert (comms.root / ".private-owner-rename.pending").is_file()
@@ -491,7 +492,11 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
         await agent._publish_private_cursor("beta", "beta")
     assert len(updates) == before
     await agent._publish_private_cursor("beta", "beta")
-    assert len(updates) == before  # Same proof; no spurious transition on unlock.
+    # PR299 invalidates the local announcement on contention so a trusted load
+    # that observed unavailable receives a fresh projection after the lock clears.
+    assert len(updates) == before + 1
+    assert updates[-1].same_observation(updates[-2])
+    assert updates[-1].revision > loaded.revision
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
     await agent._publish_private_cursor("beta", "beta")
@@ -517,7 +522,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
         comms.registry.heartbeat("beta")
         raise BlockingIOError("writer holds the observation lock")
 
-    monkeypatch.setattr("agent_comms.acp.read_current_native_cursor", replacement_during_read)
+    monkeypatch.setattr("agent_comms.acp.NativeSourceCursor.read", replacement_during_read)
     await agent._publish_private_cursor("beta", "beta")
     assert updates[-1].status == "unavailable"
     assert updates[-1].scope.admission_generation > scope.admission_generation

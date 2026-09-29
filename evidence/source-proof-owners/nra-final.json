@@ -1,0 +1,95 @@
+{
+  "timing": {
+    "parse_seconds": 0.897,
+    "analysis_seconds": 7.391,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.574,
+    "analysis_cache_status": "partial",
+    "total_seconds": 8.862
+  },
+  "supporting_raw_finding_count": 1,
+  "supporting_raw_findings": [
+    {
+      "pattern_id": 1,
+      "title": "`CursorOwner.require_live:if` mirrors `DeclaredFamily`",
+      "why": "The branch literal at /home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/cursor_owner.py:36 repeats NativeOutcome, NativePreparationResult, PiMessage from the `DeclaredFamily` semantic authority. A later class, enum member, or schema field can diverge from this hand-maintained view.",
+      "capability_gap": "derived class-family registry or polymorphic dispatch",
+      "relation_context": "branch_literal has semantic overlap ('role', 'status') with class_family `DeclaredFamily`; branch literal `CursorOwner.require_live:if` repeats members from class_family `DeclaredFamily`; derive it by iterating the authority registry or subclass family instead of maintaining a parallel presentation surface",
+      "confidence": "high",
+      "certification": "certified",
+      "capability_tags": [
+        "nominal_identity",
+        "provenance",
+        "enumeration",
+        "authoritative_mapping"
+      ],
+      "observation_tags": [
+        "class_family",
+        "manual_synchronization",
+        "projection_dict"
+      ],
+      "detector_id": "semantic_mirror_without_descent",
+      "summary": "`CursorOwner.require_live:if` mirrors 3 member(s) of `DeclaredFamily` without a descent path",
+      "evidence": [
+        {
+          "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/cursor_owner.py",
+          "line": 36,
+          "symbol": "CursorOwner.require_live:if"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/declared_family.py",
+          "line": 86,
+          "symbol": "DeclaredFamily"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/compaction_states.py",
+          "line": 303,
+          "symbol": "NativeOutcome"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/owner_compaction_prepare.py",
+          "line": 49,
+          "symbol": "NativePreparationResult"
+        },
+        {
+          "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/pi_payloads.py",
+          "line": 329,
+          "symbol": "PiMessage"
+        }
+      ],
+      "projection_evidence": {
+        "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/cursor_owner.py",
+        "line": 36,
+        "symbol": "CursorOwner.require_live:if"
+      },
+      "authority_evidence": {
+        "file_path": "/home/ts/wt/comms-source-proof-owners-20260928/src/agent_comms/declared_family.py",
+        "line": 86,
+        "symbol": "DeclaredFamily"
+      },
+      "compression_certificate": null,
+      "metrics": {
+        "registration_site_count": 3,
+        "registry_name": "CursorOwner.require_live:if",
+        "class_names": [
+          "NativeOutcome",
+          "NativePreparationResult",
+          "PiMessage"
+        ],
+        "class_key_pairs": [
+          "NativeOutcome='status'",
+          "NativePreparationResult='status'",
+          "PiMessage='role'"
+        ]
+      },
+      "stable_id": "cfb5a54aa2",
+      "evidence_ids": [
+        "fc4685c51d",
+        "f0670ae0a2",
+        "91b8046703",
+        "1e05a547d0",
+        "35f028bed8"
+      ]
+    }
+  ]
+}

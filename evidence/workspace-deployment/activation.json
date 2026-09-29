@@ -1,0 +1,23 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-workspace-20260928",
+  "packages": {
+    "agent-comms": "b77db612325ab0aee46d198b4639c949e9ade0a1",
+    "batrachian-toad": "e46f8cb5a6f8ce25e28de62846d225a4756ea26d",
+    "textual": "c9743801c98dc570f82f82e25915ecce89800f4b"
+  },
+  "previous_links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928/bin/agent-comms-nk-foreground"
+  },
+  "restarted": [
+    "OwnerRestartResult(thread='agent-comms-ux', previous_pid=2640563, pid=2694252)",
+    "OwnerRestartResult(thread='pr95-selected-pi-summary-owner', previous_pid=2640564, pid=2694253)",
+    "OwnerRestartResult(thread='nra-architecture', previous_pid=2640565, pid=2694267)",
+    "OwnerRestartResult(thread='nra-domain-mapping', previous_pid=2640569, pid=2694274)"
+  ],
+  "state_reset": false,
+  "input_replay": false
+}
