@@ -25,7 +25,10 @@ this document does not promote an activation-in-progress claim to completed.
 - Boyle365 owns goal scheduler/control and queued-input context/handoff closure.
   TurnRunner's ledger/origin/projection state and all callers move to the actual
   GoalScheduler owner; the input declaration owns its immutable acceptance context.
-  This is the remaining scheduler bite, not a claim that all S14 is finished.
+  [PR365 receipt](../evidence/s14-goal-scheduler/README.md):328 production lines
+  deleted,35 chain terms removed; actual installed socket retry/native and selected
+  handoff paths pass on current main. Ready for parent integration; not a claim
+  that all S14 is finished.
 - Wegener retains current SelectedExecution/coordinated-runtime/startup work.
   Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
   Do not create competing work in those files.
