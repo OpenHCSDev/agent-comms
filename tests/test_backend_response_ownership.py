@@ -56,7 +56,14 @@ def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(
 def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
     root = Path(__file__).parents[1] / "src/agent_comms"
     backend = ast.parse((root / "backend.py").read_text())
-    retired = {"guard_identity", "observe_progress", "settle_or_continue"}
+    retired = {
+        "guard_identity",
+        "observe_progress",
+        "settle_or_continue",
+        "read_rpc_line",
+        "turn_state",
+        "handle_timeout",
+    }
     assert not any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in retired
         for node in ast.walk(backend)
