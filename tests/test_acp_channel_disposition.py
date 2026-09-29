@@ -16,6 +16,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.tracked_turn import TrackedTurnSession
 from delivery_owner_fixture import canonical_delivery_owner, native_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -27,14 +28,14 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, first, root_id):
         alpha, alpha_calls = native_model(decision="IGNORE")
-        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", alpha)
+        monkeypatch.setattr(TrackedTurnSession, "execute", alpha)
         assert await owner.inputs.drain_inbox("alpha") == 1
         beta, beta_calls = native_model(decision="FULL")
-        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", beta)
+        monkeypatch.setattr(TrackedTurnSession, "execute", beta)
         assert await owner.inputs.drain_inbox("beta") == 1
         assert len(alpha_calls) == 1 and len(beta_calls) == 2
         second = comms.messaging.send_message("sender", "#team", "A distinct source")
-        monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", alpha)
+        monkeypatch.setattr(TrackedTurnSession, "execute", alpha)
         # Beta's prior reply is passive context, not another model request.
         assert await owner.inputs.drain_inbox("alpha") == 1
         with MutationStore(str(comms.root / "coordination.sqlite3")) as store:
@@ -75,7 +76,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     model, calls = native_model(fail_on=1)
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", model)
+    monkeypatch.setattr(TrackedTurnSession, "execute", model)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
         with pytest.raises(NativePiUnavailable, match="died"):
             await owner.inputs.drain_inbox("alpha")
@@ -119,7 +120,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
         await release.wait()
         return await model(*args, **kwargs)
 
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+    monkeypatch.setattr(TrackedTurnSession, "execute", suspended)
     async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
         turn = asyncio.create_task(owner.inputs.drain_inbox("beta"))
         try:
@@ -162,7 +163,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
         await release.wait()
         return await model(*args, **kwargs)
 
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", suspended)
+    monkeypatch.setattr(TrackedTurnSession, "execute", suspended)
     async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
         turn = asyncio.create_task(owner.inputs.drain_inbox("beta"))
         try:

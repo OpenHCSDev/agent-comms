@@ -6,33 +6,22 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import re
 import shutil
 import stat
 import sys
-from collections.abc import Awaitable, Callable, Iterator
-from contextlib import AbstractContextManager
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
-from . import pi_commands as commands
 from . import pi_events as pi
-from .child_process import BoundedRun
-from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .maintenance_barrier import MaintenanceBarrier
 from .native_entries import NativeEntry, SessionEntry
-from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
-from .native_tool_call import SelectedToolDenied
-from .pi_payloads import TextDelta
-from .pi_rpc import PiRpcChannel
-from .selected_tool_broker import NativeToolMode, OwnerToolSocket
-from .store_files import _store_lock
+from .selected_tool_broker import NativeToolMode
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
@@ -374,6 +363,143 @@ class NativePiRpcLaunch:
         )
         return cls(argv, cwd, env, saved.parent if saved else cwd, saved, package)
 
+    @classmethod
+    def tracked(
+        cls,
+        package: Path,
+        *,
+        worktree: Path,
+        session_dir: Path,
+        session_file: Path | None = None,
+        provider: str = "openrouter",
+        model: str = "z-ai/glm-5.3-flash",
+        thinking_level: str | None = None,
+        selected_thinking_level: str | None = None,
+        selected_tool_mode: NativeToolMode | None = None,
+    ) -> NativePiRpcLaunch:
+        """Verify compiled Pi bytes and commit private no-retry policy before spawning.
+
+        A backend must explicitly consume this launch, not guess Pi from a basename
+        or trust an RPC capability response from an arbitrary executable. This
+        only establishes the executable and its settings; native input, context,
+        and model-delivery proofs remain separate per-attempt observations.
+        """
+        if any(
+            not isinstance(value, str)
+            or not value.strip()
+            or value.startswith("-")
+            or any(character.isspace() for character in value)
+            for value in (provider, model)
+        ):
+            raise NativePiUnavailable("Native Pi requires an explicit provider and model")
+        if selected_thinking_level is not None and (
+            type(selected_thinking_level) is not str
+            or selected_thinking_level not in {"low", "high"}
+            or session_file is None
+        ):
+            raise NativePiUnavailable(
+                "Selected launch requires a saved session and supported level"
+            )
+        if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
+            raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
+        if selected_thinking_level is not None and selected_tool_mode is not None:
+            raise NativePiUnavailable("Selected fresh source cannot launch a file tool")
+        cli = _trusted_package(package)
+        worktree = Path(worktree).absolute()
+        session_dir = Path(session_dir).absolute()
+        _durable_private_session_dir(session_dir)
+        if not worktree.is_dir():
+            raise NativePiUnavailable("Native Pi worktree is unavailable")
+        if session_file is not None:
+            session_file = _session_location(session_dir, str(session_file))
+            from .fresh_private_session import FreshPrivateSession
+
+            FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
+        agent_dir = _private_agent_dir(session_dir)
+        tool_arguments = (
+            selected_tool_mode.launch_arguments(package)
+            if selected_tool_mode is not None
+            else ("--no-tools",)
+        )
+        argv = [
+            "node",
+            str(cli),
+            "--mode",
+            "rpc",
+            "--no-approve",
+            *tool_arguments,
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--session-dir",
+            str(session_dir),
+            "--provider",
+            provider,
+            "--model",
+            model,
+        ]
+        if selected_thinking_level is not None:
+            argv.extend(
+                ("--thinking", selected_thinking_level, "--no-prompt-templates", "--no-themes")
+            )
+        if session_file is not None:
+            argv.extend(("--session", str(session_file)))
+        if thinking_level is not None and selected_thinking_level is None:
+            argv.extend(("--thinking", thinking_level))
+        env = cls.private_environment(agent_dir, session_dir, selected_thinking_level)
+        return cls(tuple(argv), worktree, env, session_dir, session_file, package)
+
+    @staticmethod
+    def private_environment(
+        agent_dir: Path, session_dir: Path, selected_thinking_level: str | None
+    ) -> dict[str, str]:
+        if selected_thinking_level is not None:
+            # This selected-only candidate is still hard-denied before real spawn.
+            # Do not hand a credential, proxy, hooks, or ambient provider settings
+            # to even a future reviewed source CLI. The copied c1 gate needs its
+            # explicit marker; PR94 must separately review this exact env contract.
+            if os.name != "posix":
+                raise NativePiUnavailable("Selected source requires reviewed POSIX isolation")
+            import pwd
+
+            username = pwd.getpwuid(os.geteuid()).pw_name
+            env = {
+                "HOME": str(agent_dir),
+                "USER": username,
+                "LOGNAME": username,
+                "PATH": os.defpath,
+                "LANG": "C.UTF-8",
+                "TMPDIR": str(session_dir),
+                "PI_OFFLINE": "1",
+                "PI_CODING_AGENT_DIR": str(agent_dir),
+                "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
+            }
+        else:
+            env = os.environ.copy()
+            for name in (
+                "PI_AGENT_ID",
+                "PI_PARENT_ID",
+                "PI_AGENT_TAGS",
+                "AGENT_COMMS_THREAD",
+                "AGENT_COMMS_TAGS",
+                "AGENT_COMMS_SELECTED_TOOL_SOCKET",
+                "AGENT_COMMS_SELECTED_TOOL_TOKEN",
+            ):
+                env.pop(name, None)
+            env["PI_OFFLINE"] = "1"
+            # Canonical credentials/catalog remain separate from retry isolation.
+            env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
+                Path(
+                    env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
+                    or env.get("PI_CODING_AGENT_DIR")
+                    or "~/.pi/agent"
+                )
+                .expanduser()
+                .resolve()
+            )
+            env["PI_CODING_AGENT_DIR"] = str(agent_dir)
+        return env
+
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
@@ -620,428 +746,3 @@ def _fresh_selected_revision(
     fresh.verify_prewrite()
     info = fresh.path.lstat()
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
-
-
-def prepare_native_pi_rpc_launch(
-    package: Path,
-    *,
-    worktree: Path,
-    session_dir: Path,
-    session_file: Path | None = None,
-    provider: str = "openrouter",
-    model: str = "z-ai/glm-5.3-flash",
-    thinking_level: str | None = None,
-    selected_thinking_level: str | None = None,
-    selected_tool_mode: NativeToolMode | None = None,
-) -> NativePiRpcLaunch:
-    """Verify compiled Pi bytes and commit private no-retry policy before spawning.
-
-    A backend must explicitly consume this launch, not guess Pi from a basename
-    or trust an RPC capability response from an arbitrary executable. This
-    only establishes the executable and its settings; native input, context,
-    and model-delivery proofs remain separate per-attempt observations.
-    """
-    if any(
-        not isinstance(value, str)
-        or not value.strip()
-        or value.startswith("-")
-        or any(character.isspace() for character in value)
-        for value in (provider, model)
-    ):
-        raise NativePiUnavailable("Native Pi requires an explicit provider and model")
-    if selected_thinking_level is not None and (
-        type(selected_thinking_level) is not str
-        or selected_thinking_level not in {"low", "high"}
-        or session_file is None
-    ):
-        raise NativePiUnavailable("Selected launch requires a saved session and supported level")
-    if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
-        raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
-    if selected_thinking_level is not None and selected_tool_mode is not None:
-        raise NativePiUnavailable("Selected fresh source cannot launch a file tool")
-    cli = _trusted_package(package)
-    worktree = Path(worktree).absolute()
-    session_dir = Path(session_dir).absolute()
-    _durable_private_session_dir(session_dir)
-    if not worktree.is_dir():
-        raise NativePiUnavailable("Native Pi worktree is unavailable")
-    if session_file is not None:
-        session_file = _session_location(session_dir, str(session_file))
-        from .fresh_private_session import FreshPrivateSession
-
-        FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
-    agent_dir = _private_agent_dir(session_dir)
-    tool_arguments = (
-        selected_tool_mode.launch_arguments(package)
-        if selected_tool_mode is not None
-        else ("--no-tools",)
-    )
-    argv = [
-        "node",
-        str(cli),
-        "--mode",
-        "rpc",
-        "--no-approve",
-        *tool_arguments,
-        "--no-extensions",
-        "--no-skills",
-        "--no-context-files",
-        "--session-dir",
-        str(session_dir),
-        "--provider",
-        provider,
-        "--model",
-        model,
-    ]
-    if selected_thinking_level is not None:
-        argv.extend(("--thinking", selected_thinking_level, "--no-prompt-templates", "--no-themes"))
-    if session_file is not None:
-        argv.extend(("--session", str(session_file)))
-    if thinking_level is not None and selected_thinking_level is None:
-        argv.extend(("--thinking", thinking_level))
-    if selected_thinking_level is not None:
-        # This selected-only candidate is still hard-denied before real spawn.
-        # Do not hand a credential, proxy, hooks, or ambient provider settings
-        # to even a future reviewed source CLI. The copied c1 gate needs its
-        # explicit marker; PR94 must separately review this exact env contract.
-        if os.name != "posix":
-            raise NativePiUnavailable("Selected source requires reviewed POSIX isolation")
-        import pwd
-
-        username = pwd.getpwuid(os.geteuid()).pw_name
-        env = {
-            "HOME": str(agent_dir),
-            "USER": username,
-            "LOGNAME": username,
-            "PATH": os.defpath,
-            "LANG": "C.UTF-8",
-            "TMPDIR": str(session_dir),
-            "PI_OFFLINE": "1",
-            "PI_CODING_AGENT_DIR": str(agent_dir),
-            "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
-        }
-    else:
-        env = os.environ.copy()
-        for name in (
-            "PI_AGENT_ID",
-            "PI_PARENT_ID",
-            "PI_AGENT_TAGS",
-            "AGENT_COMMS_THREAD",
-            "AGENT_COMMS_TAGS",
-            "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-            "AGENT_COMMS_SELECTED_TOOL_TOKEN",
-        ):
-            env.pop(name, None)
-        env["PI_OFFLINE"] = "1"
-        # Canonical credentials/catalog remain separate from retry isolation.
-        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-            Path(
-                env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                or env.get("PI_CODING_AGENT_DIR")
-                or "~/.pi/agent"
-            )
-            .expanduser()
-            .resolve()
-        )
-        env["PI_CODING_AGENT_DIR"] = str(agent_dir)
-    return NativePiRpcLaunch(tuple(argv), worktree, env, session_dir, session_file, package)
-
-
-async def run_native_pi_turn(
-    package: Path,
-    *,
-    input_id: str,
-    prompt: str,
-    worktree: Path,
-    session_dir: Path,
-    session_file: Path | None = None,
-    provider: str = "openrouter",
-    model: str = "z-ai/glm-5.3-flash",
-    thinking_level: str | None = None,
-    timeout: float = 90.0,
-    prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
-    maintenance_root: Path | None = None,
-    fresh_selected: FreshPrivateSession | None = None,
-    selected_tool_mode: NativeToolMode | None = None,
-    observe_event: Callable[[pi.PiEvent], Awaitable[None]] | None = None,
-) -> NativeTurnResult:
-    """One tracked real Pi RPC prompt in an isolated, persisted session.
-
-    The caller owns disposition/publication and must never infer either from an
-    input ACK. No automatic replay, unauthorized tool launch, or coordinator writes.
-    """
-    if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
-        raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
-    if not prompt or not isinstance(prompt, str) or not 0 < timeout <= 300:
-        raise ValueError("A native turn requires bounded prompt and deadline")
-    selected_revision = None
-    if fresh_selected is not None:
-        from .fresh_private_session import FreshPrivateSession
-
-        if (
-            type(fresh_selected) is not FreshPrivateSession
-            or session_file != fresh_selected.path
-            or fresh_selected.selected_thinking_level not in {"low", "high"}
-            or prompt_send_boundary is None
-            or maintenance_root is None
-        ):
-            raise NativePiUnavailable("Selected first source requires enrolled locked prewrite")
-        selected_revision = _fresh_selected_revision(fresh_selected)
-        _require_reviewed_selected_source_cli()  # Must fail before real CLI spawn.
-    launch = prepare_native_pi_rpc_launch(
-        package,
-        worktree=worktree,
-        session_dir=session_dir,
-        session_file=session_file,
-        provider=provider,
-        model=model,
-        thinking_level=thinking_level,
-        selected_thinking_level=(
-            fresh_selected.selected_thinking_level if fresh_selected is not None else None
-        ),
-        selected_tool_mode=selected_tool_mode,
-    )
-    session_dir, session_file = launch.session_dir, launch.session_file
-    tool_socket: OwnerToolSocket | None = None
-    if selected_tool_mode is not None:
-        tool_socket = selected_tool_mode.socket(session_dir, os.urandom(32).hex())
-        await tool_socket.start()
-        launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(tool_socket.path)
-        launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = tool_socket.token
-    try:
-        async with BoundedRun.session(
-            launch.argv, timeout=timeout, cwd=launch.cwd, env=launch.env
-        ) as process:
-            if tool_socket is not None:
-                tool_socket.expected_pid = process.pid
-            stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
-            assert stdin is not None and stdout is not None and stderr is not None
-            stderr_task = asyncio.create_task(process.discard_stderr())
-            deadline = asyncio.get_running_loop().time() + timeout
-
-            channel = PiRpcChannel(stdout)
-
-            async def next_event() -> pi.PiEvent:
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise NativePiUnavailable("Native Pi turn deadline expired")
-                try:
-                    event = await asyncio.wait_for(channel.receive(strict=True), timeout=remaining)
-                except (UnicodeError, ValueError, TypeError) as error:
-                    raise NativePiUnavailable(
-                        "Native Pi RPC record is invalid or incomplete"
-                    ) from error
-                if event is None:
-                    raise NativePiUnavailable("Native Pi RPC record is incomplete")
-                return event
-
-            async def send(command: commands.PiCommand) -> None:
-                remaining = deadline - asyncio.get_running_loop().time()
-                if remaining <= 0:
-                    raise NativePiUnavailable("Native Pi send deadline expired")
-                payload = channel.encode(command)
-                if maintenance_root is not None:
-                    # Only the non-provider capability preflight uses this buffered
-                    # writer. The tracked prompt has a separate one-use raw writer
-                    # holding wire→bus→registry→SQL authority through os.write.
-                    try:
-                        with _store_lock(maintenance_root / "wire"):
-                            MaintenanceBarrier(
-                                maintenance_root / "registry.json"
-                            ).assert_open_unlocked()
-                            stdin.write(payload)
-                    except RelationViolationError as error:
-                        raise NativePiUnavailable(
-                            "Maintenance closed before Pi capability preflight"
-                        ) from error
-                else:
-                    stdin.write(payload)
-                await asyncio.wait_for(stdin.drain(), timeout=remaining)
-
-            try:
-                await send(commands.GetState(id="native-capability"))
-                while True:
-                    event = await next_event()
-                    if not isinstance(event, pi.Response) or event.id != "native-capability":
-                        raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
-                    data = event.data
-                    if (
-                        event.success is not True
-                        or event.command is not commands.GetState
-                        or data is None
-                        or data.native_input_proof_capability != CAPABILITY
-                        or data.session_id is None
-                        or not data.session_id
-                    ):
-                        raise NativePiUnavailable("Patched persisted Pi capability is unavailable")
-                    if data.session_file is None:
-                        raise NativePiUnavailable("Native Pi omitted its private session file")
-                    actual_file = _session_location(session_dir, data.session_file)
-                    if session_file is not None and actual_file != session_file:
-                        raise NativePiUnavailable("Native Pi rebound its session")
-                    session_id = data.session_id
-                    if fresh_selected is not None:
-                        actual_model = data.model
-                        if (
-                            session_id != fresh_selected.session_id
-                            or actual_model is None
-                            or actual_model.provider != "openrouter"
-                            or actual_model.id != "z-ai/glm-5.3-flash"
-                            or data.thinking_level != fresh_selected.selected_thinking_level
-                            or data.message_count != 0
-                            or data.pending_message_count != 0
-                            or data.is_streaming is not False
-                            or data.is_compacting is not False
-                        ):
-                            raise NativePiUnavailable(
-                                "Selected first source runtime or inode differs"
-                            )
-                        startup_revision = _fresh_selected_revision(fresh_selected, started=True)
-                        if startup_revision[:2] != selected_revision[:2]:
-                            raise NativePiUnavailable("Selected startup changed enrolled inode")
-                        selected_revision = startup_revision
-                    break
-                command = commands.Prompt(id="native-prompt", input_id=input_id, message=prompt)
-                if prompt_send_boundary is None:
-                    await send(command)
-                else:
-                    # A dedicated raw writer holds admission through every actual pipe
-                    # write, independent of owner-loop lifecycle callbacks and drain.
-                    # There is no buffered prompt remainder to flush after revocation.
-                    await send_fenced_prompt(
-                        stdin,
-                        channel.encode(command),
-                        (
-                            (lambda: prompt_send_boundary(actual_file, selected_revision))
-                            if fresh_selected is not None
-                            else (lambda: prompt_send_boundary(actual_file))
-                        ),
-                        timeout=deadline - asyncio.get_running_loop().time(),
-                    )
-                accepted = False
-                input_event: pi.InputCommitted | None = None
-                contexts: list[pi.ContextCommitted] = []
-                chunks: list[str] = []
-                final_messages: list[str] = []
-                terminal_error: str | None = None
-                while True:
-                    event = await next_event()
-                    if isinstance(event, pi.Response) and event.id == "native-prompt":
-                        if accepted or event.command is not commands.Prompt:
-                            raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
-                        if event.success is not True:
-                            raise NativePiPromptRejected(event)
-                        accepted = True
-                    elif isinstance(event, pi.InputCommitted) and event.input_id == input_id:
-                        if input_event is not None:
-                            raise NativePiUnavailable("Native Pi repeated the input commitment")
-                        input_event = event
-                    elif isinstance(event, pi.ContextCommitted) and event.input_id == input_id:
-                        contexts.append(event)
-                    elif isinstance(event, pi.MessageUpdate):
-                        delta = event.assistant_message_event
-                        if isinstance(delta, TextDelta):
-                            text = delta.delta
-                            chunks.append(text)
-                    elif isinstance(event, pi.MessageEnd):
-                        message = event.message
-                        if message is not None and message.assistant:
-                            content = message.content
-                            if message.error_message:
-                                terminal_error = str(message.error_message)
-                                continue
-                            if content is None or isinstance(content, str):
-                                raise NativePiUnavailable(
-                                    "Native Pi assistant content is malformed"
-                                )
-                            if message.stop_reason == "toolUse" and tool_socket is not None:
-                                tool_socket.announce(content)
-                                chunks.clear()  # Tool-round text is not the final response.
-                                final_messages.clear()
-                            elif message.stop_reason == "stop":
-                                if tool_socket is not None:
-                                    tool_socket.assert_complete()
-                                parts: list[str] = []
-                                for item in content:
-                                    if item.final_text_allowed:
-                                        parts.append(item.text)
-                                    else:
-                                        raise NativePiUnavailable(
-                                            "Native Pi assistant returned non-text content"
-                                        )
-                                final_messages.append("".join(parts))
-                            else:
-                                terminal_error = (
-                                    "Model output limit reached"
-                                    if message.stop_reason == "length"
-                                    else "Provider returned an unsuccessful terminal"
-                                )
-                    elif isinstance(event, pi.ToolExecutionStart):
-                        if (
-                            tool_socket is None
-                            or not accepted
-                            or input_event is None
-                            or not contexts
-                        ):
-                            raise NativePiUnavailable(
-                                "Native Pi tool preceded tracked context proof"
-                            )
-                        _verify_context(
-                            actual_file, input_id, session_id, input_event, contexts[-1]
-                        )
-                        tool_socket.tool_started(event)
-                    elif isinstance(event, pi.ToolExecutionEnd):
-                        if tool_socket is None:
-                            raise NativePiUnavailable("Native Pi tool has no owner policy")
-                        tool_socket.tool_finished(event, input_id)
-                    elif isinstance(event, pi.AgentSettled):
-                        break
-                    elif isinstance(event, pi.Response) and issubclass(
-                        event.command, commands.MutatesSession
-                    ):
-                        raise NativePiUnavailable(
-                            "Native Pi session identity changed during a turn"
-                        )
-                    if observe_event is not None:
-                        await observe_event(event)
-                if not accepted or input_event is None or not contexts:
-                    raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-                if terminal_error is not None:
-                    proof = _verify_context(
-                        actual_file, input_id, session_id, input_event, contexts[-1]
-                    )
-                    raise NativePiTerminalFailure(terminal_error, proof, provider, model)
-                if tool_socket is not None:
-                    tool_socket.assert_complete()
-                if (
-                    len(final_messages) != 1
-                    or not final_messages[0]
-                    or "".join(chunks) != final_messages[0]
-                ):
-                    raise NativePiUnavailable(
-                        "Native Pi has no unique authoritative completed response"
-                    )
-                proof = _verify_context(
-                    actual_file, input_id, session_id, input_event, contexts[-1]
-                )
-                if selected_tool_mode is not None:
-                    selected_tool_mode.finish()
-                return NativeTurnResult(
-                    final_messages[0].strip(),
-                    proof,
-                    tool_socket.selected_call_id if tool_socket is not None else None,
-                )
-            except SelectedToolDenied as error:
-                raise NativePiUnavailable(str(error)) from error
-            except PromptSendUnknown as error:
-                raise NativePiUnavailable(
-                    f"Native Pi prompt send is UNKNOWN; no retry: {error}"
-                ) from error
-            finally:
-                stderr_task.cancel()
-                await asyncio.gather(stderr_task, return_exceptions=True)
-    except (TimeoutError, OSError) as error:
-        raise NativePiUnavailable("Native Pi tracked turn failed; send may be UNKNOWN") from error
-    finally:
-        if tool_socket is not None:
-            await tool_socket.close()

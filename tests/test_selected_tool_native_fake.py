@@ -15,6 +15,7 @@ from agent_comms.selected_tool_broker import (
     consume_selected_slot,
     record_selected_terminal,
 )
+from agent_comms.tracked_turn import TrackedTurnSession
 
 INPUT_ID = "a" * 32
 
@@ -99,7 +100,7 @@ send({'type':'agent_settled'})
         else:
             record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)
 
-    operation = native.run_native_pi_turn(
+    operation = TrackedTurnSession.execute(
         tmp_path,
         input_id=INPUT_ID,
         prompt="Selected request",

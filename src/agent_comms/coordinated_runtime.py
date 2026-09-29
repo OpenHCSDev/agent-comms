@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.tracked_turn import TrackedTurnSession
+
 from .activity import ActivityState
 from .assignment_states import (
     AssignmentState,
@@ -69,7 +71,6 @@ from .native_pi import (
     _fresh_selected_revision,
     _private_session_dir,
     _trusted_package,
-    run_native_pi_turn,
 )
 from .native_prompt_binding import (
     bind_expected_prompt,
@@ -632,7 +633,7 @@ class SelectedExecution:
                 generation=self.participant.participant_generation,
                 prompt=self.prompt,
             )
-            result = await run_native_pi_turn(
+            result = await TrackedTurnSession.execute(
                 self.native_package,
                 input_id=self.input_id,
                 prompt=self.prompt,
@@ -862,7 +863,7 @@ class SelectedExecution:
                 raise IdentityConflict("selected tool mode did not bind to the owner")
 
     async def _execute(self):
-        return await run_native_pi_turn(
+        return await TrackedTurnSession.execute(
             self.native_package,
             observe_event=self.progress.dispatch,
             input_id=self.input_id,
@@ -987,7 +988,7 @@ class SelectedExecution:
     def _uncertain_failure(self, error: NativePiUnavailable):
         try:
             if self.progress is not None:
-                # run_native_pi_turn returns/raises only after its child, raw
+                # TrackedTurnSession.execute returns/raises only after its child, raw
                 # writer and tool socket have closed. Preserve UNKNOWN effects,
                 # but do not strand unrelated work behind this dead local turn.
                 with _response_boundary(self.bus) as registry:

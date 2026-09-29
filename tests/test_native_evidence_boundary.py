@@ -7,11 +7,7 @@ import pytest
 
 from agent_comms.fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import (
-    NativeContextProof,
-    NativePiUnavailable,
-    prepare_native_pi_rpc_launch,
-)
+from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.pi_payloads import TextContent, UnknownContent
 
 
@@ -77,7 +73,7 @@ def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypat
     fresh.path.write_text(json.dumps(row) + "\n")
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     with pytest.raises(NativePiUnavailable, match="first-start token"):
-        prepare_native_pi_rpc_launch(
+        NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,
             session_dir=fresh.path.parent,
@@ -96,7 +92,7 @@ def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monk
     )
     before = fresh.path.read_bytes()
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    launch = prepare_native_pi_rpc_launch(
+    launch = NativePiRpcLaunch.tracked(
         tmp_path,
         worktree=tmp_path,
         session_dir=fresh.path.parent,

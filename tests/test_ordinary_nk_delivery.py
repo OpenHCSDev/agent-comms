@@ -24,6 +24,7 @@ from agent_comms.messages import Message, MessageType
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -70,7 +71,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision=decision)
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = []
     recipient = []
 

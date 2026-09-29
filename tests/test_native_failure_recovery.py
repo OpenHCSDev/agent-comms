@@ -26,6 +26,7 @@ from agent_comms.coordination_store import (
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
@@ -58,7 +59,7 @@ def failed_owner(directory, output, exit_allowed):
             )
         raise NativePiUnavailable("pre-fix native provider failure")
 
-    runtime.run_native_pi_turn = old_failure
+    runtime.TrackedTurnSession.execute = old_failure
     try:
         asyncio.run(
             runtime.SelectedExecution(
@@ -220,7 +221,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
     fake, calls = _fake_model(fail_on=1)
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     # A historical unresolved attempt still blocks; current live failures are
     # settled separately by DurableTurn and do not produce this old shape.
     with monkeypatch.context() as historical:
@@ -249,7 +250,6 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
 def replacement_release(root):
     from dataclasses import replace
 
-    from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
     comms = Comms(root)

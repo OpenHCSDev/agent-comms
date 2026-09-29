@@ -24,6 +24,7 @@ from agent_comms.selected_tool_broker import (
     SelectedToolRequest,
     SelectedWriteArguments,
 )
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
 
 
@@ -131,7 +132,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
         kwargs_seen.append(kwargs)
         return await fake(*args, **kwargs)
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", observed)
+    monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     assert (
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=private_root
@@ -159,7 +160,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         mode.action(SelectedToolRequest("call_1", SelectedWriteArguments("notes.txt", "after")))
         return replace(result, selected_tool_call_id="call_1")
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", selected_model)
+    monkeypatch.setattr(TrackedTurnSession, "execute", selected_model)
     result = await runtime.SelectedExecution(
         root=root,
         wire_root_id=root_id,
@@ -194,7 +195,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         assert row.sent_owner_admission_generation == bound[0][0].owner_admission_generation
         return result
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", observed)
+    monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     result = await runtime.SelectedExecution(
         root=root,
         wire_root_id=root_id,
@@ -255,7 +256,7 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         kwargs_seen.append(kwargs)
         return await fake(*args, **kwargs)
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", observed)
+    monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     await runtime.SelectedExecution(
         root=root,
         wire_root_id=root_id,
@@ -291,7 +292,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
                 edit.commit()
         return result
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", failed)
+    monkeypatch.setattr(TrackedTurnSession, "execute", failed)
     with pytest.raises((NativePiUnavailable, StaleFence, IdentityConflict, RelationViolationError)):
         await runtime.SelectedExecution(
             root=root,

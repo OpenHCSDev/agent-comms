@@ -18,7 +18,9 @@ from test_coordinated_runtime import _root
 
 
 @pytest.mark.asyncio
-async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path, tmp_path_factory) -> None:
+async def test_private_native_raw_prompt_refused_after_pause_ack(
+    tmp_path: Path, tmp_path_factory
+) -> None:
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     received = tmp_path / "received.jsonl"
     child_pid = tmp_path / "child-pid"
@@ -56,12 +58,16 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path,
         env["PYTHONPATH"] = os.pathsep.join((str(repo / "src"), str(repo / "tests")))
         return native_pi.NativePiRpcLaunch(
             (sys.executable, str(program), str(file)),
-            worktree, env, session_dir, None, tmp_path,
+            worktree,
+            env,
+            session_dir,
+            None,
+            tmp_path,
         )
 
     with (
         patch.object(runtime, "_trusted_package", lambda _package: None),
-        patch.object(native_pi, "prepare_native_pi_rpc_launch", launch),
+        patch.object(native_pi.NativePiRpcLaunch, "tracked", launch),
         pytest.raises(RelationViolationError, match="Maintenance"),
     ):
         await runtime.SelectedExecution(
@@ -73,6 +79,9 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(tmp_path: Path,
     with pytest.raises(ProcessLookupError):
         ProcessIdentity.capture(int(child_pid.read_text()))
     with MutationStore(str(root / "coordination.sqlite3")) as store:
-        assert store._connection.execute(
-            f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
-        ).fetchone()[0] == 1
+        assert (
+            store._connection.execute(
+                f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name}"
+            ).fetchone()[0]
+            == 1
+        )

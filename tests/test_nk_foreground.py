@@ -27,6 +27,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nk_foreground import reserve_foreground_owner
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_cohort_foreground import _configured_thread, _fake_package
 from test_coordinated_runtime import _fake_model
 
@@ -73,7 +74,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
     with (
         patch.object(foreground, "_trusted_package", side_effect=_fake_package),
         patch.object(runtime, "_trusted_package", side_effect=_fake_package),
-        patch.object(runtime, "run_native_pi_turn", model),
+        patch.object(TrackedTurnSession, "execute", model),
     ):
         try:
             owner = reserve_foreground_owner(
@@ -219,7 +220,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
         _accept(root, root_id, comms, message)
         failing, attempts = _fake_model(fail_on=1)
         with (
-            patch("agent_comms.coordinated_runtime.run_native_pi_turn", failing),
+            patch("agent_comms.coordinated_runtime.TrackedTurnSession.execute", failing),
             pytest.raises(RuntimeError),
         ):
             asyncio.run(owner.run_go("GO 0"))
@@ -262,7 +263,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", _fake_package)
-    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
     commands: list[int] = []
 
     def explicit_go(timeout: int) -> str:
