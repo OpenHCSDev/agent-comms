@@ -83,7 +83,7 @@ class ProgressWatchdog:
         if event.accepts_prompt:
             self.prompt_accepted = True
             if event.invalidates_stop:
-                session.final_assistant_stop = False
+                session.output.final_assistant_stop = False
             self.progress()
             if not session.active_tools:
                 self.phase = self.phase.model_progress()
@@ -178,17 +178,17 @@ class ProgressWatchdog:
         if session.require_input_id and (not session.native_capability_confirmed):
             elapsed_ms = round((self.clock() - self.launch_started_at) * 1000)
             wait_ms = round((self.clock() - self.preflight_wait_started_at) * 1000)
-            session.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
-            session.diagnostic = {
+            session.output.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
+            session.output.diagnostic = {
                 "elapsed_ms": elapsed_ms,
                 "wait_ms": wait_ms,
                 "spawn_ms": self.spawn_ms,
                 "budget_ms": round(self.preflight_budget * 1000),
             }
             if self.session_bytes is not None:
-                session.diagnostic["session_bytes"] = self.session_bytes
+                session.output.diagnostic["session_bytes"] = self.session_bytes
             session_size = self.session_bytes if self.session_bytes is not None else "unknown"
-            session.record_failure(
+            session.output.record_failure(
                 failures.InputIdUnavailable(
                     "Pi native input-ID capability preflight timed out "
                     f"(phase=await_get_state, elapsed_ms={elapsed_ms}, "
@@ -204,7 +204,7 @@ class ProgressWatchdog:
             and (not session.initial_input_started)
             and (not self.phase.pauses_input_clock)
         ):
-            session.record_failure(
+            session.output.record_failure(
                 failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
             )
             await session.proc.stop()
@@ -225,7 +225,7 @@ class ProgressWatchdog:
             yield events.InputStarted(id=input_id)
         failed_elapsed_ms = round((self.clock() - self.last_model_progress) * 1000)
         yield self.state(session, "failed", reason_code, failed_elapsed_ms, event_phase="shutdown")
-        session.record_failure(
+        session.output.record_failure(
             failures.ModelStalled(
                 f"Model produced no RPC progress for {self.model_wait_timeout:g} seconds."
                 if self.prompt_accepted
