@@ -36,14 +36,37 @@ async def run() -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.load_session(thread.worktree, name)
-        if prompt := os.environ.get("PI_PROMPT"):
-            initial = asyncio.create_task(agent.prompt(name, [{"type": "text", "text": prompt}]))
+        if key := os.environ.pop("AGENT_COMMS_STARTUP_INPUT_KEY", None):
+            initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()
     finally:
         if initial is not None:
             initial.cancel()
             await asyncio.gather(initial, return_exceptions=True)
         await agent.shutdown()
+
+
+async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
+    """Consume this launch's explicitly admitted input, never scan for retries."""
+    from .store_files import _store_lock
+
+    async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
+        with _store_lock(agent._comms._wire_lock_path):
+            snapshot = agent._comms.registry.snapshot()
+            owner = snapshot.threads[name]
+            row = agent.inputs.dispositions.read().rows[key]
+            if not row.queued_for(
+                owner.incarnation, snapshot.admission_generations[name], row.source_text
+            ):
+                raise ValueError("Startup input no longer belongs to this owner admission")
+        await agent.inputs.emit_input_disposition(name, row)
+        await agent.turns.run_agent_turn(
+            name,
+            name,
+            row.source_text,
+            original_keys=(key,),
+            original_owner_input=True,
+        )
 
 
 def main() -> int:
