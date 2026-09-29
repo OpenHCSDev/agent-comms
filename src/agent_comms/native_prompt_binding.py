@@ -13,12 +13,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_store import IdentityConflict, MutationStore
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
@@ -28,11 +29,11 @@ from .typed_table import Column, TypedRow, TypedTable
 _BINDING_PATH = "native_prompt_bindings.sqlite3"
 
 
-def binding_store_path(store: MutationStore) -> Path:
+def binding_store_path(store: Coordination) -> Path:
     """Sidecar store beside the private coordination database."""
-    if type(store) is not MutationStore:
+    if type(store) is not Coordination:
         raise TypeError("prompt binding requires the actual coordinator store")
-    return (store.path.parent / _BINDING_PATH).absolute()
+    return (store.session.path.parent / _BINDING_PATH).absolute()
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,18 +87,18 @@ class _BindingRoot(TypedRow):
     wire_root_id: str
 
 
-def install_prompt_binding_schema(store: MutationStore) -> None:
+def install_prompt_binding_schema(store: Coordination) -> None:
     """Explicit fresh-root install; ordinary callers may rely on _ensure."""
     _ensure_binding_schema(store)
 
 
-def _ensure_binding_schema(store: MutationStore) -> None:
+def _ensure_binding_schema(store: Coordination) -> None:
     """Serialized snapshot installation; never repair an uncertain commit."""
     create_sidecar_file(binding_store_path(store), PromptBinding)
 
 
 def bind_expected_prompt(
-    store: MutationStore,
+    store: Coordination,
     *,
     input_id: str,
     stage: str,
@@ -122,7 +123,7 @@ def bind_expected_prompt(
     the bare prompt bytes.
     """
     if (
-        type(store) is not MutationStore
+        type(store) is not Coordination
         or type(input_id) is not str
         or _INPUT_ID.fullmatch(input_id) is None
         or stage not in {"triage", "full"}
@@ -143,7 +144,7 @@ def bind_expected_prompt(
     # hold SQL generation writers through insertion. Registry lifecycle writers
     # are excluded separately by the final native-send boundary, not this SQL lock.
     _ensure_binding_schema(store)
-    with store._transaction() as db:
+    with store.session.transaction() as db:
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
         _require_owner(store, assignment.recipient_lookup, owner, generation)
@@ -178,7 +179,7 @@ def bind_expected_prompt(
                 source_seq=assignment.wire_seq,
                 message_id=assignment.message_id,
                 expected_prompt_digest=digest,
-                bound_at_ms=store._now(0),
+                bound_at_ms=store.session.now(0),
             )
             inserted = expected.insert(sidecar)
             if inserted.rowcount != 1 or PromptBinding.one(sidecar, input_id=input_id) != expected:
@@ -186,11 +187,11 @@ def bind_expected_prompt(
     return digest
 
 
-def _binding_wire_root(store: MutationStore, assignment: WakeAssignment) -> str:
+def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
     """Resolve the trusted wire root for a sealed claim from the cohort receipt."""
-    with store._read_transaction():
+    with store.session.read():
         rows = _BindingRoot.read(
-            store._connection.execute(
+            store.session._connection.execute(
                 "SELECT r.wire_root_id FROM claim_batch_members m "
                 "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
                 "AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 "
@@ -204,10 +205,10 @@ def _binding_wire_root(store: MutationStore, assignment: WakeAssignment) -> str:
 
 
 def read_expected_prompt_binding(
-    store: MutationStore, input_id: str, *, blocking: bool = True
+    store: Coordination, input_id: str, *, blocking: bool = True
 ) -> PromptBinding | None:
     """Return the immutable binding, or None when none was durably written."""
-    if type(store) is not MutationStore or type(input_id) is not str:
+    if type(store) is not Coordination or type(input_id) is not str:
         raise ValueError("prompt binding lookup requires the coordinator store and input ID")
     path = binding_store_path(store)
     if not path.exists() and not path.is_symlink():

@@ -15,11 +15,13 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_initial_cohort
-from agent_comms.coordination_store import MutationStore, RecoveryBlocked, RecoveryMonitorCapability
+from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
@@ -50,8 +52,8 @@ def unknown_owner(directory, admitted, output, exit_allowed):
         pass
     else:
         raise AssertionError("fixture must leave an unresolved native attempt")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        row = store.session._connection.execute(
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
@@ -91,7 +93,7 @@ def leave(process, exit_allowed):
 
 def input_evidence(store):
     return {
-        table: [tuple(row) for row in store._connection.execute("SELECT * FROM " + table)]
+        table: [tuple(row) for row in store.session._connection.execute("SELECT * FROM " + table)]
         for table in (NativeRuntimeInput.declared_name, CurrentNativeCursor.declared_name)
     }
 
@@ -103,7 +105,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     process, exit_allowed, root, root_id, execution_id, input_id = released_unknown
     leave(process, exit_allowed)
     before_bus = (root / "bus.jsonl").read_bytes()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         before = input_evidence(store)
         result = RecoveryMonitorCapability.abandon_released_native_attempt(
             store, execution_id
@@ -131,7 +133,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
         new_owner=True,
     )
     source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
@@ -141,11 +143,11 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == 1 and calls[0][0] != input_id
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        assert not store.snapshot(execution_id).can_retry
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assert not store.snapshots.get(execution_id).can_retry
         assert (
             tuple(
-                store._connection.execute(
+                store.session._connection.execute(
                     f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?",
                     (input_id,),
                 ).fetchone()
@@ -156,24 +158,24 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
 
 def test_abandon_refuses_released_but_live_owner(released_unknown):
     _process, _exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
             RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.snapshot(execution_id).is_current
+        assert store.snapshots.get(execution_id).is_current
 
 
 def test_abandon_refuses_live_native_process(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        session_dir = root / "native-sessions" / store.snapshot(execution_id).execution.owner_lookup
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        session_dir = root / "native-sessions" / store.snapshots.get(execution_id).execution.owner_lookup
         child = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(30)", "--session-dir", str(session_dir)]
         )
         try:
             with pytest.raises(RecoveryBlocked, match="subprocess is still running"):
                 RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-            assert store.snapshot(execution_id).is_current
+            assert store.snapshots.get(execution_id).is_current
         finally:
             child.terminate()
             child.wait(timeout=5)
@@ -198,18 +200,18 @@ def test_abandon_requires_real_release(released_unknown, damage):
     else:
         receipts["beta"]["after"] = receipts["beta"]["before"]
     path.write_text(json.dumps(receipts))
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.snapshot(execution_id).is_current
+        assert store.snapshots.get(execution_id).is_current
 
 
 def test_missing_admission_cannot_borrow_a_live_successor_release(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         if (
-            store._connection.execute(
+            store.session._connection.execute(
                 f"SELECT sent_owner_admission_generation FROM {NativeRuntimeInput.declared_name}"
             ).fetchone()[0]
             is not None
@@ -225,7 +227,7 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
         )
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
             RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.snapshot(execution_id).is_current
+        assert store.snapshots.get(execution_id).is_current
 
 
 @pytest.mark.asyncio
@@ -274,13 +276,13 @@ print(json.dumps({"type":"response", "id":request["id"],
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        old = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        old = store.session._connection.execute(
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         execution_id, old_id = old["execution_id"], old["input_id"]
         assert old["session_id"] is old["sent_owner_admission_generation"] is None
-        snapshot = store.snapshot(execution_id)
+        snapshot = store.snapshots.get(execution_id)
         assert type(snapshot.execution.lifecycle) is FailedExecution
         assert not snapshot.is_current and not snapshot.can_retry
         assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
@@ -289,7 +291,7 @@ print(json.dumps({"type":"response", "id":request["id"],
     source = comms.messaging.send_initial_cohort(
         "sender", "beta", "Independent after local failure"
     )
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -314,27 +316,27 @@ async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatc
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        row = store.session._connection.execute(
             f"SELECT execution_id FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
-        assert store.snapshot(row[0]).is_current
+        assert store.snapshots.get(row[0]).is_current
 
 
 def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch):  # noqa: F811
-    from agent_comms.coordination_store import StaleFence, StaleRevision
+    from agent_comms.coordination_errors import StaleFence, StaleRevision
     from test_coordination_store import ready, started
 
     with ready(tmp_path / "store.sqlite3") as store:
         _snapshot, fence = started(store)
-        before = store.snapshot(fence.execution_id)
+        before = store.snapshots.get(fence.execution_id)
         for stale_fence, revision, error in (
             (fence, before.pointer_revision + 1, StaleRevision),
             (replace(fence, token="wrong"), before.pointer_revision, StaleFence),
         ):
             with pytest.raises(error):
-                store.fail_unknown_attempt(stale_fence, expected_pointer_revision=revision)
-            assert store.snapshot(fence.execution_id) == before
+                store.attempts.fail_unknown(stale_fence, expected_pointer_revision=revision)
+            assert store.snapshots.get(fence.execution_id) == before
 
         def fail_settlement(*_args, **_kwargs):
             raise RuntimeError("settlement interrupted")
@@ -342,9 +344,9 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path, monkeypatch): 
         with monkeypatch.context() as interrupted:
             interrupted.setattr(store, "_settle", fail_settlement)
             with pytest.raises(RuntimeError, match="settlement interrupted"):
-                store.fail_unknown_attempt(fence, expected_pointer_revision=before.pointer_revision)
-        assert store.snapshot(fence.execution_id) == before  # replay + finality rolled back too.
-        after = store.fail_unknown_attempt(
+                store.attempts.fail_unknown(fence, expected_pointer_revision=before.pointer_revision)
+        assert store.snapshots.get(fence.execution_id) == before  # replay + finality rolled back too.
+        after = store.attempts.fail_unknown(
             fence, expected_pointer_revision=before.pointer_revision
         ).value
         assert not after.is_current and not after.can_retry

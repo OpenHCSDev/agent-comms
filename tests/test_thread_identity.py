@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -13,7 +14,6 @@ from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
 from agent_comms.thread_identity import GenerationCounter, ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import IdleThreadStatus
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
@@ -147,19 +147,19 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
 
 
 def test_coordination_assignment_generation_is_independent_of_registry_process(tmp_path):
-    from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordinator import Coordination
 
     registry = registry_with_owner(tmp_path)
     initial = registry.snapshot().owner_identity("owner")
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
-        participant = store.register_participant("lookup", "Owner", "owner", committed=True).value
-        advanced = store.advance_owner_generation(
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
+        participant = store.participants.register("lookup", "Owner", "owner", committed=True).value
+        advanced = store.participants.advance_generation(
             "lookup", "owner", expected_generation=participant.participant_generation
         ).value
         assert advanced.participant_generation == participant.participant_generation + 1
         assert registry.snapshot().owner_identity("owner") == initial
         registry.register(registry.require("owner"), new_owner=True)
-        assert store.participant("lookup").participant_generation == advanced.participant_generation
+        assert store.participants.get("lookup").participant_generation == advanced.participant_generation
 
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):

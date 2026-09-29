@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
+from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import SettlingAttempt, SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
@@ -104,7 +105,7 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
 
 @pytest.mark.asyncio
 async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_schema(tmp_path):
-    from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordinator import Coordination
     from agent_comms.execution_states import UnstartedExecution
 
     class PausedExecution(UnstartedExecution):
@@ -113,25 +114,25 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
             return (PendingExecution,)
 
     try:
-        with MutationStore(tmp_path / "coordination.sqlite3") as store:
-            store.register_participant("owner", "owner", "owner", committed=True)
-            store._connection.execute(
+        with Coordination(tmp_path / "coordination.sqlite3") as store:
+            store.participants.register("owner", "owner", "owner", committed=True)
+            store.session._connection.execute(
 
                     "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,owner_loo"
                     "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
                     "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
 
             )
-            record = store.snapshot("e").execution
+            record = store.snapshots.get("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
             assert FieldCodec.decode(type(record), FieldCodec.encode(record)) == record
-            store._connection.execute(
+            store.session._connection.execute(
 
                     "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
                     "ion=2 WHERE execution_id='e'"
 
             )
-            assert isinstance(store.snapshot("e").execution.lifecycle, PendingExecution)
+            assert isinstance(store.snapshots.get("e").execution.lifecycle, PendingExecution)
             projection = ProjectedExecution(
                 type(record.lifecycle), record.origin, False, None, False, None
             )
@@ -149,15 +150,16 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
 
 @pytest.mark.asyncio
 async def test_durable_turn_records_native_phases_before_completion(tmp_path):
-    from agent_comms.coordination_store import MutationStore, prepare_fence_token
+    from agent_comms.coordinator import Coordination
     from agent_comms.durable_turn import DurableTurn
+    from agent_comms.owner_fence import prepare_fence_token
     from agent_comms.pi_events import PiEvent
 
-    with MutationStore(tmp_path / "coordination.sqlite3") as store:
-        store.register_participant("owner", "owner", "owner", committed=True)
-        created = store.create_execution("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
-        pending = store.mark_pending("e", expected_revision=created.execution.revision).value
-        started = store.start_attempt(
+    with Coordination(tmp_path / "coordination.sqlite3") as store:
+        store.participants.register("owner", "owner", "owner", committed=True)
+        created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
+        pending = store.executions.mark_pending("e", expected_revision=created.execution.revision).value
+        started = store.attempts.start(AttemptStart(
             "e",
             1,
             "owner",
@@ -165,8 +167,8 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
             prepare_fence_token(),
             expected_execution_revision=pending.execution.revision,
             expected_pointer_revision=pending.pointer_revision,
-        ).value
-        progress = DurableTurn(store, started.fence, started.snapshot.pointer_revision, "input")
+        )).value
+        progress = DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, "input")
         samples = [
             (
                 {"type": "response", "id": "native-prompt", "command": "prompt", "success": True},
@@ -182,17 +184,17 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
         ]
         for raw, expected in samples:
             await progress.dispatch(PiEvent.from_wire(raw))
-            attempt = store.snapshot("e").attempt
+            attempt = store.snapshots.get("e").attempt
             assert attempt.lifecycle.declared_name == expected
             assert not attempt.lifecycle.backend_done and not attempt.lifecycle.process_dead
         final = progress.finish()
         assert final.revision > started.fence.revision
-        assert store.snapshot("e").attempt.lifecycle.backend_done
-        assert isinstance(store.snapshot("e").attempt.lifecycle, SettlingAttempt)
-        store.settle_nonpublication(
+        assert store.snapshots.get("e").attempt.lifecycle.backend_done
+        assert isinstance(store.snapshots.get("e").attempt.lifecycle, SettlingAttempt)
+        store.attempts.settle_nonpublication(
             final, expected_pointer_revision=started.snapshot.pointer_revision, success=True
         )
-        assert store.snapshot("e").execution.lifecycle.completed
+        assert store.snapshots.get("e").execution.lifecycle.completed
 
 
 async def _through_socket(projection):
@@ -222,7 +224,7 @@ async def _through_socket(projection):
 
 @pytest.mark.asyncio
 async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
-    from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordinator import Coordination
 
     class ReviewedResponse(ResponseState):
         @classmethod
@@ -230,9 +232,9 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             return (SilentResponse,)
 
     try:
-        with MutationStore(tmp_path / "coordination.sqlite3") as store:
-            store.register_participant("p", "owner", "owner", committed=True)
-            with store._transaction() as db:
+        with Coordination(tmp_path / "coordination.sqlite3") as store:
+            store.participants.register("p", "owner", "owner", committed=True)
+            with store.session.transaction() as db:
                 db.execute(
 
                         "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
@@ -258,7 +260,7 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
 
                 )
                 db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
-            obligation = store.snapshot("e").obligation
+            obligation = store.snapshots.get("e").obligation
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
             projection = AvailableRecoveryProjection(
@@ -277,27 +279,27 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             )
             result = await _through_socket(projection)
             assert result["current"]["publication"] == "reviewed"
-            store._connection.execute(
+            store.session._connection.execute(
 
                     "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
                     "RE execution_id='e'"
 
             )
-            assert isinstance(store.snapshot("e").obligation.lifecycle, SilentResponse)
+            assert isinstance(store.snapshots.get("e").obligation.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")
 
 
 def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
     from agent_comms.assignment_states import FailedAssignment
-    from agent_comms.coordination_store import MutationStore
+    from agent_comms.coordinator import Coordination
 
     class AwaitingAssignment(FullPendingAssignment):
         pass
 
     try:
-        with MutationStore(tmp_path / "coordination.sqlite3") as store:
-            store.register_participant("owner", "owner", "owner", committed=True)
+        with Coordination(tmp_path / "coordination.sqlite3") as store:
+            store.participants.register("owner", "owner", "owner", committed=True)
             assignment = WakeAssignment(
                 assignment_id="assignment",
                 recipient="owner",
@@ -309,17 +311,17 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 accepted_at_ms=0,
                 updated_at_ms=0,
             )
-            with store._transaction() as db:
+            with store.session.transaction() as db:
                 assignment.insert(db)
-            assert store.assignment("assignment") == assignment
-            assert store.assignment("assignment").wake_mode == "full"
-            settled = store.transition_preengagement(
+            assert store.assignments.get("assignment") == assignment
+            assert store.assignments.get("assignment").wake_mode == "full"
+            settled = store.assignments.transition_preengagement(
                 "assignment",
                 FailedAssignment,
                 expected_revision=1,
             ).value
             assert settled.lifecycle.failed and settled.lifecycle.mode == assignment.lifecycle.mode
-            assert store.assignment("assignment") == settled
+            assert store.assignments.get("assignment") == settled
     finally:
         AssignmentState.__registry__.pop("awaiting")
 

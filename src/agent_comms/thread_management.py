@@ -175,8 +175,9 @@ class ThreadManagement:
         Repeating this operation repairs an interrupted coordinator registration
         without replacing existing owners or importing historical delivery state.
         """
+        from agent_comms.coordinator import Coordination
+
         from .bus_publication import stable_thread_lookup
-        from .coordination_store import MutationStore
 
         selected = tuple(dict.fromkeys(names))
         with _store_lock(self._wire_lock_path):
@@ -184,10 +185,10 @@ class ThreadManagement:
             with _store_lock(self.registry.store.path):
                 private = self.registry.store.private_guard_unlocked() is not None
             if private:
-                with MutationStore(str(self.root / "coordination.sqlite3")) as store:
+                with Coordination(str(self.root / "coordination.sqlite3")) as store:
                     for name in selected:
                         thread = self.registry.require(name)
-                        store.register_participant(
+                        store.participants.register(
                             stable_thread_lookup(thread.created_at),
                             thread.name,
                             thread.name,
@@ -398,8 +399,10 @@ class ThreadManagement:
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
 
+        from agent_comms.coordination_errors import IdentityConflict
+        from agent_comms.coordinator import Coordination
+
         from .bus_publication import stable_thread_lookup
-        from .coordination_store import IdentityConflict, MutationStore
 
         before = self.registry.require(name)
         private_meta = self.root / "bus_meta.json"
@@ -433,9 +436,9 @@ class ThreadManagement:
             replace(before, name=new_name)
             if len(new_name) > MAX_IDENTIFIER_CHARS:
                 raise ValueError("Private coordinator owner name exceeds its bound.")
-            with MutationStore(str(coordinator)) as store:
+            with Coordination(str(coordinator)) as store:
                 try:
-                    person = store.participant(stable_thread_lookup(before.created_at))
+                    person = store.participants.get(stable_thread_lookup(before.created_at))
                 except IdentityConflict as error:
                     if str(error) != "participant aggregate is not registered":
                         raise
@@ -465,7 +468,7 @@ class ThreadManagement:
                         fsync_parent=True,
                     )
                     intent_created = True
-                    store.advance_owner_generation(
+                    store.participants.advance_generation(
                         person.lookup, new_name, expected_generation=person.participant_generation
                     )
                     # An old selected attempt stays fenced in its old generation;
@@ -481,7 +484,7 @@ class ThreadManagement:
                         try:
                             actual = self.registry.require(before.name).name
                             if actual == before.name:
-                                store.advance_owner_generation(
+                                store.participants.advance_generation(
                                     person.lookup,
                                     before.name,
                                     expected_generation=person.participant_generation + 1,

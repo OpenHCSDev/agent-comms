@@ -17,7 +17,7 @@ from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.messages import Message, MessageType
@@ -63,9 +63,9 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     )
     comms.threads.register(alpha)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        store.register_participant(
+        store.participants.register(
             stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True
         )
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
@@ -103,8 +103,8 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     expected_n = 1 if target == "beta" else 2
     assert len(initial.audience.recipients) == expected_n
     lookup = stable_thread_lookup(recipient[0].created_at)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        db = store._connection
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        db = store.session._connection
         assert (
             db.execute("SELECT COUNT(*) FROM cohort_delivery_receipts").fetchone()[0] == expected_n
         )

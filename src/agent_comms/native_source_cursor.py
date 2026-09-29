@@ -12,10 +12,12 @@ from __future__ import annotations
 import os
 import sqlite3
 
+from agent_comms.coordination_errors import IdentityConflict, StaleFence
+from agent_comms.coordinator import Coordination
+
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_response import _response_boundary
-from .coordination_store import IdentityConflict, MutationStore, StaleFence
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
@@ -38,7 +40,7 @@ def _source_witness(bus: MessageBus) -> PrefixWitness:
 
 def _bounded_coverage_pages(
     bus: MessageBus,
-    store: MutationStore,
+    store: Coordination,
     root_id: str,
     lookup: str,
     *,
@@ -107,7 +109,7 @@ def _bounded_coverage_pages(
 
 
 def _prefix_evidence(
-    store: MutationStore,
+    store: Coordination,
     root_id: str,
     lookup: str,
     coverage: ProvenSourceCoverage,
@@ -160,7 +162,7 @@ def _same_generation_prefix(
 
 
 def _last_source_proof(
-    store: MutationStore, root_id: str, lookup: str, source_seq: int
+    store: Coordination, root_id: str, lookup: str, source_seq: int
 ) -> HistoricalNativeInput | None:
     if source_seq == 0:
         return None
@@ -175,7 +177,7 @@ def _last_source_proof(
 
 def advance_current_native_cursor(
     bus: MessageBus,
-    store: MutationStore,
+    store: Coordination,
     *,
     wire_root_id: str,
     owner: Thread,
@@ -193,7 +195,7 @@ def advance_current_native_cursor(
     """
     if (
         type(bus) is not MessageBus
-        or type(store) is not MutationStore
+        or type(store) is not Coordination
         or type(owner) is not Thread
         or type(owner_admission_generation) is not int
         or owner_admission_generation <= 0
@@ -211,7 +213,7 @@ def advance_current_native_cursor(
     # exact IDs before the write transaction, then verify their immutable SQL
     # receipt identities again inside its live-owner fence.
     prefix_evidence = _prefix_evidence(store, wire_root_id, lookup, coverage)
-    with _response_boundary(bus, blocking=False) as registry, store._transaction() as db:
+    with _response_boundary(bus, blocking=False) as registry, store.session.transaction() as db:
         marker = bus.log._private_marker_unlocked()
         if _source_witness_unlocked(bus) != source_witness:
             raise IdentityConflict("current cursor canonical source changed before commit")
@@ -244,7 +246,7 @@ def advance_current_native_cursor(
         ):
             raise StaleFence("current cursor owner or private root changed")
         assert_native_runtime_schema(db)
-        person = store._participant(lookup)
+        person = store.participants.get(lookup)
         if (
             not person.committed
             or person.owner_thread != owner.name
@@ -375,7 +377,7 @@ def advance_current_native_cursor(
 
 def read_current_native_cursor(
     bus: MessageBus,
-    store: MutationStore,
+    store: Coordination,
     *,
     wire_root_id: str,
     owner_name: str,
@@ -386,7 +388,7 @@ def read_current_native_cursor(
     remain available for inspection. The returned cursor is informational and
     does not authorize skipping a sealed claim, ACK, write, response or retry.
     """
-    if type(bus) is not MessageBus or type(store) is not MutationStore:
+    if type(bus) is not MessageBus or type(store) is not Coordination:
         raise ValueError("current native cursor needs actual private stores")
     with _response_boundary(bus, blocking=False) as registry:
         marker = bus.log._private_marker_unlocked()
@@ -403,20 +405,20 @@ def read_current_native_cursor(
         ):
             raise StaleFence("current native cursor has no matching live owner")
         lookup = stable_thread_lookup(actual.created_at)
-        with store._read_transaction():
-            assert_native_runtime_schema(store._connection)
-            person = store._participant(lookup)
+        with store.session.read():
+            assert_native_runtime_schema(store.session._connection)
+            person = store.participants.get(lookup)
             if not person.committed or person.owner_thread != owner_name:
                 raise StaleFence("current native cursor recipient is not committed")
             row = CurrentNativeCursor.one(
-                store._connection,
+                store.session._connection,
                 wire_root_id=wire_root_id,
                 recipient_lookup=lookup,
                 owner_generation=person.participant_generation,
                 owner_admission_generation=admission_generation,
             )
             if row is not None and row.input_id is not None:
-                input_row = NativeRuntimeInput.one(store._connection, input_id=row.input_id)
+                input_row = NativeRuntimeInput.one(store.session._connection, input_id=row.input_id)
                 if (
                     input_row is None
                     or input_row.sent_owner_admission_generation != admission_generation
@@ -464,10 +466,10 @@ def read_current_native_cursor(
         prefix_evidence = _prefix_evidence(
             store, wire_root_id, lookup, coverage, through_seq=cursor.covered_seq
         )
-        with store._read_transaction():
-            assert_native_runtime_schema(store._connection)
+        with store.session.read():
+            assert_native_runtime_schema(store.session._connection)
             if not _same_generation_prefix(
-                store._connection,
+                store.session._connection,
                 prefix_evidence,
                 lookup,
                 owner_name,
@@ -526,9 +528,9 @@ def read_current_native_cursor(
         # between them without changing the registry. Recheck SQL while all
         # wire/bus/registry locks are held; never return a stale gen1 cursor
         # after a same-owner gen2 advance or a replacement SQL cursor row.
-        with store._read_transaction():
-            assert_native_runtime_schema(store._connection)
-            fresh = store._participant(lookup)
+        with store.session.read():
+            assert_native_runtime_schema(store.session._connection)
+            fresh = store.participants.get(lookup)
             if (
                 not fresh.committed
                 or fresh.owner_thread != owner_name
@@ -536,7 +538,7 @@ def read_current_native_cursor(
             ):
                 raise StaleFence("current native cursor participant generation changed")
             fresh_row = CurrentNativeCursor.one(
-                store._connection,
+                store.session._connection,
                 wire_root_id=wire_root_id,
                 recipient_lookup=lookup,
                 owner_generation=generation,

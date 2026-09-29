@@ -22,10 +22,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Generic, TypeVar
 
+from agent_comms.coordinator import Coordination
+
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_store import MutationStore
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .field_codec import FieldCodec
 from .native_runtime_input import NativeRuntimeInput
@@ -236,7 +237,7 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
 
 def selected_tool_mode_for_owner(
     comms: Comms,
-    store: MutationStore,
+    store: Coordination,
     admission: WakeAdmission,
     owner_name: str,
     session_dir: Path,
@@ -249,7 +250,7 @@ def selected_tool_mode_for_owner(
     """
     if (
         type(comms) is not Comms
-        or type(store) is not MutationStore
+        or type(store) is not Coordination
         or type(admission) is not WakeAdmission
         or type(owner_name) is not str
         or type(input_id) is not str
@@ -268,12 +269,12 @@ def selected_tool_mode_for_owner(
 
 
 def verify_sent_full_input(
-    store: MutationStore, admission: WakeAdmission, owner_name: str, input_id: str
+    store: Coordination, admission: WakeAdmission, owner_name: str, input_id: str
 ) -> None:
     """Only the exact FULL input admitted by the owner may call native tools."""
-    with MutationStore(str(store.path), lock_timeout=0) as scoped, scoped._read_transaction():
-        assert_native_runtime_schema(scoped._connection)
-        row = NativeRuntimeInput.one(scoped._connection, input_id=input_id)
+    with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.read():
+        assert_native_runtime_schema(scoped.session._connection)
+        row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
         if row is None or (
             row.stage,
             row.assignment_id,
@@ -317,7 +318,7 @@ def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
 
 def perform_selected_write(
     comms: Comms,
-    store: MutationStore,
+    store: Coordination,
     admission: WakeAdmission,
     owner_name: str,
     session_dir: Path,

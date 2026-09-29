@@ -14,14 +14,14 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.assignment_states import FullPendingAssignment
-from agent_comms.coordination_store import (
-    MutationStore,
-    RecoveryBlocked,
+from agent_comms.attempt_recovery import (
     RecoveryMonitorCapability,
     VerifiedOwnerLoss,
     _owner_loss_verified,
 )
+from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -69,8 +69,8 @@ def failed_owner(directory, output, exit_allowed):
         pass
     else:
         raise AssertionError("failure fixture unexpectedly succeeded")
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
-        row = store._connection.execute(
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        row = store.session._connection.execute(
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
@@ -111,9 +111,9 @@ def leave(process, exit_allowed):
 def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(released_failure):
     process, exit_allowed, root, execution_id, input_id, session_file = released_failure
     leave(process, exit_allowed)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         before = tuple(
-            store._connection.execute(
+            store.session._connection.execute(
                 f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?", (input_id,)
             ).fetchone()
         )
@@ -128,7 +128,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
         assert settled.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not settled.replay.replay_safe
         after = tuple(
-            store._connection.execute(
+            store.session._connection.execute(
                 f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?", (input_id,)
             ).fetchone()
         )
@@ -139,10 +139,10 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
 
 def test_recovery_refuses_released_but_live_owner(released_failure):
     _process, _exit_allowed, root, execution_id, _input_id, session_file = released_failure
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
             RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
-        assert store.snapshot(execution_id).is_current
+        assert store.snapshots.get(execution_id).is_current
 
 
 @pytest.mark.parametrize(
@@ -180,10 +180,10 @@ def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
         session_file = session_file.parent.parent / "other.jsonl"
     if damage not in {"wrong_session", "wrong_epoch"}:
         session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises((RecoveryBlocked, NativePiUnavailable)):
             RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
-        assert store.snapshot(execution_id).is_current
+        assert store.snapshots.get(execution_id).is_current
 
 
 def test_recovery_refuses_live_native_session_process(released_failure):
@@ -199,10 +199,10 @@ def test_recovery_refuses_live_native_session_process(released_failure):
         ]
     )
     try:
-        with MutationStore(str(root / "coordination.sqlite3")) as store:
+        with Coordination(str(root / "coordination.sqlite3")) as store:
             with pytest.raises(RecoveryBlocked, match="subprocess is still running"):
                 RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
-            assert store.snapshot(execution_id).is_current
+            assert store.snapshots.get(execution_id).is_current
     finally:
         child.terminate()
         child.wait(timeout=5)
@@ -215,7 +215,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
 ):
     from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
-    from agent_comms.coordination_store import StaleFence
+    from agent_comms.coordination_errors import StaleFence
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
@@ -233,7 +233,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
             ).run()
     source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, source.seq, store)
         with pytest.raises(StaleFence, match="unresolved execution"):
             await runtime.SelectedExecution(
@@ -243,7 +243,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
         assert len(claims) == 1
         assert type(claims[0].lifecycle) is FullPendingAssignment
         assert len(calls) == 1
-        assert store._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
+        assert store.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
 
 
 def replacement_release(root):
@@ -269,7 +269,7 @@ def test_later_attested_release_still_fences_original_admission(released_failure
     replacement.start()
     replacement.join(5)
     assert replacement.exitcode == 0
-    with MutationStore(str(root / "coordination.sqlite3")) as store:
+    with Coordination(str(root / "coordination.sqlite3")) as store:
         settled = RecoveryMonitorCapability.recover_native_failure(
             store, execution_id, session_file
         ).value

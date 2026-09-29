@@ -13,16 +13,16 @@ import pytest
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
-from agent_comms.coordination_store import MutationStore
+from agent_comms.coordinator import Coordination
 
 ROOT = "a" * 32
 SEQ = 7
 
 
-def _tables(store: MutationStore) -> set[str]:
+def _tables(store: Coordination) -> set[str]:
     return {
         str(row[0])
-        for row in store._connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        for row in store.session._connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
 
 
@@ -135,71 +135,71 @@ def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: 
 def test_selected_claims_follow_ordered_n_subsequence_not_only_set_membership(
     tmp_path: Path,
 ) -> None:
-    with MutationStore(str(tmp_path / "valid.sqlite3")) as store:
+    with Coordination(str(tmp_path / "valid.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _seal_two_selected_with_observer(db, reverse_claims=False)
-        sealed = store._connection.execute("SELECT sealed FROM claim_batch_receipts").fetchone()[0]
+        sealed = store.session._connection.execute("SELECT sealed FROM claim_batch_receipts").fetchone()[0]
         assert sealed == 1
-    with MutationStore(str(tmp_path / "reversed.sqlite3")) as store:
+    with Coordination(str(tmp_path / "reversed.sqlite3")) as store:
         install_private_cohort_schema(store)
         with (
             pytest.raises(sqlite3.IntegrityError, match="selected claim order"),
-            store._transaction() as db,
+            store.session.transaction() as db,
         ):
             _seal_two_selected_with_observer(db, reverse_claims=True)
-        count = store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+        count = store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
         assert count == 0
 
 
 def test_schema_is_opt_in_versioned_and_idempotent_on_reopen(tmp_path: Path) -> None:
     path = tmp_path / "coordination.sqlite3"
-    with MutationStore(str(path)) as store:
-        assert store.schema_version == COORDINATION_SCHEMA_VERSION
+    with Coordination(str(path)) as store:
+        assert store.session.schema_version == COORDINATION_SCHEMA_VERSION
         assert "claim_batch_receipts" not in _tables(store)
         assert "cohort_delivery_receipts" not in _tables(store)
         install_private_cohort_schema(store)
         before = set(_tables(store))
         install_private_cohort_schema(store)
         assert _tables(store) == before
-        assert store.schema_version == COORDINATION_SCHEMA_VERSION
+        assert store.session.schema_version == COORDINATION_SCHEMA_VERSION
     if os.name == "posix":
         assert path.stat().st_mode & 0o077 == 0
     # Windows' st_mode does not attest NTFS ACL protection.
-    with MutationStore(str(path)) as reopened:
+    with Coordination(str(path)) as reopened:
         install_private_cohort_schema(reopened)
         assert _tables(reopened) == before
-        assert reopened._connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
-        assert reopened._connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert reopened.session._connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+        assert reopened.session._connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert (
-            reopened._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
+            reopened.session._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
             == 2
         )
 
 
 def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_path: Path) -> None:
     path = tmp_path / "coordination.sqlite3"
-    with MutationStore(str(path)) as store:
+    with Coordination(str(path)) as store:
         install_private_cohort_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _receipt(db, n=0, k=0)
             _seal(db)
         assert (
-            store._connection.execute("SELECT sealed FROM claim_batch_receipts").fetchone()[0] == 1
+            store.session._connection.execute("SELECT sealed FROM claim_batch_receipts").fetchone()[0] == 1
         )
-        assert store._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
-    with MutationStore(str(path)) as reopened:
+        assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
+    with Coordination(str(path)) as reopened:
         install_private_cohort_schema(reopened)
         assert (
-            reopened._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            reopened.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
             == 1
         )
 
 
 def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path: Path) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _assignment(db)
             db.execute(
                 (
@@ -212,7 +212,7 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
             )
         with (
             pytest.raises(sqlite3.IntegrityError, match="observer has an existing wake claim"),
-            store._transaction() as db,
+            store.session.transaction() as db,
         ):
             _receipt(db, n=2, k=1)
             _member(db)
@@ -228,16 +228,16 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
                 assignment_id=None,
             )
             _seal(db)
-        db = store._connection
+        db = store.session._connection
         assert db.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0] == 0
         assert db.execute("SELECT COUNT(*) FROM cohort_delivery_receipts").fetchone()[0] == 0
         assert db.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 2
 
 
 def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Path) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
             _member(db)
@@ -253,7 +253,7 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Pa
                 assignment_id=None,
             )
             _seal(db)
-        db = store._connection
+        db = store.session._connection
         assert [
             tuple(row)
             for row in db.execute(
@@ -274,10 +274,10 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Pa
 
 
 def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with pytest.raises(sqlite3.IntegrityError, match="incomplete"):  # noqa: SIM117
-            with store._transaction() as db:
+            with store.session.transaction() as db:
                 _assignment(db)
                 _receipt(db, n=2, k=1)
                 _member(db)
@@ -291,13 +291,13 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
                 )
                 _seal(db)
         assert (
-            store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
             == 0
         )
-        assert store._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
-        assert store._connection.execute("SELECT COUNT(*) FROM participants").fetchone()[0] == 0
+        assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
+        assert store.session._connection.execute("SELECT COUNT(*) FROM participants").fetchone()[0] == 0
         with pytest.raises(sqlite3.IntegrityError, match="sealed after"):  # noqa: SIM117
-            with store._transaction() as db:
+            with store.session.transaction() as db:
                 _receipt(db, n=0, k=0)
                 db.execute("UPDATE claim_batch_receipts SET sealed=1")
                 db.execute(
@@ -325,9 +325,9 @@ def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) 
 
 
 def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(tmp_path: Path) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _assignment(db)
             _receipt(db, n=2, k=1)
             for assignment_id, lookup in (("missing", "a"), ("claim-a", "b")):
@@ -401,11 +401,11 @@ def test_foreign_claim_lookup_and_kind_shape_fail_before_seal(tmp_path: Path) ->
 def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
     tmp_path: Path, field: str, override: str | int
 ) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with (
             pytest.raises(sqlite3.IntegrityError, match="does not match cohort acceptance"),
-            store._transaction() as db,
+            store.session.transaction() as db,
         ):
             _assignment(db)
             _receipt(db, n=1, k=1, **{field: override})
@@ -414,17 +414,17 @@ def test_seal_cannot_adopt_claim_with_conflicting_immutable_acceptance(
                 db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
             )
             _seal(db)
-        assert store._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
+        assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
         assert (
-            store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
             == 0
         )
 
 
 def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
-        with store._transaction() as db:
+        with store.session.transaction() as db:
             _assignment(db)
             _receipt(db, n=1, k=1)
             _member(db)
@@ -432,55 +432,55 @@ def test_one_claim_cannot_be_sealed_by_two_wire_roots(tmp_path: Path) -> None:
                 db, ordinal=0, lookup="a", name="Alice", kind="selected", assignment_id="claim-a"
             )
             _seal(db)
-        with pytest.raises(sqlite3.IntegrityError), store._transaction() as db:
+        with pytest.raises(sqlite3.IntegrityError), store.session.transaction() as db:
             _receipt(db, n=1, k=1, root="b" * 32)
             db.execute(
                 "INSERT INTO claim_batch_members VALUES (?,?,0,'claim-a','a')",
                 ("b" * 32, SEQ),
             )
         assert (
-            store._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
+            store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
             == 1
         )
-        db = store._connection
+        db = store.session._connection
         member_count = db.execute("SELECT COUNT(*) FROM claim_batch_members").fetchone()[0]
         assert member_count == 1
 
 
 @pytest.mark.parametrize("problem", ["partial", "version", "drift"])
 def test_reopen_rejects_partial_unsupported_or_drifted_schema(tmp_path: Path, problem: str) -> None:
-    with MutationStore(str(tmp_path / "coordination.sqlite3")) as store:
+    with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         if problem == "partial":
-            store._connection.execute("CREATE TABLE cohort_schema_meta (x INTEGER)")
+            store.session._connection.execute("CREATE TABLE cohort_schema_meta (x INTEGER)")
         else:
             install_private_cohort_schema(store)
             if problem == "version":
-                store._connection.execute("DROP TRIGGER cohort_meta_update_guard")
-                store._connection.execute("PRAGMA ignore_check_constraints=ON")
+                store.session._connection.execute("DROP TRIGGER cohort_meta_update_guard")
+                store.session._connection.execute("PRAGMA ignore_check_constraints=ON")
                 try:
-                    store._connection.execute("UPDATE cohort_schema_meta SET version=999")
+                    store.session._connection.execute("UPDATE cohort_schema_meta SET version=999")
                 finally:
-                    store._connection.execute("PRAGMA ignore_check_constraints=OFF")
+                    store.session._connection.execute("PRAGMA ignore_check_constraints=OFF")
             else:
-                store._connection.execute("DROP INDEX cohort_delivery_receipts_0_idx")
+                store.session._connection.execute("DROP INDEX cohort_delivery_receipts_0_idx")
         before = set(_tables(store))
         with pytest.raises(SchemaVersionError):
             install_private_cohort_schema(store)
         assert _tables(store) == before
-        assert not store._connection.in_transaction
+        assert not store.session._connection.in_transaction
 
 
 def test_two_process_like_connections_serialize_explicit_migration(tmp_path: Path) -> None:
     path = str(tmp_path / "coordination.sqlite3")
-    with MutationStore(path):
+    with Coordination(path):
         pass
     barrier = Barrier(2)
 
     def migrate() -> int:
-        with MutationStore(path) as store:
+        with Coordination(path) as store:
             barrier.wait(timeout=5)
             install_private_cohort_schema(store)
-            return store._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
+            return store.session._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         left = pool.submit(migrate)

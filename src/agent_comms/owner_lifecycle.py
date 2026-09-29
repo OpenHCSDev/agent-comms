@@ -277,12 +277,13 @@ class OwnerLifecycle:
                 agent_bin = str(Path(sys.executable).with_name("pi-comms-native"))
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
-            from .bus_publication import stable_thread_lookup
-            from .coordination_store import MutationStore
+            from agent_comms.coordinator import Coordination
 
-            with MutationStore(str(self.root / "coordination.sqlite3")) as store:
+            from .bus_publication import stable_thread_lookup
+
+            with Coordination(str(self.root / "coordination.sqlite3")) as store:
                 store.install_private_runtime()
-                store.register_participant(
+                store.participants.register(
                     stable_thread_lookup(thread.created_at),
                     thread.name,
                     thread.name,
