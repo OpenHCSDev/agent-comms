@@ -49,10 +49,18 @@ export class NativeProofJournal {
         if (session && session.id !== this.sessionId)
             throw new Error('Native proof journal belongs to another session');
     }
-    recover() {
+    recover(entryStore) {
         const db = this.#open(false);
         if (!db) return 0;
-        try { return db.prepare(nativeProofSchema.head).get().generation; }
+        try {
+            // Validate the current context lineage, bounded by that context.
+            // Historical native claims remain in SessionManager, never replayed.
+            for (const row of db.prepare(nativeProofSchema.current).iterate()) {
+                if (entryStore.trackedInputMetadata(row.input_id)?.id !== row.session_entry_id)
+                    throw new Error('Native proof current source lineage differs');
+            }
+            return db.prepare(nativeProofSchema.head).get().generation;
+        }
         finally { db.close(); }
     }
     commit(tracked, digest) {

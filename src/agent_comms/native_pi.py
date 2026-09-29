@@ -10,9 +10,11 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import stat
 import sys
 from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -23,7 +25,7 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_entries import NativeEntry, SessionEntry
 from .selected_tool_broker import NativeToolMode
-from .typed_table import Column, Index, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
@@ -167,6 +169,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             "insert": f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
             "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
+            "current": f"SELECT input_id,session_entry_id FROM {table} "
+                       f"WHERE request_generation=(SELECT MAX(request_generation) FROM {table})",
         }
 
     def __post_init__(self) -> None:
@@ -176,6 +180,62 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             or not _DIGEST.fullmatch(self.llm_context_digest)
         ):
             raise ValueError("Native Pi proof journal contains an invalid row")
+
+    @classmethod
+    @contextmanager
+    def open_evidence(cls, session_file: Path) -> Iterator[sqlite3.Connection]:
+        """Read an indexed snapshot; only native recovery may repair a hot journal.
+
+        A read is corroboration, never a fresh receipt. Keep the private inode
+        pinned across SQLite's transaction and refuse redirection or schema drift.
+        """
+        path = Path(str(session_file) + ".input-proof")
+        try:
+            with closing(os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")) as held:
+                before = os.fstat(held.fileno())
+                if not stat.S_ISREG(before.st_mode):
+                    raise NativePiUnavailable("Native proof must be a regular file")
+                if (before.st_uid, stat.S_IMODE(before.st_mode), before.st_nlink) != (
+                    os.geteuid(), 0o600, 1
+                ):
+                    raise NativePiUnavailable("Native proof must be private and unaliased")
+                with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+                    db.execute("BEGIN")
+                    actual = SQLiteSchemaObject.read(db.execute(
+                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"
+                    ))
+                    if {item.name: item.sql for item in actual} != cls.schema_objects():
+                        raise NativePiUnavailable("Native proof requires offline durable conversion")
+                    if not os.path.samestat(before, path.lstat()):
+                        raise NativePiUnavailable("Native proof inode changed while opening")
+                    yield db
+                    if not os.path.samestat(before, path.lstat()):
+                        raise NativePiUnavailable("Native proof inode changed during observation")
+        except (OSError, sqlite3.Error, ValueError, TypeError) as error:
+            raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
+
+    @classmethod
+    def for_input(
+        cls, db: sqlite3.Connection, input_id: str, generation: int | None = None
+    ) -> NativeContextJournal | None:
+        """The primary key answers one input without scanning lifetime history."""
+        where, parameters = "input_id=?", (input_id,)
+        if generation is not None:
+            where += " AND request_generation=?"
+            parameters += (generation,)
+        rows = cls.read(db.execute(
+            f"SELECT {cls._column_list(cls.columns())} FROM {cls.declared_name} "
+            f"WHERE {where} ORDER BY request_generation DESC LIMIT 1", parameters
+        ))
+        return next(iter(rows), None)
+
+    def corroborate(
+        self, session_file: Path, header: SessionEntry, tracked: dict[str, NativeEntry]
+    ) -> NativeContextProof:
+        entry = tracked.get(self.input_id)
+        if self.session_id != header.id or entry is None or self.session_entry_id != entry.id:
+            raise NativePiUnavailable("Native Pi proof journal source lineage differs")
+        return self.at(session_file)
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,64 +264,29 @@ class NativeContextProof(NativeContextRecord):
         tracked = NativeEntry.tracked_users(entries)
         if input_id not in tracked:
             raise NativePiUnavailable("The specified input was never durably committed")
-        chosen = None
-        for proof in cls._verified_history_rows(session_file, header, tracked):
-            if proof.input_id == input_id and (
-                request_generation is None or proof.request_generation == request_generation
-            ):
-                chosen = proof
-        if chosen is None:
-            raise NativePiUnavailable("The input has no assembled-context proof")
-        return chosen
+        with NativeContextJournal.open_evidence(session_file) as db:
+            row = NativeContextJournal.for_input(db, input_id, request_generation)
+            if row is None:
+                raise NativePiUnavailable("The input has no assembled-context proof")
+            return row.corroborate(session_file, header, tracked)
 
     @classmethod
     def read_history_evidence(
         cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...]
     ) -> dict[str, NativeContextProof]:
-        """Verify retained context in one pass using already-decoded native history.
+        """Corroborate retained inputs using indexed, latest context inclusion.
 
         This proves historical context inclusion. It never creates an input
         disposition, an owner enrollment, or permission to replay an input.
         """
         tracked = NativeEntry.tracked_users(entries)
-        return {
-            proof.input_id: proof
-            for proof in cls._verified_history_rows(session_file, header, tracked)
-        }
-
-    @classmethod
-    def _verified_history_rows(
-        cls, session_file: Path, header: SessionEntry, tracked: dict[str, NativeEntry]
-    ) -> Iterator[NativeContextProof]:
-        previous_generation = 0
-        generation_digest = None
-        seen = set()
-        for row in _read_private_file(Path(str(session_file) + ".input-proof")):
-            try:
-                proof = FieldCodec.decode(NativeContextJournal, row).at(session_file)
-                entry = tracked.get(proof.input_id)
-                if (
-                    proof.session_id != header.id
-                    or entry is None
-                    or proof.session_entry_id != entry.id
-                    or proof.request_generation < previous_generation
-                    or (
-                        proof.request_generation == previous_generation
-                        and proof.llm_context_digest != generation_digest
-                    )
-                    or (proof.request_generation, proof.input_id) in seen
-                ):
-                    raise ValueError("Native Pi proof journal contains an invalid row")
-            except (ValueError, TypeError, KeyError) as error:
-                raise NativePiUnavailable(
-                    "Native Pi proof journal contains an invalid row"
-                ) from error
-            if proof.request_generation != previous_generation:
-                seen.clear()
-            previous_generation = proof.request_generation
-            generation_digest = proof.llm_context_digest
-            seen.add((proof.request_generation, proof.input_id))
-            yield proof
+        result = {}
+        with NativeContextJournal.open_evidence(session_file) as db:
+            for input_id in tracked:
+                row = NativeContextJournal.for_input(db, input_id)
+                if row is not None:
+                    result[input_id] = row.corroborate(session_file, header, tracked)
+        return result
 
 
 class NativePiTerminalFailure(NativePiUnavailable):
