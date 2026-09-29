@@ -98,6 +98,12 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     @abstractmethod
     def successors(cls) -> tuple[type[SummaryState], ...]: ...
 
+    def require_original_admission(self) -> None:
+        from .compaction_journal import CompactionJournalError
+
+        if not self.original_eligible:
+            raise CompactionJournalError("Manual compaction cannot admit an original input")
+
     def require_commit_reservation(self) -> None:
         from .compaction_journal import CompactionJournalError
 
@@ -204,14 +210,12 @@ class LinkedSummary(SummaryState):
 
     def verifies_original(self, journal, session, operation_id, source_json):
         commit = journal.get(self.commit_id)
-        intent = json.loads(commit.intent_json)
-        return (
-            commit.session_file == session
-            and commit.state.committed
-            and type(intent) is dict
-            and intent.get("selectedSummaryOperationId") == operation_id
-            and intent.get("selectedSummarySourceDigest") == TextDigest.of(source_json).value
+        from .compaction_journal import SelectedSummaryAttempt
+
+        commit.require_summary_link(
+            SelectedSummaryAttempt(operation_id, session, source_json, self), admit_original=True,
         )
+        return True
 
 
 class ManualCommittedSummary(LinkedSummary):
@@ -304,11 +308,21 @@ class ObservedPublication(PublicationState):
 
 
 @dataclass(frozen=True)
-class CompactionPublishedMetadata:
-    commit_id: str = field(metadata={"wire_name": "commitId"})
+class NativeCommitPosition:
+    """The committed native entry/revision/leaf shared by receipt and publication."""
+
     entry_id: str = field(metadata={"wire_name": "entryId"})
     revision: str
     leaf_id: str = field(metadata={"wire_name": "leafId"})
+
+    def __post_init__(self):
+        if not self.entry_id or not self.revision or not self.leaf_id:
+            raise ValueError("Invalid native metadata receipt; never replay")
+
+
+@dataclass(frozen=True)
+class CompactionPublishedMetadata(NativeCommitPosition):
+    commit_id: str = field(metadata={"wire_name": "commitId"})
 
 
 class NativeOutcome(DeclaredFamily, affix="NativeOutcome"):
@@ -339,30 +353,27 @@ class UnknownNativeOutcome(NativeOutcome):
 
 
 @dataclass(frozen=True)
-class CommittedNativeOutcome(NativeOutcome):
+class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
     state = CommittedOperation()
-    entry_id: str = field(metadata={"wire_name": "entryId"})
-    revision: str
-    leaf_id: str = field(metadata={"wire_name": "leafId"})
     metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
 
     def __post_init__(self):
-        if (
-            not self.entry_id
-            or not self.revision
-            or not self.leaf_id
-            or len(self.metadata_digest) != 64
-            or any(c not in "0123456789abcdef" for c in self.metadata_digest)
-        ):
-            raise ValueError("Invalid native metadata receipt; never replay")
+        super().__post_init__()
+        TextDigest(self.metadata_digest)
 
     def bind_metadata(self, expected: str) -> NativeOutcome:
         if self.metadata_digest != expected:
             return UnknownNativeOutcome("native-metadata-mismatch")
         return self
 
+    def publication_json(self, commit_id: str) -> str:
+        from .field_codec import FieldCodec
+
+        return json.dumps(FieldCodec.encode(self.publication(commit_id)), sort_keys=True,
+                          separators=(",", ":"), allow_nan=False)
+
     def publication(self, commit_id: str) -> CompactionPublishedMetadata:
-        return CompactionPublishedMetadata(commit_id, self.entry_id, self.revision, self.leaf_id)
+        return CompactionPublishedMetadata(self.entry_id, self.revision, self.leaf_id, commit_id)
 
 
 @dataclass(frozen=True)
