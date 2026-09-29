@@ -11,6 +11,7 @@ from agent_comms.active_route import ActiveRoute, LocalRoute, read_active_route,
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.wire_log import WireLog
@@ -95,7 +96,7 @@ def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkey
     _, root, root_id = route_fixture(tmp_path, monkeypatch)
     service = wire()
     assert service.root == root
-    assert service.owners._private_nk_launch == (root, root_id, tmp_path)
+    assert service.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path, None)
     assert wire(root).owners._private_nk_launch is None
 
 

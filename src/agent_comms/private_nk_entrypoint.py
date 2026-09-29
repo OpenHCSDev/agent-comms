@@ -15,8 +15,6 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import PublicationActivationBlocked
 
-from .cohort_foreground import _preflight
-
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
 
@@ -30,6 +28,20 @@ class PrivateNkLaunch:
     wire_root_id: str
     native_package: Path
     selected_tool_intent: SelectedToolIntent | None
+
+    def validate(self) -> None:
+        """Recheck this authority before a new owner process can be reserved."""
+        from .cohort_foreground import _preflight
+
+        _preflight(self.validated_root, self.wire_root_id, self.native_package, True)
+
+    def apply_environment(self, environment: dict[str, str]) -> None:
+        """Derive the child handoff solely from this retained launch authority."""
+        environment.update({
+            "AGENT_COMMS_ROOT": str(self.validated_root),
+            ROOT_ID_ENV: self.wire_root_id,
+            PACKAGE_ENV: str(self.native_package),
+        })
 
 
 def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:
@@ -61,10 +73,11 @@ def private_nk_launch(root: Path, environment: Mapping[str, str]) -> PrivateNkLa
         )
     validated_root = Path(root).expanduser().absolute()  # capture cwd once
     native_package = Path(package)
-    _preflight(validated_root, root_id, native_package, True)
     # Normal production FULL turns select their coding tools in the runtime.
     # Claim support is not a request for the optional single-write proof mode.
-    return PrivateNkLaunch(validated_root, root_id, native_package, None)
+    launch = PrivateNkLaunch(validated_root, root_id, native_package, None)
+    launch.validate()
+    return launch
 
 
 def private_nk_from_environment() -> PrivateNkLaunch | None:
