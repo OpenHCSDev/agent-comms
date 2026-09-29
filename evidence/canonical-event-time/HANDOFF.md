@@ -13,3 +13,14 @@ TIME-9: no codec subclass, time wrapper, parallel timestamp store, migration or 
 Two subclass overrides of the full projection boundary are replaced by content hooks; no consumer can omit the clock for a content subclass. Core has never fabricated a replacement timestamp; that default is in Toad, owned by Tesla. This urgent bug adds a missing fact, not a net deletion claim. Deferred selected dry-run RPC deletion has no implementation edits.
 
 Initial boundary checks: five pass (external offset/fractional times, split/routed input, compaction, merge, and unknown time). Actual native plus ACP transport/rebuild and installed Toad return-paint are pending. Production is not installed by this branch.
+
+## Actual boundary acceptance
+
+- Initial run:26pass,1failure (obsolete merge test still implemented removed `replay_update` instead of required `routed`). Corrected the fixture to declare its actual routing behavior; no production compatibility API restored.
+- Final followthrough:8pass in4.07s, including actual pinned native local-provider request, native user/assistant ISO timestamps, official ACP SDK over real localhost byte streams, TWO production `session/load` snapshot publications, and fresh bounded page rebuild. Same two event times throughout; native JSONL and input-proof bytes unchanged; exactly one loopback request. All test-owned native and ACP resources closed.
+- The first three socket harness attempts were interrupted during teardown; they are retained as unsuccessful attempts. Python3.14 server `wait_closed()` waited for the accepted socket whose lifecycle belongs to the test server; final harness closes each accepted writer and joins handler tasks before awaiting server closure. No production teardown changes or success claim for those attempts.
+- Full-context NRA source scan:243 files indexed,18.81s, zero raw findings on the two selected report targets. Full payload does not emit detector/omission metadata; do not infer a complete clean architecture verdict. Author-authored boundary change, not an NRA equivalence proof.
+
+## Explicit local R0 conflict
+
+Independent class-size measure reports NativeEntry+17, TranscriptEvent+2; other ratchet measures unchanged. This missing-feature addition extends the two existing correct authorities. No facade/alternate owner introduced to evade the measure. Parent review has the exact conflict in337comment5883327190; no CI wait or deployment performed. Installed Toad142 return-paint acceptance belongs to Tesla and is not claimed by these core results.
