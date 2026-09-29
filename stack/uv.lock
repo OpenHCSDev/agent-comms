@@ -4,7 +4,7 @@ requires-python = ">=3.14"
 
 [manifest]
 overrides = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=4510dddf737da3d445ba20d90c79f3dcb3f08b27" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=e6fa8febd943d5350f596d121557534aafde80ae" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=c9743801c98dc570f82f82e25915ecce89800f4b" },
 ]
 
@@ -23,7 +23,7 @@ wheels = [
 [[package]]
 name = "agent-comms"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=4510dddf737da3d445ba20d90c79f3dcb3f08b27#4510dddf737da3d445ba20d90c79f3dcb3f08b27" }
+source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=e6fa8febd943d5350f596d121557534aafde80ae#e6fa8febd943d5350f596d121557534aafde80ae" }
 dependencies = [
     { name = "metaclass-registry" },
 ]
@@ -45,8 +45,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=4510dddf737da3d445ba20d90c79f3dcb3f08b27" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=08ee5aac2943c59757242dedd9938c0b9ec3387b" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=e6fa8febd943d5350f596d121557534aafde80ae" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=c0d61fa55657732193b4d656bb0695ac48b7e0f4" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=c9743801c98dc570f82f82e25915ecce89800f4b" },
 ]
 
@@ -193,7 +193,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=08ee5aac2943c59757242dedd9938c0b9ec3387b#08ee5aac2943c59757242dedd9938c0b9ec3387b" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=c0d61fa55657732193b4d656bb0695ac48b7e0f4#c0d61fa55657732193b4d656bb0695ac48b7e0f4" }
 dependencies = [
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },
