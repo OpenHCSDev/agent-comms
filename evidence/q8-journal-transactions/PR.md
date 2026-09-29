@@ -19,16 +19,16 @@ SQL schema and durable shapes unchanged.
 
 ## Verification
 
--94 focused journal/fresh/admission/guard cases passed,2 optional skips (13.76s).
--Current-main noneditable installed native/ACP:2 passed (22.94s), including
+- 94 focused journal/fresh/admission/guard cases passed,2 optional skips (13.76s).
+- Current-main noneditable installed native/ACP:2 passed (22.94s), including
   publication before original binding, two continued saved-session input cycles,
   and disconnected UNKNOWN without replay. Earlier4 native cases passed33.94s,
   including correction refusal after actual native commit.
--Eleven publication race/uncertainty cases passed in retained aggregate receipt.
+- Eleven publication race/uncertainty cases passed in retained aggregate receipt.
   Its sole failed obsolete mocked-stream/invalid-session case was deleted; its
   ordering assertion now executes in the real native journey above. All RED
   receipts retained and explained, not described as green suites.
--Ratchet: no increases;206 journal class excess lines and2 foreign-state probes
+- Ratchet: no increases;206 journal class excess lines and2 foreign-state probes
   removed. Journal82 lines; largest new transaction owner310. Ruff/diff/caller
   checks pass. Latest authoritative NRA/refactor-audit applied.
 

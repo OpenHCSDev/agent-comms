@@ -17,11 +17,11 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
             assert await publish_pending_local(agent, "project", "project") == 0
             assert [row.commit_id for row in journal.publications.pending(str(session))] == [commit_id]
             updates = []
-    
+
             class Client:
                 async def session_update(self, session_id, update):
                     updates.append(update.model_dump(by_alias=True, exclude_none=True))
-    
+
             agent.on_connect(Client())
             assert await publish_pending_local(agent, "project", "project") == 1
             assert journal.publications.pending(str(session)) == ()
@@ -49,11 +49,11 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2252b667b0>
         await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         updates = []
-    
+
         class Client:
             async def session_update(self, session_id, update):
                 updates.append(update.model_dump(by_alias=True, exclude_none=True))
-    
+
         async def events(*args, **kwargs):
             assert any(
                 item.get("_meta", {})
@@ -66,14 +66,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2252b667b0>
             with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
                 assert allowed is True
             yield ae.Done(ok=False, text="No provider invoked")
-    
+
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.on_connect(Client())
         try:
 >           await agent.inputs.run_owned_input("project", "project", "distinct new input")
 
-tests/test_compaction_publication.py:117: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_compaction_publication.py:117:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.14/site-packages/agent_comms/input_drain.py:642: in run_owned_input
     await self.effects.turns.run_agent_turn(
 .venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:501: in run_agent_turn
@@ -101,7 +101,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib/python3.14/pathlib/__init__.py:938: in resolve
     return self.with_segments(os.path.realpath(self, strict=strict))
                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 filename = '/home/ts/wt/comms-q8-journal-transactions-20260929/.scratch/focused-native/test_pending_metadata_projects0/project'
 strict = True
@@ -126,26 +126,26 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
         await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         original_received, wrong_received = [], []
-    
+
         class Client:
             def __init__(self, received):
                 self.received = received
-    
+
             async def session_update(self, session_id, update):
                 self.received.append(update.model_dump(by_alias=True, exclude_none=True))
-    
+
         original = Client(original_received)
         wrong = Client(wrong_received)
         agent.on_connect(original)
         actual = agent._runtime.session_update
-    
+
         async def race(*, session_id, update, **binding):
             # Registry/session file and epoch remain untouched. This swaps only
             # the ACP binding after publisher precheck but before runtime transport.
             agent.on_connect(wrong)
             agent.sessions.bindings[session_id] = "other-canonical-thread"
             return await actual(session_id=session_id, update=update, **binding)
-    
+
         agent._runtime.session_update = race
         try:
             assert await publish_pending_local(agent, "project", "project") == 0
@@ -180,23 +180,23 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
         await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         old_received, new_received = [], []
-    
+
         class Socket:
             def __init__(self, received):
                 self.received = received
-    
+
             async def session_update(self, *, session_id, update):
                 self.received.append(update.model_dump(by_alias=True, exclude_none=True))
-    
+
         old, new = Socket(old_received), Socket(new_received)
         agent._runtime.clients["project"] = {old}
         actual = agent._runtime.session_update
-    
+
         async def swap(*, session_id, update, **binding):
             # ACP socket set only; canonical registry/session/epoch stay unchanged.
             agent._runtime.clients["project"] = {new}
             return await actual(session_id=session_id, update=update, **binding)
-    
+
         agent._runtime.session_update = swap
         try:
             assert await publish_pending_local(agent, "project", "project") == 0
@@ -227,21 +227,21 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
         await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         old_received, new_received = [], []
-    
+
         class NewSocket:
             async def session_update(self, *, session_id, update):
                 new_received.append(update)
-    
+
         new = NewSocket()
-    
+
         class OldSocket:
             swap = True
-    
+
             async def session_update(self, *, session_id, update):
                 old_received.append(update.model_dump(by_alias=True, exclude_none=True))
                 if self.swap:
                     agent._runtime.clients[session_id] = {new}
-    
+
         old = OldSocket()
         agent._runtime.clients["project"] = {old}
         try:
@@ -269,13 +269,13 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         received = []
         wrong_received = []
-    
+
         class WrongClient:
             async def session_update(self, session_id, update):
                 wrong_received.append(update)
-    
+
         wrong = WrongClient()
-    
+
         class Client:
             async def session_update(self, session_id, update):
                 received.append(update.model_dump(by_alias=True, exclude_none=True))
@@ -283,7 +283,7 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
                 # retroactively prevent the first delivery, but never mark ACK.
                 agent.on_connect(wrong)
                 agent.sessions.bindings[session_id] = "other-canonical-thread"
-    
+
         original = Client()
         agent.on_connect(original)
         try:
@@ -310,15 +310,15 @@ tmp_path = PosixPath('/home/ts/wt/comms-q8-journal-transactions-20260929/.scratc
         await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         seen = []
-    
+
         class Client:
             fail = True
-    
+
             async def session_update(self, session_id, update):
                 seen.append(update.model_dump(by_alias=True, exclude_none=True))
                 if self.fail:
                     raise ConnectionError("delivery uncertain")
-    
+
         client = Client()
         agent.on_connect(client)
         try:

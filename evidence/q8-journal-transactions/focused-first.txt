@@ -46,10 +46,10 @@ terminal = 'linked'
             )
             journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
         original_fsync = os.fsync
-    
+
         def deny_fsync(_fd):
             raise OSError("post-COMMIT directory fsync denied")
-    
+
         monkeypatch.setattr(os, "fsync", deny_fsync)
         with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
             if terminal == "linked":
@@ -110,10 +110,10 @@ terminal = 'declined-prestart'
             )
             journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
         original_fsync = os.fsync
-    
+
         def deny_fsync(_fd):
             raise OSError("post-COMMIT directory fsync denied")
-    
+
         monkeypatch.setattr(os, "fsync", deny_fsync)
         with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
             if terminal == "linked":

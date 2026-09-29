@@ -98,7 +98,7 @@ Original first/correction receipts show missed reopened test callers and an old
 error-text assertion, corrected without weakening the refusal. Missing-package
 receipt records absent fixture environment, corrected before actual native tests.
 Publication-stale receipt records consumers of the removed ACP metadata shape;
-these now use the canonical decoder. No receipt was overwritten to hide failure.
+these now use the canonical decoder. No failure was hidden; captured text logs only normalize trailing whitespace.
 
 No diagnosed remaining blocker in this role. CI deferred. Parent373 HistoryViews
 and Wegener367 selected lifetime remain their owners;367 received the new caller

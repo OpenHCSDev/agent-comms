@@ -15,11 +15,11 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7ce2c0f0e0>
         await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
         comms.threads.attach_session("project", str(session), pid=os.getpid())
         updates = []
-    
+
         class Client:
             async def session_update(self, session_id, update):
                 updates.append(update.model_dump(by_alias=True, exclude_none=True))
-    
+
         async def events(*args, **kwargs):
             assert [event.commit_id for event in _publication_events(updates)] == [commit_id], (
                 "Local metadata projection must precede native provider send"
@@ -27,14 +27,14 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7ce2c0f0e0>
             with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
                 assert allowed is True
             yield ae.Done(ok=False, text="No provider invoked")
-    
+
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.on_connect(Client())
         try:
 >           await agent.inputs.run_owned_input("project", "project", "distinct new input")
 
-tests/test_compaction_publication.py:115: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_compaction_publication.py:115:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv/lib/python3.14/site-packages/agent_comms/input_drain.py:642: in run_owned_input
     await self.effects.turns.run_agent_turn(
 .venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:501: in run_agent_turn
@@ -49,7 +49,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     async for event in stream:
 .venv/lib/python3.14/site-packages/agent_comms/backend.py:480: in run
     async for event in self.finish_result():
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <agent_comms.native_session_prepare.NativeSessionPreparation object at 0x7f7ce15b4050>
 
