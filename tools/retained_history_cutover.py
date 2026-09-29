@@ -126,6 +126,8 @@ def certify_current(root: Path) -> None:
 
 def prepare(root: Path, output: Path) -> tuple[PreparedSource, ...]:
     root=root.resolve();output=output.resolve()
+    if output.is_relative_to(root) or root.is_relative_to(output):
+        raise ValueError('Preparation output must be disjoint from the selected live root')
     if output.exists():
         raise ValueError('Preparation output must be new; do not overwrite earlier work')
     raw=(root/'history_sources.json').read_text()
@@ -240,6 +242,7 @@ class SnapshotCutover:
         try:os.rename(self.replacement,self.source)
         except BaseException:
             os.rename(self.retained,self.source)
+            self.sync_directory()
             raise
 
     def rollback(self) -> None:
