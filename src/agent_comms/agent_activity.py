@@ -36,8 +36,8 @@ class AgentActivity:
             canonical = self.registry.require(thread).name
             self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
 
-    def activity_of(self, thread: str) -> Activity:
-        snapshot = self.registry.snapshot()
+    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> Activity:
+        snapshot = snapshot or self.registry.snapshot()
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
         return self.activity.current(participant.name, active=participant.executing).for_owner(
