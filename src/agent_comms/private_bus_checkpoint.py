@@ -27,11 +27,10 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, SQLiteSchemaObject, TypedTable
 from .wire_metadata import WireMetadata
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .delivery_policy import KeyedResponseReceipt
-    from .messages import Message
     from .wire_log import WireLog
 
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
@@ -187,20 +186,9 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
         raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
 
 
-def _index_row(
-    db: sqlite3.Connection,
-    offset: int,
-    raw: bytes,
-    message: Message,
-    receipt: KeyedResponseReceipt | None,
-    initial: CommittedDelivery | None,
-) -> None:
-    if receipt is not None:
-        ResponseKeys(receipt.publication_key).insert(db)
-    if initial is not None:
-        DeliverySources(message.seq, message.message_id, offset, len(raw)).insert(db)
-        for recipient in initial.audience.recipients:
-            Addressed(recipient.recipient_lookup, message.seq).insert(db)
+def _index_row(db: sqlite3.Connection, offset: int, raw: bytes, record: WireRecord) -> None:
+    for row in record.checkpoint_rows(offset, len(raw)):
+        row.insert(db)
 
 
 def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -> PrefixWitness:
@@ -252,14 +240,14 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                     digest = _SEED
                     through_seq = 0
 
-                    def collect(offset, raw, message, receipt, initial):
+                    def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = message.seq
-                        _index_row(db, offset, raw, message, receipt, initial)
+                        through_seq = record.message.seq
+                        _index_row(db, offset, raw, record)
 
                     with db:
-                        for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+                        for _ in bus.verified_records_unlocked(marker, on_row=collect):
                             pass
                         if through_seq != marker.last_seq:
                             raise RelationViolationError(
@@ -311,7 +299,7 @@ def _recover_pending_unlocked(
         db.execute(f"DELETE FROM {DeliverySources.declared_name}")
         db.execute("DELETE FROM response_keys")
 
-        def collect(offset, raw, message, receipt, initial):
+        def collect(offset, raw, record):
             nonlocal digest, prior_seen, prior_seq, last_seq, count, size
             count += 1
             size += len(raw)
@@ -320,15 +308,15 @@ def _recover_pending_unlocked(
             digest = _chain(digest, raw)
             if offset + len(raw) == prior.revision[2]:
                 prior_seen = True
-                prior_seq = message.seq
+                prior_seq = record.message.seq
                 if digest.hex() != prior.digest or prior_seq != prior.through_seq:
                     raise RelationViolationError(
                         "Private bus checkpoint old prefix changed during recovery."
                     )
-            last_seq = message.seq
-            _index_row(db, offset, raw, message, receipt, initial)
+            last_seq = record.message.seq
+            _index_row(db, offset, raw, record)
 
-        for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+        for _ in bus.verified_records_unlocked(marker, on_row=collect):
             pass
         if not prior_seen or (prior.revision[2] == 0 and prior.digest != _SEED.hex()):
             raise RelationViolationError("Private bus checkpoint old prefix is unavailable.")
@@ -388,24 +376,20 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             digest = _SEED
             observed_prefix = saved.offset == 0
             prefix_seq = 0
-            additions: list[
-                tuple[int, bytes, Message, KeyedResponseReceipt | None, CommittedDelivery | None]
-            ] = []
+            additions: list[tuple[int, bytes, WireRecord]] = []
             suffix_bytes = 0
 
             def collect(
                 offset: int,
                 raw: bytes,
-                message: Message,
-                receipt: KeyedResponseReceipt | None,
-                initial: CommittedDelivery | None,
+                record: WireRecord,
             ) -> None:
                 nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
                 digest = _chain(digest, raw)
                 end = offset + len(raw)
                 if end == saved.offset:
                     observed_prefix = True
-                    prefix_seq = message.seq
+                    prefix_seq = record.message.seq
                     if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
                         raise RelationViolationError(
                             "Private bus checkpoint certified prefix changed."
@@ -420,9 +404,9 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                         raise RelationViolationError(
                             "Private bus checkpoint crash suffix exceeds recovery bound."
                         )
-                    additions.append((offset, raw, message, receipt, initial))
+                    additions.append((offset, raw, record))
 
-            for _ in bus._verified_private_rows_unlocked(marker, on_row=collect):
+            for _ in bus.verified_records_unlocked(marker, on_row=collect):
                 pass
             if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
                 raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
@@ -431,7 +415,7 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             ) != file_revision(info):
                 raise RelationViolationError("Private bus changed during checkpoint validation.")
             # Full parser above checked all cross-prefix response key duplicates.
-            last_seq = additions[-1][2].seq if additions else saved.through_seq
+            last_seq = additions[-1][2].message.seq if additions else saved.through_seq
             expected = PrefixWitness(
                 saved.root_id,
                 file_revision(info),
@@ -442,8 +426,8 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             marker.seal_with(PendingSeal.capture(saved, expected, path))
             bus.write_metadata_unlocked(marker)
             with db:
-                for offset, raw, message, receipt, initial in additions:
-                    _index_row(db, offset, raw, message, receipt, initial)
+                for offset, raw, record in additions:
+                    _index_row(db, offset, raw, record)
                 PrefixCertificate.capture(
                     saved.root_id, info, last_seq, digest, expected.tail
                 ).upsert(db)
@@ -461,9 +445,7 @@ def append_private_bus_checkpoint_unlocked(
     bus: WireLog,
     marker: WireMetadata,
     raw: bytes,
-    message: Message,
-    receipt: KeyedResponseReceipt | None,
-    initial: CommittedDelivery | None,
+    record: WireRecord,
 ) -> PrefixWitness:
     """Append one certified row only AFTER the canonical bus/parent fsync."""
     path = _path(bus.path)
@@ -476,7 +458,7 @@ def append_private_bus_checkpoint_unlocked(
                 saved.root_id != marker.root_id
                 or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
                 or offset != saved.offset
-                or message.seq <= saved.through_seq
+                or record.message.seq <= saved.through_seq
             ):
                 raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
             marker.seal.check_final(saved, path)
@@ -487,16 +469,16 @@ def append_private_bus_checkpoint_unlocked(
             expected = PrefixWitness(
                 saved.root_id,
                 file_revision(info),
-                message.seq,
+                record.message.seq,
                 digest.hex(),
                 _tail(stream, info.st_size),
             )
             marker.seal_with(PendingSeal.capture(saved, expected, path))
             bus.write_metadata_unlocked(marker)
             with db:
-                _index_row(db, offset, raw, message, receipt, initial)
+                _index_row(db, offset, raw, record)
                 PrefixCertificate.capture(
-                    saved.root_id, info, message.seq, digest, expected.tail
+                    saved.root_id, info, record.message.seq, digest, expected.tail
                 ).upsert(db)
             _directory_sync(path)
             marker.seal_with(FinalSeal.capture(expected, path))
@@ -523,7 +505,7 @@ def certified_delivery_page_unlocked(
     Recheck the witness under the same bus-held SQL commit; an unlocked return
     is advisory only.
     """
-    from .bus_publication import PRIVATE_WIRE_FIELD, unique_wire_object, validate_delivery_record
+    from .bus_publication import CommittedDelivery, unique_wire_object
 
     if (
         type(lookup) is not str
@@ -565,9 +547,7 @@ def certified_delivery_page_unlocked(
                 if len(raw) != row.length or not raw.endswith(b"\n"):
                     raise RelationViolationError("Certified initial row changed.")
                 record = json.loads(raw, object_pairs_hook=unique_wire_object)
-                if not isinstance(record, dict) or PRIVATE_WIRE_FIELD not in record:
-                    raise RelationViolationError("Certified initial row is unavailable.")
-                initial = validate_delivery_record(record, witness.root_id)
+                initial = CommittedDelivery.from_wire(record, witness.root_id)
                 if (
                     initial.message.seq != row.seq
                     or initial.message.message_id != row.message_id

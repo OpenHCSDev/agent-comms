@@ -614,7 +614,7 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
     with store_files._store_lock(comms.bus.log.path):
         metadata = comms.bus.log._private_marker_unlocked()
-        return list(comms.bus.log._verified_private_rows_unlocked(metadata))
+        return list(comms.bus.log.verified_records_unlocked(metadata))
 
 
 def _ordinary_locked_iterator(comms: Comms) -> list[Message]:
