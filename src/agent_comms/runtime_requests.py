@@ -17,6 +17,15 @@ from typing import TYPE_CHECKING, Any, Self
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .goal_actions import (
+    EditGoalAction,
+    GoalAction,
+    GoalPrecondition,
+    OwnerControlInvocable,
+    OwnerInvocable,
+    RetryGoalAction,
+    SetGoalAction,
+)
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
@@ -240,6 +249,21 @@ class GoalRevisionRuntimeRequest(ResultRuntimeRequest):
     goal_id: str
     expected_revision: int
 
+    def precondition(self, ctx: RuntimeRequestContext) -> GoalPrecondition:
+        """Bind every revisioned UI command to the same complete current goal.
+
+        GoalAction rechecks this capture under its canonical wire lock before
+        mutation; reading here never grants permission to a later owner.
+        """
+        goal = ctx.server.agent._comms.registry.require(ctx.name).goal
+        if goal is None or goal.id != self.goal_id or goal.revision != self.expected_revision:
+            raise ValueError("The goal changed; refresh its state before updating.")
+        return GoalPrecondition(
+            goal_id=self.goal_id,
+            expected_goal=goal,
+            expected_owner_pid=os.getpid(),
+        )
+
 
 @dataclass(frozen=True, kw_only=True)
 class GoalTextRuntimeRequest(ResultRuntimeRequest):
@@ -255,9 +279,13 @@ class EditGoalRuntimeRequest(
     GoalTextRuntimeRequest, GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest
 ):
     async def change(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.server.agent.turns.edit_goal(
-            ctx.session_id, self.goal_id, self.expected_revision, self.text
+        agent = ctx.server.agent
+        agent._comms.goals.update_goal(
+            ctx.name,
+            EditGoalAction(text=self.text, expect=self.precondition(ctx)),
+            actor=OwnerInvocable,
         )
+        await agent.sessions.config.sync_thread(ctx.session_id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -265,22 +293,57 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
     status: str | None = None
 
     async def change(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.server.agent.turns.update_goal(
-            ctx.session_id, self.status, self.goal_id, self.expected_revision
-        )
+        action = GoalAction.decode(self.status)
+        if not issubclass(action, OwnerControlInvocable):
+            raise ValueError("Goal updates support only active, paused, or clear.")
+        agent = ctx.server.agent
+        expect = self.precondition(ctx)
+        try:
+            agent._comms.goals.update_goal(
+                ctx.name,
+                action(expect=expect),
+                actor=OwnerInvocable,
+                owner_store=agent.turns.open_goal_store() if action.owner_grant else None,
+            )
+        finally:
+            # Resume may reconcile a failed attempt to BLOCKED before refusing.
+            # Publish that durable state even when the request returns an error.
+            await agent.sessions.config.sync_thread(ctx.session_id)
+        if action.schedules_goal:
+            agent.turns.schedule_goal(ctx.session_id)
 
 
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        goal = await ctx.server.agent.turns.retry_goal(
-            ctx.session_id, self.goal_id, self.expected_revision
+        agent = ctx.server.agent
+        expect = self.precondition(ctx)
+        if agent.turns.pending_goal_origins.get(ctx.name) == self.goal_id:
+            raise ValueError("Wait for the goal origin turn to finish.")
+        goal = agent._comms.goals.update_goal(
+            ctx.name,
+            RetryGoalAction(expect=expect),
+            actor=OwnerInvocable,
+            owner_store=agent.turns.open_goal_store(),
         )
+        assert goal is not None
+        # The durable decision is immediate. Existing scheduler busy fences
+        # defer its fresh launch until the unrelated turn finishes.
+        agent.turns.schedule_goal(ctx.session_id)
+        await agent.turns.sync_goal_execution(ctx.session_id, ctx.name)
         return {"goal": goal.to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        goal = await ctx.server.agent.turns.set_goal(ctx.session_id, self.text)
+        agent = ctx.server.agent
+        goal = agent._comms.goals.update_goal(
+            ctx.name,
+            SetGoalAction(text=self.text, expect=GoalPrecondition(expected_owner_pid=os.getpid())),
+            actor=OwnerInvocable,
+            owner_store=agent.turns.open_goal_store(),
+        )
+        assert goal is not None
+        agent.turns.schedule_goal(ctx.session_id)
         return {"goal": goal.to_wire()}

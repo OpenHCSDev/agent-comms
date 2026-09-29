@@ -23,14 +23,9 @@ from . import pi_events as pi
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .goal_actions import (
-    EditGoalAction,
-    GoalAction,
     GoalPrecondition,
-    OwnerControlInvocable,
     OwnerInvocable,
     PausedGoalAction,
-    RetryGoalAction,
-    SetGoalAction,
 )
 from .goal_attempts import (
     Generation,
@@ -576,108 +571,6 @@ class TurnRunner:
         except UnresolvedAttemptError:
             store.recover_unreserved_ready(generation.goal_id, generation.number)
             return store.ready_grant(generation.goal_id, generation.number)
-
-    async def set_goal(self, session_id: str, text: str) -> Goal:
-        """Commit a UI goal through its executing owner and private launch ledger."""
-        if not isinstance(text, str) or not text.strip():
-            raise ValueError("A goal requires text.")
-        name = self.sessions.require(session_id)
-        goal = self.comms.goals.update_goal(
-            name,
-            SetGoalAction(text=text, expect=GoalPrecondition(expected_owner_pid=os.getpid())),
-            actor=OwnerInvocable,
-            owner_store=self.open_goal_store(),
-        )
-        assert goal is not None
-        self.schedule_goal(session_id)
-        return goal
-
-    async def edit_goal(
-        self, session_id: str, goal_id: str, expected_revision: int, text: str
-    ) -> Goal:
-        """Edit the current objective without replacing its identity or execution state."""
-        name = self.sessions.require(session_id)
-        goal = self.comms.registry.require(name).goal
-        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
-            raise ValueError("The goal changed; refresh its state before editing.")
-        # update_goal owns the wire lock and atomically rechecks both this
-        # snapshot and the executing owner. Do not acquire its lock twice.
-        edited = self.comms.goals.update_goal(
-            name,
-            EditGoalAction(
-                text=text,
-                expect=GoalPrecondition(
-                    goal_id=goal_id,
-                    expected_goal=goal,
-                    expected_owner_pid=os.getpid(),
-                ),
-            ),
-            actor=OwnerInvocable,
-        )
-        assert edited is not None
-        await self.sessions.config.sync_thread(session_id)
-        return edited
-
-    async def update_goal(
-        self, session_id: str, status: str, goal_id: str, expected_revision: int
-    ) -> Goal | None:
-        """Apply an explicit UI pause, resume, or clear through the current owner."""
-        action = GoalAction.decode(status)
-        if not issubclass(action, OwnerControlInvocable):
-            raise ValueError("Goal updates support only active, paused, or clear.")
-        name = self.sessions.require(session_id)
-        goal = self.comms.registry.require(name).goal
-        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
-            raise ValueError("The goal changed; refresh its state before updating.")
-        try:
-            updated = self.comms.goals.update_goal(
-                name,
-                action(
-                    expect=GoalPrecondition(
-                        goal_id=goal_id,
-                        expected_goal=goal,
-                        expected_owner_pid=os.getpid(),
-                    )
-                ),
-                actor=OwnerInvocable,
-                owner_store=self.open_goal_store() if action.owner_grant else None,
-            )
-        finally:
-            # Resume can discover that a paused attempt failed. Publish the
-            # reconciled BLOCKED state even when the action returns an error.
-            await self.sessions.config.sync_thread(session_id)
-        if action.schedules_goal:
-            self.schedule_goal(session_id)
-        return updated
-
-    async def retry_goal(self, session_id: str, goal_id: str, expected_revision: int) -> Goal:
-        """Record an explicit UI retry in the executing owner's private ledger."""
-        name = self.sessions.require(session_id)
-        thread = self.comms.registry.require(name)
-        goal = thread.goal
-        if goal is None or goal.id != goal_id or goal.revision != expected_revision:
-            raise ValueError("The blocked goal changed; refresh its state.")
-        if self.pending_goal_origins.get(name) == goal_id:
-            raise ValueError("Wait for the goal origin turn to finish.")
-        resumed = self.comms.goals.update_goal(
-            name,
-            RetryGoalAction(
-                expect=GoalPrecondition(
-                    goal_id=goal_id,
-                    expected_goal=goal,
-                    expected_owner_pid=os.getpid(),
-                )
-            ),
-            actor=OwnerInvocable,
-            owner_store=self.open_goal_store(),
-        )
-        assert resumed is not None
-        # READY records the accepted owner decision even during an unrelated
-        # turn. The scheduler's existing busy fences defer launch until that
-        # turn finishes; reserved/claimed attempts remain unretryable above.
-        self.schedule_goal(session_id)
-        await self.sync_goal_execution(session_id, name)
-        return resumed
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
         event = self.comms.goals.goal_changed(

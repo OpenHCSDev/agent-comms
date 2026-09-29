@@ -1,0 +1,58 @@
+...........F....                                                         [100%]
+=================================== FAILURES ===================================
+_______ test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-541/test_busy_retry_keeps_unresolv2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f68fcd62200>
+fence = 'owner'
+
+    @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+    async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
+        session = (await owner.new_session(str(tmp_path / "project"))).session_id
+        store = owner.turns.open_goal_store()
+        goal = comms.goals.update_goal(
+            session, SetGoalAction(text="Keep attempt authority"), owner_store=store
+        )
+        reservation = store.reserve(goal.id, 1)
+        if fence != "reserved":
+            store.claim_launch(reservation)
+        if fence in {"owner", "origin"}:
+            store.record_failed(reservation, "Known failed attempt")
+        blocked = comms.goals.update_goal(
+            session,
+            BlockedGoalAction(
+                expect=GoalPrecondition(goal_id=goal.id),
+                block_reason="Owner input required before retry",
+            ),
+        )
+        generation = store.snapshot(goal.id)
+        owner.turns.active_turns[session] = "unrelated-turn"
+        owner.inputs.backend_inboxes[session] = asyncio.Queue()
+        proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+        if fence == "owner":
+            # Call the actual owner handler after identity changed, without redirecting the proxy.
+            original = owner.sessions.require
+    
+            def replaced_owner(session_id):
+                comms.registry.register(
+                    replace(comms.registry.require(session), process_identity=ProcessIdentity(os.getpid() + 100000, 1))
+                )
+                return original(session_id)
+    
+            monkeypatch.setattr(owner.sessions, "require", replaced_owner)
+        elif fence == "origin":
+            owner.turns.pending_goal_origins[session] = goal.id
+        try:
+            expected = {"owner": "owner changed", "origin": "origin turn"}.get(fence, "unresolved")
+>           with pytest.raises(RuntimeError, match=expected):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE RuntimeError
+
+tests/test_runtime_goal_retry_running.py:246: Failed
+=========================== short test summary info ============================
+FAILED tests/test_runtime_goal_retry_running.py::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner]
+1 failed, 15 passed in 3.46s
