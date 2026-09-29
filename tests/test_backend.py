@@ -2295,6 +2295,7 @@ sys.exit(1)
 import json, select, sys, time
 state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
+print("Native startup timeout witness", file=sys.stderr, flush=True)
 time.sleep(0.3)
 if select.select([sys.stdin], [], [], 0)[0]:
     line = sys.stdin.readline()
@@ -2319,6 +2320,7 @@ if select.select([sys.stdin], [], [], 0)[0]:
         assert "elapsed_ms=" in done.text
         assert "wait_ms=" in done.text
         assert "spawn_ms=" in done.text
+        assert "Native startup timeout witness" in done.text
         assert "secret prompt" not in done.text
         assert not received.exists()
 

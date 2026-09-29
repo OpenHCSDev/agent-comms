@@ -1,0 +1,44 @@
+                                                                                                                                                                
+  ☰     <──    ──>   ⠸ beta ×                                                                                                                                  
+                      ━━━━━━                                                                                                                                    
+▼ Channels                                           Name ▾    │                                                                                                
++ New Session                                                  │                                                                                                
+▾ #any                                       Date created ▾    │                                                                                                
+  ⠸ beta                                                       │                                                                                                
+    Thinking · PRIVATE_PREFLIGHT_INPUT_NEVER_SENT              │                                                                                                
+▸ #none                                      Date created ▾    │                                                                                                
+▸ #all                                       Date created ▾    │                                                                                                
+▸ #team                                      Date created ▾    │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │▌──────────────────────────────────── User · 03:32:38 ─────────────────────────────────────     
+                                                               │▌▊❯ PRIVATE_PREFLIGHT_INPUT_NEVER_SENT                                                          
+                                                             < │▌                                                                                             < 
+                                                               │▌┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓    
+                                                               │▌┃Request failed — Pi native input-ID capability preflight ended before attestation.       ┃    
+                                                               │▌┃The prompt was not sent. Backend startup reported:                                       ┃    
+                                                               │▌┃Error: Failed to load extension                                                          ┃    
+                                                               │▌┃"/home/ts/wt/comms-preflight-feedback-sol-20260929/.artifacts/l0a-native-nk0kyjew/projec ┃    
+                                                               │▌┃t/blocked-startup.ts": Failed to load extension: Native import boundary refused: outside ┃    
+                                                               │▌┃committed deployment root                                                                ┃    
+                                                               │▌┃Hint: Start without extensions using "pi -ne".                                           ┃    
+                                                               │▌┃Not sent — input not retried                                                             ┃    
+                                                               │▌┃Inspect the input delivery status before deciding whether to send again.                 ┃    
+                                                               │▌┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛    
+                                                               │                                                                                                
+                                                               │                                  Native fixture connected                                      
+                                                               │ ▶ Session details · Needs attention · Thinking · PRIVATE_PREFLIGHT_INPUT_NEVER_SENT · Saved    
+                                                               │━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   
+                                                               │ Enter queues · Send now (Ctrl+Enter / Ctrl+Y)                                                  
+                                                               │▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+                                                               │▊ ❯                                                                                         ▎   
+40% ───────────────────────────────────────●────────────────   │▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+  ──>   Float                                                  │  selected-offline/fixture · off  ~/wt/…/project               Context estimate unavailable     
+^y Send now ⏎ Send ⇧+⏎ Line ^c Interrupt ^g IRC view ^s Channels                                                                                    ▏^p palette 

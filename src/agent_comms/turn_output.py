@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import turn_failure as failures
-from .diagnostics import FailureReason
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -65,17 +64,8 @@ class TurnOutput:
         )
 
     def startup_error(self, stderr: str) -> None:
-        if (
-            self.preflight_failure == FailureReason.PREFLIGHT_EXIT
-            and stderr.strip()
-            and not self.sensitive
-        ):
-            self.record_failure(
-                failures.InputIdUnavailable(
-                    "Pi native input-ID capability preflight ended before attestation. "
-                    "The prompt was not sent. Backend startup reported:\n" + stderr.strip()
-                )
-            )
+        if self.failure and stderr.strip() and not self.sensitive:
+            self.failure = self.failure.with_startup_diagnostics(stderr.strip())
 
     def done(self, session: TurnSession, stderr: str) -> events.Done:
         # Read admission and custody from their actual owners; output never grants either.

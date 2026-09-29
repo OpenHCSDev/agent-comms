@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .store_files import _store_lock
+
 from typing import TYPE_CHECKING, Any, cast
 
 from acp.schema import (
@@ -202,15 +204,17 @@ class AcpEventConsumer(MroDispatch):
         session_id = self.session_id
         client = self.client
         text = str(event.text or "Backend failed")
-        self.agent.turns.emitted_errors[session_id] = text
         failure = ACPFailure.from_error(-32603, text, diagnostics=event.diagnostics)
         original_keys = self.agent.inputs.turn_original_input_keys.get(session_id, ())
-        rows = self.agent.inputs.dispositions.read().rows
-        observed = [rows[key] for key in original_keys if key in rows]
-        if observed and len({type(row) for row in observed}) == 1:
-            from dataclasses import replace
+        from dataclasses import replace
 
-            failure = replace(failure, input_state=type(observed[0]))
+        failure = replace(
+            failure,
+            input_state=self.agent.inputs.dispositions.read().shared_state(original_keys),
+        )
+        if self.agent.turns.emitted_errors.get(session_id) == failure:
+            return
+        self.agent.turns.emitted_errors[session_id] = failure
         failed_input = None
         input_text = self.agent.inputs.turn_input_text.get(session_id)
         if input_text and not self.agent.inputs.dispositions.read().all_started(
@@ -234,10 +238,12 @@ class AcpEventConsumer(MroDispatch):
     async def on_done(self, event: events.Done) -> None:
         session_id = self.session_id
         client = self.client
-        prior_error = self.agent.turns.emitted_errors.pop(session_id, None)
+        with _store_lock(self.agent._comms._wire_lock_path):
+            self.agent.inputs.dispositions.settle_unbound(
+                self.agent.inputs.turn_original_input_keys.get(session_id, ())
+            )
         if not event.ok and event.text:
-            text = str(event.text)
-            # An explicit error event in this turn already showed the failure.
-            if prior_error != text:
-                await self.agent._emit_event(session_id, events.Error(text), client)
-                self.agent.turns.emitted_errors.pop(session_id, None)
+            # The existing emission owner deduplicates full typed evidence,
+            # including a terminal not-sent transition with unchanged text.
+            await self.agent._emit_event(session_id, events.Error(str(event.text)), client)
+        self.agent.turns.emitted_errors.pop(session_id, None)
