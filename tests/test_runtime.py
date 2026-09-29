@@ -14,7 +14,7 @@ from agent_comms.acp_extension import (
     TurnSettledUpdate,
     decode_updates,
 )
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.compaction_result import CommittedCompactionResult, CompactionResult
 from agent_comms.field_codec import FieldCodec
@@ -22,6 +22,22 @@ from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+
+
+@pytest.fixture
+def runtime_processes():
+    import sys
+
+    children = []
+    try:
+        for _ in range(2):
+            children.append(
+                DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+            )
+        yield tuple(child.identity for child in children)
+    finally:
+        for child in children:
+            child.stop_sync()
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():
@@ -160,9 +176,8 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
             CompactionResult, await proxy.request("compact", instructions="focus")
         ) == CommittedCompactionResult("summary", "commit")
         assert compact_calls == [(response.session_id, "focus")]
-        invalid = RuntimeProxy(client, "missing-thread", path)
-        with pytest.raises(RuntimeError, match="not registered"):
-            await invalid.request("cancel")
+        with pytest.raises(ValueError, match="not registered"):
+            RuntimeProxy(client, "missing-thread", path)
     finally:
         await proxy.close()
         await owner.shutdown()
@@ -171,12 +186,13 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp_path):
+async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
+    tmp_path, runtime_processes
+):
     comms = wire(tmp_path / "wire")
-    old_pid, new_pid = 901001, 901002
-    comms.threads.register(
-        Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(old_pid, 1))
-    )
+    old, new = runtime_processes
+    old_pid, new_pid = old.pid, new.pid
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
     client = canonical_agent(comms)
     updates = []
 
@@ -237,9 +253,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
         )
         assert await proxy.request("cancel") == {"owner": "old"}
         comms.registry.rename("worker", "renamed")
-        comms.registry.register(
-            replace(comms.registry.require("renamed"), process_identity=ProcessIdentity(new_pid, 1))
-        )
+        comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:
             writer.close()
@@ -299,12 +313,13 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(tmp
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_request_only_proxy_never_replays_after_request_was_received(tmp_path):
+async def test_request_only_proxy_never_replays_after_request_was_received(
+    tmp_path, runtime_processes
+):
     comms = wire(tmp_path / "wire")
-    old_pid, new_pid = 902001, 902002
-    comms.threads.register(
-        Thread("worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(old_pid, 1))
-    )
+    old, new = runtime_processes
+    old_pid, new_pid = old.pid, new.pid
+    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
     old_path = socket_path(comms.root, old_pid)
     new_path = socket_path(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
@@ -313,9 +328,7 @@ async def test_request_only_proxy_never_replays_after_request_was_received(tmp_p
     async def old_owner(reader, writer):
         request = json.loads(await reader.readline())
         received.append(("old", request["action"]))
-        comms.registry.register(
-            replace(comms.registry.require("worker"), process_identity=ProcessIdentity(new_pid, 1))
-        )
+        comms.registry.register(replace(comms.registry.require("worker"), process_identity=new))
         writer.close()  # The action may have happened; its result was lost.
 
     async def new_owner(reader, writer):
