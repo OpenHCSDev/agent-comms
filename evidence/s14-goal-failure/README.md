@@ -74,3 +74,7 @@ temporarily for the immediately following ratchet correction; no live root,
 provider settings or predecessor work was touched.
 
 The existing passive projection is a documented pilot API, not an existing UI/RPC endpoint (docs/audits/passive_failed_turn_observation_20260926.md). Its output is not claimed painted/live. The production terminal failure callback is exercised through the actual native goal journey.
+
+## Parent deployment checkpoint
+
+Per parent: core350/351/352 at95a792 and Toad158/159/161 at510716 are merged. Paired installed continuous native/MCP journeys passed; nine idle owners activated on identity-mcp and nine fresh ACP loads passed. Actual saved UI paint is still being checked. Current remaining ownership is updated in the existing plans/remaining-plan-closure-20260929.md; no standalone census rerun.353 itself is not claimed installed.
