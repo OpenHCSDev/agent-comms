@@ -11,7 +11,11 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsClient
-from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
+from agent_comms.acp_extension import (
+    CursorAdvancedUpdate,
+    VerifiedCursorObservation,
+    decode_updates,
+)
 from agent_comms.comms import Comms
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
@@ -147,10 +151,20 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
     attachment.on_connect(Client())
 
     async def until(predicate, description):
-        async with asyncio.timeout(25):
-            while not predicate():
-                assert not failures, failures
-                await asyncio.sleep(0.05)
+        try:
+            async with asyncio.timeout(25):
+                while not predicate():
+                    assert not failures, failures
+                    await asyncio.sleep(0.05)
+        except TimeoutError:
+            print("TIMEOUT", description, "ACP facts", repr(facts), flush=True)
+            with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
+                print(
+                    "native receipts",
+                    db.execute("SELECT * FROM native_runtime_input").fetchall(),
+                    flush=True,
+                )
+            raise
         print(description, "provider_calls", len(requests), flush=True)
 
     try:
@@ -197,15 +211,27 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
         await until(
             lambda: any(
-                isinstance(fact, CursorAdvancedUpdate) and fact.selected_status == "proven"
+                isinstance(fact, CursorAdvancedUpdate)
+                and isinstance(fact.envelope.observation, VerifiedCursorObservation)
+                and fact.envelope.observation.cursor.injected_seq == reply.seq
                 for fact in facts
             ),
-            "A delivery feedback confirms proven observation",
+            "A ACP feedback proves exact reply injection",
         )
         with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
             rows = db.execute(
                 "SELECT input_id, session_file, session_entry_id FROM native_runtime_input"
             ).fetchall()
+        delivered = [
+            fact.envelope.observation.cursor
+            for fact in facts
+            if isinstance(fact, CursorAdvancedUpdate)
+            if isinstance(fact.envelope.observation, VerifiedCursorObservation)
+            if fact.envelope.observation.cursor.injected_seq == reply.seq
+        ]
+        assert delivered[-1].covered_seq == reply.seq
+        assert delivered[-1].stage == "triage"
+        assert delivered[-1].input_id in {row[0] for row in rows}
         assert len(rows) == 2 and all(row[2] for row in rows)
         assert len({row[0] for row in rows}) == 2
         assert len({row[1] for row in rows}) == 2  # Two actual native owners/children.
