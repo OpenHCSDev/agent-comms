@@ -1,0 +1,96 @@
+{
+  "core": [
+    {
+      "file": "history_views.py",
+      "class": "HistoryViews",
+      "lines": 1018
+    },
+    {
+      "file": "coordinated_runtime.py",
+      "class": "SelectedExecution",
+      "lines": 814
+    },
+    {
+      "file": "goal_attempts.py",
+      "class": "GoalAttemptStore",
+      "lines": 781
+    },
+    {
+      "file": "message_bus.py",
+      "class": "MessageBus",
+      "lines": 752
+    },
+    {
+      "file": "compaction_journal.py",
+      "class": "CompactionJournal",
+      "lines": 743
+    },
+    {
+      "file": "turn_runner.py",
+      "class": "TurnRunner",
+      "lines": 721
+    },
+    {
+      "file": "wire_log.py",
+      "class": "WireLog",
+      "lines": 659
+    },
+    {
+      "file": "input_drain.py",
+      "class": "InputDrain",
+      "lines": 607
+    },
+    {
+      "file": "acp.py",
+      "class": "CommsAgent",
+      "lines": 576
+    },
+    {
+      "file": "thread_management.py",
+      "class": "ThreadManagement",
+      "lines": 561
+    },
+    {
+      "file": "owner_compaction_commit.py",
+      "class": "OwnerCompactionCommit",
+      "lines": 543
+    },
+    {
+      "file": "attempt_store.py",
+      "class": "AttemptStore",
+      "lines": 512
+    }
+  ],
+  "toad": [
+    {
+      "file": "widgets/conversation.py",
+      "class": "Conversation",
+      "lines": 1936
+    },
+    {
+      "file": "app.py",
+      "class": "ToadApp",
+      "lines": 1510
+    },
+    {
+      "file": "acp/agent.py",
+      "class": "Agent",
+      "lines": 1134
+    },
+    {
+      "file": "widgets/comms_sidebar.py",
+      "class": "CommsSidebar",
+      "lines": 924
+    },
+    {
+      "file": "widgets/comms_chat.py",
+      "class": "CommsChatView",
+      "lines": 732
+    },
+    {
+      "file": "widgets/transcript_history.py",
+      "class": "TranscriptHistory",
+      "lines": 529
+    }
+  ]
+}
