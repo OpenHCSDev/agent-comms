@@ -92,6 +92,8 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
                 pytest.fail("wire exclusion released before native write")
         with _store_lock(comms._wire_lock_path, blocking=False):
             pass
+        assert kwargs["native_start"](None, "a" * 32, args[2])
+        yield ae.InputStarted(id=None)
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Admission inspected")
 

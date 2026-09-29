@@ -4,38 +4,33 @@ Updated 2026-09-29. Parent owns integration and live activation. Historical
 completion receipts remain evidence for their recorded versions; newly reported
 regressions are not declared fixed by those receipts. CI is deferred.
 
-## Installed baseline
+## Installed baseline and next pair
 
-Core408, Toad195/197/200/203, Textual12 and matched native context-budget package are
-selected by the default launchers. Ten running owners reloaded while idle; their
-new native-package environment pins were verified before the unchanged-Core/native UI update. The actual default
-`toad-comms` PTY displayed saved history and Ready, then was closed by the test harness.
-The user's already open Toad is not restarted automatically.
+Core409/Toad199/Textual12/native776 are globally selected through checkpoint410.
+The default installed entrypoint displayed saved history and Ready. The user's
+open Toad was not restarted. Current staged installation pairs Core412's tested
+source with merged Toad204/205/201 and unchanged Textual/native. Actual autonomous
+compaction painting acceptance is in progress before selecting this pair.
 
-## Complete user paths
+## Current user paths and active owners
 
-| Path | Current evidence or defect | Active owner and acceptance |
+| Path | State and evidence | Active owner and next acceptance |
 | --- | --- | --- |
-| Saved-history startup | Default installed entrypoint passes. | Parent; preserve original bus/native sessions and unknown inputs. |
-| Channel input, receipt, handling and reply | Earlier continuous installed/native journeys passed; retain ongoing receiver-view coverage. | Parent integrates current paired journey; no claim of exhaustive delivery coverage from startup alone. |
-| Streamed reply presentation | Toad199 merged: installed continuous 2,800-character / 70-chunk stream failed the old build with duplicate headers and passed candidate with one response. Default installation underway. | Arendt, Toad199: realistic delayed/chunked reply must fail old build and render one continuous message in installed UI. |
-| Cancel, model change, next message | Real ACP cancel returned cancelled; following model controls and prompts returned empty-details internal errors. | Arendt: delayed-provider actual ACP/UI journey, unambiguous terminal outcomes, subsequent controls/send usable, uncertain inputs preserved without replay. |
-| Owner attachment after startup | nra-architecture startup failed before input; retry is now alive and processing with the current native pin. Earlier diagnostic launches include old-package mismatch and absent private launch configuration. Cause of the latest failure remains under investigation. | Parent traces launch authority; Arendt owns precise Not sent feedback. Never replay the original input or restart an active owner to hide failure. |
-| Parent/child opening | Toad203 is merged; installed actual right-sidebar parent/channel child click journey passed. Final default activation is underway. | Heisenberg: supported owner binding, actual right-sidebar/channel/child opening clicks and retained native source identity. |
-| Warm agent A/B/A return | Live video shows rebuilding/reader movement; cache identity assertions alone were insufficient. | Toad197/200 merged and installed-candidate five-return journey passed; Heisenberg continues Toad202 with same installed version, stable visible reader/draft/undo and warm prepared/rendered history; useful checkpoints may ship before final latency target. |
-| Fast/reverse scrolling and End | Adaptive lookahead remains required; no preparing all skipped blocks. | Heisenberg and Mendel: physical held PageUp/PageDown/PageUp/End/idle, bounded existing preparation workers. |
-| Reusable visual/performance evidence | Isolated st/Xvfb capture tooling in progress. | Mendel, Toad201: correlate same-run footage, action timestamps, UI/background CPU profiles and hot call stacks; note profiler overhead. Desktop X session untouched. |
-| Recording process custody | Recorder descendant cleanup included a durable live comms owner. Live-root candidate recordings stopped; relation to the latest attachment failure is unproven. | Mendel, Toad201: clean recorder-owned UI/profiler/display processes while a separately owned comms worker stays alive, attachable and usable; continue acceptance on an isolated pinned private fixture. |
-| Goal/turn/activity source identity | Toad198 installed fixes; fresh live failures must reopen this acceptance row. | Parent integrates current A/B/A, parent/child/no-goal/settlement and automatic goal write refresh in full journey. |
-| Oversized completion allowance | Core406 actual ACP/Pi explicit rejection recovers with identical provider messages and one native input; unrelated400 is not retried. Installed and active. | Parent; no automatic replay of earlier user failures or uncertain provider streams. |
-| Lifetime proof-journal limit | Indexed proof recovery, 87 preserved conversions and installed/live receipts completed; issue107 closed. | Parent; native transcript indexing cost is separate and remains qualified. |
+| Saved history, channel opening, first fork/input/reply | Installed continuous native/ACP/physical-UI journey passed checkpoint410. | Parent retains this baseline through paired cutover; preserve history/proofs/uncertain inputs. |
+| Streamed response headers | Toad199 merged and live; old build failed, candidate kept one response through 70 SSE chunks. | Parent retains in matched pair. |
+| Cancel, controls, next input and startup feedback | Core411/Toad205 merged; real three-stage cancellation/controls/new-message and single Not sent/draft-recovery journeys passed. | Parent paired installation; original uncertain inputs never replayed. |
+| Old inbound blocks repeating in an already open view | Toad204 merged; old baseline failed actual row pressure, candidate retained original receipt object and updated handling in place; reconnect/return passed. | Parent paired installation; bounded acceptance is not exhaustive delivery proof. |
+| Automatic goal compaction | Live openhcs-helper continuation bypassed original reservation and was refused before native input start. Core412 draft uses inherited shared reservation/compaction. Installed native goal journey passes; baseline fails. | Parent implementation/integration; Arendt Toad206 actual cold-goal compaction/summary painting in staged pair. Original failed goal remains blocked. |
+| New private owner startup | Live startup lacked matching private launch pins; explicit/env root currently loses existing launch authority. | Schrodinger owns route/launch repair, new draft; isolated actual CLI/env-root/fork/ACP/native reply. No implicit privilege from bus marker. |
+| Warm agent A/B/A return and first paint | Toad202 pushed checkpoint; visual acceptance still fails stale body/late reflow. Current draft is not live. | Heisenberg continues existing retained presentation owner/layout work and actual private native/UI acceptance. |
+| Fast/reverse scrolling and End | Toad202 End/source-coverage checkpoint pushed; actual fast/reverse/idle performance remains incomplete. | Heisenberg uses existing background preparation, destination burst, bounded resources; paired video/profile assessment. |
+| Reusable video/profile tooling and recorder custody | Toad201 merged. Two private original owners survived captures; installed ACP reattach and one new native input passed. Capture/probe identities stopped. | Parent paired installation; Heisenberg uses same-run footage/profiles, account for profiler overhead. |
+| Older adaptive test fixture | Eight failures on obsolete nullable fields/status and synthetic saved history. Not a green full suite. | Mendel takes fixture replacement/deletion via existing actual native infrastructure; no production compaction mechanism duplication. |
+| Goal/activity identity, sidebar geometry, parent/child navigation | Earlier checkpoints passed installed physical journeys; newly reported regressions reopen acceptance. | Parent retains coherent journey; Heisenberg owns concrete sidebar geometry blocker in its candidate. |
+| Oversized completion allowance and lifetime proof growth | Core406 installed rejection recovery and preserved proof conversions completed; issue107 closed. | Parent preserves no-replay and current native pin; no claim of exhaustive future-provider behavior. |
 
-## Deletion and broad closure
+## Remaining plan and resource closure
 
-- Toad195 merged: 730 obsolete per-mode pilot/driver lines deleted. Original
-  workspace/resource and terminal-latency targets remain under current owners.
-- Core271 and Toad53/116 are closed as historical/superseded work; their relevant
-  implementations/deletion receipts are in current main. Toad50 is merged.
 - Original and round-two plan closure is tracked in
   `plans/remaining-plan-closure-20260929.md`. Its dated ownership/status rows are
   historical; current active UI owners are named above. Remaining package-wide
@@ -47,17 +42,3 @@ The user's already open Toad is not restarted automatically.
 
 The goal remains incomplete until its full requirements are verified. This
 checklist describes current delivery, not a reduction of the goal's scope.
-
-## New paired checkpoint
-
-Core409 adds the updated skill's packaged dispatch subject/arm screens. Actual
-installed CLI/Git checks passed and measured real-history arm growth. Toad199
-merges streamed-response identity and queue feedback. This pair preserves the
-reviewed native package and all runtime/durable formats. Parent owns installed
-continuous journey and default-entrypoint verification before activation.
-
-Toad204 (Schrodinger) owns repeated old inbound blocks in an already open view,
-not merely reconnect. Existing native wake records have not advanced for the
-reported old inputs; UI projection is the current hypothesis, not proof that
-all duplicate execution is impossible. Its acceptance covers ordinary repeated
-activity updates and checkpoint retirement as well as reconnect/A/B/A/reopen.

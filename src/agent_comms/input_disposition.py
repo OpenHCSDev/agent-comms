@@ -21,6 +21,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .selected_source import SelectedSource
+    from .thread_identity import TurnId
 
 
 class FutureInputQueue(ABC):
@@ -171,6 +172,15 @@ class InputDispositions(LockedStore[InputDocument]):
 
         self.update(change)
         return recorded
+
+    def reserve_turn(self, owner: str, turn: TurnId, admission: int, text: str) -> str:
+        """Reserve one original with no external ingress in the existing input store."""
+        key = f"turn:{turn.value}"
+        if not self.record(
+            key, seq=None, owner=owner, admission=admission, target=owner, text=text
+        ):
+            raise RelationViolationError("Original turn input was already reserved")
+        return key
 
     def _transition(self, key: str, change) -> bool:
         changed = False
