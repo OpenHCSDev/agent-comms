@@ -118,6 +118,18 @@ def _resource(value: object) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class AssignmentBinding:
+    """Selected claim revision and source, shared by its admission and SQL row."""
+
+    assignment_id: str
+    revision: int
+    recipient_lookup: str
+    source_seq: int
+    source_message_id: str
+    execution_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class WakeAdmission:
     """A selected N/K execution bound into the durable resource-claim row."""
 
@@ -134,6 +146,13 @@ class WakeAdmission:
     participant_generation: int
     attempt_ordinal: int
     version: int = field(default=1, metadata={"wire_required": True})
+
+    @property
+    def binding(self) -> AssignmentBinding:
+        return AssignmentBinding(
+            self.wake_assignment_id, self.wake_revision, self.recipient_lookup,
+            self.source_seq, self.source_message_id, self.execution_id,
+        )
 
     def __post_init__(self) -> None:
         for label, value, size in (

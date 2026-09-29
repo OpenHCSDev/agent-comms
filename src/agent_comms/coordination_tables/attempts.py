@@ -19,6 +19,8 @@ from agent_comms.coordination_contracts import (
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import projected
+from agent_comms.owner_fence import AttemptAuthority
+from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
@@ -45,6 +47,20 @@ APPROVED_REPLAY_FACT_MASK: Final = sum(fact.value for fact in ReplayFact)
 
 @dataclass(frozen=True, slots=True)
 class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
+    @property
+    def authority(self) -> AttemptAuthority:
+        return AttemptAuthority(
+            self.execution_id, self.attempt_ordinal, self.owner_thread,
+            self.owner_generation, self.owner_token_digest,
+        )
+
+    @property
+    def owner_identity(self) -> OwnerGenerations:
+        return OwnerGenerations(
+            owner_lookup=self.owner_lookup, owner_thread=self.owner_thread,
+            generation=self.owner_generation,
+        )
+
     execution_id: str = dataclass_field(
         metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
     )

@@ -52,12 +52,12 @@ from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
-from agent_comms.owner_fence import OwnerFence, _digest
+from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _store_lock
-from agent_comms.thread_identity import ThreadRole
-from agent_comms.turn_lease import ActiveTurn
+from agent_comms.native_input_owner import RegistryOwner
+from agent_comms.native_admission_rules import RegistryAdmissionCheck
 from agent_comms.typed_table import (
     Column,
     SQLiteForeignKeys,
@@ -199,48 +199,21 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True) -> Iterator[Re
         yield bus._registry.store._read_unlocked().snapshot()
 
 
-@dataclass(frozen=True, slots=True)
-class LiveResponseOwner:
-    """A specific running turn, not a PID-only assertion or a status bit."""
+@dataclass(frozen=True, kw_only=True)
+class LiveResponseOwner(RegistryOwner):
+    """One captured registry owner; response finality does not depend on its goal."""
 
-    name: str
-    recipient_lookup: str
-    pid: int
-    created_at: float
-    worktree: str
-    active_turn: ActiveTurn
-    admission_generation: int
+    check_type = RegistryAdmissionCheck
+
+    @property
+    def recipient_lookup(self) -> str:
+        return stable_thread_lookup(self.thread.created_at)
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
-        """Recheck this exact process/turn against current registry authority."""
-        if (
-            self.name != fence.owner_thread
-            or type(self.active_turn) is not ActiveTurn
-            or self.active_turn.owner_pid != self.pid
-            or self.active_turn.admission_generation != self.admission_generation
-            or type(self.admission_generation) is not int
-            or self.admission_generation < 1
-            or type(self.pid) is not int
-        ):
-            raise StaleFence("response turn witness is invalid")
-        if self.pid != os.getpid():
-            raise StaleFence("response witness does not own the current process")
-        thread = snapshot.threads.get(fence.owner_thread)
-        status = snapshot.statuses.get(fence.owner_thread)
-        if (
-            thread is None
-            or status is None
-            or not status.active
-            or thread.role is not ThreadRole.AGENT
-            or thread.name != fence.owner_thread
-            or thread.pid != self.pid
-            or thread.created_at != self.created_at
-            or stable_thread_lookup(thread.created_at) != self.recipient_lookup
-            or thread.worktree != self.worktree
-            or thread.active_turn != self.active_turn
-            or snapshot.admission_generations.get(thread.name) != self.admission_generation
-        ):
-            raise StaleFence("response owner turn stopped or changed before publication")
+        self.require_snapshot(snapshot, "response owner turn stopped or changed before publication")
+        if self.thread.name != fence.owner_thread:
+            raise StaleFence("response turn belongs to a different fenced owner")
+        self.require_active_turn()
 
 
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
@@ -342,8 +315,7 @@ def _require_final_owner(
         raise StaleFence("response turn belongs to a different SQL recipient")
     if (
         not execution.lifecycle.active
-        or not attempt.lifecycle.settling
-        or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
+        or not attempt.lifecycle.publication_ready
         or snapshot.obligation is None
         or snapshot.obligation.exact_target != execution.exact_target
         or execution.exact_target is None
@@ -478,17 +450,11 @@ def _terminal_replay(
         return None
     if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("finished response belongs to a different SQL recipient")
-    attempt = snapshot.attempt
-    if (
-        attempt is None
-        or attempt.owner_thread != fence.owner_thread
-        or attempt.owner_generation != fence.owner_generation
-        or attempt.attempt_ordinal != fence.attempt_ordinal
-        or attempt.owner_token_digest != _digest(fence.token)
-        or snapshot.publication_intent is None
-        or snapshot.publication_receipt is None
-    ):
+    attempt = snapshot.require_attempt()
+    if attempt.authority != fence.authority:
         raise StaleFence("finished response is not this owner's original attempt")
+    if snapshot.publication_intent is None or snapshot.publication_receipt is None:
+        raise StaleFence("finished response has no frozen publication evidence")
     _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=True)
     matched, _, _ = bus.log._keyed_receipt_unlocked(snapshot.publication_intent)
     if matched is None or (

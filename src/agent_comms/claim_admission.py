@@ -29,6 +29,9 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .messages import Message, MessageType
+from .native_input_owner import RegistryOwner
+from .coordination_tables.participants import OwnerGenerations
+from .coordination_errors import StaleFence
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import _store_lock
 from .threads import Thread
@@ -68,15 +71,16 @@ def _verify_selected_wake_state(
     admission: WakeAdmission,
 ) -> None:
     """Check an already locked bus/owner snapshot against one SQL state."""
-    turn = owner.active_turn
-    if (
-        initial.message.message_id != admission.source_message_id
-        or generation != admission.owner_admission_generation
-        or stable_thread_lookup(owner.created_at) != admission.recipient_lookup
-        or turn is None
-        or turn.id != admission.turn_id
-        or turn.admission_generation != generation
-    ):
+    registry_owner = RegistryOwner(thread=owner, admission_generation=generation)
+    try:
+        turn = registry_owner.require_active_turn()
+    except StaleFence as error:
+        raise IdentityConflict("Wake source or owner turn does not match") from error
+    if initial.message.message_id != admission.source_message_id:
+        raise IdentityConflict("Wake source message changed")
+    if stable_thread_lookup(owner.created_at) != admission.recipient_lookup:
+        raise IdentityConflict("Wake recipient incarnation changed")
+    if generation != admission.owner_admission_generation or turn.id != admission.turn_id:
         raise IdentityConflict("Wake source or owner turn does not match")
     with store.session.read():
         assert_cohort_schema(store.session._connection)
@@ -89,32 +93,27 @@ def _verify_selected_wake_state(
         assignment = store.assignments.get(admission.wake_assignment_id)
         participant = store.participants.get(admission.recipient_lookup)
         snapshot = store.snapshots.get(admission.execution_id)
-        attempt = snapshot.attempt
-        if (
-            assignment.recipient_lookup != admission.recipient_lookup
-            or assignment.recipient != owner.name
-            or assignment.wire_seq != admission.source_seq
-            or assignment.message_id != admission.source_message_id
-            or assignment.revision != admission.wake_revision
-            or assignment.lifecycle.execution_id != admission.execution_id
-            or not assignment.lifecycle.engaged
-            or not participant.committed
-            or participant.owner_thread != owner.name
-            or participant.participant_generation != admission.participant_generation
-            or not snapshot.execution.lifecycle.active
-            or snapshot.execution.owner_lookup != admission.recipient_lookup
-            or snapshot.execution.owner_thread != owner.name
-            or not snapshot.is_current
-            or attempt is None
-            or not attempt.lifecycle.allows_tool_admission
-            or attempt.lifecycle.backend_done
-            or attempt.lifecycle.process_dead
-            or attempt.attempt_ordinal != admission.attempt_ordinal
-            or attempt.owner_generation != admission.participant_generation
-            or attempt.owner_thread != owner.name
-            or assignment.assignment_id not in {row.assignment_id for row in snapshot.assignments}
-        ):
+        if assignment.require_engaged_binding() != admission.binding:
+            raise IdentityConflict("Wake assignment binding changed")
+        expected_owner = OwnerGenerations(
+            owner_lookup=admission.recipient_lookup, owner_thread=owner.name,
+            generation=admission.participant_generation,
+        )
+        if not participant.committed or participant.owner_identity != expected_owner:
+            raise IdentityConflict("Wake participant generation changed")
+        try:
+            attempt = snapshot.require_current_attempt()
+        except StaleFence as error:
+            raise IdentityConflict("Wake execution is not the current selected attempt") from error
+        if attempt.owner_identity != expected_owner or attempt.attempt_ordinal != admission.attempt_ordinal:
+            raise IdentityConflict("Wake selected attempt owner changed")
+        if snapshot.execution.owner_thread != owner.name:
+            raise IdentityConflict("Wake execution owner changed")
+        if not attempt.lifecycle.tool_admission_open:
             raise IdentityConflict("Wake execution is not the current selected attempt")
+        if assignment not in snapshot.assignments or assignment.recipient != owner.name:
+            raise IdentityConflict("Wake assignment is not a member of this owner's execution")
+
 
 
 @contextmanager
@@ -136,18 +135,12 @@ def _selected_claim_boundary(
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
         canonical = registry.aliases.get(owner_name, owner_name)
-        owner = registry.threads.get(canonical)
-        status = registry.statuses.get(canonical)
-        generation = registry.admission_generations.get(canonical)
-        if (
-            owner is None
-            or status is None
-            or not status.active
-            or owner.pid != os.getpid()
-            or not owner.role.executable
-            or generation is None
-        ):
-            raise IdentityConflict("Selected wake owner stopped or changed")
+        try:
+            captured = RegistryOwner.capture(registry, canonical, "Selected wake owner stopped or changed")
+            captured.require_active_turn()
+        except StaleFence as error:
+            raise IdentityConflict("Selected wake owner stopped or changed") from error
+        owner, generation = captured.thread, captured.admission_generation
         _require_no_private_owner_rename(comms.root)
         metadata = bus.log._private_marker_unlocked()
         if metadata.root_id != admission.wire_root_id:
@@ -372,19 +365,12 @@ def write_selected_claimed_file(
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
         canonical = registry.aliases.get(owner_name, owner_name)
-        owner = registry.threads.get(canonical)
-        status = registry.statuses.get(canonical)
-        generation = registry.admission_generations.get(canonical)
-        if (
-            owner is None
-            or status is None
-            or not status.active
-            or owner.pid != os.getpid()
-            or not owner.role.executable
-            or generation is None
-            or generation != admission.owner_admission_generation
-        ):
-            raise IdentityConflict("Selected write owner stopped or changed")
+        try:
+            captured = RegistryOwner.capture(registry, canonical, "Selected write owner stopped or changed")
+            captured.require_active_turn()
+        except StaleFence as error:
+            raise IdentityConflict("Selected write owner stopped or changed") from error
+        owner, generation = captured.thread, captured.admission_generation
         _require_no_private_owner_rename(comms.root)
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != admission.wire_root_id:

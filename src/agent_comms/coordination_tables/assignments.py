@@ -18,6 +18,8 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import projected
+from agent_comms.envelope_claim_transitions import AssignmentBinding
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
@@ -34,6 +36,14 @@ class MessageAudience(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
+    def require_engaged_binding(self) -> AssignmentBinding:
+        if not self.lifecycle.engaged:
+            raise IdentityConflict("wake assignment is not engaged")
+        return AssignmentBinding(
+            self.assignment_id, self.revision, self.recipient_lookup,
+            self.wire_seq, self.message_id, self.lifecycle.execution_id,
+        )
+
     assignment_id: str = dataclass_field(
         metadata={
             "wire_name": "claim_id",
