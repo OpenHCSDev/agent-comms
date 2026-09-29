@@ -86,10 +86,6 @@ class AcpEventConsumer(MroDispatch):
     async def turn_settled(self, event: events.TurnSettled) -> None:
         await self.settled(event.turn_id)
 
-    @handles(events.NoActiveTurn)
-    async def no_active_turn(self, event: events.NoActiveTurn) -> None:
-        await self.settled(None)
-
     @handles(events.ToolStart)
     async def on_tool_start(self, event: events.ToolStart) -> None:
         session_id = self.session_id
