@@ -59,6 +59,10 @@ class ProgressWatchdog:
     def await_input(self) -> None:
         self.prompt_start_deadline = self.clock() + self.input_timeout
 
+    def compacted(self, input_started: bool) -> None:
+        if not input_started and self.prompt_start_deadline is not None:
+            self.prompt_start_deadline = self.now + self.input_timeout
+
     def tick(self) -> None:
         self.now = self.clock()
 

@@ -181,12 +181,8 @@ class CompactionEnd(PiEvent):
             and session.result.usage is not None
         ):
             yield session.usage.charge(session.result.usage)
-        if (
-            session.completed
-            and (not session.initial_input_started)
-            and (session.watchdog.prompt_start_deadline is not None)
-        ):
-            session.watchdog.await_input()
+        if session.completed:
+            session.watchdog.compacted(session.initial_input_started)
         session.usage.invalidate()
         yield session.context_info()
         session.reason = self.reason
