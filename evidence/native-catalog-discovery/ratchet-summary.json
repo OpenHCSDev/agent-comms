@@ -1,0 +1,6 @@
+{
+  "ClassSize:src/agent_comms/config_options.py::ModelConfigOption": 18,
+  "ClassSize:src/agent_comms/config_options.py::ThinkingLevelConfigOption": 9,
+  "ClassSize:src/agent_comms/config_options.py::ConfigOptions": 25,
+  "ClassSize:src/agent_comms/pi_rpc.py::PiRpcChannel": 23
+}

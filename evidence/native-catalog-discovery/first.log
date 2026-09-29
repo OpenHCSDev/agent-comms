@@ -1,0 +1,292 @@
+FF....F.....FFFF................................................
+=================================== FAILURES ===================================
+___ test_actual_catalog_auth_refresh_preserves_selection_and_reaps_children ____
+
+catalog_owner = (<agent_comms.acp.CommsAgent object at 0x7fe27b809e80>, [<agent_comms.child_process.AttachedChild object at 0x7fe27b6be660>, <agent_comms.child_process.AttachedChild object at 0x7fe27b612350>])
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fe27b80bb60>
+
+    async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_children(
+        catalog_owner, native_backend,
+    ):
+        owner, children = catalog_owner
+        native = native_backend
+        config = owner.sessions.config
+        session = await owner.new_session(str(native.project))
+        models = await config.models_for(session.session_id)
+>       assert [model.id for model in models] == ["response-local/fixture"]
+E       AssertionError: assert ['openrouter/...pus-4.1', ...] == ['response-local/fixture']
+E         
+E         At index 0 diff: 'openrouter/anthropic/claude-3-haiku' != 'response-local/fixture'
+E         Left contains 366 more items, first extra item: 'openrouter/anthropic/claude-fable-5'
+E         Use -v to get more diff
+
+tests/test_native_catalog_discovery.py:55: AssertionError
+________________ test_actual_catalog_larger_than_stream_buffer _________________
+
+catalog_owner = (<agent_comms.acp.CommsAgent object at 0x7fe27a3b0050>, [<agent_comms.child_process.AttachedChild object at 0x7fe27a3b1810>])
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fe27b613d90>
+
+    async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_backend):
+        owner, children = catalog_owner
+        path = native_backend.config / "models.json"
+        document = json.loads(path.read_text())
+        models = document["providers"]["response-local"]["models"]
+        models.extend({"id": f"large-{i}-" + "x" * 2048, "name": str(i)} for i in range(70))
+        path.write_text(json.dumps(document))
+        result = await ModelConfigOption.discover(owner.sessions.config, "response-local/fixture")
+>       assert len(result) == 71
+E       AssertionError: assert 437 == 71
+E        +  where 437 = len([Model(id='openrouter/anthropic/claude-3-haiku', name='openrouter/anthropic/claude-3-haiku', description=None), Model(..., Model(id='openrouter/anthropic/claude-opus-4.1', name='openrouter/anthropic/claude-opus-4.1', description=None), ...])
+
+tests/test_native_catalog_discovery.py:92: AssertionError
+____ test_changed_auth_refreshes_catalogue_without_changing_selected_model _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-catalog-discovery/first/test_changed_auth_refreshes_ca0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe27cd6def0>
+
+    async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
+        tmp_path, monkeypatch
+    ):
+        revision = [0]
+        monkeypatch.setattr(backend, "auth_revision", lambda: (revision[0], 0))
+    
+        async def discover(*args):
+            models = [Model("test/base", "Base")]
+            if revision[0]:
+                models.append(Model("openai-codex/test", "Subscription"))
+            return models
+    
+        monkeypatch.setattr(ModelConfigOption, "discover", discover)
+        agent = CommsAgent(wire(tmp_path), agent_args=["--model", "test/base"])
+        # Exercise the explicit refresh path without the background drain racing it.
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        agent.on_connect(Client())
+>       session = (await agent.new_session("/tmp/project")).session_id
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_auth.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:192: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7fe27b5769e0>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+src/agent_comms/acp.py:492: PublicationActivationBlocked
+__________ test_uncaught_failure_feedback_once_even_after_done[None] ___________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fe27a1fc5f0>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-catalog-discovery/first/test_uncaught_failure_feedback0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe27a185470>
+prior = None
+
+    @pytest.mark.parametrize("prior", [None, "error", "done"])
+    async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
+        _, session = await new_session(owner, tmp_path, "feedback")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+    
+        async def stream(*args, **kwargs):
+            if prior == "error":
+                yield events.Error("specific provider failure")
+            elif prior == "done":
+                yield events.Done("specific provider failure", False)
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        errors = [u for u in updates if "[agent error]" in str(u)]
+>       assert len(errors) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_turn_runner.py:165: AssertionError
+__________ test_uncaught_failure_feedback_once_even_after_done[error] __________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fe27a1ffb60>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-catalog-discovery/first/test_uncaught_failure_feedback1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe27a186890>
+prior = 'error'
+
+    @pytest.mark.parametrize("prior", [None, "error", "done"])
+    async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
+        _, session = await new_session(owner, tmp_path, "feedback")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+    
+        async def stream(*args, **kwargs):
+            if prior == "error":
+                yield events.Error("specific provider failure")
+            elif prior == "done":
+                yield events.Done("specific provider failure", False)
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        errors = [u for u in updates if "[agent error]" in str(u)]
+>       assert len(errors) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_turn_runner.py:165: AssertionError
+__________ test_uncaught_failure_feedback_once_even_after_done[done] ___________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fe27a082eb0>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-catalog-discovery/first/test_uncaught_failure_feedback2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe27a035400>
+prior = 'done'
+
+    @pytest.mark.parametrize("prior", [None, "error", "done"])
+    async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
+        _, session = await new_session(owner, tmp_path, "feedback")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+    
+        async def stream(*args, **kwargs):
+            if prior == "error":
+                yield events.Error("specific provider failure")
+            elif prior == "done":
+                yield events.Done("specific provider failure", False)
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        errors = [u for u in updates if "[agent error]" in str(u)]
+>       assert len(errors) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_turn_runner.py:165: AssertionError
+________ test_compaction_fault_reaches_acp_client_without_original_send ________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fe27a096a50>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-catalog-discovery/first/test_compaction_fault_reaches_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe27a036c80>
+
+    async def test_compaction_fault_reaches_acp_client_without_original_send(
+        owner, tmp_path, monkeypatch
+    ):
+        from dataclasses import replace
+    
+        from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
+    
+        _, session = await new_session(owner, tmp_path, "compacting")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        # No native process or provider is started. The real ACP input admission and
+        # TurnRunner adaptive hook execute; only the selected operation is substituted.
+        owner.turns.agent_bin = "pi"
+        owner._comms.registry.register(
+            replace(owner._comms.registry.require(session), session_file=str(tmp_path / "saved.jsonl"))
+        )
+        source = OSError("402: insufficient credits on this model")
+        failure = SelectedChildUnknown("402: insufficient credits on this model")
+        attempts = []
+    
+        async def compact(*args, **kwargs):
+            attempts.append(args[5])
+            raise failure from source
+    
+        async def forbidden_stream(*args, **kwargs):
+            pytest.fail("original input must not reach native after uncertain compaction")
+            yield
+    
+        monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
+        monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
+        with pytest.raises(SelectedChildUnknown) as caught:
+>           await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
+
+tests/test_turn_runner.py:206: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:216: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+src/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:299: in _prompt_request
+    return await self.turns.prompt_owned(
+src/agent_comms/turn_runner.py:226: in prompt_owned
+    await self.inputs.run_owned_input(
+src/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+src/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:690: in run
+    await self.prepare_native()
+src/agent_comms/owned_turn.py:577: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+src/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+src/agent_comms/native_session_prepare.py:83: in open
+    async for event in stream:
+src/agent_comms/backend.py:727: in run
+    async for event in self.finish_result():
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.native_session_prepare.NativeSessionPreparation object at 0x7fe27a0e12b0>
+
+    async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
+        if not self.retained:
+>           raise NativePiUnavailable(
+                self.output.failure_text or "Native session preparation failed"
+            )
+E           agent_comms.native_pi.NativePiUnavailable: Native session preparation failed
+
+src/agent_comms/native_session_prepare.py:50: NativePiUnavailable
+=========================== short test summary info ============================
+FAILED tests/test_native_catalog_discovery.py::test_actual_catalog_auth_refresh_preserves_selection_and_reaps_children
+FAILED tests/test_native_catalog_discovery.py::test_actual_catalog_larger_than_stream_buffer
+FAILED tests/test_auth.py::test_changed_auth_refreshes_catalogue_without_changing_selected_model
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[error]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[done]
+FAILED tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send
+7 failed, 57 passed in 16.78s

@@ -23,7 +23,6 @@ import tempfile
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, aclosing, contextmanager, nullcontext
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +31,7 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import pi_payloads
 from . import turn_failure as failures
-from .child_process import AttachedChild, BoundedRun, TimedOutOutcome
+from .child_process import AttachedChild, TimedOutOutcome
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
@@ -301,13 +300,6 @@ class PersistentPiSession:
             await self.close()
 
 
-@dataclass(frozen=True, slots=True)
-class Model:
-    id: str
-    name: str
-    description: str | None = None
-
-
 def auth_revision() -> tuple[int, int]:
     """Detect credential changes without reading or exposing their contents."""
     root = Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser()
@@ -400,101 +392,6 @@ def args_for_thinking_level(args: Sequence[str], level: str | None) -> list[str]
             continue
         result.append(argument)
     return [*result, "--thinking", level] if level else result
-
-
-async def discover_thinking_levels(
-    agent_bin: str, agent_args: Sequence[str], model: str | None
-) -> list[str]:
-    """Ask Pi for the thinking levels supported by one selected model."""
-    if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
-        return ["off", "minimal", "low", "medium", "high"]
-    args = args_for_model(agent_args, model)
-    levels: list[str] = []
-    try:
-        launch = await asyncio.to_thread(
-            NativePiRpcLaunch.managed,
-            agent_bin,
-            tuple([*args, "--no-extensions", "--no-skills", "--no-context-files", "--no-session"]),
-            worktree=Path.cwd(),
-        )
-        async with BoundedRun.session(
-            launch.argv, cwd=launch.cwd, env=launch.env, timeout=10, limit=1024 * 1024
-        ) as proc:
-            assert proc.stdin is not None and proc.stdout is not None
-            reader = PiRpcChannel(proc.stdout)
-            proc.stdin.write(reader.encode(commands.GetAvailableThinkingLevels(id="thinking")))
-            await proc.stdin.drain()
-            while line := await reader.readline():
-                payload = PiRpcChannel.decode_record(line)
-                if (
-                    not isinstance(payload, pi.Response)
-                    or payload.id != "thinking"
-                    or payload.command is not commands.GetAvailableThinkingLevels
-                ):
-                    continue
-                levels = (
-                    list(payload.data.levels)
-                    if payload.success and payload.data is not None
-                    else []
-                )
-                break
-    except (TimeoutError, ValueError, OSError, NativePiUnavailable):
-        pass
-    return levels or ["off"]
-
-
-async def discover_models(
-    agent_bin: str, agent_args: Sequence[str], selected: str | None = None
-) -> list[Model]:
-    """Ask a Pi backend for its configured model catalog."""
-    explicit = [
-        value.strip()
-        for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
-        if value.strip()
-    ]
-    if explicit:
-        values = explicit
-    else:
-        values = []
-        try:
-            launch = await asyncio.to_thread(
-                NativePiRpcLaunch.managed,
-                agent_bin,
-                tuple(
-                    [
-                        *agent_args,
-                        "--no-extensions",
-                        "--no-skills",
-                        "--no-context-files",
-                        "--no-session",
-                    ]
-                ),
-                worktree=Path.cwd(),
-            )
-            async with BoundedRun.session(
-                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10, limit=8 * 1024 * 1024
-            ) as proc:
-                assert proc.stdin is not None and proc.stdout is not None
-                reader = PiRpcChannel(proc.stdout)
-                proc.stdin.write(reader.encode(commands.GetAvailableModels(id="models")))
-                await proc.stdin.drain()
-                while line := await reader.readline():
-                    payload = PiRpcChannel.decode_record(line)
-                    if (
-                        not isinstance(payload, pi.Response)
-                        or payload.id != "models"
-                        or payload.command is not commands.GetAvailableModels
-                    ):
-                        continue
-                    for item in payload.data.models if payload.success and payload.data else ():
-                        if item.provider and item.id:
-                            values.append(f"{item.provider}/{item.id}")
-                    break
-        except (TimeoutError, ValueError, OSError, NativePiUnavailable):
-            pass
-    if selected and selected not in values:
-        values.insert(0, selected)
-    return [Model(value, value) for value in dict.fromkeys(values)]
 
 
 def tool_kind(name: str) -> str:
