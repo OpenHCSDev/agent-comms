@@ -1,0 +1,96 @@
+{
+  "before": {
+    "raw_count": 112,
+    "counts": {
+      "by_pattern": [
+        {
+          "pattern_id": 1,
+          "count": 111,
+          "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+        },
+        {
+          "pattern_id": 14,
+          "count": 1,
+          "pattern_name": "Authoritative Projection Schema"
+        }
+      ],
+      "by_detector": [
+        {
+          "detector_id": "redundant_type_check",
+          "count": 56
+        },
+        {
+          "detector_id": "repeated_builder_calls",
+          "count": 1
+        },
+        {
+          "detector_id": "semantic_mirror_without_descent",
+          "count": 22
+        },
+        {
+          "detector_id": "unmodeled_record_shape",
+          "count": 33
+        }
+      ]
+    },
+    "source_files": 233,
+    "timing": {
+      "parse_seconds": 0.982,
+      "analysis_seconds": 22.071,
+      "planning_seconds": 0.0,
+      "source_index_seconds": 0.111,
+      "analysis_cache_status": "partial",
+      "total_seconds": 23.164
+    },
+    "scan_status": null
+  },
+  "after": {
+    "raw_count": 112,
+    "counts": {
+      "by_pattern": [
+        {
+          "pattern_id": 1,
+          "count": 111,
+          "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+        },
+        {
+          "pattern_id": 14,
+          "count": 1,
+          "pattern_name": "Authoritative Projection Schema"
+        }
+      ],
+      "by_detector": [
+        {
+          "detector_id": "redundant_type_check",
+          "count": 56
+        },
+        {
+          "detector_id": "repeated_builder_calls",
+          "count": 1
+        },
+        {
+          "detector_id": "semantic_mirror_without_descent",
+          "count": 22
+        },
+        {
+          "detector_id": "unmodeled_record_shape",
+          "count": 33
+        }
+      ]
+    },
+    "source_files": 233,
+    "timing": {
+      "parse_seconds": 0.889,
+      "analysis_seconds": 16.098,
+      "planning_seconds": 0.0,
+      "source_index_seconds": 0.727,
+      "analysis_cache_status": "partial",
+      "total_seconds": 17.714
+    },
+    "scan_status": null
+  },
+  "nra_import": "/home/ts/wt/nra-installed-main-20260928/nominal_refactor_advisor/__init__.py",
+  "base": "0931c47d",
+  "head_production": "1efe934a",
+  "limits": "Full core plus explicit src context. Successful full/raw CLI gives233 source files but omits analyzed/omitted detector counts and scan_status. Not a global zero-debt claim or authored-change equivalence proof. Initial20s deadline-exceeded receipts retained; bounded150s scans finished."
+}

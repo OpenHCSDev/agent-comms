@@ -1,3 +1,48 @@
+# PR316 corrected ownership: local R0/T4 passes
+
+Owner: Wegener. Production1efe934a; actual setting-response followthrough9bec4e22. Current main317a1d24d3a merged in7d0576d8; no production overlap. Parent owns merge/install, live untouched.
+
+**This supersedes the earlier review state below.** The independent class-size rule is a local guard, not CI: it now passes with zero increases and no exemption or guard change.
+
+## Complete semantic destinations
+
+- ConfigOption now declares discover as abstract behavior. CatalogConfigOption instances own the entire per-option catalog/cache, credential revision, lock, generation, ACP projection and shared choice validation. Concrete model/thinking declarations inherit that implementation and own discovery/selection/persistence. This replaces ConfigOptions' separate model/thinking caches and cache methods; generation is derived from actual option instances. No second hand-maintained option roster.
+- CatalogQuery is a PiCommand subclass that owns the complete read-only native-query lifecycle: managed launch, one write, existing pending correlation, response interpretation, stderr drainage and child retirement. Existing GetAvailableModels/GetAvailableThinkingLevels inherit it. PiRpcChannel.request is deleted and the channel returns exactly to its pre316 framing/correlation responsibility.
+- SettingCommand owns the result class and shared response interpretation of existing SetModel/SetThinkingLevel. Deleted duplicate callbacks and the option consumer's separately paired result type. Query/setting abstract bases are excluded from wire family membership; concrete command names and payloads stay native-owned.
+- Deleted the displaced Model projection entirely: options use existing ACP SessionConfigSelectOption. Deleted backend discovery functions, ConfigOptions.discover/models_for/thinking_levels_for, root model/thinking cache fields and stale caller mock. All current callers changed, no aliases or forwarding entry points.
+
+Production versus0931c47d:235added/243deleted, net-8. backend1064→961. Tests314added/50deleted: actual catalog/settings acceptance, shared protocol new-case and current caller coverage replace unsupported discovery and duplicate option implementation. No source-format migration or reset.
+
+## Local guard and actual path
+
+Packaged debt_ratchet --root src/agent_comms --base0931c47d --head1efe934a: **zero increases**. Existing class spans: ConfigOption-14, ModelConfigOption-3, ThinkingLevelConfigOption-6, ConfigOptions-16, GetAvailableModels-1, GetAvailableThinkingLevels-1, SetModel-8, SetThinkingLevel-8; PiRpcChannel unchanged. New semantic owners are measured as new declarations, not fabricated zero baselines. Full measurement retained locally; ratchet-correction-summary.json committed.
+
+**68 distinct passing checks, four actual pinned native cases**, zero provider prompts:
+
+- owned-catalog.log:60pass25.21s. All three actual native catalog/auth/large-response/cancellation cases rerun on corrected ownership; auth/model caches remain selected correctly, all children retire and saved input stays unchanged. Also exercises new query subclass over recorded TCP plus existing RPC/config/auth/new-option family contracts.
+- native-settings.log:2pass3.14s, one is a repeated guard. New actual Pi case: set_model success, set_thinking_level success, set_model refusal; real decoded replies traverse SettingCommand to existing result events with exact request IDs and native refusal reason. No provider prompt. This is native response-to-result acceptance, not a claim of a live in-flight user model change.
+- acp-settings.log:3pass1.25s. Existing ACP persisted/selectable configuration, unknown-model rejection, and active backend confirmation/rejection checks. These use recorded confirmation events; complemented by actual native case above.
+- turn-caller.log:4pass1.83s, the four assigned baseline cases deselected. Removed obsolete discovery mock; non-failing orchestration callers still work.
+- Changed-file Ruff and git diff --check pass. Parent retains combined installed acceptance. No full-suite-green or deployed claim.
+
+## Four baseline failures have a concrete fix assignment
+
+Assigned to **Dalton**, original-scope/PR319: [assignment with exact cases and reproduction](https://github.com/OpenHCSDev/agent-comms/pull/319#issuecomment-5882174054). Acceptance is code-bearing current-native preparation/ACP error-feedback coverage, exact receipt, no weakened assertions/compatibility. Three feedback variants must preserve exactly-once error delivery; compaction case must preserve original-not-sent/provenance with actual existing saved history.
+
+Acknowledgment is **not yet received**. This sidecar exposes no direct Codex agent messaging tool; live bus lookup has no Dalton participant. Parent was asked to relay to Dalton thread01a0e9a0-1787-7860-b9b8-ef08bb2368fb. Do not interpret the GitHub assignment as verified active work. The four bodies and owned_turn/turn_runner production remain exclusively Dalton's to prevent duplicates.
+
+## Current NRA and cleanup
+
+Used /usr/bin/python importing installed NRA mainab85aa0b, with the complete core and explicit src context, one parse/analysis worker. Baseline0931c47d and corrected production both233 source files and112 raw findings:56 redundant_type_check,33 unmodeled_record_shape,22 semantic mirrors,1 repeated builder. The changed boundary retains only existing backend._tool_title raw-record lead (tool presentation remains separate) and unchanged presentation.py family evidence mentioning ModelConfigOption. No new raw lead in query/catalog ownership.
+
+Initial default20s runs reported deadline_exceeded and are retained as failed coverage attempts. Explicit150s bounded scans finished in23.164s/17.714s. Successful full/raw CLI omits scan_status/analyzed/omitted counts; no invented full-detector coverage or global zero-debt claim. Summary and failed statuses committed, full raw graphs retained locally. Authored semantic refactor, not NRA-equivalence proof. This replaces the earlier scan with the older NRA installation; its21-findings receipt below remains historical only.
+
+Owned fixture/source-cache copies were removed after all commands and native children finished; r0-cleanup.json records bytes. Source, branch, canonical5fde native package, raw audits and all passing/failing receipts retained. No shared checkout or live process changes.
+
+---
+
+# Historical first316 checkpoint (superseded)
+
 # S2 G4/G5 native catalog discovery closure
 
 Owner: Wegener. PR316. Parent owns merge/install; no live changes. Production checkpoint8d997dcc; merged current main0931c47d in1abd07ff with no owned-file overlap.
