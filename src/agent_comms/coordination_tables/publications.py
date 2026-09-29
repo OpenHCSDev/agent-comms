@@ -43,6 +43,10 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     def matches_request(self, execution_id: str, message: Message) -> bool:
         return self.execution_id == execution_id and self.expected_message == message
 
+    def matches_publication(self, message: Message) -> bool:
+        """Compare the frozen intent once against the Message-owned content snapshot."""
+        return self.expected_message == message.publication_snapshot
+
     execution_id: str = dataclass_field(
         metadata={
             "snapshot_exclude": True,

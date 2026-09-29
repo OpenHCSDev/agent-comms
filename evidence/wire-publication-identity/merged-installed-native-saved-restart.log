@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, platformdirs-4.12.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_native_channel_reply_roundtrip.py B actual native request provider_calls 3
+B published actual reply provider_calls 3
+A automatically observed native reply provider_calls 4
+A ACP feedback proves exact reply injection provider_calls 4
+Both native turns released before guarded restart provider_calls 4
+.
+
+============================== 1 passed in 26.72s ==============================

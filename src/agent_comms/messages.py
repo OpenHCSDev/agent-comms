@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from enum import Enum, StrEnum
 from typing import TYPE_CHECKING
 
@@ -57,18 +57,40 @@ class Message:
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
     )
-    seq: int = field(default=0, metadata={"wire_order": 0})
-    sender_role: ThreadRole = field(default=ThreadRole.AGENT, metadata={"wire_order": 7})
+    seq: int = field(default=0, metadata={"wire_order": 0, "publication_exclude": True})
+    sender_role: ThreadRole = field(
+        default=ThreadRole.AGENT, metadata={"wire_order": 7, "publication_exclude": True}
+    )
     membership: MembershipChange | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_order": 8}
     )
     notice: bool = field(default=False, metadata={"wire_omit_default": True, "wire_order": 9})
     mentions: tuple[ThreadMention, ...] = field(
-        default=(), metadata={"wire_omit_default": True, "wire_order": 10}
+        default=(),
+        metadata={"wire_omit_default": True, "wire_order": 10, "publication_exclude": True},
     )
     claim_transition: ClaimTransition | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_order": 11}
+        default=None,
+        metadata={"wire_omit_default": True, "wire_order": 11, "publication_exclude": True},
     )
+
+    @property
+    def publication_snapshot(self) -> Message:
+        """Frozen publication content before independently owned delivery enrichment.
+
+        Sequence, role, resolved mentions and claim evidence are assigned by the
+        bus. Their declarations exclude them from publication content identity;
+        all other declared fields participate in the Message value comparison.
+        This is an in-memory snapshot, never a different wire representation.
+        """
+        return replace(
+            self,
+            **{
+                declared.name: declared.default
+                for declared in fields(self)
+                if declared.metadata.get("publication_exclude")
+            },
+        )
 
     @property
     def reference(self) -> MessageReference:
