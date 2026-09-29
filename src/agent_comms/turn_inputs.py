@@ -31,13 +31,17 @@ class ForwardedInput:
 
 @dataclass
 class InputForwarding:
+    queue: asyncio.Queue[str | dict[str, Any]] | None = None
     pending: list[tuple[str | None, str, str | dict[str, Any], str]] = field(default_factory=list)
     accepted: set[str] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     generation: int = 0
     started: bool = False
     uncertain: bool = False
-    unresolved: bool = False
+
+    @property
+    def unresolved(self) -> bool:
+        return bool(self.pending) or (self.queue is not None and not self.queue.empty())
 
     @property
     def settled(self) -> bool:
@@ -50,7 +54,7 @@ class InputForwarding:
 
     async def forward(self, session: TurnSession) -> None:
         while True:
-            message = await session.steering_queue.get()
+            message = await self.queue.get()
             original = dict(message) if isinstance(message, dict) else message
             wire = (
                 dict(original)
@@ -173,9 +177,3 @@ class InputForwarding:
                 self.started = True
                 return (True, input_id)
         return (False, None)
-
-    def finish(self, session: TurnSession) -> None:
-        self.unresolved |= bool(self.pending) or (
-            session.steering_queue is not None and not session.steering_queue.empty()
-        )
-        self.pending.clear()

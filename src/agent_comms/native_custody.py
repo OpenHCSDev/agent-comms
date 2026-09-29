@@ -59,6 +59,8 @@ class NativeCustody(ABC):
     @abstractmethod
     def available(self) -> bool: ...
 
+    retained = False
+
     def reuse(self, key, session_file: str | None) -> PiSessionChild | None:
         return None
 
@@ -78,9 +80,6 @@ class NativeCustody(ABC):
 
     def reopen(self, session_file: str) -> ReopenNative:
         return ReopenNative(session_file)
-
-    def retains(self, child: PiSessionChild) -> bool:
-        return False
 
 
 class EmptyNative(NativeCustody):
@@ -159,6 +158,7 @@ class BorrowedNative(NativeCustody):
 
 @dataclass
 class RetainedNative(NativeCustody):
+    retained = True
     child: PiSessionChild
     identity: NativeSessionIdentity
     revision: tuple[_FileRevision, _FileRevision | None]
@@ -198,6 +198,3 @@ class RetainedNative(NativeCustody):
         if self.identity.session_file != session_file:
             raise ValueError("Idle manager belongs to a different saved session")
         return ReopenNative(session_file, self.identity.session_id)
-
-    def retains(self, child):
-        return self.child is child

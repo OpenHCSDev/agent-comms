@@ -380,7 +380,6 @@ for line in sys.stdin:
         assert process.returncode is not None
         assert turn not in backend._ACTIVE_PROCESSES
         assert turn not in backend._ACTIVE_STEERING
-        assert turn not in backend._ACTIVE_INPUT_RESTORERS
         # Once written, this input may already have crossed a provider boundary.
         # It must not be silently requeued after caller cancellation.
         assert queue.empty()
@@ -2664,7 +2663,7 @@ for line in sys.stdin:
             # a valid native JSONL. This stub tests the transport lifecycle:
             # discard injected manager; a different process and matching
             # get_state identity precede a distinct new input's provider work.
-            from agent_comms import native_session_reopen
+            from agent_comms import native_custody
 
             calls = []
 
@@ -2672,7 +2671,7 @@ for line in sys.stdin:
                 calls.append((file, expected_session_id))
                 return "fixed-session"
 
-            monkeypatch.setattr(native_session_reopen, "validate_native_reopen", validated)
+            monkeypatch.setattr(native_custody, "validate_native_reopen", validated)
             retired = persistent.custody.child.proc
             await persistent.discard_for_external_write(str(session_file))
             assert retired is not None and retired.returncode is not None

@@ -80,7 +80,7 @@ class TurnOutput:
     def done(self, session: TurnSession, stderr: str) -> events.Done:
         # Read admission and custody from their actual owners; output never grants either.
         transport_ok = not self.failure_text and (
-            session.retained or session.native.proc.returncode == 0
+            session.native_session.custody.retained or session.native.proc.returncode == 0
         )
         success = (
             transport_ok

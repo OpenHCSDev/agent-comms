@@ -70,11 +70,14 @@ def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
         "initialize_output",
         "record_failure",
         "fail_reason",
+        "reusable",
+        "can_retain",
     }
     assert not any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in retired
         for node in ast.walk(backend)
     )
+    assert "_ACTIVE_INPUT_RESTORERS" not in (root / "backend.py").read_text()
     turn = next(
         node
         for node in backend.body

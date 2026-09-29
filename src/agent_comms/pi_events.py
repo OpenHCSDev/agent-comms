@@ -505,7 +505,7 @@ class MessageStart(PiEvent):
                 if session.native_start is not None:
                     yield events.InputStarted(id=None)
                 if (
-                    session.steering_queue is not None
+                    session.inputs.queue is not None
                     and session.native.proc.stdin is not None
                     and (session.steering_task is None)
                 ):

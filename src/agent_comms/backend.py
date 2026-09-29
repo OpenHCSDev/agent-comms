@@ -78,7 +78,6 @@ _TOOL_KINDS = {
 _ACTIVE_PROCESSES: dict[asyncio.Task[Any], AttachedChild] = {}
 _ACTIVE_STDERR_TASKS: dict[asyncio.Task[Any], asyncio.Task[str]] = {}
 _ACTIVE_STEERING: dict[asyncio.Task[Any], asyncio.Task[None]] = {}
-_ACTIVE_INPUT_RESTORERS: dict[asyncio.Task[Any], Callable[[], None]] = {}
 # Pi 0.85.1 owns provider-idle detection and defaults it to 300 seconds. This
 # transport backstop must remain strictly longer so Pi can emit its authoritative
 # timeout, auto-retry, and transport evidence before agent-comms intervenes.
@@ -217,8 +216,6 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     if steering := _ACTIVE_STEERING.pop(task, None):
         steering.cancel()
         await asyncio.gather(steering, return_exceptions=True)
-    if restore_inputs := _ACTIVE_INPUT_RESTORERS.pop(task, None):
-        restore_inputs()
     proc = _ACTIVE_PROCESSES.pop(task, None)
     if proc is not None:
         await proc.stop()
@@ -489,7 +486,6 @@ class TurnSession:
         self.launch = launch
         self.task = task
         self.session_file = session_file
-        self.steering_queue = steering_queue
         self.finish_event = finish_event
         self.fork_session = fork_session
         self.images = images
@@ -502,12 +498,12 @@ class TurnSession:
         self.interrupt_boundary = interrupt_boundary
         self.native_start = native_start
         self.persistent_session = persistent_session
-        self.custody = (
+        self.native_session = (
             persistent_session if persistent_session is not None else PersistentPiSession()
         )
         self.ui_request = ui_request
         self.startup = startup
-        self.inputs = InputForwarding()
+        self.inputs = InputForwarding(steering_queue)
         self.admission = UnacknowledgedPrompt()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
@@ -556,12 +552,12 @@ class TurnSession:
         )
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
-        self.finished = self.skip = self.retained = False
+        self.finished = self.skip = False
         self.loop = asyncio.get_running_loop()
         self.owner = asyncio.current_task()
         try:
             try:
-                self.native = await self.custody.open(
+                self.native = await self.native_session.open(
                     self.launch,
                     self.session_file,
                     reuse=self.persistent_session is not None and not self.fork_session,
@@ -630,8 +626,8 @@ class TurnSession:
             async for event in self.finish_result():
                 yield event
         finally:
-            if not self.retained:
-                await self.custody.close()
+            if not self.native_session.custody.retained:
+                await self.native_session.close()
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
         while self.rejected_commands:
@@ -762,7 +758,7 @@ class TurnSession:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.rejected_signal = asyncio.Event()
-        if self.steering_queue is not None and self.native.proc.stdin is not None:
+        if self.inputs.queue is not None and self.native.proc.stdin is not None:
             self.stdin = self.native.proc.stdin
             if not self.require_input_id:
                 self.steering_task = asyncio.create_task(self.inputs.forward(self))
@@ -790,8 +786,6 @@ class TurnSession:
         self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
         self.ui_seen: set[str] = set()
-        if self.owner is not None:
-            _ACTIVE_INPUT_RESTORERS[self.owner] = lambda: self.inputs.finish(self)
         if False:
             yield
 
@@ -799,10 +793,7 @@ class TurnSession:
         if self.steering_task is not None:
             self.steering_task.cancel()
             await asyncio.gather(self.steering_task, return_exceptions=True)
-        self.inputs.finish(self)
         self.native.reader.pending.cancel_all()
-        if self.owner is not None:
-            _ACTIVE_INPUT_RESTORERS.pop(self.owner, None)
         identity = self.native.attestation.identity
         if (
             self.persistent_session is not None
@@ -811,8 +802,8 @@ class TurnSession:
             and self.admission.permits_retention(self)
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
-            self.retained = self.custody.retain(self.native, identity)
-        if not self.retained:
+            self.native_session.retain(self.native, identity)
+        if not self.native_session.custody.retained:
             outcome = await self.native.proc.finish()
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
@@ -822,7 +813,9 @@ class TurnSession:
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         if self.owner is not None:
             _ACTIVE_PROCESSES.pop(self.owner, None)
-        self.error_text = "" if self.retained else await self.native.stderr_task
+        self.error_text = (
+            "" if self.native_session.custody.retained else await self.native.stderr_task
+        )
         self.output.startup_error(self.error_text)
         if self.owner is not None:
             _ACTIVE_STDERR_TASKS.pop(self.owner, None)

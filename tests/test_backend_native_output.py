@@ -130,7 +130,7 @@ async def test_actual_native_retained_image_failure_redacts_provider_text(native
     first = await owner.run("Inspect this diagnostic image", images=(image,))
     assert first[-1].ok, first[-1]
     retained = owner.persistent.custody.child.proc
-    assert retained is not None and owner.persistent.sensitive_diagnostics
+    assert retained is not None and owner.persistent.custody.child.sensitive_diagnostics
     owner.provider.status = 503
     second = await owner.run("A new diagnostic input after the image")
     assert not second[-1].ok

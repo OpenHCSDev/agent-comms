@@ -43,7 +43,7 @@ class NativeSessionPreparation(backend.TurnSession):
         self.finished = True
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
-        if not self.retained:
+        if not self.native_session.custody.retained:
             raise NativePiUnavailable(
                 self.output.failure_text or "Native session preparation failed"
             )
