@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from .agent_events import CompactionEnd
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 
 if TYPE_CHECKING:
@@ -24,6 +25,11 @@ class OwnerSummaryOutcome(ABC):
         self, writer: Callable[[NativeSummary], Awaitable[CompactionOperation]]
     ) -> CompactionOperation | None:
         """Write a summary or preserve the unchanged source on a clean decline."""
+
+    @property
+    @abstractmethod
+    def completion_event(self) -> CompactionEnd:
+        """Report only a completed, authoritative outcome."""
 
     def admit_original(
         self,
@@ -45,7 +51,13 @@ class NativeSummary(OwnerSummaryOutcome):
     async def commit_with(
         self, writer: Callable[[NativeSummary], Awaitable[CompactionOperation]]
     ) -> CompactionOperation:
-        return await writer(self)
+        operation = await writer(self)
+        operation.state.require_committed(operation.commit_id)
+        return operation
+
+    @property
+    def completion_event(self) -> CompactionEnd:
+        return CompactionEnd(reason="adaptive")
 
     def commit_options(self) -> dict[str, Any]:
         """Additional owner-commit binding supplied by a selected summary."""

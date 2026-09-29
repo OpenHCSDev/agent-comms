@@ -159,6 +159,15 @@ class CompactionStart(CompactionEvent):
 
 
 @dataclass(frozen=True)
+class CompactionSummaryProgress(CompactionEvent):
+    """The selected native model is alive; no chunk completion is implied."""
+
+    @property
+    def phase(self) -> str:
+        return "progress"
+
+
+@dataclass(frozen=True)
 class CompactionEnd(CompactionEvent):
     aborted: bool = False
     summary: str | None = None
