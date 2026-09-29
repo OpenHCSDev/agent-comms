@@ -56,3 +56,41 @@ Neither side restores an old register alias.
 Installed/native and per-path ratchet pending on the complete published candidate.
 Whole ThreadManagement includes distinct cross-store rename/project/archive/native
 fork/import orchestration; no false all-goal/universal debt-free claim.
+
+## Final installed acceptance and current-main integration
+
+Integrated main1832c930 (Boyle376 journal +Wegener367 selected lifetime) into own
+candidate f2cb5f5d after initial native pass. No production ownership collision;
+new current main introduced no obsolete register caller. All maintained Python
+source/test/benchmark files parse; current README caller migrated as well.
+
+- installed-focused.log: **64 passed7.58s**, own noneditable wheel.
+- installed-native-fork-relations.log: **1 passed13.65s** before376 integration.
+- current-native-fork-relations.log: **1 passed13.92s**, combined current wheel,
+  Pi d396, real physical parent native/localHTTP +production fork/actual ACP
+  attachment/answer +normal mutual relationship add/read/reopen from BOTH owners.
+  First answer8.762s, 7,888/32,768 parent tokens (~24%), serialized-byte mismatch
+  retained; zero compaction, exactly one original input/two provider requests,
+  parent journal and declaration unchanged, inherited context retained/no replay.
+  Existing fixture stops child and native processes. No launch interception or
+  test endpoint/mock protocol; only provider responses are controlled.
+- installed-imports.json: Registration/ThreadManagement/relationships load from
+  own installed site-packages and match current candidate source.
+- current-ratchet.json:canonical guard passes against1832c930; no increased
+  per-path measure. ThreadManagement excess drops14 to0 (now below500), five
+  fewer long-chain terms/one chain, three fewer foreign absence probes. New
+  relation/base/registration behavior does not create a god owner.
+- lint-final.log:changed owner/new case files listed by command pass. The
+  retained unrelated 101-character observed_turn and restorable_aliases lines
+  are not falsely certified by this narrower lint selection.
+
+Whole caller closure is paired **core379 /Toad178**. Core deletes obsolete entry
+instead of preserving an alias. Core production code, maintained tests/benchmark
+and README migrated; 93 maintained Toad fixture/pilot files (122 calls) migrated,
+with no Toad production caller found. Toad's installed right-click/real core stop
+pilot exercises the new declaration setup in a real App, recorded separately.
+
+Ready for parent review/integration and affected LIVE fork/history/relationships
+entry check. No live claim, public-root mutation, durable migration/reset or CI
+hold. All generated own test/build scratch is cleaned after process-reference
+inspection; source/RED evidence/final receipts remain persistent.
