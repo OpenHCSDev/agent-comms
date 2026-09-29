@@ -21,7 +21,7 @@ Claim sent directly on Boyle361. Boyle retains registration_change, registry_doc
 - `native-source.log`:actual pinned d396 Pi, real loopback HTTP provider, real wire/SQLite, current source:1passed3.59s. Candidate index materialized; provider request asserts source-cited non-authoritative awareness, then actual read/edit/write/bash and one published reply, proof binding, cursor and exact owner lease release. No paid provider.
 - `measures.json`:all declaration-owned measures for both touched production files, no increase including per-file chain terms, foreign absence, codec subclasses and independent class lines above500. Scoped measurement; no resource-heavy whole-project NRA scan or completeness claim.
 
-Pending at draft: noneditable-wheel affected native case and final parent integration/live acceptance. Existing schema/history untouched; this is an in-memory ownership change, no cutover/migration needed.
+At initial draft the noneditable-wheel case was pending; it is now passed below. Final parent paired live acceptance remains parent-owned. Existing schema/history untouched; this is an in-memory ownership change, no cutover/migration needed.
 
 ## Installed checkpoint
 
@@ -30,3 +30,9 @@ Noneditable wheel actual native case PASS1test3.19s, source/history prompts sent
 Measured touched-source debt: god-class excess315→305, exact-type checks13→9, long chains4→3, chain terms18→12, foreign absence11→9, string subscripts6→3, codec subclasses0. Per-file increases absent. These are scoped numbers, not a claim the whole refactor is finished.
 
 Boyle now owns goal scheduler/controls too. Preserved incomplete262546bd implementation/handoff sent directly; no parallel goal-control continuation. PR363 remains limited to awareness.
+
+## Current-main installed acceptance
+
+Normal merge of main361/d7745d0e into d1f8ca43 completed without conflicts. Rebuilt noneditable wheel and explicitly reinstalled with no cache; changed-owner bytes (including the integrated registry owners) and all loaded core modules verified from that candidate. `current-installed-native.log`: **1 passed3.23s**, same actual pinned-native four-tool/source-awareness/publish/proof/lease case. No duplicate matrix, paid calls, live changes or original replay. This resolves the concrete registry integration boundary. Source ready for parent review/merge; parent owns paired live acceptance.
+
+Owned completed disposable tests and previous merged startup candidate removed after process cwd/cmdline/fd reference check; cleanup.json records exact paths. Current candidate, source, all evidence, global canonical native package and original histories preserved.

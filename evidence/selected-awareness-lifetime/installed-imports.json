@@ -6,7 +6,14 @@
   },
   "changed_owners": {
     "agent_comms.coordinated_runtime": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py",
-    "agent_comms.optional_awareness_projection": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/optional_awareness_projection.py"
+    "agent_comms.optional_awareness_projection": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/optional_awareness_projection.py",
+    "agent_comms.registration": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/registration.py",
+    "agent_comms.registration_change": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/registration_change.py",
+    "agent_comms.registry_document": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/registry_document.py",
+    "agent_comms.thread_identity": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/thread_identity.py",
+    "agent_comms.thread_status": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/thread_status.py",
+    "agent_comms.threads": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/threads.py",
+    "agent_comms.turn_lease": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/turn_lease.py"
   },
   "loaded_core_modules": {
     "agent_comms.bus_publication": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/bus_publication.py",
@@ -78,6 +85,7 @@
     "agent_comms.reservation_rules": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/reservation_rules.py",
     "agent_comms.native_admission_rules": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/native_admission_rules.py",
     "agent_comms.thread_status": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/thread_status.py",
+    "agent_comms.registration_change": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/registration_change.py",
     "agent_comms.registry_document": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/registry_document.py",
     "agent_comms.native_input_owner": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/native_input_owner.py",
     "agent_comms.owner_compaction_gate": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-awareness-lifetime/installed/lib/python3.14/site-packages/agent_comms/owner_compaction_gate.py",
