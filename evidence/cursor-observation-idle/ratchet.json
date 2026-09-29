@@ -1,0 +1,12 @@
+{
+  "before": {
+    "BooleanChainTerms": 0,
+    "ForeignAbsenceProbe": 5,
+    "class_excess_500": 45
+  },
+  "after": {
+    "BooleanChainTerms": 0,
+    "ForeignAbsenceProbe": 5,
+    "class_excess_500": 45
+  }
+}

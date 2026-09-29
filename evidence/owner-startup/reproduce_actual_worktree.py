@@ -1,11 +1,15 @@
 """No prompt: mirror the failed live declaration in a private isolated launch."""
-import os, tempfile, time, shutil
-from pathlib import Path
+import os
+import shutil
+import tempfile
+import time
 from dataclasses import replace
+from pathlib import Path
+
+from agent_comms.child_process import ObservedProcess
 from agent_comms.comms import Comms
 from agent_comms.registration import Registration
 from agent_comms.runtime import socket_path
-from agent_comms.child_process import DetachedProcess
 
 receipt=Path(__file__).parent
 stage=receipt.parent.parent/'.artifacts'/'actual-worktree'
@@ -37,6 +41,6 @@ with tempfile.TemporaryDirectory(prefix='comms-startup-mirror-',dir='/var/tmp') 
    time.sleep(.02)
   print('ACTUAL_WORKTREE_STARTUP',owner.process_alive,socket_path(root,result.pid).exists(),flush=True)
  finally:
-  if owner.process_alive:DetachedProcess.attach(owner.process_identity).stop_sync()
+  if owner.process_alive:ObservedProcess(owner.process_identity).stop_sync()
   for path in (root/'diagnostics').glob('owner-*.log'):
    shutil.copyfile(path,receipt/('actual-worktree-'+path.name))

@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from agent_comms.goal_attempts import ProviderUsageTotal
 from pathlib import Path
 
 import pytest
@@ -986,7 +987,7 @@ class TestAgentTurn:
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         assert wired.registry.require("proj").goal.state.declared_name == "completed"
         assert GoalAttemptStore(private).snapshot(goal.id).lifecycle == CompletedGeneration()
-        assert GoalAttemptStore(private).provider_usage_total(goal.id).responses == 1
+        assert ProviderUsageTotal.for_goal(GoalAttemptStore(private), goal.id).responses == 1
         await agent.shutdown()
 
     @pytest.mark.parametrize("owner_paused", [False, True])
@@ -1037,8 +1038,8 @@ class TestAgentTurn:
         store = GoalAttemptStore(wired.root / "goal-private")
         assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
         assert store.snapshot(goal.id).number == 2
-        assert store.provider_usage_total(goal.id).responses == 2
-        assert str(store.provider_usage_total(goal.id).cost_total) == "0.03"
+        assert ProviderUsageTotal.for_goal(store, goal.id).responses == 2
+        assert str(ProviderUsageTotal.for_goal(store, goal.id).cost_total) == "0.03"
         grant = agent.turns.goals.goal_store.ready_grant(goal.id, 2)
         assert grant not in repr(updates)
         assert grant not in repr(goal)
@@ -1137,7 +1138,7 @@ class TestAgentTurn:
         store.create_goal(goal.id)
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
-        store.record_failed(reservation, "The previous turn failed")
+        reservation.fail(store, "The previous turn failed")
         blocked = wired.goals.update_goal(
             "proj",
             BlockedGoalAction(
@@ -1181,7 +1182,7 @@ class TestAgentTurn:
         store.create_goal(goal.id)
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
-        store.record_failed(reservation, "Previous turn failed")
+        reservation.fail(store, "Previous turn failed")
         blocked = wired.goals.update_goal(
             "proj",
             BlockedGoalAction(
@@ -1228,7 +1229,7 @@ class TestAgentTurn:
         if failed:
             reservation = store.reserve(goal.id, 1)
             store.claim_launch(reservation)
-            store.record_failed(reservation, "Interrupted by owner")
+            reservation.fail(store, "Interrupted by owner")
         paused = await agent.turns.goals.update_goal("proj", "paused", goal.id, goal.revision)
         updates.clear()
         try:
@@ -1366,7 +1367,9 @@ class TestAgentTurn:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         monkeypatch.setattr("agent_comms.backend.terminate_task_process", terminate)
-        monkeypatch.setattr(agent.turns.goals.goal_store, "record_provider_usage", fail_usage)
+        from agent_comms.goal_attempts import LaunchPermit
+
+        monkeypatch.setattr(LaunchPermit, "record_provider_usage", fail_usage)
         with pytest.raises(StorageUncertainError):
             await agent.turns.run_agent_turn("proj", "proj", "continue")
         assert terminated

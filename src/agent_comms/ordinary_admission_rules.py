@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .goal_attempt_phase import ClaimedAttempt
-from .goal_attempts import Generation
-from .goal_generation import ReservedGeneration
 from .reservation_rules import ReservationRule, RuleCheck
 from .thread_identity import TurnId
 
@@ -220,14 +217,7 @@ class OrdinaryGoalGrantRule(ReservationRule):
     explanation = "The captured autonomous goal launch is no longer claimed."
 
     def violated(self, check: OrdinaryGoalGrantCheck) -> bool:
-        attempt = check.permit.reservation
-        return not check.store._is_attempt(
-            attempt,
-            ClaimedAttempt(),
-            Generation(
-                attempt.goal_id, attempt.generation, ReservedGeneration(), attempt.attempt_id
-            ),
-        )
+        return not check.permit.is_claimed(check.store)
 
 
 class UnboundOrdinaryInputCheck(RuleCheck):

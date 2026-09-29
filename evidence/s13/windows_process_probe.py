@@ -1,15 +1,21 @@
-import asyncio,json,sys,time,os
+import asyncio
+import json
+import os
+import sys
 from dataclasses import replace
 from pathlib import Path
+
 from agent_comms.child_process import *
+
+
 async def run():
     print('identity', ProcessIdentity.capture(os.getpid()),flush=True)
     result=await BoundedRun.run((sys.executable,'-c','print("Windows real execution")'),timeout=5)
     assert result.outcome.successful,(result.outcome,result.stderr)
     print('ordinary', result.stdout.decode().strip(),flush=True)
-    child=DetachedProcess.launch((sys.executable,'-c','import time; time.sleep(60)'))
+    child=ParentedProcess.launch((sys.executable,'-c','import time; time.sleep(60)'))
     try:
-        stale=DetachedProcess.attach(replace(child.identity,start_time=child.identity.start_time+1))
+        stale=ObservedProcess(replace(child.identity,start_time=child.identity.start_time+1))
         assert not stale.alive()
         try: stale.force()
         except IdentityMismatchError: pass
@@ -23,7 +29,7 @@ async def run():
         captured.append(identity)
         raise ValueError('reservation refused')
     try:
-        DetachedProcess.launch((sys.executable,'-c','raise RuntimeError("must not execute")'),before_start=refuse)
+        ParentedProcess.launch((sys.executable,'-c','raise RuntimeError("must not execute")'),before_start=refuse)
     except ValueError as error: assert str(error)=='reservation refused'
     else: raise AssertionError('reservation accepted')
     assert len(captured)==1 and not captured[0].alive()

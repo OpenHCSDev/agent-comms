@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.child_process import DetachedProcess, ProcessIdentity
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
@@ -16,7 +16,7 @@ from agent_comms.threads import Thread
 
 @pytest.mark.parametrize("ending", ["exit", "lease", "process", "root", "close", "cancel"])
 async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
-    process = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    process = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     comms = Comms(tmp_path / "wire")
     comms.registry.declare(
         Thread("cold", frozenset(), str(tmp_path), process_identity=process.identity)

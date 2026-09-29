@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import time
 from contextlib import closing
@@ -17,9 +18,10 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
-    DetachedProcess,
     ExitedOutcome,
     IdentityMismatchError,
+    ObservedProcess,
+    ParentedProcess,
     Platform,
     ProcessIdentity,
     TimedOutOutcome,
@@ -77,10 +79,8 @@ async def test_attached_stop_retires_real_child_and_defiant_grandchild(tmp_path:
 
 @pytest.mark.asyncio
 async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> None:
-    child = DetachedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
-    stale = DetachedProcess.attach(
-        replace(child.identity, start_time=child.identity.start_time + 1)
-    )
+    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
     try:
         assert not stale.alive()
         with pytest.raises(IdentityMismatchError):
@@ -181,7 +181,7 @@ async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> Non
     if not isinstance(Platform.current(), NamespaceContainment):
         pytest.skip("This platform does not provide PID namespaces")
     receipt = tmp_path / "namespace.json"
-    launcher = DetachedProcess.launch(
+    launcher = ParentedProcess.launch(
         (
             sys.executable,
             "-c",
@@ -272,7 +272,7 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
         assert identity.alive()
         recorded.append(identity)
 
-    child = DetachedProcess.launch(
+    child = ParentedProcess.launch(
         (
             sys.executable,
             "-c",
@@ -283,9 +283,7 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
     )
     try:
         assert recorded == [child.identity]
-        stale = DetachedProcess.attach(
-            replace(child.identity, start_time=child.identity.start_time + 1)
-        )
+        stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
         with pytest.raises(IdentityMismatchError):
             stale.stop_sync()
         assert child.alive()
@@ -303,7 +301,7 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
         raise ValueError("reservation refused")
 
     with pytest.raises(ValueError, match="reservation refused"):
-        DetachedProcess.launch(
+        ParentedProcess.launch(
             (
                 sys.executable,
                 "-c",
@@ -375,7 +373,7 @@ async def test_inherited_deadline_survives_parent_death_and_releases_real_lock(
 
     receipt = tmp_path / "child.json"
     lock = tmp_path / "authority.lock"
-    launcher = DetachedProcess.launch(
+    launcher = ParentedProcess.launch(
         (
             sys.executable,
             "-c",
@@ -417,7 +415,7 @@ BoundedRun.run_inherited(command,deadline=time.monotonic()+4,pass_fds=(fd,))
         if launcher.alive():
             await launcher.stop()
         if child is not None and child.alive():
-            await DetachedProcess.attach(child).stop()
+            await ObservedProcess(child).stop()
 
 
 @pytest.mark.asyncio
@@ -439,3 +437,35 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
             drain.cancel()
             await asyncio.gather(drain, return_exceptions=True)
     assert not child.alive()
+
+
+@pytest.mark.asyncio
+async def test_parent_custody_reaps_but_observation_cannot_claim_exit_code():
+    from agent_comms.child_process import DetachedExitOutcome
+
+    child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1); exit(7)"))
+    observed = ObservedProcess(child.identity)
+    try:
+        assert await child.wait() == ExitedOutcome(7)
+        assert await observed.wait() == DetachedExitOutcome()
+        with pytest.raises(IdentityMismatchError):
+            observed.stop_sync()
+    finally:
+        child.close()
+
+
+def test_parent_pipe_custody_closes_after_real_exception():
+    with (
+        pytest.raises(ValueError, match="caller failed"),
+        Platform.current().launch(
+            (sys.executable, "-c", "import time; time.sleep(60)"), ()
+        ) as launch,
+        launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
+    ):
+        launch.release(child.identity)
+        launch.verify()
+        identity = child.identity
+        stdout, stderr = child.process.stdout, child.process.stderr
+        raise ValueError("caller failed")
+    assert not identity.alive()
+    assert stdout.closed and stderr.closed
