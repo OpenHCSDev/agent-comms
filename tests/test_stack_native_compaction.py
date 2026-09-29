@@ -353,7 +353,9 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                     monkeypatch.setenv(key, value)
                 comms = wire(root / "wire")
                 root_id = comms.messaging.initialize_private_initial_protocol()
-                package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+                assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"
+                package = Path(package_path)
                 monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
                 monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
                 monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
