@@ -115,7 +115,8 @@ integrated simultaneously, fold these two native context/RPC changes into its
 complete package; do not overwrite its proof index. This completes assigned Q8
 bridge behavior, not every remaining history/event/T4 plan surface.
 
-Owned disposable roots and env: `.scratch`, diagnostic `stack/.pi-native.stage.*`,
-`.venv`. Remove after active process references finish; retain this receipt and
-canonical package for parent integration. No predecessor or live root is cleanup
-scope.
+Cleanup complete after checking active process arguments: own `.scratch`,
+diagnostic stage and `.venv` removed (323,298,956 apparent bytes). See
+[cleanup](cleanup.json). Only the canonical package is retained for parent
+integration. Resource guard still warns (root6.4GiB/home13.4GiB, swap9.0GiB);
+no large tests or workers remain. No predecessor or live root was touched.

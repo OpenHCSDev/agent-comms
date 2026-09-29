@@ -1,7 +1,7 @@
 {
   "root": "src/agent_comms/",
   "base_revision": "69be56053990d0d6ea89139b03e6423e555c2691",
-  "head_revision": "6a14e1445151bab1b027913d8437ecd75b468541",
+  "head_revision": "69221b33400b981c4b13bb6ea7662107f8c0724c",
   "paths": [
     "src/agent_comms/compaction_boundary.py",
     "src/agent_comms/compaction_records.py",
@@ -19,11 +19,10 @@
     "src/agent_comms/registration.py",
     "src/agent_comms/selected_summary_admission.py",
     "src/agent_comms/threads.py"
-  ]
-}
-Nonzero deltas:
-{
-  "GodClassExcess:src/agent_comms/owner_compaction_commit.py::OwnerCompactionCommit": -42,
-  "ForeignAbsenceProbe:src/agent_comms/owner_compaction_commit.py": -6,
-  "StringSubscript": -7
+  ],
+  "nonzero_delta": {
+    "GodClassExcess:src/agent_comms/owner_compaction_commit.py::OwnerCompactionCommit": -42,
+    "ForeignAbsenceProbe:src/agent_comms/owner_compaction_commit.py": -6,
+    "StringSubscript": -7
+  }
 }
