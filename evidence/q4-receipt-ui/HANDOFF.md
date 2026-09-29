@@ -19,3 +19,7 @@ Noneditable installed native/ACP journey PASS1test5.14s, then normal main365/acd
 Noether169 reports physical canonical fork open before missing socket becomes ready passes in his isolated current-core test; historical default missing-socket trigger remains unproved. Q4 does not claim to fix it. Parent retains diagnosis; issue107 is queued afterQ4.
 
 Owned completed test copies and previous merged363 candidate removed after cwd/cmdline/fd process-reference check. Current Q4 candidate/wheel, all source/evidence,367draft branch and global immutable d396 retained.
+
+## Closure after cold-fork hotfix372
+
+Normal current-main merge c60f1f99 includes369 FieldCodec ownership,366 transcript read identity and372 cold attachment. No merge conflicts. Because369 changes Q4's actual decode owner, rebuilt a new noneditable candidate `.artifacts/q4-current/runtime` and ran the one affected continuous native/ACP receipt+UI journey: PASS1test5.02s. Changed bytes/all loaded modules verified installed, no PYTHONPATH, no paid calls. Exact current installed receipt `installed-main372.log` and `installed-imports-main372.json`. No unchanged broad matrix. Q4 source/caller/installed closure ready for parent; paired live paint remains parent-owned. Continue367 whole lifetime batch and its missing actual terminal/installed acceptance;107 queued.
