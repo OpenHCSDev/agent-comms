@@ -1,0 +1,104 @@
+[
+  {
+    "measure": "GodClassExcess",
+    "before": {
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::CoordinatedTurn": 0,
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::SelectedExistingFileWrite": 0,
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::SelectedExecution": 315,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_ParticipantOwner": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_CoordinatorVersions": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_CohortVersion": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_GenerationProvenance": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_SelectedDecision": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_OpenObligation": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::OptionalAwarenessResult": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::OmittedAwareness": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::CompleteAwareness": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::OptionalAwarenessProjection": 0,
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::OptionalAwarenessSupplement": 0
+    },
+    "after": {
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::CoordinatedTurn": 0,
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::SelectedExistingFileWrite": 0,
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::SelectedExecution": 305,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_ParticipantOwner": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_CoordinatorVersions": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_CohortVersion": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_GenerationProvenance": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_SelectedDecision": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::_OpenObligation": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::OptionalAwarenessResult": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::OmittedAwareness": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::CompleteAwareness": 0,
+      "GodClassExcess:src/agent_comms/optional_awareness_projection.py::OptionalAwarenessProjection": 0,
+      "GodClassExcess:src/agent_comms/coordinated_runtime.py::OptionalAwarenessSupplement": 0
+    },
+    "increases": {}
+  },
+  {
+    "measure": "TypeIdentity",
+    "before": {
+      "TypeIdentity": 13
+    },
+    "after": {
+      "TypeIdentity": 9
+    },
+    "increases": {}
+  },
+  {
+    "measure": "LongBooleanChain",
+    "before": {
+      "LongBooleanChain": 4
+    },
+    "after": {
+      "LongBooleanChain": 3
+    },
+    "increases": {}
+  },
+  {
+    "measure": "BooleanChainTerms",
+    "before": {
+      "BooleanChainTerms:src/agent_comms/coordinated_runtime.py": 18,
+      "BooleanChainTerms:src/agent_comms/optional_awareness_projection.py": 0
+    },
+    "after": {
+      "BooleanChainTerms:src/agent_comms/coordinated_runtime.py": 12,
+      "BooleanChainTerms:src/agent_comms/optional_awareness_projection.py": 0
+    },
+    "increases": {}
+  },
+  {
+    "measure": "ForeignAbsenceProbe",
+    "before": {
+      "ForeignAbsenceProbe:src/agent_comms/coordinated_runtime.py": 9,
+      "ForeignAbsenceProbe:src/agent_comms/optional_awareness_projection.py": 2
+    },
+    "after": {
+      "ForeignAbsenceProbe:src/agent_comms/coordinated_runtime.py": 7,
+      "ForeignAbsenceProbe:src/agent_comms/optional_awareness_projection.py": 2
+    },
+    "increases": {}
+  },
+  {
+    "measure": "CodecSubclass",
+    "before": {
+      "CodecSubclass:src/agent_comms/coordinated_runtime.py": 0,
+      "CodecSubclass:src/agent_comms/optional_awareness_projection.py": 0
+    },
+    "after": {
+      "CodecSubclass:src/agent_comms/coordinated_runtime.py": 0,
+      "CodecSubclass:src/agent_comms/optional_awareness_projection.py": 0
+    },
+    "increases": {}
+  },
+  {
+    "measure": "StringSubscript",
+    "before": {
+      "StringSubscript": 6
+    },
+    "after": {
+      "StringSubscript": 3
+    },
+    "increases": {}
+  }
+]
