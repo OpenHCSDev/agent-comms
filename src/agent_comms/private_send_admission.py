@@ -7,12 +7,14 @@ raw byte or uncertain commit never becomes a fresh send attempt.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import sqlite3
 import threading
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -25,6 +27,13 @@ from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_prompt_send import PromptAdmissionBusy
 from .native_runtime_input import NativeRuntimeInput
+from .native_prompt_binding import bind_expected_prompt
+from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .tracked_turn import TrackedTurnSession
+
+if TYPE_CHECKING:
+    from .pi_events import PiEvent
+    from .selected_tool_broker import NativeToolMode
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 from .registry_document import RegistrySnapshot
@@ -53,6 +62,110 @@ class PrivateSendAdmission:
             "_journal",
             CompactionJournal(self.bus.log.path.parent / "compaction-commits.sqlite3"),
         )
+
+    @classmethod
+    def reserve(
+        cls,
+        *,
+        bus: MessageBus,
+        store: Coordination,
+        wire_root_id: str,
+        owner: RegistryOwner,
+        participant: ParticipantOwner,
+        stage: NativeSendStage,
+        token: str,
+        prompt: str,
+        expected_session: Path | None,
+        fresh_selected: FreshPrivateSession | None,
+    ) -> PrivateSendAdmission:
+        """Reserve once and bind the exact prompt before any native process starts.
+
+        A failed binding leaves the durable reservation intact; construction must
+        never roll it back or make another input eligible for automatic replay.
+        """
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        input_id = stage.reserve(store, participant, digest)
+        bind_expected_prompt(
+            store,
+            input_id=input_id,
+            stage=stage,
+            owner=owner.thread,
+            generation=participant.generation,
+            prompt=prompt,
+        )
+        return cls(
+            bus=bus,
+            store_path=store.session.path,
+            wire_root_id=wire_root_id,
+            owner=owner,
+            participant=participant,
+            stage=stage,
+            input_id=input_id,
+            token_digest=digest,
+            prompt=prompt,
+            expected_session=expected_session,
+            fresh_selected=fresh_selected,
+        )
+
+    @property
+    def session_dir(self) -> Path:
+        return self.bus.log.path.parent / "native-sessions" / self.stage.assignment.recipient_lookup
+
+    def verify(self, store: Coordination, context: NativeContextProof) -> None:
+        self.stage.verify(
+            store,
+            self.participant,
+            self.input_id,
+            self.token_digest,
+            context,
+            session_dir=self.session_dir,
+            wire_root_id=self.wire_root_id,
+            prompt=self.prompt,
+        )
+        self.owner.require_registry(self.bus._registry)
+
+    async def execute(
+        self,
+        package: Path,
+        *,
+        provider: str,
+        model: str,
+        selected_tool_mode: NativeToolMode | None = None,
+        observe_event: Callable[[PiEvent], Awaitable[None]] | None = None,
+    ) -> NativeTurnResult:
+        """Return only live corroborated proof, or settle a proved terminal failure.
+
+        TrackedTurnSession retains child/tool custody. Its return or exception
+        follows cleanup; disconnect and unknown outcomes are never committed here.
+        The raw writer still owns the sole one-use send token and exclusion.
+        """
+        with Coordination(str(self.store_path)) as store:
+            try:
+                result = await TrackedTurnSession.execute(
+                    package,
+                    input_id=self.input_id,
+                    prompt=self.prompt,
+                    worktree=Path(self.owner.thread.worktree).absolute(),
+                    session_dir=self.session_dir,
+                    session_file=self.expected_session,
+                    provider=provider,
+                    model=model,
+                    thinking_level=self.owner.thread.thinking_level,
+                    maintenance_root=self.bus.log.path.parent,
+                    fresh_selected=self.fresh_selected,
+                    selected_tool_mode=selected_tool_mode,
+                    observe_event=observe_event,
+                    prompt_send_boundary=self,
+                )
+            except NativePiTerminalFailure as error:
+                self.verify(store, error.context)
+                self.stage.fail_terminal(store)
+                raise
+            self.verify(store, result.context)
+            return result
+
+    def commit(self, store: Coordination, context: NativeContextProof) -> None:
+        self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
 
     @contextmanager
     def _exclusion(self) -> Iterator[tuple[Coordination, RegistrySnapshot, sqlite3.Connection]]:
