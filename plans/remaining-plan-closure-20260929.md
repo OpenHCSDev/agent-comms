@@ -29,9 +29,7 @@ this document does not promote an activation-in-progress claim to completed.
   deleted,35 chain terms removed; actual installed socket retry/native and selected
   handoff paths passed before parent merge. Boyle371 journal
   enrollment/publication identities and376 transaction ownership are merged;381 continues native authority/settlement closure; neither slice completes all S14.
-- Wegener retains current SelectedExecution/coordinated-runtime/startup work.
-  Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
-  Do not create competing work in those files.
+- Current ownership supersedes earlier snapshots: Boyle384 closes SelectedExecution;383 closes Wegener's InputDrain. Both are ready for parent review. Dalton382/182 closes MessageBus and its actual installed idle gate now passes; remaining HistoryViews is his next whole closure. Carver183 closes Agent session lifecycle (627->377), Noether181 closes App actions (750->442) and continues CommsSidebar, Tesla owns final116 producer/terminal-writer latency after180. Wegener owns the next whole GoalAttemptStore/AttemptStore closure; Boyle proceeds to remaining process custody after cross-review. Parent owns paired live deployment and full plan reconciliation.
 - Workspace156 mapping was superseded by160(+163 proof); first-open153,154 and345
   cutover were reported complete. Later Toad167 is in the parent's paired test
   above. The historical T4 and UI rows below are not fresh outstanding assignments;

@@ -1,0 +1,5 @@
+Using Python 3.14.2 environment at: /home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed
+Resolved 1 package in 1ms
+Prepared 1 package in 11ms
+Installed 1 package in 5ms
+ + batrachian-toad==0.6.20 (from file:///home/ts/wt/toad-registration-authority-callers-20260929/.artifacts/wheels/batrachian_toad-0.6.20-py3-none-any.whl)

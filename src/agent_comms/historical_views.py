@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 
 from .channels import Channel
+from .field_codec import FieldCodec
+from .message_page import MessagePage, MessagePageRequest, PageTraversal
 from .messages import Message
+from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import ChannelDisplayScope, DisplayBasis, DMDisplayScope, MessageDisplayScope
 from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .response_policy import InformationalPolicy, ResponsePolicy
-from .store_files import file_revision
+from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock, file_revision
 from .threads import Thread
+from .wire_log import WireLog
+from .wire_metadata import ArchivedAccess
 
 
 class HistoryView(ABC):
@@ -168,3 +174,134 @@ class HistoricalDisplay:
 
     def select(self, sequences) -> HistoricalDisplay:
         return HistoricalDisplay(self.source, self.displayed.select(sequences))
+
+
+class HistoryArchive:
+    """Ordered immutable source snapshots; never a delivery/launch authority."""
+
+    filename = "history_sources.json"
+
+    def __init__(self, bus_path: Path):
+        self.bus_path = bus_path
+        self.path = bus_path.with_name(self.filename)
+
+    def sources(self) -> tuple[HistorySource, ...]:
+        try:
+            raw = json.loads(self.path.read_text())
+        except FileNotFoundError:
+            return ()
+        return FieldCodec.decode(tuple[HistorySource, ...], raw)
+
+    def attach(self, source_root: Path) -> HistorySource:
+        """Snapshot a preserved source, then publish it for ordinary display.
+
+        Only destination files are written. No Comms constructor, source locks,
+        inboxes, execution inputs, or source sequence allocator are touched.
+        A source is attached once. Its original bytes and identity survive.
+        """
+        import shutil
+        import tempfile
+
+        from .catalog_store import ChannelCatalog
+        from .historical_views import HistorySource
+        from .transcript_routes import TranscriptRoutes
+
+        source_root = source_root.resolve()
+        if source_root == self.bus_path.parent.resolve():
+            raise ValueError("The live bus cannot be its own history source")
+        with _store_lock(self.path):
+            sources = self.sources()
+            existing = next((s for s in sources if s.original_root == str(source_root)), None)
+            if existing is not None:
+                return existing
+            parent = self.bus_path.parent / "history"
+            parent.mkdir(mode=0o700, exist_ok=True)
+            stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
+            try:
+                paths = [
+                    source_root / name
+                    for name in (
+                        "bus.jsonl",
+                        "registry.json",
+                        ChannelCatalog.filename,
+                        "bus_meta.json",
+                    )
+                ]
+                revisions = tuple(file_revision(path) for path in paths)
+                for path in paths:
+                    if path.exists():
+                        shutil.copy2(path, stage / path.name)
+                TranscriptRoutes(source_root).snapshot(stage)
+                if revisions != tuple(file_revision(path) for path in paths):
+                    raise ValueError("Historical source changed during snapshot; retry")
+                bus_info = paths[0].stat() if paths[0].exists() else None
+                if bus_info is None:
+                    (stage / "bus.jsonl").touch()
+                # One current marker format; snapshots retain source identity
+                # and explicitly prohibit publication or historical admission.
+                archived = WireLog(stage / "bus.jsonl")
+                marker = archived.read_metadata_unlocked(required=True)
+                marker.admission_after_seq = marker.last_seq
+                marker.access = ArchivedAccess()
+                marker.checkpoint_version = None
+                marker.checkpoint_seal = None
+                guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
+                guard.create_pending()
+                archived.write_metadata_unlocked(marker)
+                guard.commit_initial()
+                source = HistorySource(
+                    str(stage.resolve()),
+                    str(source_root),
+                    marker.root_id,
+                    (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
+                    bus_info.st_size if bus_info else 0,
+                    file_revision(stage / "bus.jsonl"),
+                    file_revision(stage / "registry.json"),
+                )
+                declarations = source.registry().all_threads()
+                previous = 0
+                for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
+                    message, _ = archived._public_page_record(record, size, marker)
+                    if message.seq <= previous:
+                        raise ValueError("Historical source has nonascending sequences")
+                    previous = message.seq
+                if not declarations:
+                    raise ValueError("Historical source has no identity declarations")
+                _atomic_write_text(
+                    self.path,
+                    json.dumps([FieldCodec.encode(item) for item in (*sources, source)]),
+                )
+                return source
+            except BaseException:
+                shutil.rmtree(stage)
+                raise
+
+    def page(self, view: HistoryView, *, before=None, after=None, limit=100,
+             max_bytes=256 * 1024) -> MessagePage:
+        traversal = PageTraversal.capture(
+            before.sequence if before is not None else None,
+            after.sequence if after is not None else None,
+        )
+        sources = self.sources()
+        cursor = before or after
+        start = next(
+            (i for i, source in enumerate(sources) if cursor and source.key == cursor.source),
+            len(sources) - 1 if cursor is None else -1,
+        )
+        if cursor is not None and start < 0:
+            raise ValueError("Historical source detached; reload history")
+        for index in traversal.source_indexes(start, len(sources)):
+            source = sources[index]
+            snapshot = source.registry().snapshot()
+            request = MessagePageRequest(
+                view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes
+            )
+            page = request.read(WireLog(Path(source.root) / "bus.jsonl"))
+            page = replace(page, messages=tuple(
+                HistoricalMessage.project(message, source, index, snapshot)
+                for message in page.messages
+            ))
+            if page.messages:
+                return replace(page, has_older=page.has_older or index > 0,
+                               has_newer=page.has_newer or index < len(sources) - 1)
+        return MessagePage((), False, False)
