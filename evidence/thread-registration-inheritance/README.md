@@ -42,3 +42,20 @@ Installed/native fork acceptance and scoped ratchet follow on the complete wheel
 no source-only readiness claim, CI hold, extra agents or live user mutation.
 Claim posted on Wegener367#issuecomment-5887144880; process/SelectedInput startup
 files remain his scope. No edits to Boyle CompactionJournal or parent projections.
+
+## Current main / installed checkpoint
+
+Integrated main 2ccfaed4 (371 journal +368 receipt admission) before building final
+installed wheel. All three changed modules import from own noneditable installed
+site-packages and match source byte-for-byte (installed-imports.json).
+Installed focused 41 passed in 5.32s. Scoped ratchet against 2ccfaed4 passes:
+ThreadManagement excess -47, chain terms -9, foreign absence -1; no increases.
+Lint finds one retained pre-existing 101-character line in Thread.observed_turn;
+not newly introduced and not a false all-files lint-green claim.
+
+Initial installed native fork attempt failed before worker startup in the existing
+fixture's detached-launch interception: current OwnerLifecycle now provides its
+own output handle; the old wrapper supplied it twice. Delete the interception and
+its separate log handle, consume actual production owner diagnostics instead.
+Retain all native answer/history/no-compaction/no-replay assertions unchanged.
+Initial RED retained in installed-native-fork-first.log; final run follows.
