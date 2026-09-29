@@ -91,3 +91,12 @@ wegener-final.log records 45 passes and one missing-import test failure, correct
 before the final installed run; it is not a green receipt. wegener-installed.log
 records 46 passed in 35.50s against the installed package, with actual pinned Pi child/local HTTP
 fresh-input lifetime acceptance enabled (no paid provider, no mocked child).
+
+## Current main295 integration
+
+Merged main e6fa8feb (including parent295 trusted-load recovery) without conflicts.
+current295-cursor.log:25 passed in15.59s against current source, including the
+parent real file-lock/RuntimeServer TCP recovery test and all24 maintained private
+ACP delivery checks. Parent recovery test is retained unchanged and distinct from
+the deleted cursor-v1 fixture reducers. Prior46 installed/native checks above
+precede this main sync; this focused receipt does not claim a new deployment.
