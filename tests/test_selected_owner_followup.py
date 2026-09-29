@@ -6,9 +6,9 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms import cohort_foreground, coordinated_runtime
-from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.input_attempt import NotSentInput, ReservedInput
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
 from test_coordinated_runtime import _fake_model
