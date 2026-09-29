@@ -15,11 +15,10 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 
-from native_proof_cases import read_proof_rows, write_proof_rows
-
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
+from agent_comms import selected_turn
 from agent_comms.assignment_states import (
     CompletedAssignment,
     FailedAssignment,
@@ -64,6 +63,7 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from agent_comms.wake_injection import render_selected_wake_frame
 from agent_comms.wake_policy import PassiveWake
+from native_proof_cases import read_proof_rows, write_proof_rows
 from selected_summary_cases import manual_source
 
 
@@ -1509,13 +1509,13 @@ async def test_owner_stop_before_response_boundary_never_appends(
     method = (
         "prepare_fenced_response" if stop_stage == "before_intent" else "publish_fenced_response"
     )
-    original = getattr(runtime, method)
+    original = getattr(selected_turn, method)
 
     def stopped_before_boundary(*args, **kwargs):
         comms.registry.unregister("beta")  # Direct registry writer does NOT hold wire lock.
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(runtime, method, stopped_before_boundary)
+    monkeypatch.setattr(selected_turn, method, stopped_before_boundary)
     with pytest.raises(StaleFence, match="stopped or changed"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1585,9 +1585,9 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     original = (
-        runtime.prepare_fenced_response
+        selected_turn.prepare_fenced_response
         if boundary == "before_tx1"
-        else runtime.publish_fenced_response
+        else selected_turn.publish_fenced_response
     )
 
     def revoke(*args, **kwargs):
@@ -1601,7 +1601,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         return original(*args, **kwargs)
 
     monkeypatch.setattr(
-        runtime,
+        selected_turn,
         "prepare_fenced_response" if boundary == "before_tx1" else "publish_fenced_response",
         revoke,
     )
@@ -1688,7 +1688,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
             if boundary == "before_tx1_forged"
             else "publish_fenced_response"
         )
-        publish = getattr(runtime, method)
+        publish = getattr(selected_turn, method)
 
         def revoke_after_tx1(*args, **kwargs):
             revoked_generation = kwargs["owner_witness"].admission_generation

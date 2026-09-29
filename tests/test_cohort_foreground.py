@@ -12,8 +12,6 @@ import sys
 import threading
 import time
 from pathlib import Path
-
-from native_proof_cases import write_proof_rows
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -36,9 +34,11 @@ from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.native_prompt_send import _enter_admission
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_sidecar import native_request_digest
+from agent_comms.selected_actions import SelectedExistingFileWrite
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
+from native_proof_cases import write_proof_rows
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -222,7 +222,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
             opt_in=True,
             wait_seconds=0,
             ready=ready,
-            selected_existing_file_write=runtime.SelectedExistingFileWrite(
+            selected_existing_file_write=SelectedExistingFileWrite(
                 ExistingFileClaim(Path(resource)), b"after selected claim\n"
             ),
         )
@@ -251,7 +251,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
         root.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True)
         root_id = "0" * 32  # No issuer has initialized this root yet.
-        plan = runtime.SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
+        plan = SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
         with pytest.raises(RelationViolationError, match="no durable protocol marker"):
             await foreground.run_foreground_once(
                 root,
@@ -276,7 +276,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 tags=frozenset(),
                 native_package=Path(package),
                 wait_seconds=0,
-                selected_existing_file_write=runtime.SelectedExistingFileWrite(
+                selected_existing_file_write=SelectedExistingFileWrite(
                     ExistingFileClaim(Path(external)), b"forbidden\n"
                 ),
             )
@@ -320,9 +320,7 @@ def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
         ]
         assert foreground.main(argv) == 0
         assert observed == [
-            runtime.SelectedExistingFileWrite(
-                ExistingFileClaim(Path(resource)), b"operator bytes\n"
-            )
+            SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"operator bytes\n")
         ]
         assert resource.read_bytes() == b"before\n"  # Parser alone never writes.
         assert "NO_SELECTED_CLAIM" in capsys.readouterr().out
@@ -396,7 +394,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
             native_package=tmp_path,
             wait_seconds=0,
             ready=ready,
-            selected_existing_file_write=runtime.SelectedExistingFileWrite(
+            selected_existing_file_write=SelectedExistingFileWrite(
                 ExistingFileClaim(Path(resource)), b"forbidden\n"
             ),
         )

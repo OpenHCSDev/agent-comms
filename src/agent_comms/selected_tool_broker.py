@@ -34,6 +34,7 @@ from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
 from .pi_rpc import unique_fields
+from .selected_actions import SelectedAction
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
@@ -45,12 +46,30 @@ _TOOL_SOURCE_SHA = "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedToolIntent:
+class SelectedToolIntent(SelectedAction):
     """Trusted, explicit pre-turn opt-in; no tool call or write authority.
 
     The owner must create a distinct bound SelectedToolMode only after reserving
     the exact FULL input. Do not construct this from injected/model text.
     """
+
+    instruction = (
+        "Answer the original committed message directly and concisely. "
+        "You may call selected_claimed_write at most once to request a complete UTF-8 "
+        "replacement of an existing worktree file (maximum 128 KiB); the owner "
+        "independently checks the active selected wake, claim and write before the tool "
+        "returns. Tool failure/UNKNOWN must not be retried. No shell, generic edits or other tools. "
+    )
+
+    def mode(self, owner):
+        return selected_tool_mode_for_owner(
+            owner.comms,
+            owner.store,
+            owner.admission,
+            owner.owner_name,
+            owner.session_dir,
+            owner.input_id,
+        )
 
 
 class NativeToolMode(ABC):

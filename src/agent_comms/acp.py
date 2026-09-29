@@ -45,7 +45,6 @@ from agent_comms.coordination_errors import (
     PublicationActivationBlocked,
     StaleFence,
 )
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.native_source_cursor import NativeSourceCursor
 
@@ -78,10 +77,10 @@ from .runtime import (
     UNBOUND_CONTROLLER,
     RuntimeProxy,
     RuntimeServer,
-    SocketClient,
     socket_path,
 )
-from .selected_write_plan import PlannedWrite, SelectedWritePlans
+from .selected_write_authority import AcpSelectedWriteAuthority
+from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .thread_identity import OwnerIdentity, ThreadIncarnation
@@ -545,33 +544,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 store, participant.lookup, owner.name, after_seq=admission_after_seq
             )
             runnable = candidate is not None and participant.pointer.execution_id is None
-        plans = SelectedWritePlans(self._comms, wire_root_id)
-
-        def check_plan_controller(
-            assignment: WakeAssignment, owner: Thread, operation_id: str
-        ) -> None:
-            bound = self._selected_write_controllers.get((owner.name, assignment.wire_seq))
-            if bound is None or bound[0] != operation_id:
-                raise IdentityConflict("Selected write original controller is no longer bound")
-            controller = bound[1]
-            if isinstance(controller, SocketClient):
-                if not self._runtime.is_controller(session_id, controller):
-                    raise IdentityConflict("Selected write controller disconnected")
-            elif controller is not self.sessions.client or controller is None:
-                raise IdentityConflict("Selected write ACP controller changed")
-
-        def load_plan(
-            assignment: WakeAssignment, owner: Thread, admission_generation: int
-        ) -> PlannedWrite | None:
-            plan = plans.load(assignment, owner, admission_generation)
-            if plan is not None:
-                check_plan_controller(assignment, owner, plan.operation_id)
-            return plan
-
-        def applied_plan(assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
-            plans.applied(assignment, owner, operation_id)
-            self._selected_write_controllers.pop((owner.name, assignment.wire_seq), None)
-
         result = None
         if runnable:
             execution = SelectedExecution(
@@ -579,9 +551,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 wire_root_id=wire_root_id,
                 owner_name=thread_name,
                 native_package=package,
-                selected_write_plan_loader=load_plan,
-                selected_write_plan_check=check_plan_controller,
-                selected_write_plan_applied=applied_plan,
+                write_authority=AcpSelectedWriteAuthority(
+                    self, session_id, SelectedWritePlans(self._comms, wire_root_id)
+                ),
                 **(
                     {"selected_tool_intent": self._private_selected_tool_intent}
                     if self._private_selected_tool_intent is not None
