@@ -468,6 +468,16 @@ class Publisher:
             validate_initial_record(row, metadata.root_id)
             if before_revisions != tuple(file_revision(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
+            # Every frozen subscriber needs an identity, including stopped
+            # observers. Register from this authoritative registry snapshot,
+            # before publishing; an inbox must never invent owners from a row.
+            from .coordinator import Coordination
+
+            with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
+                for thread, lookup in zip(selected, lookups, strict=True):
+                    store.participants.register(
+                        lookup, thread.name, thread.name, committed=True
+                    )
             if _human_origin is None:
                 self.log._append_private_unlocked(metadata, row)
             else:
