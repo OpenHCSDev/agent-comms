@@ -1,0 +1,18 @@
+{
+  "finding_count": 0,
+  "finding_counts": {
+    "by_pattern": [],
+    "by_detector": []
+  },
+  "timing": {
+    "parse_seconds": 2.038,
+    "analysis_seconds": 28.666,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.515,
+    "analysis_cache_status": "miss",
+    "total_seconds": 31.219
+  },
+  "active_finding_surface": "raw_findings",
+  "supporting_raw_findings": null,
+  "coverage_limit": "Complete package context supplied; CLI did not emit analyzed/omitted detector counts or scan_status."
+}

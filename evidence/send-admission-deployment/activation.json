@@ -1,0 +1,23 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-send-admission-20260928",
+  "packages": {
+    "agent-comms": "0931c47d13cace1934a3c3744174bb9a81172ee9",
+    "batrachian-toad": "4147eb180bea771adae7b6b7ffbb1422e2c8411c",
+    "textual": "c9743801c98dc570f82f82e25915ecce89800f4b"
+  },
+  "previous_links": {
+    "toad": "/home/ts/.local/share/agent-comms/runtime-goal-controls-20260928/bin/toad",
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-goal-controls-20260928/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-goal-controls-20260928/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-goal-controls-20260928/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-goal-controls-20260928/bin/agent-comms-nk-foreground"
+  },
+  "restarted": [
+    "OwnerRestartResult(thread='agent-comms-ux', previous_pid=2800204, pid=2839214)",
+    "OwnerRestartResult(thread='pr95-selected-pi-summary-owner', previous_pid=2800216, pid=2839215)",
+    "OwnerRestartResult(thread='nra-architecture', previous_pid=2800217, pid=2839216)",
+    "OwnerRestartResult(thread='nra-domain-mapping', previous_pid=2800218, pid=2839223)"
+  ],
+  "state_reset": false,
+  "input_replay": false
+}

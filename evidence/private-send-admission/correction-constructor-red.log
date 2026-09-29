@@ -1,0 +1,2950 @@
+.....FF..FFFF.FFFF.....FF..FFFFFFFFFFFFFFFFFFFFF..                       [100%]
+=================================== FAILURES ===================================
+__________ test_actual_raw_writes_hold_owner_exclusions[False-False] ___________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-35u7wb3s')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c851d60>
+direct = False, revoke = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    @pytest.mark.parametrize("revoke", [False, True])
+    async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, direct, revoke):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        children = []
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            if revoke:
+                comms.registry.unregister(owner.name)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observed = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            @contextmanager
+            def scope():
+                with boundary():
+                    observed.append(_held(root))
+                    yield
+                    observed.append(_held(root))
+    
+            result = write(fd, payload, scope, cancelled, deadline)
+            # The same production admission cannot write twice even after all locks
+            # are released. Its UNKNOWN journal reservation survives the first send.
+            with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
+                pytest.fail("one-use native admission reopened")
+            return result
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:140: in probe
+    result = write(fd, payload, scope, cancelled, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:135: in scope
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-35u7wb3s', pa..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'd754b82c296e91ca22ab97c066d0f103'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+___________ test_actual_raw_writes_hold_owner_exclusions[False-True] ___________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-7mdykdyf')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507cdddfd0>
+direct = True, revoke = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    @pytest.mark.parametrize("revoke", [False, True])
+    async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, direct, revoke):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        children = []
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            if revoke:
+                comms.registry.unregister(owner.name)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observed = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            @contextmanager
+            def scope():
+                with boundary():
+                    observed.append(_held(root))
+                    yield
+                    observed.append(_held(root))
+    
+            result = write(fd, payload, scope, cancelled, deadline)
+            # The same production admission cannot write twice even after all locks
+            # are released. Its UNKNOWN journal reservation survives the first send.
+            with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
+                pytest.fail("one-use native admission reopened")
+            return result
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:374: in run
+    result = await self._execute()
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:835: in _execute
+    return await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:140: in probe
+    result = write(fd, payload, scope, cancelled, deadline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:135: in scope
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-7mdykdyf', par..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'e98ca9a01d881f9528a6787cd816480a'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+___ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[lifecycle] ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-7_mn2yx2'), mode = 'lifecycle'
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
+    @pytest.mark.parametrize(
+        "mode", ["lifecycle", "timeout", "cancel", "repeat-cancel", "preflight-drain"]
+    )
+    def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import asyncio,sys; from pathlib import Path; "
+                "from test_native_send_admission import _same_loop_backpressure_case; "
+                "asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))",
+                str(tmp_path),
+                mode,
+            ],
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(Path(__file__).parent), os.environ.get("PYTHONPATH", "")]
+                ),
+            },
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 1, in <module>
+E             import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                                ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E             return runner.run(main)
+E                    ~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E             return self._loop.run_until_complete(task)
+E                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E             return future.result()
+E                    ~~~~~~~~~~~~~^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 264, in _same_loop_backpressure_case
+E             await asyncio.wait_for(task, timeout=3)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E             return await fut
+E                    ^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 374, in run
+E             result = await self._execute()
+E                      ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 835, in _execute
+E             return await TrackedTurnSession.execute(
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             ...<14 lines>...
+E             )
+E             ^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 181, in bounded_turn
+E             return await native_turn(*args, **kwargs, timeout=0.35)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 137, in execute
+E             return await turn.complete()
+E                    ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 157, in complete
+E             await self.admit_prompt()
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 276, in admit_prompt
+E             await send_fenced_prompt(
+E             ...<4 lines>...
+E             )
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 152, in send_fenced_prompt
+E             await asyncio.shield(done)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 135, in worker
+E             _write_fenced(fd, payload, boundary, cancelled, deadline)
+E             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 64, in _write_fenced
+E             with _enter_admission(boundary, cancelled, deadline):
+E                  ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 42, in _enter_admission
+E             scope.enter_context(boundary())
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 530, in enter_context
+E             result = _enter(cm)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+E             return next(self.gen)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py", line 130, in __call__
+E             self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+E             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py", line 66, in require_reservation
+E             owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+E                   ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py", line 77, in coordinator_identity
+E             return OwnerGenerations(lookup, self.thread.name, self.generation)
+E         TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-private-send-admission-20260928/.venv/bin/python', '-c', 'import asyncio,sys....thread.name, self.generation)\nTypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given\n').returncode
+
+tests/test_native_send_admission.py:314: AssertionError
+____ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[timeout] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-3rm6gym8'), mode = 'timeout'
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
+    @pytest.mark.parametrize(
+        "mode", ["lifecycle", "timeout", "cancel", "repeat-cancel", "preflight-drain"]
+    )
+    def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import asyncio,sys; from pathlib import Path; "
+                "from test_native_send_admission import _same_loop_backpressure_case; "
+                "asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))",
+                str(tmp_path),
+                mode,
+            ],
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(Path(__file__).parent), os.environ.get("PYTHONPATH", "")]
+                ),
+            },
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 1, in <module>
+E             import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                                ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E             return runner.run(main)
+E                    ~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E             return self._loop.run_until_complete(task)
+E                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E             return future.result()
+E                    ~~~~~~~~~~~~~^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 264, in _same_loop_backpressure_case
+E             await asyncio.wait_for(task, timeout=3)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E             return await fut
+E                    ^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 374, in run
+E             result = await self._execute()
+E                      ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 835, in _execute
+E             return await TrackedTurnSession.execute(
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             ...<14 lines>...
+E             )
+E             ^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 181, in bounded_turn
+E             return await native_turn(*args, **kwargs, timeout=0.35)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 137, in execute
+E             return await turn.complete()
+E                    ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 157, in complete
+E             await self.admit_prompt()
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 276, in admit_prompt
+E             await send_fenced_prompt(
+E             ...<4 lines>...
+E             )
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 152, in send_fenced_prompt
+E             await asyncio.shield(done)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 135, in worker
+E             _write_fenced(fd, payload, boundary, cancelled, deadline)
+E             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 64, in _write_fenced
+E             with _enter_admission(boundary, cancelled, deadline):
+E                  ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 42, in _enter_admission
+E             scope.enter_context(boundary())
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 530, in enter_context
+E             result = _enter(cm)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+E             return next(self.gen)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py", line 130, in __call__
+E             self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+E             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py", line 66, in require_reservation
+E             owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+E                   ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py", line 77, in coordinator_identity
+E             return OwnerGenerations(lookup, self.thread.name, self.generation)
+E         TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-private-send-admission-20260928/.venv/bin/python', '-c', 'import asyncio,sys....thread.name, self.generation)\nTypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given\n').returncode
+
+tests/test_native_send_admission.py:314: AssertionError
+____ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[cancel] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-lmi9pbzq'), mode = 'cancel'
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
+    @pytest.mark.parametrize(
+        "mode", ["lifecycle", "timeout", "cancel", "repeat-cancel", "preflight-drain"]
+    )
+    def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import asyncio,sys; from pathlib import Path; "
+                "from test_native_send_admission import _same_loop_backpressure_case; "
+                "asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))",
+                str(tmp_path),
+                mode,
+            ],
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(Path(__file__).parent), os.environ.get("PYTHONPATH", "")]
+                ),
+            },
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 1, in <module>
+E             import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                                ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E             return runner.run(main)
+E                    ~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E             return self._loop.run_until_complete(task)
+E                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E             return future.result()
+E                    ~~~~~~~~~~~~~^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 264, in _same_loop_backpressure_case
+E             await asyncio.wait_for(task, timeout=3)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E             return await fut
+E                    ^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 374, in run
+E             result = await self._execute()
+E                      ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 835, in _execute
+E             return await TrackedTurnSession.execute(
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             ...<14 lines>...
+E             )
+E             ^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 181, in bounded_turn
+E             return await native_turn(*args, **kwargs, timeout=0.35)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 137, in execute
+E             return await turn.complete()
+E                    ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 157, in complete
+E             await self.admit_prompt()
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 276, in admit_prompt
+E             await send_fenced_prompt(
+E             ...<4 lines>...
+E             )
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 152, in send_fenced_prompt
+E             await asyncio.shield(done)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 135, in worker
+E             _write_fenced(fd, payload, boundary, cancelled, deadline)
+E             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 64, in _write_fenced
+E             with _enter_admission(boundary, cancelled, deadline):
+E                  ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 42, in _enter_admission
+E             scope.enter_context(boundary())
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 530, in enter_context
+E             result = _enter(cm)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+E             return next(self.gen)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py", line 130, in __call__
+E             self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+E             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py", line 66, in require_reservation
+E             owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+E                   ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py", line 77, in coordinator_identity
+E             return OwnerGenerations(lookup, self.thread.name, self.generation)
+E         TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-private-send-admission-20260928/.venv/bin/python', '-c', 'import asyncio,sys....thread.name, self.generation)\nTypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given\n').returncode
+
+tests/test_native_send_admission.py:314: AssertionError
+_ test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[repeat-cancel] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-zmvhy42o'), mode = 'repeat-cancel'
+
+    @pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
+    @pytest.mark.parametrize(
+        "mode", ["lifecycle", "timeout", "cancel", "repeat-cancel", "preflight-drain"]
+    )
+    def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import asyncio,sys; from pathlib import Path; "
+                "from test_native_send_admission import _same_loop_backpressure_case; "
+                "asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))",
+                str(tmp_path),
+                mode,
+            ],
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    [str(Path(__file__).parent), os.environ.get("PYTHONPATH", "")]
+                ),
+            },
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 1, in <module>
+E             import asyncio,sys; from pathlib import Path; from test_native_send_admission import _same_loop_backpressure_case; asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))
+E                                                                                                                                ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+E             return runner.run(main)
+E                    ~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+E             return self._loop.run_until_complete(task)
+E                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+E             return future.result()
+E                    ~~~~~~~~~~~~~^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 264, in _same_loop_backpressure_case
+E             await asyncio.wait_for(task, timeout=3)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+E             return await fut
+E                    ^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 374, in run
+E             result = await self._execute()
+E                      ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 835, in _execute
+E             return await TrackedTurnSession.execute(
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E             ...<14 lines>...
+E             )
+E             ^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/tests/test_native_send_admission.py", line 181, in bounded_turn
+E             return await native_turn(*args, **kwargs, timeout=0.35)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 137, in execute
+E             return await turn.complete()
+E                    ^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 157, in complete
+E             await self.admit_prompt()
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 276, in admit_prompt
+E             await send_fenced_prompt(
+E             ...<4 lines>...
+E             )
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 152, in send_fenced_prompt
+E             await asyncio.shield(done)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 135, in worker
+E             _write_fenced(fd, payload, boundary, cancelled, deadline)
+E             ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 64, in _write_fenced
+E             with _enter_admission(boundary, cancelled, deadline):
+E                  ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py", line 42, in _enter_admission
+E             scope.enter_context(boundary())
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 530, in enter_context
+E             result = _enter(cm)
+E           File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+E             return next(self.gen)
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py", line 130, in __call__
+E             self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+E             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py", line 66, in require_reservation
+E             owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+E                   ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-private-send-admission-20260928/.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py", line 77, in coordinator_identity
+E             return OwnerGenerations(lookup, self.thread.name, self.generation)
+E         TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/ts/wt/comms-private-send-admission-20260928/.venv/bin/python', '-c', 'import asyncio,sys....thread.name, self.generation)\nTypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given\n').returncode
+
+tests/test_native_send_admission.py:314: AssertionError
+_____ test_short_admission_contention_sends_once_after_release[wire-False] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-uiumt19g')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507cfa2820>
+held_store = 'wire', revoke = False
+
+    @pytest.mark.parametrize(
+        ("held_store", "revoke"),
+        [
+            ("wire", False),
+            ("bus.jsonl", False),
+            ("registry.json", False),
+            ("sql", False),
+            ("wire", True),
+        ],
+    )
+    async def test_short_admission_contention_sends_once_after_release(
+        tmp_path, monkeypatch, held_store, revoke
+    ):
+        """A busy store before admission is not an attempted native prompt."""
+        import sqlite3
+        import threading
+    
+        from agent_comms import coordinated_runtime as runtime
+        from agent_comms.store_files import _store_lock
+    
+        root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+        owner = people[2]
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            return await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        admissions = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            held, release = threading.Event(), threading.Event()
+    
+            def contend():
+                if held_store == "sql":
+                    with sqlite3.connect(root / "coordination.sqlite3") as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        held.set()
+                        assert release.wait(3)
+                else:
+                    with _store_lock(root / held_store):
+                        if revoke:
+                            comms.registry.unregister(owner.name)
+                        held.set()
+                        assert release.wait(3)
+    
+            competitor = threading.Thread(target=contend)
+            competitor.start()
+            assert held.wait(3)
+            timer = threading.Timer(0.1, release.set)
+            timer.start()
+    
+            @contextmanager
+            def scope():
+                with boundary():
+                    admissions.append(payload)
+                    yield
+    
+            try:
+                return write(fd, payload, scope, cancelled, deadline)
+            finally:
+                release.set()
+                competitor.join(3)
+                timer.cancel()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The child intentionally exits after reading the prompt; this tests raw
+        # admission only, not a native context or successful model response.
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:394: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:374: in run
+    result = await self._execute()
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:835: in _execute
+    return await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:384: in probe
+    return write(fd, payload, scope, cancelled, deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:379: in scope
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-uiumt19g', par..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '8700a05c862bac19e5dbae0541099470'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+__ test_short_admission_contention_sends_once_after_release[bus.jsonl-False] ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-gudlq9bp')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c5332a0>
+held_store = 'bus.jsonl', revoke = False
+
+    @pytest.mark.parametrize(
+        ("held_store", "revoke"),
+        [
+            ("wire", False),
+            ("bus.jsonl", False),
+            ("registry.json", False),
+            ("sql", False),
+            ("wire", True),
+        ],
+    )
+    async def test_short_admission_contention_sends_once_after_release(
+        tmp_path, monkeypatch, held_store, revoke
+    ):
+        """A busy store before admission is not an attempted native prompt."""
+        import sqlite3
+        import threading
+    
+        from agent_comms import coordinated_runtime as runtime
+        from agent_comms.store_files import _store_lock
+    
+        root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+        owner = people[2]
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            return await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        admissions = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            held, release = threading.Event(), threading.Event()
+    
+            def contend():
+                if held_store == "sql":
+                    with sqlite3.connect(root / "coordination.sqlite3") as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        held.set()
+                        assert release.wait(3)
+                else:
+                    with _store_lock(root / held_store):
+                        if revoke:
+                            comms.registry.unregister(owner.name)
+                        held.set()
+                        assert release.wait(3)
+    
+            competitor = threading.Thread(target=contend)
+            competitor.start()
+            assert held.wait(3)
+            timer = threading.Timer(0.1, release.set)
+            timer.start()
+    
+            @contextmanager
+            def scope():
+                with boundary():
+                    admissions.append(payload)
+                    yield
+    
+            try:
+                return write(fd, payload, scope, cancelled, deadline)
+            finally:
+                release.set()
+                competitor.join(3)
+                timer.cancel()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The child intentionally exits after reading the prompt; this tests raw
+        # admission only, not a native context or successful model response.
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:394: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:374: in run
+    result = await self._execute()
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:835: in _execute
+    return await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:384: in probe
+    return write(fd, payload, scope, cancelled, deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:379: in scope
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-gudlq9bp', par..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'd651701d11745e76b692581b9d06f06b'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+_ test_short_admission_contention_sends_once_after_release[registry.json-False] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-yw_at0_m')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c532cf0>
+held_store = 'registry.json', revoke = False
+
+    @pytest.mark.parametrize(
+        ("held_store", "revoke"),
+        [
+            ("wire", False),
+            ("bus.jsonl", False),
+            ("registry.json", False),
+            ("sql", False),
+            ("wire", True),
+        ],
+    )
+    async def test_short_admission_contention_sends_once_after_release(
+        tmp_path, monkeypatch, held_store, revoke
+    ):
+        """A busy store before admission is not an attempted native prompt."""
+        import sqlite3
+        import threading
+    
+        from agent_comms import coordinated_runtime as runtime
+        from agent_comms.store_files import _store_lock
+    
+        root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+        owner = people[2]
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            return await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        admissions = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            held, release = threading.Event(), threading.Event()
+    
+            def contend():
+                if held_store == "sql":
+                    with sqlite3.connect(root / "coordination.sqlite3") as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        held.set()
+                        assert release.wait(3)
+                else:
+                    with _store_lock(root / held_store):
+                        if revoke:
+                            comms.registry.unregister(owner.name)
+                        held.set()
+                        assert release.wait(3)
+    
+            competitor = threading.Thread(target=contend)
+            competitor.start()
+            assert held.wait(3)
+            timer = threading.Timer(0.1, release.set)
+            timer.start()
+    
+            @contextmanager
+            def scope():
+                with boundary():
+                    admissions.append(payload)
+                    yield
+    
+            try:
+                return write(fd, payload, scope, cancelled, deadline)
+            finally:
+                release.set()
+                competitor.join(3)
+                timer.cancel()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The child intentionally exits after reading the prompt; this tests raw
+        # admission only, not a native context or successful model response.
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:394: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:374: in run
+    result = await self._execute()
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:835: in _execute
+    return await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:384: in probe
+    return write(fd, payload, scope, cancelled, deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:379: in scope
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-yw_at0_m', par..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '9b052fc6be7b65b439cb9af4f7e31d80'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+_____ test_short_admission_contention_sends_once_after_release[sql-False] ______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-lrdb80nw')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c97f770>
+held_store = 'sql', revoke = False
+
+    @pytest.mark.parametrize(
+        ("held_store", "revoke"),
+        [
+            ("wire", False),
+            ("bus.jsonl", False),
+            ("registry.json", False),
+            ("sql", False),
+            ("wire", True),
+        ],
+    )
+    async def test_short_admission_contention_sends_once_after_release(
+        tmp_path, monkeypatch, held_store, revoke
+    ):
+        """A busy store before admission is not an attempted native prompt."""
+        import sqlite3
+        import threading
+    
+        from agent_comms import coordinated_runtime as runtime
+        from agent_comms.store_files import _store_lock
+    
+        root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+        owner = people[2]
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            return await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        admissions = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            held, release = threading.Event(), threading.Event()
+    
+            def contend():
+                if held_store == "sql":
+                    with sqlite3.connect(root / "coordination.sqlite3") as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        held.set()
+                        assert release.wait(3)
+                else:
+                    with _store_lock(root / held_store):
+                        if revoke:
+                            comms.registry.unregister(owner.name)
+                        held.set()
+                        assert release.wait(3)
+    
+            competitor = threading.Thread(target=contend)
+            competitor.start()
+            assert held.wait(3)
+            timer = threading.Timer(0.1, release.set)
+            timer.start()
+    
+            @contextmanager
+            def scope():
+                with boundary():
+                    admissions.append(payload)
+                    yield
+    
+            try:
+                return write(fd, payload, scope, cancelled, deadline)
+            finally:
+                release.set()
+                competitor.join(3)
+                timer.cancel()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The child intentionally exits after reading the prompt; this tests raw
+        # admission only, not a native context or successful model response.
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:394: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:374: in run
+    result = await self._execute()
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:835: in _execute
+    return await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:384: in probe
+    return write(fd, payload, scope, cancelled, deadline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:379: in scope
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-lrdb80nw', par..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'bf5240cbb09f4bb27690c668e450830e'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+__ test_actual_native_admission_excludes_feedback_readers_before_bytes[False] __
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-ckjfhzz9')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5078e52430>
+direct = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
+        tmp_path, monkeypatch, direct
+    ):
+        root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+        children = []
+    
+        async def launch(*_args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observations = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            path = root / "coordination.sqlite3"
+            reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+            reader.execute("BEGIN")
+            reader.execute("SELECT * FROM native_runtime_input").fetchall()
+    
+            @contextmanager
+            def checked_admission():
+                try:
+                    with boundary():
+                        assert observations == ["reader refused before bytes"]
+                        # A late feedback reader cannot sneak in after admission.
+                        late = sqlite3.connect(path, isolation_level=None, timeout=0)
+                        try:
+                            with pytest.raises(sqlite3.OperationalError) as blocked:
+                                late.execute("SELECT * FROM native_runtime_input").fetchall()
+                            assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                        finally:
+                            late.close()
+                        observations.append("late reader excluded")
+                        yield
+                except native_prompt_send.PromptAdmissionBusy:
+                    assert observations == []
+                    assert not received.exists()  # No raw prompt has reached the child.
+                    observations.append("reader refused before bytes")
+                    reader.execute("ROLLBACK")
+                    raise
+    
+            try:
+                write(fd, payload, checked_admission, cancelled, deadline)
+                observations.append("sent and committed once")
+            finally:
+                reader.close()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The local child supplies capability+reads prompt then exits without proof;
+        # the expected downstream error is NOT a post-write admission failure.
+        with pytest.raises(native_pi.NativePiUnavailable) as caught:
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:582: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:573: in probe
+    write(fd, payload, checked_admission, cancelled, deadline)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:553: in checked_admission
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-ckjfhzz9', pa..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'e3bf713cbc6ef085d340ce8f802ee349'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+__ test_actual_native_admission_excludes_feedback_readers_before_bytes[True] ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-__r7vobv')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5078e78de0>
+direct = True
+
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
+        tmp_path, monkeypatch, direct
+    ):
+        root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+        children = []
+    
+        async def launch(*_args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observations = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            path = root / "coordination.sqlite3"
+            reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+            reader.execute("BEGIN")
+            reader.execute("SELECT * FROM native_runtime_input").fetchall()
+    
+            @contextmanager
+            def checked_admission():
+                try:
+                    with boundary():
+                        assert observations == ["reader refused before bytes"]
+                        # A late feedback reader cannot sneak in after admission.
+                        late = sqlite3.connect(path, isolation_level=None, timeout=0)
+                        try:
+                            with pytest.raises(sqlite3.OperationalError) as blocked:
+                                late.execute("SELECT * FROM native_runtime_input").fetchall()
+                            assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                        finally:
+                            late.close()
+                        observations.append("late reader excluded")
+                        yield
+                except native_prompt_send.PromptAdmissionBusy:
+                    assert observations == []
+                    assert not received.exists()  # No raw prompt has reached the child.
+                    observations.append("reader refused before bytes")
+                    reader.execute("ROLLBACK")
+                    raise
+    
+            try:
+                write(fd, payload, checked_admission, cancelled, deadline)
+                observations.append("sent and committed once")
+            finally:
+                reader.close()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The local child supplies capability+reads prompt then exits without proof;
+        # the expected downstream error is NOT a post-write admission failure.
+        with pytest.raises(native_pi.NativePiUnavailable) as caught:
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:582: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:374: in run
+    result = await self._execute()
+             ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:835: in _execute
+    return await TrackedTurnSession.execute(
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:157: in complete
+    await self.admit_prompt()
+.venv/lib/python3.14/site-packages/agent_comms/tracked_turn.py:276: in admit_prompt
+    await send_fenced_prompt(
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:152: in send_fenced_prompt
+    await asyncio.shield(done)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:135: in worker
+    _write_fenced(fd, payload, boundary, cancelled, deadline)
+tests/test_native_send_admission.py:573: in probe
+    write(fd, payload, checked_admission, cancelled, deadline)
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:64: in _write_fenced
+    with _enter_admission(boundary, cancelled, deadline):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:42: in _enter_admission
+    scope.enter_context(boundary())
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+tests/test_native_send_admission.py:553: in checked_admission
+    with boundary():
+         ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-__r7vobv', par..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '8c2400ca5a2d3119bb14183cd2e56938'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+______________ test_binding_matches_journal_and_exposes_equality _______________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-48uw0k8d')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5078e75f60>
+
+    async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monkeypatch):
+        root, root_id, comms, initial, people = _root(tmp_path)
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+>       turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        ).run()
+
+tests/test_native_prompt_binding.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-48uw0k8d', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'f37d149887699e0686a9586839138596'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+________ test_source_coverage_stops_at_missing_claim_and_unknown_input _________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-qoi1kfoi')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507cced240>
+
+    async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+        second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
+        lookup = stable_thread_lookup(people[1].created_at)
+        bus = comms.bus
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
+            assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
+            accept_initial_cohort(bus, root_id, second.seq, store)
+>       first_turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
+
+tests/test_native_prompt_binding.py:292: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-qoi1kfoi', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'a5e66959c83b7f1d04970421b18b58c5'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+___________ test_source_coverage_mismatch_cannot_skip_to_later_proof ___________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-2ik39x6n')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c5478c0>
+
+    async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
+        good, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", bad)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:325: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-2ik39x6n', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '1bbf7df646b8fe08a59cd74e7b2037e4'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_______ test_source_coverage_distinguishes_no_wake_from_native_injection _______
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-2rgcdrse')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507d23c2f0>
+
+    async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+        beta = Thread(
+            "beta",
+            frozenset({"team"}),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+        comms.threads.register(beta)
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            store.participants.register(
+                stable_thread_lookup(beta.created_at), "beta", "beta", committed=True
+            )
+        second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            accept_initial_cohort(comms.bus, root_id, second.seq, store)
+        assert (
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+            is not None
+        )
+
+tests/test_native_prompt_binding.py:380: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-2rgcdrse', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '70fd8b8fbf31f90e38b49f62c2e7d1ff'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+__________ test_source_coverage_stops_at_triage_without_required_full __________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-855j04g_')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507d23c360>
+
+    async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+    
+        async def fail_full(package, **kwargs):
+            if "bounded triage" in kwargs["prompt"]:
+                return await fake(package, **kwargs)
+            raise NativePiUnavailable("full launch failed after triage")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fail_full)
+        with pytest.raises(NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:411: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:406: in fail_full
+    return await fake(package, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-855j04g_', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '123156c7b4fa0ade9597a5171bc401aa'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+___________ test_current_cursor_never_promotes_old_owner_generation ____________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-w7bgg48d')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507d23c3d0>
+
+    async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monkeypatch):
+        root, root_id, comms, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+>       turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
+
+tests/test_native_prompt_binding.py:432: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-w7bgg48d', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '0226b80e5e0bf5b58cf93af5d48680bd'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_________ test_old_input_id_cannot_directly_seed_new_admission_cursor __________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-yy_wh9he')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5078e76820>
+
+    async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, monkeypatch):
+        root, root_id, comms, _, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+>       turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
+
+tests/test_native_prompt_binding.py:458: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-yy_wh9he', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '1741cf55165c42b1b82d4ddb22d414c2'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+________________ test_current_cursor_rejects_forged_high_water _________________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-9zct_jym')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c6f59b0>
+
+    async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
+        root, root_id, comms, first, _ = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+>       turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
+
+tests/test_native_prompt_binding.py:511: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-9zct_jym', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '346db5f1fad9a2c25906114ce873c38e'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_________ test_current_cursor_new_owner_generation_cannot_borrow_proof _________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-2z06bp6w')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c533770>
+
+    async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path, monkeypatch):
+        root, root_id, comms, first, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+>       old_turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
+
+tests/test_native_prompt_binding.py:530: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-2z06bp6w', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '0824b7eabc57c9a51c74ea80146183f2'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+____________ test_full_stage_binding_joins_after_triage_engagement _____________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-621b0ere')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c531010>
+
+    async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch):
+        root, root_id, comms, initial, people = _root(tmp_path)
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+>       turn = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        ).run()
+
+tests/test_native_prompt_binding.py:568: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-621b0ere', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '1725286920da9eb2151d4c8c9ed96e32'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_________________ test_journal_digest_mismatch_is_not_equality _________________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-apbbtj5s')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c5338c0>
+
+    async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypatch):
+        root, root_id, comms, initial, people = _root(tmp_path)
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, _ = _fake_model(digest_override="b" * 64)
+        monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root,
+                wire_root_id=root_id,
+                owner_name="alpha",
+                native_package=tmp_path,
+                opt_in=True,
+            ).run()
+
+tests/test_native_prompt_binding.py:598: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-apbbtj5s', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '48a94dab258f21992163ced4aacf2ec7'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+________ test_full_stage_digest_mismatch_is_unproven_and_never_replayed ________
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-2paceh7o')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507cbcd5c0>
+
+    async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_path, monkeypatch):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+    
+        async def corrupt_full(package, **kwargs):
+            if "bounded triage" in kwargs["prompt"]:
+                return await fake(package, **kwargs)
+            bad, _ = _fake_model(digest_override="b" * 64)
+            return await bad(package, **kwargs)
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", corrupt_full)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:646: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:640: in corrupt_full
+    return await fake(package, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-2paceh7o', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'a13ab7b7cdfff9fa27ed418acb320872'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_binding_rejects_tampered_owner_and_attempt_before_proof[triage-owner_lookup-ffffffffffffffffffffffffffffffff] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-gvdh2zuz')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c5465f0>
+stage = 'triage', field = 'owner_lookup'
+bad = 'ffffffffffffffffffffffffffffffff'
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "bad"),
+        [
+            ("triage", "owner_lookup", "f" * 32),
+            ("triage", "owner_thread", "attacker"),
+            ("triage", "owner_generation", 99),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+            ("full", "owner_thread", "attacker"),
+        ],
+    )
+    async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+        tmp_path, monkeypatch, stage, field, bad
+    ):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        real_read = runtime.read_expected_prompt_binding
+        tampered = False
+    
+        async def fake_then_tamper(package, **kwargs):
+            nonlocal tampered
+            result = await fake(package, **kwargs)
+            if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+                tampered = True
+            return result
+    
+        def changed_binding(store, input_id, **kwargs):
+            binding = real_read(store, input_id, **kwargs)
+            return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
+        monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:697: in fake_then_tamper
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-gvdh2zuz', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '4b7c5ac6d256e4c291b268ec9d893fd3'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_binding_rejects_tampered_owner_and_attempt_before_proof[triage-owner_thread-attacker] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-bhq11vtv')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c5dd6a0>
+stage = 'triage', field = 'owner_thread', bad = 'attacker'
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "bad"),
+        [
+            ("triage", "owner_lookup", "f" * 32),
+            ("triage", "owner_thread", "attacker"),
+            ("triage", "owner_generation", 99),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+            ("full", "owner_thread", "attacker"),
+        ],
+    )
+    async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+        tmp_path, monkeypatch, stage, field, bad
+    ):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        real_read = runtime.read_expected_prompt_binding
+        tampered = False
+    
+        async def fake_then_tamper(package, **kwargs):
+            nonlocal tampered
+            result = await fake(package, **kwargs)
+            if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+                tampered = True
+            return result
+    
+        def changed_binding(store, input_id, **kwargs):
+            binding = real_read(store, input_id, **kwargs)
+            return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
+        monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:697: in fake_then_tamper
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-bhq11vtv', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'ab111d9bbb3463688157ba26df7065c4'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_binding_rejects_tampered_owner_and_attempt_before_proof[triage-owner_generation-99] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-dbyvcfas')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5078e744b0>
+stage = 'triage', field = 'owner_generation', bad = 99
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "bad"),
+        [
+            ("triage", "owner_lookup", "f" * 32),
+            ("triage", "owner_thread", "attacker"),
+            ("triage", "owner_generation", 99),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+            ("full", "owner_thread", "attacker"),
+        ],
+    )
+    async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+        tmp_path, monkeypatch, stage, field, bad
+    ):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        real_read = runtime.read_expected_prompt_binding
+        tampered = False
+    
+        async def fake_then_tamper(package, **kwargs):
+            nonlocal tampered
+            result = await fake(package, **kwargs)
+            if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+                tampered = True
+            return result
+    
+        def changed_binding(store, input_id, **kwargs):
+            binding = real_read(store, input_id, **kwargs)
+            return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
+        monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:697: in fake_then_tamper
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-dbyvcfas', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '6561598e15d50cfed8d1522ad63a7ed4'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_binding_rejects_tampered_owner_and_attempt_before_proof[full-execution_id-forged-execution] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-4rzkms65')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5078e50b40>
+stage = 'full', field = 'execution_id', bad = 'forged-execution'
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "bad"),
+        [
+            ("triage", "owner_lookup", "f" * 32),
+            ("triage", "owner_thread", "attacker"),
+            ("triage", "owner_generation", 99),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+            ("full", "owner_thread", "attacker"),
+        ],
+    )
+    async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+        tmp_path, monkeypatch, stage, field, bad
+    ):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        real_read = runtime.read_expected_prompt_binding
+        tampered = False
+    
+        async def fake_then_tamper(package, **kwargs):
+            nonlocal tampered
+            result = await fake(package, **kwargs)
+            if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+                tampered = True
+            return result
+    
+        def changed_binding(store, input_id, **kwargs):
+            binding = real_read(store, input_id, **kwargs)
+            return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
+        monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:697: in fake_then_tamper
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-4rzkms65', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'a68c2823dbf5e14cf56ea297bee049e4'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_binding_rejects_tampered_owner_and_attempt_before_proof[full-attempt_ordinal-99] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-lptq23v9')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c8ca270>
+stage = 'full', field = 'attempt_ordinal', bad = 99
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "bad"),
+        [
+            ("triage", "owner_lookup", "f" * 32),
+            ("triage", "owner_thread", "attacker"),
+            ("triage", "owner_generation", 99),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+            ("full", "owner_thread", "attacker"),
+        ],
+    )
+    async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+        tmp_path, monkeypatch, stage, field, bad
+    ):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        real_read = runtime.read_expected_prompt_binding
+        tampered = False
+    
+        async def fake_then_tamper(package, **kwargs):
+            nonlocal tampered
+            result = await fake(package, **kwargs)
+            if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+                tampered = True
+            return result
+    
+        def changed_binding(store, input_id, **kwargs):
+            binding = real_read(store, input_id, **kwargs)
+            return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
+        monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:697: in fake_then_tamper
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-lptq23v9', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '7ffd51c06d5788e9d205f5ed5ae1104a'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_binding_rejects_tampered_owner_and_attempt_before_proof[full-owner_thread-attacker] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-v8jmae48')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c530600>
+stage = 'full', field = 'owner_thread', bad = 'attacker'
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "bad"),
+        [
+            ("triage", "owner_lookup", "f" * 32),
+            ("triage", "owner_thread", "attacker"),
+            ("triage", "owner_generation", 99),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+            ("full", "owner_thread", "attacker"),
+        ],
+    )
+    async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
+        tmp_path, monkeypatch, stage, field, bad
+    ):
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        real_read = runtime.read_expected_prompt_binding
+        tampered = False
+    
+        async def fake_then_tamper(package, **kwargs):
+            nonlocal tampered
+            result = await fake(package, **kwargs)
+            if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
+                tampered = True
+            return result
+    
+        def changed_binding(store, input_id, **kwargs):
+            binding = real_read(store, input_id, **kwargs)
+            return replace(binding, **{field: bad}) if tampered and binding is not None else binding
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
+        monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:709: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:697: in fake_then_tamper
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-v8jmae48', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '793d60bcb7948facf3da80602a501290'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_gate_refuses_persisted_sidecar_identity_tamper[triage-owner_thread-attacker] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-pd69ufgh')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c531160>
+stage = 'triage', field = 'owner_thread', value = 'attacker'
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "value"),
+        [
+            ("triage", "owner_thread", "attacker"),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+        ],
+    )
+    async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
+        tmp_path, monkeypatch, stage, field, value
+    ):
+        from agent_comms import native_prompt_binding as binding_module
+    
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            path = binding_store_path(store)
+    
+        async def mutate_after_admitted_send(package, **kwargs):
+            result = await fake(package, **kwargs)
+            current_stage = "triage" if "bounded triage" in kwargs["prompt"] else "full"
+            if current_stage == stage:
+                with sqlite3.connect(path) as db:
+                    db.execute("DROP TRIGGER prompt_binding_update_guard")
+                    update = db.execute(
+                        f"UPDATE prompt_binding SET {field}=? WHERE input_id=?",
+                        (value, kwargs["input_id"]),
+                    )
+                    assert update.rowcount == 1
+                    db.execute(binding_module.PromptBinding.triggers()["prompt_binding_update_guard"])
+            return result
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", mutate_after_admitted_send)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:773: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:758: in mutate_after_admitted_send
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-pd69ufgh', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'd2cd009a8bde5296be4aefd357cf316e'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_gate_refuses_persisted_sidecar_identity_tamper[full-execution_id-forged-execution] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-gtgp85mu')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507c530ec0>
+stage = 'full', field = 'execution_id', value = 'forged-execution'
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "value"),
+        [
+            ("triage", "owner_thread", "attacker"),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+        ],
+    )
+    async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
+        tmp_path, monkeypatch, stage, field, value
+    ):
+        from agent_comms import native_prompt_binding as binding_module
+    
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            path = binding_store_path(store)
+    
+        async def mutate_after_admitted_send(package, **kwargs):
+            result = await fake(package, **kwargs)
+            current_stage = "triage" if "bounded triage" in kwargs["prompt"] else "full"
+            if current_stage == stage:
+                with sqlite3.connect(path) as db:
+                    db.execute("DROP TRIGGER prompt_binding_update_guard")
+                    update = db.execute(
+                        f"UPDATE prompt_binding SET {field}=? WHERE input_id=?",
+                        (value, kwargs["input_id"]),
+                    )
+                    assert update.rowcount == 1
+                    db.execute(binding_module.PromptBinding.triggers()["prompt_binding_update_guard"])
+            return result
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", mutate_after_admitted_send)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:773: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:758: in mutate_after_admitted_send
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-gtgp85mu', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = '3fed92a1d0ab2dbef3e5bba89d74bbef'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+_ test_live_gate_refuses_persisted_sidecar_identity_tamper[full-attempt_ordinal-99] _
+
+tmp_path = PosixPath('/var/tmp/ac-binding-test-5zq380co')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f507d186510>
+stage = 'full', field = 'attempt_ordinal', value = 99
+
+    @pytest.mark.parametrize(
+        ("stage", "field", "value"),
+        [
+            ("triage", "owner_thread", "attacker"),
+            ("full", "execution_id", "forged-execution"),
+            ("full", "attempt_ordinal", 99),
+        ],
+    )
+    async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
+        tmp_path, monkeypatch, stage, field, value
+    ):
+        from agent_comms import native_prompt_binding as binding_module
+    
+        root, root_id, _, initial, people = _root(tmp_path)
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            path = binding_store_path(store)
+    
+        async def mutate_after_admitted_send(package, **kwargs):
+            result = await fake(package, **kwargs)
+            current_stage = "triage" if "bounded triage" in kwargs["prompt"] else "full"
+            if current_stage == stage:
+                with sqlite3.connect(path) as db:
+                    db.execute("DROP TRIGGER prompt_binding_update_guard")
+                    update = db.execute(
+                        f"UPDATE prompt_binding SET {field}=? WHERE input_id=?",
+                        (value, kwargs["input_id"]),
+                    )
+                    assert update.rowcount == 1
+                    db.execute(binding_module.PromptBinding.triggers()["prompt_binding_update_guard"])
+            return result
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", mutate_after_admitted_send)
+        with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            ).run()
+
+tests/test_native_prompt_binding.py:773: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:367: in run
+    triaged = await self._triage()
+              ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:599: in _triage
+    result = await TrackedTurnSession.execute(
+tests/test_native_prompt_binding.py:758: in mutate_after_admitted_send
+    result = await fake(package, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:171: in fake
+    await asyncio.to_thread(admitted)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_native_prompt_binding.py:168: in admitted
+    with _["prompt_send_boundary"](session_file):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/private_send_admission.py:130: in __call__
+    self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+.venv/lib/python3.14/site-packages/agent_comms/private_send_stage.py:66: in require_reservation
+    owner=owner.coordinator_identity(self.assignment.recipient_lookup),
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ParticipantOwner(thread=Thread(name='alpha', tags=frozenset({'team'}), worktree='/var/tmp/ac-binding-test-5zq380co', p..., last_goal_report_turn=None, channel_scope_generation=0, turn_generation=1, last_finished_turn_id=None), generation=1)
+lookup = 'e0c98a00a5a1e4e6c7650d5157551279'
+
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+>       return OwnerGenerations(lookup, self.thread.name, self.generation)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: OwnerGenerations.__init__() takes 1 positional argument but 4 were given
+
+.venv/lib/python3.14/site-packages/agent_comms/native_input_owner.py:77: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_native_send_admission.py::test_actual_raw_writes_hold_owner_exclusions[False-False]
+FAILED tests/test_native_send_admission.py::test_actual_raw_writes_hold_owner_exclusions[False-True]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[lifecycle]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[timeout]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[cancel]
+FAILED tests/test_native_send_admission.py::test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded[repeat-cancel]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[wire-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[bus.jsonl-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[registry.json-False]
+FAILED tests/test_native_send_admission.py::test_short_admission_contention_sends_once_after_release[sql-False]
+FAILED tests/test_native_send_admission.py::test_actual_native_admission_excludes_feedback_readers_before_bytes[False]
+FAILED tests/test_native_send_admission.py::test_actual_native_admission_excludes_feedback_readers_before_bytes[True]
+FAILED tests/test_native_prompt_binding.py::test_binding_matches_journal_and_exposes_equality
+FAILED tests/test_native_prompt_binding.py::test_source_coverage_stops_at_missing_claim_and_unknown_input
+FAILED tests/test_native_prompt_binding.py::test_source_coverage_mismatch_cannot_skip_to_later_proof
+FAILED tests/test_native_prompt_binding.py::test_source_coverage_distinguishes_no_wake_from_native_injection
+FAILED tests/test_native_prompt_binding.py::test_source_coverage_stops_at_triage_without_required_full
+FAILED tests/test_native_prompt_binding.py::test_current_cursor_never_promotes_old_owner_generation
+FAILED tests/test_native_prompt_binding.py::test_old_input_id_cannot_directly_seed_new_admission_cursor
+FAILED tests/test_native_prompt_binding.py::test_current_cursor_rejects_forged_high_water
+FAILED tests/test_native_prompt_binding.py::test_current_cursor_new_owner_generation_cannot_borrow_proof
+FAILED tests/test_native_prompt_binding.py::test_full_stage_binding_joins_after_triage_engagement
+FAILED tests/test_native_prompt_binding.py::test_journal_digest_mismatch_is_not_equality
+FAILED tests/test_native_prompt_binding.py::test_full_stage_digest_mismatch_is_unproven_and_never_replayed
+FAILED tests/test_native_prompt_binding.py::test_live_binding_rejects_tampered_owner_and_attempt_before_proof[triage-owner_lookup-ffffffffffffffffffffffffffffffff]
+FAILED tests/test_native_prompt_binding.py::test_live_binding_rejects_tampered_owner_and_attempt_before_proof[triage-owner_thread-attacker]
+FAILED tests/test_native_prompt_binding.py::test_live_binding_rejects_tampered_owner_and_attempt_before_proof[triage-owner_generation-99]
+FAILED tests/test_native_prompt_binding.py::test_live_binding_rejects_tampered_owner_and_attempt_before_proof[full-execution_id-forged-execution]
+FAILED tests/test_native_prompt_binding.py::test_live_binding_rejects_tampered_owner_and_attempt_before_proof[full-attempt_ordinal-99]
+FAILED tests/test_native_prompt_binding.py::test_live_binding_rejects_tampered_owner_and_attempt_before_proof[full-owner_thread-attacker]
+FAILED tests/test_native_prompt_binding.py::test_live_gate_refuses_persisted_sidecar_identity_tamper[triage-owner_thread-attacker]
+FAILED tests/test_native_prompt_binding.py::test_live_gate_refuses_persisted_sidecar_identity_tamper[full-execution_id-forged-execution]
+FAILED tests/test_native_prompt_binding.py::test_live_gate_refuses_persisted_sidecar_identity_tamper[full-attempt_ordinal-99]
+33 failed, 17 passed in 21.77s

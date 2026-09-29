@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -20,11 +21,18 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .native_admission_rules import NativeIdentityCheck
+from .native_input_owner import ParticipantOwner
+from .native_input_record import NativeInputRecord
 from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
+from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .typed_table import Column, TypedRow, TypedTable
+
+if TYPE_CHECKING:
+    from .private_send_stage import NativeSendStage
 
 _BINDING_PATH = "native_prompt_bindings.sqlite3"
 
@@ -37,7 +45,7 @@ def binding_store_path(store: Coordination) -> Path:
 
 
 @dataclass(frozen=True, slots=True)
-class PromptBinding(TypedTable, PrivateRuntimeSchema):
+class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     @classmethod
     def install(cls, store) -> None:
         install_prompt_binding_schema(store)
@@ -101,13 +109,10 @@ def bind_expected_prompt(
     store: Coordination,
     *,
     input_id: str,
-    stage: str,
-    assignment: WakeAssignment,
+    stage: NativeSendStage,
     owner: Thread,
     generation: int,
     prompt: str,
-    execution_id: str | None = None,
-    attempt_ordinal: int | None = None,
 ) -> str:
     """Commit the prelaunch native-request digest under a serialized fence.
 
@@ -122,23 +127,20 @@ def bind_expected_prompt(
     envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
     the bare prompt bytes.
     """
+    assignment = stage.assignment
     if (
         type(store) is not Coordination
         or type(input_id) is not str
         or _INPUT_ID.fullmatch(input_id) is None
-        or stage not in {"triage", "full"}
         or type(assignment) is not WakeAssignment
         or type(owner) is not Thread
         or type(generation) is not int
         or generation <= 0
         or type(prompt) is not str
         or not prompt
-        or (stage == "triage" and (execution_id is not None or attempt_ordinal is not None))
-        or (stage == "full" and (execution_id is None or attempt_ordinal is None))
     ):
         raise ValueError("prompt binding requires bounded exact prelaunch identities")
     digest = native_request_digest(prompt)
-    from .coordinated_runtime import _require_owner
 
     # Installation grants no owner authority. Recheck ownership after it, then
     # hold SQL generation writers through insertion. Registry lifecycle writers
@@ -147,20 +149,22 @@ def bind_expected_prompt(
     with store.session.transaction() as db:
         assert_native_runtime_schema(db)
         assert_cohort_schema(db)
-        _require_owner(store, assignment.recipient_lookup, owner, generation)
+        ParticipantOwner(owner, generation).require(store, assignment.recipient_lookup)
         reserved = NativeRuntimeInput.one(db, input_id=input_id)
         if reserved is None:
             raise IdentityConflict("prompt binding requires an already reserved input")
-        if (
-            reserved.stage != stage
-            or reserved.assignment_id != assignment.assignment_id
-            or reserved.execution_id != execution_id
-            or reserved.attempt_ordinal != attempt_ordinal
-            or reserved.owner_lookup != assignment.recipient_lookup
-            or reserved.owner_thread != owner.name
-            or reserved.owner_generation != generation
-        ):
-            raise IdentityConflict("prompt binding identity differs from its reservation")
+        try:
+            NativeIdentityCheck(
+                row=reserved,
+                stage=stage,
+                owner=ParticipantOwner(owner, generation).coordinator_identity(
+                    assignment.recipient_lookup
+                ),
+            ).require_valid()
+        except ReservationViolationError as error:
+            raise IdentityConflict(
+                f"prompt binding identity differs from its reservation: {error}"
+            ) from error
         wire_root_id = _binding_wire_root(store, assignment)
         path = binding_store_path(store)
         with sidecar_connection(path, PromptBinding) as sidecar:
@@ -168,10 +172,10 @@ def bind_expected_prompt(
                 raise IdentityConflict("this input already has a prelaunch prompt binding")
             expected = PromptBinding(
                 input_id=input_id,
-                stage=stage,
+                stage=stage.stage,
                 assignment_id=assignment.assignment_id,
-                execution_id=execution_id,
-                attempt_ordinal=attempt_ordinal,
+                execution_id=stage.execution_id,
+                attempt_ordinal=stage.attempt_ordinal,
                 owner_lookup=assignment.recipient_lookup,
                 owner_thread=owner.name,
                 owner_generation=generation,
