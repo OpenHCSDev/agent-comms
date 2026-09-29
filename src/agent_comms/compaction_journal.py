@@ -900,9 +900,7 @@ class CompactionJournal:
             raise CompactionJournalError("Selected original has competing reservations")
         if self.unresolved(expected.session_file):
             raise CompactionJournalError("Unresolved native commit excludes selected input")
-        if not expected.state.verifies_original(
-            self, expected.session_file, expected.operation_id, expected.source_json,
-        ):
+        if not expected.state.verifies_original(self, expected):
             raise CompactionJournalError("Selected terminal does not admit original input")
 
     def pending_publications(self, session_file: str) -> tuple[CompactionPublication, ...]:

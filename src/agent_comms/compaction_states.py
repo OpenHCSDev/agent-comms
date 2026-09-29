@@ -17,7 +17,7 @@ from .lifecycle import LifecycleState
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from .compaction_journal import CompactionJournal
+    from .compaction_journal import CompactionJournal, SelectedSummaryAttempt
 
 
 def sql_names(family: type[DeclaredFamily], *, unresolved: bool = False) -> str:
@@ -132,7 +132,7 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
         raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
 
     def verifies_original(
-        self, journal: CompactionJournal, session: str, operation_id: str, source_json: str
+        self, journal: CompactionJournal, attempt: SelectedSummaryAttempt
     ) -> bool:
         return False
 
@@ -208,13 +208,9 @@ class LinkedSummary(SummaryState):
     def successors(cls):
         return ()
 
-    def verifies_original(self, journal, session, operation_id, source_json):
+    def verifies_original(self, journal, attempt):
         commit = journal.get(self.commit_id)
-        from .compaction_journal import SelectedSummaryAttempt
-
-        commit.require_summary_link(
-            SelectedSummaryAttempt(operation_id, session, source_json, self), admit_original=True,
-        )
+        commit.require_summary_link(attempt, admit_original=True)
         return True
 
 
@@ -239,7 +235,7 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
     def successors(cls):
         return ()
 
-    def verifies_original(self, journal, session, operation_id, source_json):
+    def verifies_original(self, journal, attempt):
         return True
 
 
