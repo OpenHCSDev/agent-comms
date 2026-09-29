@@ -10,6 +10,14 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import (
+    InputDeliveryChangedUpdate,
+    QueuePromptRequest,
+    SendNowRequest,
+    SteerPromptRequest,
+    decode_updates,
+    encode_request,
+)
 from agent_comms.child_process import DetachedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
@@ -70,22 +78,18 @@ async def owner(tmp_path, monkeypatch):
     await agent.shutdown()
 
 
-async def queue(agent, text="future", delivery="queue"):
+async def queue(agent, text="future", delivery=QueuePromptRequest):
     response = await agent.prompt(
         "owner",
         [{"type": "text", "text": text}],
-        agentComms={"delivery": delivery, "deferDisplay": True},
+        _meta=encode_request(delivery(defer_display=True)),
     )
-    public = response.field_meta["agentComms"]["inputDisposition"]
-    assert public["status"] == "accepted_not_started"
-    key = "acp:" + public["inputId"]
-    assert (
-        InputDispositions(agent._comms.root / InputDispositions.filename)
-        .read()
-        .rows.get(key)
-        .native_id
-        is None
-    )
+    (receipt,) = decode_updates(response.field_meta)
+    assert isinstance(receipt, InputDeliveryChangedUpdate)
+    key = "acp:" + receipt.input_id
+    assert not InputDispositions(
+        agent._comms.root / InputDispositions.filename
+    ).read().lookup(key).has_native_binding
     return key
 
 
@@ -113,7 +117,7 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
         text="foreign input",
     )
     assert capture(owner) == source
-    assert agent.inputs.dispositions.read().rows.get(key).declared_name == "unknown"
+    assert agent.inputs.dispositions.read().rows.get(key).declared_name == "reserved"
     assert not any(
         name in vars(agent) for name in ("_queued_inputs", "_dispositions", "_drain_tasks")
     )
@@ -138,15 +142,15 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
     agent, current, admission_generation, bridge, witness, source = owner
     key = await queue(agent)
     if change == "steer":
-        await queue(agent, delivery="steer")
+        await queue(agent, delivery=SteerPromptRequest)
     elif change == "clear":
         await agent.inputs.clear_queued_inputs("owner")
     elif change == "promote":
-        await agent.prompt("owner", [], agentComms={"sendNow": True})
+        await agent.prompt("owner", [], _meta=encode_request(SendNowRequest()))
     elif change == "shutdown":
         await agent.inputs.stop_wakes()
     elif change == "lost_owner":
-        bridge.future_queue = CommsAgent(agent._comms).inputs
+        bridge.boundary = replace(bridge.boundary, future_queue=CommsAgent(agent._comms).inputs)
     elif change in {"changed_queue", "deleted_queue"}:
 
         def mutate(document):
@@ -175,9 +179,14 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
             target="owner",
             text="old",
         )
+        assert agent.inputs.dispositions.bind(
+            "acp:old", admission=current.active_turn.admission_generation,
+            turn_id="earlier", native_id="b" * 32, text="old",
+        )
+        assert agent.inputs.dispositions.read().rows["acp:old"].declared_name == "bound_unknown"
     with pytest.raises(RelationViolationError):
         capture(owner)
-    assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "unknown"
+    assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "reserved"
     assert (
         CompactionJournal(agent._comms.root / "compaction-commits.sqlite3").operations.unresolved(
             str(current.session_file)

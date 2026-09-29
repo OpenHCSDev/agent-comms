@@ -373,8 +373,8 @@ async def test_active_backend_executor_refuses_before_intent_or_dispatch(native)
 
 def test_malformed_bus_refuses_source_capture_without_repair(native):
     bridge, owner, owner_generation, witness = native
-    bus = bridge.root / "bus.jsonl"
-    Comms(bridge.root).messaging.initialize_private_initial_protocol()
+    bus = bridge.boundary.root / "bus.jsonl"
+    Comms(bridge.boundary.root).messaging.initialize_private_initial_protocol()
     bus.write_bytes(b'{"incomplete":')
     with pytest.raises(RelationViolationError):
         bridge.capture_source(owner, owner_generation, witness)
@@ -384,8 +384,8 @@ def test_malformed_bus_refuses_source_capture_without_repair(native):
 
 def test_new_correction_send_invalidates_pre_summary_source(native):
     bridge, owner, owner_generation, witness = native
-    comms = Comms(bridge.root)
-    comms.threads.register(Thread("peer", frozenset(), str(bridge.root)))
+    comms = Comms(bridge.boundary.root)
+    comms.threads.register(Thread("peer", frozenset(), str(bridge.boundary.root)))
     comms.messaging.send("peer", "owner", "Correction: retain the newer requirement")
     with pytest.raises(RelationViolationError, match="source changed"):
         bridge.commit(owner, owner_generation, witness, "stale summary", 42)
@@ -395,7 +395,7 @@ def test_new_correction_send_invalidates_pre_summary_source(native):
 
 def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown(native):
     bridge, owner, owner_generation, witness = native
-    inputs = InputDispositions(bridge.root / InputDispositions.filename)
+    inputs = InputDispositions(bridge.boundary.root / InputDispositions.filename)
     inputs.record(
         "acp:queued",
         seq=None,
@@ -404,18 +404,24 @@ def test_unsettled_input_refuses_preparation_and_commit_without_touching_unknown
         target=owner.name,
         text="queued correction",
     )
+    assert inputs.bind(
+        "acp:queued", admission=owner.active_turn.admission_generation,
+        turn_id=owner.active_turn.id, native_id="a" * 32, text="queued correction",
+    )
+    uncertain = inputs.read().rows["acp:queued"]
+    assert uncertain.declared_name == "bound_unknown"
     with pytest.raises(RelationViolationError, match="Unsettled"):
         bridge.capture_source(owner, owner_generation, witness)
     with pytest.raises(RelationViolationError, match="Unsettled"):
         bridge.commit(owner, owner_generation, witness, "summary", 42)
-    assert inputs.read().rows["acp:queued"].declared_name == "unknown"
+    assert inputs.read().rows["acp:queued"] == uncertain
     assert bridge.journal.operations.unresolved(witness.session_file) == ()
     assert entries(witness)[-1]["type"] == "message"
 
 
 def test_only_exact_unattempted_original_input_can_cross_source_and_commit(native):
     bridge, owner, owner_generation, witness = native
-    inputs = InputDispositions(bridge.root / InputDispositions.filename)
+    inputs = InputDispositions(bridge.boundary.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     assert admission is not None
     inputs.record(
@@ -436,13 +442,13 @@ def test_only_exact_unattempted_original_input_can_cross_source_and_commit(nativ
         bridge, owner, owner_generation, witness, "summary", 42, source=source
     )
     assert result.state.declared_name == "committed"
-    assert inputs.read().rows["acp:original"].declared_name == "unknown"
-    assert inputs.read().rows.get("acp:original").native_id is None
+    assert inputs.read().rows["acp:original"].declared_name == "reserved"
+    assert not inputs.read().lookup("acp:original").has_native_binding
 
 
 def test_original_input_exception_refuses_other_unknown_or_bound_original(native):
     bridge, owner, owner_generation, witness = native
-    inputs = InputDispositions(bridge.root / InputDispositions.filename)
+    inputs = InputDispositions(bridge.boundary.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     assert admission is not None
     inputs.record(
@@ -484,7 +490,7 @@ def test_original_input_exception_refuses_other_unknown_or_bound_original(native
 def test_bus_unknown_cannot_borrow_direct_original_exception(native):
     bridge, owner, owner_generation, witness = native
     assert owner.active_turn is not None
-    InputDispositions(bridge.root / InputDispositions.filename).record(
+    InputDispositions(bridge.boundary.root / InputDispositions.filename).record(
         "bus:1",
         seq=1,
         owner=owner.name,
@@ -499,7 +505,7 @@ def test_bus_unknown_cannot_borrow_direct_original_exception(native):
 
 def test_changed_started_input_still_invalidates_pre_summary_source(native):
     bridge, owner, owner_generation, witness = native
-    inputs = InputDispositions(bridge.root / InputDispositions.filename)
+    inputs = InputDispositions(bridge.boundary.root / InputDispositions.filename)
     admission = owner.active_turn.admission_generation
     inputs.record(
         "acp:new",
