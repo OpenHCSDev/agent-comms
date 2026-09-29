@@ -1,0 +1,46 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_coordinated_runtime.py F                                      [100%]
+
+=================================== FAILURES ===================================
+______ test_selected_original_survives_auxiliary_cursor_over_100_initials ______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-m4j3ezcw')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa29d45b230>
+
+    async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
+        tmp_path: Path, monkeypatch
+    ) -> None:
+        root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
+        # These are committed frozen direct sources for another recipient. They
+        # must not become beta's work or move beta's proven-injected cursor.
+        for index in range(101):
+            comms.messaging.send_initial_cohort("sender", "alpha", f"unrelated {index}")
+        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        runner, calls = _fake_model()
+        monkeypatch.setattr(TrackedTurnSession, "execute", runner)
+        outcome = await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        ).run()
+        assert outcome is not None and outcome.response_message_id
+        assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
+        assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
+            assert cursor is not None and cursor.input_id == outcome.input_id
+>           assert cursor.covered_seq == 102 and cursor.injected_seq == _initial.message.seq
+E           AssertionError: assert (103 == 102)
+E            +  where 103 = CurrentNativeCursor(wire_root_id='32113664db544be792944dcf51340e2b', recipient_lookup='5fcb39fdcd93fe368afde95798f5259...1d5a7575fa57138b88936c659f2f34c62f61123b95d2f70628', stage='full', session_id='isolated-session', request_generation=1).covered_seq
+
+tests/test_coordinated_runtime.py:832: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:212 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+=========================== short test summary info ============================
+FAILED tests/test_coordinated_runtime.py::test_selected_original_survives_auxiliary_cursor_over_100_initials
+============================== 1 failed in 3.99s ===============================

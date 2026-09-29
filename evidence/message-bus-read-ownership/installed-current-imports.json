@@ -1,0 +1,14 @@
+{
+  "core": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "toad": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/toad/__init__.py",
+  "modules": {
+    "message_bus.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/message_bus.py",
+    "message_page.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/message_page.py",
+    "historical_views.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/historical_views.py",
+    "routing.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/routing.py",
+    "goal_waits.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/goal_waits.py",
+    "goal_management.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/goal_management.py",
+    "history_views.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/history_views.py",
+    "transcripts.py": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/installed/lib/python3.14/site-packages/agent_comms/transcripts.py"
+  }
+}

@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
-from .channel_targets import is_channel_target
+from .channel_targets import BuiltinChannel, is_channel_target
 from .messages import Message
+from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
@@ -122,10 +123,31 @@ class DeliveryMessage:
 
 
 @dataclass(frozen=True, slots=True)
-class DeliveryScope:
+class DeliveryScope(MessageDisplayScope):
     actor: str
     aliases: Mapping[str, str]
     channels: frozenset[str]
+
+    @property
+    def index_targets(self) -> frozenset[str]:
+        return self.channels | frozenset(
+            name for name in (self.actor, *self.aliases) if self.canonical(name) == self.actor
+        )
+
+    def includes(self, message: Message) -> bool:
+        return self.delivers(message.sender, message.target)
+
+    def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
+        if target is None:
+            return ChannelDisplayScope(BuiltinChannel.ANY.value, None)
+        if is_channel_target(target):
+            return ChannelDisplayScope(target, catalog.history_targets(target))
+        peer = snapshot.aliases.get(target, target)
+        if peer not in snapshot.threads:
+            from .errors import UnregisteredThreadError
+
+            raise UnregisteredThreadError(f"Thread {target!r} is not registered.")
+        return DMDisplayScope.capture(self.actor, peer, snapshot)
 
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)
