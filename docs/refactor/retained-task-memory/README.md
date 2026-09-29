@@ -2,7 +2,8 @@
 
 Planning and provider-free evaluation scaffold against `OpenHCSDev/agent-comms`
 main `697bba42f5f03e169ff8eae9490090cbd0d0b89e`, 2026-09-29.
-Owner of this draft: `openhcs-pr159-viewer-bind-owner`, at Tristan's direct request.
+Current owner: `comms428`, at Tristan's direct request. Initial draft publication
+was by `openhcs-pr159-viewer-bind-owner`; followthrough uses `/home/ts/wt/comms428`.
 
 The original PR48 proposal included task-aware timing, exact task memory,
 cache-preserving summaries, and comparative retention evaluation. Live journaled
@@ -17,7 +18,9 @@ It adds no runtime route, installed-package change, or provider request.
 3. [02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md): existing owners, not another pipeline.
 4. [03-COORDINATION.md](03-COORDINATION.md): dispatch boundaries and product defaults.
 5. [04-EVIDENCE.md](04-EVIDENCE.md): PR history, source receipts, limits, reproduction.
-6. [S1-TIMING.md](S1-TIMING.md), [S2-MEMORY.md](S2-MEMORY.md),
+6. [05-AUDIT-REVIEW.md](05-AUDIT-REVIEW.md): complete contextual scaffold scan,
+   counterevidence and the required source-derived scoring repair.
+7. [S1-TIMING.md](S1-TIMING.md), [S2-MEMORY.md](S2-MEMORY.md),
    [S3-CACHE.md](S3-CACHE.md), [S4-EVALUATION.md](S4-EVALUATION.md).
 
 The surface receipts are provisional design proposals, not admitted NRA migration

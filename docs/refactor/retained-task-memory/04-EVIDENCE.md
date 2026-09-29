@@ -8,7 +8,9 @@
   preparation. The ten class-census modules have zero diff between these heads.
 - NRA declaration-census source: local `nra-installed-main-20260928` worktree,
   `ab85aa0b0724894f81e16e9fda30fc290fc0aa27`. Interpreter: installed stack Python
-  3.14. No dependency detector scan, raw-findings corpus or migration proof run.
+  3.14. That initial census had no dependency detector scan, raw-findings corpus
+  or migration proof. The later complete contextual scaffold scan and raw leads
+  are recorded in [05-AUDIT-REVIEW.md](05-AUDIT-REVIEW.md).
 - Installed-path observation: worker runtime `runtime-journaled-original-20260929`
   and native package `native-current-776dc36857e630da`. Read-only environment and
   installed-source observation established the selected journaled path exists and

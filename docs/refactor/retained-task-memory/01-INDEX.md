@@ -36,7 +36,7 @@ state, not the team's unrecorded prioritization decisions.
 | --- | --- |
 | `owner_compaction_adaptive.py`, preparation/source/witness and selected RPC | S1/S2 request changes from one accepted owner; no second route |
 | `CompactionPolicy`, native summary generation/accounting | S2/S3/S4 share owner; [PR416](https://github.com/OpenHCSDev/agent-comms/pull/416) first |
-| Pi vocabulary/payload declarations | [PR417](https://github.com/OpenHCSDev/agent-comms/pull/417) owns cleanup; integrate normally before extensions |
+| Pi vocabulary/payload declarations | [PR417](https://github.com/OpenHCSDev/agent-comms/pull/417) merged and integrated in the followthrough worktree; use its typed response owners |
 | state/commands and turn lifecycle | [PR421](https://github.com/OpenHCSDev/agent-comms/pull/421) and [PR425](https://github.com/OpenHCSDev/agent-comms/pull/425) own implementation; merged [PR418](https://github.com/OpenHCSDev/agent-comms/pull/418) records dispatch |
 | retained native fixtures | Reuse `tests/retained_native_fixture.py`, selected-owner integration and manual-compaction journeys |
 | synthetic recall oracle | S4 owns fixture/measurement, never runtime selection or task authority |
@@ -53,3 +53,9 @@ state, not the team's unrecorded prioritization decisions.
 | Quality threshold | Exact-state/invalidation controls must pass; predeclare recall/cost/latency margins before seeing model results |
 
 No new provider model or automatic memory-mining policy is silently enabled.
+
+Followthrough at source `452bc01f` is recorded in
+[05-AUDIT-REVIEW.md](05-AUDIT-REVIEW.md): all 85 detectors completed for the
+declared contextual scaffold scan, with no omissions. The four raw leads are
+adjudicated with source counterevidence before any code repair; do not interpret
+this as a clean whole-production audit or completed implementation.

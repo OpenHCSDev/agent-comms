@@ -9,6 +9,17 @@ switch into a helper, author a parallel roster, or add a data class that mirrors
 another mutable authority. A new case must not require synchronized edits to
 several interpreters.
 
+**Owner instruction: no state duplication ever. Always derive from the
+authoritative source.** No shadow state, authoritative cache, second registry,
+or independently maintained replica. Read-only projections and exported views
+must derive from the existing source, not acquire their own update lifecycle.
+
+Before any code edit, use the refactor-audit and nra-refactoring skill tools.
+Record class-first evidence and complete contextual detector coverage, including
+omissions. Local reasoning, a partial census, or tests alone do not satisfy this
+gate. Trace and adjudicate tool leads against the authoritative source; matching
+field names alone never licenses merging different fact families.
+
 One owner per fact family does not mean one god object for independent facts:
 Pi settings own budget/enablement; goal and input stores own their state; native
 transcript owns history; provider transport owns its cache capabilities; commit

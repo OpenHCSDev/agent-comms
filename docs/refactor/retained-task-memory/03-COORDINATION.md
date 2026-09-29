@@ -5,7 +5,7 @@ without acceptance. User requested the evidence/scaffold PR, not live activation
 
 | Surface | Current owner | Next dispatch |
 | --- | --- | --- |
-| planning and offline oracle | `openhcs-pr159-viewer-bind-owner` | This draft |
+| planning and offline oracle | `comms428` | PR428 followthrough in `/home/ts/wt/comms428` |
 | S1 timing | Unassigned | Accept receipt after S2 source contract is settled |
 | S2 memory | Unassigned | Trace canonical correction/failure/source owners; admit bounded projection |
 | S3 cache | Unassigned | Trace selected transports and supported cache semantics |
