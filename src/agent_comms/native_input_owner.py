@@ -11,10 +11,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .bus_publication import stable_thread_lookup
+from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
+from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .errors import RelationViolationError
+from .native_admission_rules import RegistryAdmissionCheck
 from .registry_document import RegistrySnapshot
+from .reservation_rules import ReservationViolationError
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -37,29 +41,16 @@ class RegistryOwner:
         return owner
 
     def _require_current(self, actual: Thread, admission: int | None, reason: str) -> None:
-        if (
-            admission != self.admission_generation
-            or actual.pid != os.getpid()
-            or (
-                actual.name,
-                actual.created_at,
-                actual.pid,
-                actual.role,
-                actual.worktree,
-                actual.active_turn,
-                actual.goal,
-            )
-            != (
-                self.thread.name,
-                self.thread.created_at,
-                self.thread.pid,
-                self.thread.role,
-                self.thread.worktree,
-                self.thread.active_turn,
-                self.thread.goal,
-            )
-        ):
-            raise StaleFence(reason)
+        try:
+            RegistryAdmissionCheck(
+                expected=self.thread,
+                actual=actual,
+                expected_admission=self.admission_generation,
+                admission=admission,
+                process=ProcessIdentity.capture(os.getpid()),
+            ).require_valid()
+        except ReservationViolationError as error:
+            raise StaleFence(f"{reason}: {error}") from error
 
     def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:
         actual, status = snapshot.threads.get(self.thread.name), snapshot.statuses.get(
@@ -82,6 +73,11 @@ class ParticipantOwner:
     thread: Thread
     generation: int
 
+    def coordinator_identity(self, lookup: str) -> OwnerGenerations:
+        return OwnerGenerations(
+            owner_lookup=lookup, owner_thread=self.thread.name, generation=self.generation
+        )
+
     def require(self, store: Coordination, lookup: str) -> None:
         participant = store.participants.get(lookup)
         if (
@@ -89,7 +85,7 @@ class ParticipantOwner:
             or participant.owner_thread != self.thread.name
             or participant.participant_generation != self.generation
             or stable_thread_lookup(self.thread.created_at) != lookup
-            or self.thread.pid != os.getpid()
+            or self.thread.process_identity != ProcessIdentity.capture(os.getpid())
             or not self.thread.role.executable
         ):
             raise StaleFence("cohort recipient is not this live registered owner generation")

@@ -42,3 +42,17 @@ def test_private_admission_owners_stay_within_s7_bounds_without_runner_state():
                 assert node.end_lineno - node.lineno + 1 <= 100, (path, node.name)
             if isinstance(node, ast.Name):
                 assert node.id != "SelectedExecution", (path, node.lineno)
+
+
+def test_private_send_does_not_rebuild_identity_tuples_or_compare_bare_pids():
+    for name in ("native_input_owner", "private_send_stage", "native_admission_rules"):
+        for node in ast.walk(ast.parse((SOURCE / f"{name}.py").read_text())):
+            if isinstance(node, ast.Compare):
+                assert not any(
+                    isinstance(value, ast.Tuple) and len(value.elts) > 2
+                    for value in (node.left, *node.comparators)
+                ), (name, node.lineno)
+                assert not any(
+                    isinstance(value, ast.Attribute) and value.attr == "pid"
+                    for value in ast.walk(node)
+                ), (name, node.lineno)

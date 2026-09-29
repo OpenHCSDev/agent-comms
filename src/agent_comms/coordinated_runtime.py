@@ -590,8 +590,7 @@ class SelectedExecution:
             self.prompt_digest = bind_expected_prompt(
                 self.store,
                 input_id=self.input_id,
-                stage="triage",
-                assignment=self.assignment,
+                stage=TriageNativeSend(self.assignment),
                 owner=self.owner,
                 generation=self.participant.participant_generation,
                 prompt=self.prompt,
@@ -765,13 +764,10 @@ class SelectedExecution:
         self.prompt_digest = bind_expected_prompt(
             self.store,
             input_id=self.input_id,
-            stage="full",
-            assignment=self.assignment,
+            stage=FullNativeSend(self.assignment, self.fence),
             owner=self.owner,
             generation=self.participant.participant_generation,
             prompt=self.prompt,
-            execution_id=self.execution_id,
-            attempt_ordinal=self.fence.attempt_ordinal,
         )
 
         self.progress.input_id = self.input_id
