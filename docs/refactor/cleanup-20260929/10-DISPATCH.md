@@ -20,6 +20,31 @@ owners before editing. Parent Codex owns integration and paired activation.
   deletions. Worktrees stay under persistent `/home/ts/wt`; disposable fixtures
   are bounded and cleaned. Preserve native history and uncertain attempts.
 
+## Latest explicit owner corrections — 2026-09-29
+
+> "kill all mirroring"
+> "mirror genocide"
+> "thats what hte skill is more, it hsould be regularlry revisited"
+
+Canonical semantic owners determine messages, goals, source identities and turn
+state. Views derive their projections through existing publication and
+invalidation; do not introduce independently maintained copies. Delete replaced
+stores, flags, mirrored records, compatibility entrypoints and every consumer in
+place. Bounded retained widget/render resources are not semantic authorities.
+All six workers were instructed to revisit the authoritative skill archive and
+relevant pattern entries against their current complete workflow diffs at the
+next safe checkpoint. Passing screening ratchets alone does not prove ownership
+closure. The repeated violation must be checked through the existing ownership
+guards with real-history evidence, without a new parallel checking framework.
+
+Sender outbound projection: Schrodinger owns the complete sender-chat workflow
+in Toad210; Mendel contributes the durable wire/routing/index/source closure.
+The pr159 reply at 19:27:10 to codex-bootstrap is visible in IRC but absent from
+its sender DM. Both views must project the same original durable record once,
+chronologically, through immediate updates, A/B/A and cold reopening. No second
+message store or sender-only append is accepted. Existing426 owner binding
+recovery remains with Schrodinger; canonical lifecycle425/211 remains Arendt.
+
 ## Complete-surface assignments
 
 | Plan / workflow | Implementation owner | PR ownership and sequence | Acceptance / deletion closure |
