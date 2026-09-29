@@ -288,8 +288,36 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
 async def test_acp_selected_summary_handoff_uses_final_prompt_once(
     tmp_path, monkeypatch, correction, future_queued, queue_revoked, clean_decline, private_session
 ):
+    await acp_selected_summary_journey(
+        tmp_path,
+        monkeypatch,
+        correction=correction,
+        future_queued=future_queued,
+        queue_revoked=queue_revoked,
+        clean_decline=clean_decline,
+        private_session=private_session,
+    )
+
+
+async def acp_selected_summary_journey(
+    tmp_path,
+    monkeypatch,
+    *,
+    correction=False,
+    future_queued=False,
+    queue_revoked=False,
+    clean_decline=False,
+    private_session=False,
+    after_summary=None,
+    exchange=None,
+    response_gate=None,
+    expected_error=None,
+    expected_state="reserved",
+):
     original_key = "acp:original-proj" if private_session else "acp:original"
     from dataclasses import replace
+
+    from acp import RequestError
 
     from agent_comms.acp import CommsAgent
     from agent_comms.acp_extension import (
@@ -311,7 +339,7 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
     if clean_decline:
         monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
-    async with owner_fixture(tmp_path, monkeypatch) as (
+    async with owner_fixture(tmp_path, monkeypatch, response_gate=response_gate) as (
         persistent,
         _registry,
         _inputs,
@@ -337,9 +365,13 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                         # selected original. Read its authority from the journal owner.
                         journal = CompactionJournal(root / "compaction-commits.sqlite3")
                         operation = journal.operations.get(event.publication.commit_id)
-                        reference = SelectedCommitReference.from_intent(json.loads(operation.intent_json))
+                        reference = SelectedCommitReference.from_intent(
+                            json.loads(operation.intent_json)
+                        )
                         attempt = journal.summaries.get(reference.operation_id)
-                        source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json)).source
+                        source = FieldCodec.decode(
+                            SelectedSummarySource, json.loads(attempt.source_json)
+                        ).source
                         assert source.pending_input_key is not None
                         original = dispositions.read().lookup(source.pending_input_key)
                         assert original.exists and not original.has_native_binding
@@ -414,8 +446,14 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 if queue_revoked:
                     await agent.inputs.clear_queued_inputs("proj")
                     assert dispositions.read().lookup(key) == row
-            result = await selected_exchange(self, *args, **kwargs)
+            result = await (
+                selected_exchange(self, *args, **kwargs)
+                if exchange is None
+                else exchange(selected_exchange, self, persistent, *args, **kwargs)
+            )
             summary_ids.append(result.operation_id)
+            if after_summary is not None:
+                await after_summary(persistent, Path(file))
             if correction:
                 dispositions.record(
                     "acp:correction",
@@ -450,6 +488,8 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
         monkeypatch.setattr(NativePiRpcLaunch, "managed", offline_launch)
         try:
             before = Path(file).read_bytes()
+            goal_before = comms.registry.require("proj").goal
+            grant_before = store.snapshot("goal-acp")
             turn = agent.turns.run_agent_turn(
                 "proj",
                 "proj",
@@ -458,26 +498,52 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 original_owner_input=True,
                 original_goal_id="goal-acp",
             )
-            if queue_revoked:
-                with pytest.raises(RelationViolationError, match="Unsettled"):
+            if expected_error is not None:
+                with pytest.raises(RequestError) as refused:
                     await turn
+                assert isinstance(refused.value.__cause__, expected_error)
+                original = dispositions.read().lookup(original_key)
+                assert isinstance(original, NotSentInput)
+                assert not original.has_native_binding and not original.has_started
+                assert Path(file).read_bytes() == before
+                assert comms.registry.require("proj").goal == goal_before
+                assert store.snapshot("goal-acp") == grant_before
+                journal = CompactionJournal(root / "compaction-commits.sqlite3")
+                (attempt,) = journal.summaries.history(file)
+                assert attempt.state.declared_name == expected_state
+                assert publications == []
+                assert "proj" not in agent.inputs.selected_summary_admissions
+                assert not native_input_admitted(root, file)
+                requests = json.loads((tmp_path / "provider-requests.json").read_text())
+                assert len(requests) == 1  # Actual summary request only.
+                return
+            if queue_revoked:
+                with pytest.raises(RequestError) as refused:
+                    await turn
+                assert isinstance(refused.value.__cause__, RelationViolationError)
                 assert summary_ids == []
-                assert not CompactionJournal(
-                    root / "compaction-commits.sqlite3"
-                ).summaries.history(file)
+                assert not CompactionJournal(root / "compaction-commits.sqlite3").summaries.history(
+                    file
+                )
                 assert Path(file).read_bytes() == before
                 assert not (tmp_path / "provider-requests.json").exists()
                 for key in (original_key, *queued_keys):
                     row = dispositions.read().lookup(key)
                     assert row.exists and not row.has_native_binding and not row.has_started
+                assert comms.registry.require("proj").goal == goal_before
+                assert store.snapshot("goal-acp") == grant_before
                 assert "proj" not in agent.inputs.selected_summary_admissions
                 return
             if os.environ.get("PR95_COLD_DECLINE") == "1":
                 from agent_comms.owner_compaction_settings import PiSettingsEvidenceError
-                with pytest.raises(PiSettingsEvidenceError, match="context_requires_compaction"):
+
+                with pytest.raises(RequestError) as refused:
                     await turn
+                assert isinstance(refused.value.__cause__, PiSettingsEvidenceError)
                 original = dispositions.read().lookup(original_key)
-                assert original.exists and not original.has_native_binding and not original.has_started
+                assert (
+                    original.exists and not original.has_native_binding and not original.has_started
+                )
                 journal = CompactionJournal(root / "compaction-commits.sqlite3")
                 (attempt,) = journal.summaries.history(file)
                 assert attempt.state.declared_name == "refused"
@@ -486,10 +552,17 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                 assert Path(file).read_bytes() == before
                 return
             if correction:
-                with pytest.raises(RelationViolationError, match="Unsettled"):
+                with pytest.raises(RequestError) as refused:
                     await turn
+                assert isinstance(refused.value.__cause__, RelationViolationError)
                 assert isinstance(dispositions.read().lookup(original_key), NotSentInput)
                 assert not dispositions.read().lookup(original_key).has_native_binding
+                assert Path(file).read_bytes() == before
+                assert comms.registry.require("proj").goal == goal_before
+                assert store.snapshot("goal-acp") == grant_before
+                if not clean_decline:
+                    requests = json.loads((tmp_path / "provider-requests.json").read_text())
+                    assert len(requests) == 1  # Summary only; no original send/replay.
             else:
                 await turn
                 assert dispositions.read().rows[original_key].declared_name == "started", updates
@@ -761,60 +834,79 @@ async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, m
         assert inputs.read().lookup("acp:original").accepts_reservation
 
 
-async def test_disconnected_selected_summary_stays_unknown_without_original_replay(
+async def test_acp_selected_settings_change_refuses_original_without_history_write(
+    tmp_path, monkeypatch
+):
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.pi_commands import UnknownCommand
+    from agent_comms.pi_events import Response
+    from agent_comms.pi_rpc import PiRpcChannel
+
+    async def change_settings(persistent, file):
+        command = UnknownCommand(
+            wire={"type": "set_auto_compaction", "id": "fixture-disable", "enabled": False}
+        )
+        async with persistent.lock, asyncio.timeout(5):
+            child = persistent.custody.child
+            child.proc.stdin.write(PiRpcChannel.command_bytes(command))
+            await child.proc.stdin.drain()
+            response = PiRpcChannel.decode_record(await child.reader.readline(), strict=True)
+            assert isinstance(response, Response) and response.success
+            assert response.id == "fixture-disable"
+
+    await acp_selected_summary_journey(
+        tmp_path,
+        monkeypatch,
+        after_summary=change_settings,
+        expected_error=RelationViolationError,
+    )
+
+
+async def test_acp_selected_saved_source_change_refuses_original_without_history_write(
+    tmp_path, monkeypatch
+):
+    from agent_comms.native_pi import NativePiUnavailable
+
+    async def change_revision(persistent, file):
+        stat = file.stat()
+        os.utime(file, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1000000))
+
+    await acp_selected_summary_journey(
+        tmp_path,
+        monkeypatch,
+        after_summary=change_revision,
+        expected_error=NativePiUnavailable,
+    )
+
+
+async def test_acp_disconnected_selected_summary_stays_unknown_without_original_replay(
     tmp_path, monkeypatch
 ):
     from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
 
     gate = asyncio.Event()
-    async with owner_fixture(tmp_path, monkeypatch, response_gate=gate) as (
-        persistent,
-        registry,
-        inputs,
-        file,
-        launcher,
-        info,
-    ):
-        before = Path(file).read_bytes()
-        admissions = []
-        operation = asyncio.create_task(
-            maybe_compact_owner_turn(
-                registry,
-                launcher,
-                "owner",
-                "turn",
-                info,
-                "acp:original",
-                persistent,
-                input_text="Continue",
-                on_admission=admissions.append,
-            )
-        )
+
+    async def disconnect(exchange, slot, persistent, *args, **kwargs):
+        operation = asyncio.create_task(exchange(slot, *args, **kwargs))
         try:
             async with asyncio.timeout(15):
                 while not (tmp_path / "provider-requests.json").exists():
                     await asyncio.sleep(0.01)
-                # The actual selected request reached the provider. Kill its
-                # native process before any response can attest an outcome.
                 await persistent.custody.child.proc.stop()
-                with pytest.raises(SelectedChildUnknown):
-                    await operation
-            journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-            attempts = journal.summaries.blocking(file)
-            assert len(attempts) == 1
-            assert attempts[0].state.declared_name == "unknown"
-            assert admissions == []
-            assert inputs.read().lookup("acp:original").accepts_reservation
-            assert not inputs.read().lookup("acp:original").has_native_binding
-            assert not native_input_admitted(tmp_path, file)
-            assert Path(file).read_bytes() == before
-            assert not persistent.available and persistent.custody.session_file == file
-            requests = json.loads((tmp_path / "provider-requests.json").read_text())
-            assert len(requests) == 1
+                return await operation
         finally:
             gate.set()
             operation.cancel()
             await asyncio.gather(operation, return_exceptions=True)
+
+    await acp_selected_summary_journey(
+        tmp_path,
+        monkeypatch,
+        exchange=disconnect,
+        response_gate=gate,
+        expected_error=SelectedChildUnknown,
+        expected_state="unknown",
+    )
 
 
 @pytest.mark.parametrize(
@@ -992,10 +1084,17 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
 
 
 @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
-async def test_cold_context_decline_refuses_before_original_binding(tmp_path, monkeypatch, private_session):
+async def test_cold_context_decline_refuses_before_original_binding(
+    tmp_path, monkeypatch, private_session
+):
     monkeypatch.setenv("PR95_COLD_DECLINE", "1")
-    await test_acp_selected_summary_handoff_uses_final_prompt_once(
-        tmp_path, monkeypatch, correction=False, future_queued=False,
-        queue_revoked=False, clean_decline=True, private_session=private_session,
+    await acp_selected_summary_journey(
+        tmp_path,
+        monkeypatch,
+        correction=False,
+        future_queued=False,
+        queue_revoked=False,
+        clean_decline=True,
+        private_session=private_session,
     )
     assert json.loads((tmp_path / "provider-requests.json").read_text()) == []
