@@ -31,3 +31,5 @@ Read-only trace: `TranscriptReplay.replay` already offloads saved-page reading w
 ## Delivery
 
 PR359. Configured real history remains only in the original source and temporary diagnostic forks, all diagnostic forks removed after their runs. Source tests seeded new small histories using loopback responses. Global immutable d396 package untouched. Carver directly notified about preserving captured stderr on timeout; his presentation files were not edited here. Initial interpreter/setup failures remain failed receipts, not counted as tests.
+
+Merged current main normally after acceptance, including356 feedback (mainab0262c1). No watchdog/startup/test conflict or change to the fix; production arbitration bytes equal the verified wheel. The installed receipt precedes that normal merge; parent combined installed App acceptance remains explicitly pending. Completed own test scratch removed after process-reference inspection; candidate/wheel/source/evidence preserved.
