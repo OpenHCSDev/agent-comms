@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .backend import PersistentPiSession, _session_revision
-from .compaction_journal import CompactionJournalError, SelectedSummaryAttempt
+from .compaction_errors import CompactionJournalError
+from .compaction_records import SelectedSummaryAttempt
 from .compaction_result import CommittedCompactionResult
 from .compaction_states import ManualCommittedSummary
 from .errors import RelationViolationError
@@ -37,7 +38,7 @@ class ManualSelectedSummary(NativeSummary):
     def admit_original(self, bridge, owner, owner_generation, operation, source):
         if operation is None or not operation.state.committed:
             raise CompactionJournalError("Manual native commit is not complete")
-        bridge.journal.link_selected_summary_commit(
+        bridge.journal.summaries.link_commit(
             self.attempt.operation_id, operation.commit_id, state_type=ManualCommittedSummary
         )
         return None
@@ -65,7 +66,7 @@ async def compact_manual_owner(
     )
 
     pending_input_key = None
-    refusals = bridge.journal.blocking_selected_summary(owner.session_file)
+    refusals = bridge.journal.summaries.blocking(owner.session_file)
     for refusal in refusals:
         refusal.state.manual_recovery()
         prior = FieldCodec.decode(SelectedSource, json.loads(refusal.source_json)["source"])
@@ -101,7 +102,7 @@ async def compact_manual_owner(
         if current != owner or current_generation != generation or await decision() != settings:
             raise RelationViolationError("Manual selected source changed before summary")
         for refusal in refusals:
-            bridge.journal.retire_refused_summary(refusal)
+            bridge.journal.summaries.retire_refused(refusal)
         source = {
             "source": FieldCodec.encode(
                 ManualSource(
@@ -133,7 +134,7 @@ async def compact_manual_owner(
             custom_instructions=instructions.strip() if instructions else None,
         )
         if result.summary is None:
-            bridge.journal.refuse_selected_summary(result.operation_id, result.decline_reason)
+            bridge.journal.summaries.refuse(result.operation_id, result.decline_reason)
             raise ValueError(f"Selected Pi declined manual summary ({result.decline_reason})")
         current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)
         if current != owner or current_generation != generation or await decision() != settings:
@@ -143,7 +144,7 @@ async def compact_manual_owner(
             result.summary.text,
             result.summary.details,
             result.summary.usage,
-            bridge.journal.selected_summary(result.operation_id),
+            bridge.journal.summaries.get(result.operation_id),
         )
 
     operation = await compact_owner_once(

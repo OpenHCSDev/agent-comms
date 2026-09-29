@@ -10,7 +10,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from .compaction_journal import CompactionJournal, CompactionJournalError
+from .compaction_errors import CompactionJournalError
+from .compaction_journal import CompactionJournal
 
 
 def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
@@ -27,7 +28,7 @@ def native_input_admitted(wire_root: Path, session_file: str | None) -> bool:
         if not path.exists() and not path.is_symlink():
             return True
         journal = CompactionJournal(path)
-        return not journal.unresolved(session_file) and not journal.blocking_selected_summary(
+        return not journal.operations.unresolved(session_file) and not journal.summaries.blocking(
             session_file
         )
     except (OSError, ValueError, sqlite3.Error, CompactionJournalError):

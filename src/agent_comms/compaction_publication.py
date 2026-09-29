@@ -61,7 +61,7 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
         journal = CompactionJournal(path)
         client = agent.sessions.client
         sockets = frozenset(runtime.clients.get(session_id, ()))
-        for item in journal.pending_publications(owner.session_file):
+        for item in journal.publications.pending(owner.session_file):
             # Recheck under the handoff fence; an owner epoch may change even
             # without a session rebind. No old row crosses that boundary.
             try:
@@ -135,6 +135,6 @@ async def publish_pending_local(agent: Any, session_id: str, thread_name: str) -
             ):
                 # No ACK after owner/client change or all socket sends failed.
                 break
-            journal.observe_publication(item.commit_id, item.metadata_json)
+            journal.publications.observe(item.commit_id, item.metadata_json)
             projected += 1
     return projected

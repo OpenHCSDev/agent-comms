@@ -317,8 +317,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             from agent_comms.compaction_journal import CompactionJournal
 
             assert (
-                CompactionJournal(comms.root / "compaction-commits.sqlite3")
-                .get(committed[0].commit_id)
+                CompactionJournal(comms.root / "compaction-commits.sqlite3").operations.get(committed[0].commit_id)
                 .state.committed
             )
             await asyncio.wait_for(

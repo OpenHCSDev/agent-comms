@@ -11,7 +11,7 @@ from .agent_events import CompactionEnd
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 
 if TYPE_CHECKING:
-    from .compaction_journal import CompactionOperation
+    from .compaction_records import CompactionOperation
     from .owner_compaction_commit import CompactionSource, OwnerCompactionCommit
     from .selected_summary_admission import SelectedSummaryAdmission
     from .threads import Thread

@@ -11,7 +11,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import AttachedChild
-from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
+from agent_comms.compaction_errors import CompactionJournalError
+from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -144,7 +145,7 @@ async def test_existing_child_summary_preserves_native_metadata_and_blocks_repla
         assert result.summary.usage.cost.total == 0
         assert result.decline_reason is None
         assert json.loads(received.read_text())["operationId"] == result.operation_id
-        assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
+        assert journal.summaries.get(result.operation_id).state.declared_name == "reserved"
         assert file.read_bytes() == before
         assert not native_input_admitted(journal.path.parent, str(file))
         assert persistent.custody.idle().current
@@ -156,7 +157,7 @@ async def test_decline_is_data_and_does_not_automatically_clear_input_gate(tmp_p
     async with selected(tmp_path, "decline") as (run, _, journal, file, _received):
         result = await run()
         assert result.summary is None and result.decline_reason == "split_turn"
-        assert journal.selected_summary(result.operation_id).state.declared_name == "reserved"
+        assert journal.summaries.get(result.operation_id).state.declared_name == "reserved"
         assert not native_input_admitted(journal.path.parent, str(file))
 
 
@@ -170,7 +171,7 @@ async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode
             await run()
         assert child.returncode is not None
         assert persistent.custody.session_file == str(file)
-        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
         assert not native_input_admitted(journal.path.parent, str(file))
 
 
@@ -179,7 +180,7 @@ async def test_timeout_does_not_retry_summary(tmp_path):
         with pytest.raises(SelectedChildUnknown, match="made no progress for 0.15 seconds"):
             await run(idle_timeout_seconds=0.15)
         assert not persistent.available and received.exists()
-        assert len(journal.unresolved_selected_summary(str(file))) == 1
+        assert len(journal.summaries.unresolved(str(file))) == 1
 
 
 @pytest.mark.parametrize(
@@ -196,9 +197,9 @@ async def test_failure_detail_survives_without_authorizing_replay(tmp_path, mode
             await run()
         assert not persistent.available
         operation = json.loads(received.read_text())["operationId"]
-        assert journal.selected_summary(operation).state.declared_name == "unknown"
+        assert journal.summaries.get(operation).state.declared_name == "unknown"
         assert not native_input_admitted(journal.path.parent, str(file))
-        assert len(journal.unresolved_selected_summary(str(file))) == 1
+        assert len(journal.summaries.unresolved(str(file))) == 1
 
 
 async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
@@ -212,7 +213,7 @@ async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
         with pytest.raises(asyncio.CancelledError):
             await task
         assert child.returncode is not None
-        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
 
 
 @pytest.mark.parametrize("changed", ["revision", "package"])
@@ -229,7 +230,7 @@ async def test_stale_child_never_reserves_or_sends(tmp_path, changed):
         with pytest.raises(SelectedChildUnknown, match="stale"):
             await run()
         assert not received.exists()
-        assert not journal.unresolved_selected_summary(str(file))
+        assert not journal.summaries.unresolved(str(file))
 
 
 async def test_bounded_reader_refuses_oversize_across_transport_fragments():
@@ -264,7 +265,7 @@ async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
     async with selected(tmp_path, "limit") as (run, persistent, journal, file, received):
         result = await run()
         assert result.summary is None and result.decline_reason == "limit_exceeded"
-        attempt = CompactionJournal(journal.path).selected_summary(result.operation_id)
+        attempt = CompactionJournal(journal.path).summaries.get(result.operation_id)
         assert attempt.state.declared_name == "refused"
         assert attempt.state.decline_reason == "limit_exceeded"
         assert not attempt.state.original_eligible
@@ -290,7 +291,7 @@ async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
     async with selected(tmp_path, "duplicate-progress") as (run, persistent, journal, file, _):
         with pytest.raises(SelectedChildUnknown, match="made no progress"):
             await run(idle_timeout_seconds=0.06)
-        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
         assert not persistent.available
 
 
@@ -311,7 +312,7 @@ async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
     async with selected(tmp_path, "foreign-progress") as (run, persistent, journal, file, _):
         with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
             await run(idle_timeout_seconds=0.06)
-        assert journal.unresolved_selected_summary(str(file))[0].state.declared_name == "unknown"
+        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
         assert not persistent.available
 
 
@@ -320,7 +321,7 @@ async def test_selected_frame_uses_transport_without_retired_file_count_budget(t
         result = await run()
         assert len(result.summary.details.read_files) == 3800
         assert persistent.custody.child.proc.returncode is None
-        assert journal.blocking_selected_summary(str(file))
+        assert journal.summaries.blocking(str(file))
 
 
 async def test_refusal_recovery_rechecks_exact_record_and_never_reattempts(tmp_path):
@@ -328,20 +329,20 @@ async def test_refusal_recovery_rechecks_exact_record_and_never_reattempts(tmp_p
 
     async with selected(tmp_path, "limit") as (run, _, journal, file, _):
         result = await run()
-        attempt = journal.selected_summary(result.operation_id)
-        journal.refuse_selected_summary(result.operation_id, result.decline_reason)
-        assert journal.selected_summary(result.operation_id) == attempt
+        attempt = journal.summaries.get(result.operation_id)
+        journal.summaries.refuse(result.operation_id, result.decline_reason)
+        assert journal.summaries.get(result.operation_id) == attempt
         with pytest.raises(CompactionJournalError, match="refusal transition"):
-            journal.refuse_selected_summary(result.operation_id, "different native reason")
+            journal.summaries.refuse(result.operation_id, "different native reason")
         with pytest.raises(CompactionJournalError, match="commit reservation"):
             attempt.state.require_commit_reservation()
-        journal.retire_refused_summary(attempt)
-        retired = journal.selected_summary(result.operation_id)
+        journal.summaries.retire_refused(attempt)
+        retired = journal.summaries.get(result.operation_id)
         assert isinstance(retired.state, RetiredRefusalSummary)
         assert retired.state.decline_reason == result.decline_reason
         with pytest.raises(CompactionJournalError, match="changed"):
-            journal.retire_refused_summary(attempt)
-        assert journal.selected_summary(result.operation_id) == retired
+            journal.summaries.retire_refused(attempt)
+        assert journal.summaries.get(result.operation_id) == retired
 
 
 @pytest.mark.parametrize(

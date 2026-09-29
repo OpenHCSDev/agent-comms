@@ -70,7 +70,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
         )
         text = inputs.read().rows["acp:original"].source_text
         digest = TextDigest.of(text)
-        operation = bridge.journal.reserve_selected_summary(
+        operation = bridge.journal.summaries.reserve(
             session,
             {
                 "source": FieldCodec.encode(
@@ -92,7 +92,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
                 "settings": dict(reserveTokens=1000, keepRecentTokens=10),
             },
         )
-        bridge.journal.mark_selected_summary_unknown(operation)
+        bridge.journal.summaries.mark_unknown(operation)
         if bound:
             assert inputs.bind(
                 "acp:original",
@@ -110,13 +110,13 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
                 await asyncio.to_thread(
                     bridge.reconcile_interrupted_summaries, owner, generation, prepared.witness
                 )
-            assert bridge.journal.selected_summary(operation).state.declared_name == "unknown"
+            assert bridge.journal.summaries.get(operation).state.declared_name == "unknown"
         else:
             await asyncio.to_thread(
                 bridge.reconcile_interrupted_summaries, owner, generation, prepared.witness
             )
-            state = bridge.journal.selected_summary(operation).state
+            state = bridge.journal.summaries.get(operation).state
             assert state.declared_name == "retired_unknown" and not state.original_eligible
-            assert not bridge.journal.blocking_selected_summary(session)
+            assert not bridge.journal.summaries.blocking(session)
         assert Path(session).read_bytes() == original
         assert inputs.path.read_bytes() == dispositions

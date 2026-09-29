@@ -12,13 +12,12 @@ ROOT = Path(__file__).resolve().parents[2] / "src/agent_comms"
 def files():
     return sorted(
         set(ROOT.glob("owner_compaction_*.py"))
+        | set(ROOT.glob("compaction_*.py"))
         | {
             ROOT / name
             for name in (
                 "manual_compaction_bridge.py",
                 "native_session_reopen.py",
-                "compaction_journal.py",
-                "compaction_states.py",
                 "selected_summary_admission.py",
                 "pi_helper.py",
                 "fresh_private_session.py",
