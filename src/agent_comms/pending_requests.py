@@ -6,6 +6,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from .sealed import Sealed
+
 if TYPE_CHECKING:
     from .agent_events import SettingChangeResult
 
@@ -16,7 +18,7 @@ class PendingRequest:
     request: Any = None
 
 
-class PendingRequests:
+class PendingRequests(Sealed):
     """One future per nominal result family and request identity."""
 
     def __init__(self) -> None:
