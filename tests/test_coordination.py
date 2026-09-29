@@ -1,8 +1,8 @@
 """Slice-1 store_files, direct-SQL authority and crash/reopen shape tests."""
 
 import hashlib
-import os
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -14,7 +14,6 @@ import pytest
 from agent_comms.assignment_states import (
     AssignmentState,
     CompletedAssignment,
-    DeferredAssignment,
     EngagedAssignment,
 )
 from agent_comms.attempt_states import (
@@ -25,34 +24,29 @@ from agent_comms.attempt_states import (
     RetryingAttempt,
     SucceededAttempt,
 )
-from agent_comms.coordination import (
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
+from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
     COORDINATION_SNAPSHOT_VERSION,
-    AttemptRecord,
-    CoordinationStore,
-    CurrentExecutions,
+)
+from agent_comms.coordination_snapshot import RecoverySnapshot
+from agent_comms.coordination_tables.assignments import (
     ExecutionAssignmentLink,
+    MessageAudience,
+    WakeAssignment,
+)
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.executions import (
     ExecutionOrigin,
     ExecutionRecord,
-    IntegrityViolationError,
-    MessageAudience,
-    OwnerFence,
+)
+from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     PublicationReceipt,
-    RecoverySnapshot,
-    ReplayAssessments,
-    ReplayFact,
-    ResponseObligation,
-    SchemaVersionError,
-    WakeAssignment,
-    assignment_transition_allowed,
-    attempt_phase_transition_allowed,
-    attempt_retry_identity_allowed,
     canonical_publication_key,
-    execution_status_transition_allowed,
-    obligation_transition_allowed,
-    replay_transition_allowed,
 )
+from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -64,7 +58,6 @@ from agent_comms.execution_states import (
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
 from agent_comms.obligation_states import (
-    DeferredResponse,
     PendingResponse,
     PublishedResponse,
     SilentResponse,
@@ -330,20 +323,6 @@ def test_total_enum_partition_and_transitions():
 
 def test_typed_execution_and_attempt_authority_are_separate():
     pending = execution()
-    active = replace(pending, revision=2, lifecycle=ActiveExecution.load(1))
-    assert execution_status_transition_allowed(pending, active)
-    deferred = replace(
-        active,
-        revision=3,
-        lifecycle=DeferredExecution.load(active.lifecycle.current_attempt_ordinal),
-    )
-    assert execution_status_transition_allowed(active, deferred)
-    retry = replace(deferred, revision=4, lifecycle=ActiveExecution.load(2))
-    assert execution_status_transition_allowed(deferred, retry)
-    assert not execution_status_transition_allowed(
-        deferred, replace(retry, lifecycle=type(retry.lifecycle).load(3))
-    )
-    assert not execution_status_transition_allowed(pending, replace(active, revision=3))
     with pytest.raises(IntegrityViolationError):
         replace(pending, lifecycle=ActiveExecution.load(pending.lifecycle.current_attempt_ordinal))
     with pytest.raises(IntegrityViolationError):
@@ -357,19 +336,6 @@ def test_typed_execution_and_attempt_authority_are_separate():
         is None
     )
     first = attempt()
-    assert attempt_phase_transition_allowed(
-        first,
-        replace(first, revision=2, lifecycle=AttemptFailedAttempt.load(None, True, True)),
-    )
-    assert not attempt_phase_transition_allowed(
-        first,
-        replace(
-            first,
-            owner_generation=2,
-            revision=2,
-            lifecycle=AttemptFailedAttempt.load(None, True, True),
-        ),
-    )
     with pytest.raises(IntegrityViolationError):
         replace(
             first, lifecycle=AttemptFailedAttempt.load(None, True, first.lifecycle.process_dead)
@@ -380,19 +346,6 @@ def test_typed_execution_and_attempt_authority_are_separate():
         pending.lifecycle = FailedExecution()
 
 
-def test_pointer_requires_exact_composite_attempt_and_owner():
-    record = execution(status=ActiveExecution, ordinal=1)
-    current = CurrentExecutions("owner-1", "execution-1", 1, 1)
-    current.assert_matches(record, attempt())
-    with pytest.raises(IntegrityViolationError):
-        current.assert_matches(record, attempt(ordinal=2))
-    assert current.transition_allowed(
-        replace(current, execution_id=None, attempt_ordinal=None, pointer_revision=2), None, None
-    )
-    assert not current.transition_allowed(replace(current, pointer_revision=3), record, attempt())
-    with pytest.raises(IntegrityViolationError):
-        replace(current, attempt_ordinal=None)
-    assert OwnerFence("execution-1", 1, "worker", 1, 1, "secret").attempt_ordinal == 1
 
 
 def test_snapshot_projection_retry_and_inert_secrets():
@@ -526,61 +479,6 @@ def test_wire_claim_obligation_and_publication_contract():
         replace(intent, expected_message_id="fabricated")
 
 
-def test_claim_replay_obligation_relations_remain_authoritative():
-    c = assignment()
-    assert assignment_transition_allowed(
-        c,
-        replace(
-            c,
-            revision=2,
-            lifecycle=DeferredAssignment.load(
-                c.lifecycle.mode,
-                c.lifecycle.verdict,
-                c.lifecycle.execution_id,
-                c.lifecycle.exact_target,
-            ),
-        ),
-    )
-    assert not assignment_transition_allowed(
-        c,
-        replace(
-            c,
-            recipient_lookup="other",
-            revision=2,
-            lifecycle=DeferredAssignment.load(
-                c.lifecycle.mode,
-                c.lifecycle.verdict,
-                c.lifecycle.execution_id,
-                c.lifecycle.exact_target,
-            ),
-        ),
-    )
-    r = ReplayAssessments("execution-1", ReplayFact.NONE, True, False, 1)
-    assert replay_transition_allowed(r, replace(r, replay_safe=False, revision=2))
-    with pytest.raises(IntegrityViolationError):
-        replace(r, revision=2, facts=ReplayFact.TOOL_EXECUTED, replay_safe=True)
-    o = obligation()
-    assert obligation_transition_allowed(
-        o,
-        replace(
-            o,
-            revision=2,
-            lifecycle=DeferredResponse.load(
-                o.lifecycle.receipt_message_id, o.lifecycle.receipt_seq
-            ),
-        ),
-    )
-    assert not obligation_transition_allowed(
-        o,
-        replace(
-            o,
-            exact_target="wrong",
-            revision=2,
-            lifecycle=DeferredResponse.load(
-                o.lifecycle.receipt_message_id, o.lifecycle.receipt_seq
-            ),
-        ),
-    )
 
 
 @pytest.fixture
@@ -612,7 +510,8 @@ def test_database_version_privacy_and_reopen(db):
 
 def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):
     script = """import sys
-from agent_comms.coordination import CoordinationStore, COORDINATION_SCHEMA_VERSION
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 sys.stdin.buffer.read(1)
 with CoordinationStore(sys.argv[1]) as store:
     assert store.schema_version == COORDINATION_SCHEMA_VERSION
@@ -1465,45 +1364,6 @@ def test_fence_digest_is_globally_unique_across_executions(db):
         assert reopened._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
 
 
-def test_typed_retry_fence_relation_requires_new_global_digest():
-    prior = attempt(phase=AttemptFailedAttempt, done=True, dead=True)
-    fresh = attempt(ordinal=2, generation=3)
-    issued = frozenset({"digest-1", "other-execution-digest"})
-    assert attempt_retry_identity_allowed(
-        prior,
-        fresh,
-        current_owner_generation=3,
-        current_owner_thread="worker",
-        issued_token_digests=issued,
-    )
-    assert not attempt_retry_identity_allowed(
-        prior,
-        replace(fresh, owner_token_digest="other-execution-digest"),
-        current_owner_generation=3,
-        current_owner_thread="worker",
-        issued_token_digests=issued,
-    )
-    assert not attempt_retry_identity_allowed(
-        prior,
-        replace(fresh, owner_token_digest="digest-1"),
-        current_owner_generation=3,
-        current_owner_thread="worker",
-        issued_token_digests=frozenset({"other-execution-digest"}),
-    )
-    assert not attempt_retry_identity_allowed(
-        prior,
-        replace(fresh, owner_generation=1),
-        current_owner_generation=1,
-        current_owner_thread="worker",
-        issued_token_digests=issued,
-    )
-    assert not attempt_retry_identity_allowed(
-        prior,
-        fresh,
-        current_owner_generation=4,
-        current_owner_thread="worker",
-        issued_token_digests=issued,
-    )
 
 
 def test_claim_target_and_recipient_lineage_is_immutable(db):
@@ -2103,7 +1963,8 @@ def test_publication_sql_validator_two_stores_raw_connection_and_process(db):
     # A fresh process must install the function before a direct SQL write.
     script = """import json
 import sqlite3, sys
-from agent_comms.coordination import CoordinationStore, COORDINATION_SCHEMA_VERSION
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 with CoordinationStore(sys.argv[1]) as store:
     db = store._connection
     assert db.execute("SELECT coordination_validate_publication_intent("

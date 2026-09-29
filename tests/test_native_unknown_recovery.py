@@ -17,9 +17,9 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination import ReplayFact
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_store import MutationStore, RecoveryBlocked, RecoveryMonitorCapability
+from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput

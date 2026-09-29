@@ -1,0 +1,26 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_corrupt_initial_and_wrong_root_rejected_before_sql ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-coordination-owners-20260928/.test-baseline-cohort/test_corrupt_initial_and_wrong0')
+
+    def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> None:
+        comms, store, root_id, _lookups = _root(tmp_path)
+        sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+        with pytest.raises(IdentityConflict, match="root"):
+            accept_initial_cohort(comms.bus, "a" * 32, sent.seq, store)
+        bus_path = tmp_path / "comms" / "bus.jsonl"
+        original = bus_path.read_bytes()
+        row = json.loads(original)
+        row[PRIVATE_WIRE_FIELD]["initial"]["decisions"][0]["recipient_lookup"] = "imposter"
+        bus_path.write_text(json.dumps(row) + "\n")
+>       with pytest.raises(RelationViolationError, match="initial"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'initial'
+E         Actual message: 'Private bus checkpoint root/inode/size changed.'
+
+.scratch/baseline-tests/test_coordination_cohort.py:251: AssertionError
+=========================== short test summary info ============================
+FAILED .scratch/baseline-tests/test_coordination_cohort.py::test_corrupt_initial_and_wrong_root_rejected_before_sql
+1 failed in 0.44s

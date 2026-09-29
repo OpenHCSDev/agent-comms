@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.coordination import CoordinationStore
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.recovery_gateway import GatewayUnavailableError, RecoveryGateway
 
 pytestmark = pytest.mark.skipif(

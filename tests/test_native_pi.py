@@ -938,8 +938,8 @@ def test_missing_native_model_fails_before_any_session_side_effect(
 
 @pytest.fixture
 def durable_attempt(tmp_path):
-    from agent_comms.coordination import ExecutionOrigin
     from agent_comms.coordination_store import MutationStore, prepare_fence_token
+    from agent_comms.coordination_tables.executions import ExecutionOrigin
     from agent_comms.durable_turn import DurableTurn
 
     with MutationStore(tmp_path / "attempt.sqlite3") as store:

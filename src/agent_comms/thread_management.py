@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
+
 from .child_process import ProcessIdentity
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
@@ -395,8 +397,8 @@ class ThreadManagement:
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
+
         from .bus_publication import stable_thread_lookup
-        from .coordination import MAX_IDENTIFIER_CHARS
         from .coordination_store import IdentityConflict, MutationStore
 
         before = self.registry.require(name)
