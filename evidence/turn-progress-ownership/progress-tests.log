@@ -1,0 +1,510 @@
+FFFFFFFF.FFF.
+=================================== FAILURES ===================================
+__________ test_current_stream_effects_then_terminal_release[normal] ___________
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bbfab4d0>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bbf61010>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bcdc6d70>
+case = <class 'test_s1_event_behavior.NormalCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bbf617f0>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+___________ test_current_stream_effects_then_terminal_release[tool] ____________
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bbf634d0>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc2ee5d0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bbf93ac0>
+case = <class 'test_s1_event_behavior.ToolCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc2ee710>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+________ test_current_stream_effects_then_terminal_release[compaction] _________
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc26c440>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc247250>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc233850>
+case = <class 'test_s1_event_behavior.CompactionCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc247390>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+_____ test_current_stream_effects_then_terminal_release[compaction_abort] ______
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc26d7f0>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc3d4cd0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc29b230>
+case = <class 'test_s1_event_behavior.CompactionAbortCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc38fe10>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+_________ test_current_stream_effects_then_terminal_release[settings] __________
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc26e120>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc3d6350>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc693590>
+case = <class 'test_s1_event_behavior.SettingsCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc423360>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+____ test_current_stream_effects_then_terminal_release[diagnostic_failure] _____
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc26ef90>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc3d7b10>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc2a4aa0>
+case = <class 'test_s1_event_behavior.DiagnosticFailureCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc831d90>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+______ test_current_stream_effects_then_terminal_release[reason_failure] _______
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc26fcb0>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc885090>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc3b27b0>
+case = <class 'test_s1_event_behavior.ReasonFailureCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc9016a0>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+________ test_current_stream_effects_then_terminal_release[interrupted] ________
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc864ad0>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bc886490>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc8d1710>
+case = <class 'test_s1_event_behavior.InterruptedCase'>
+
+    @pytest.mark.parametrize("case", EffectCase.members_with(EffectCase), ids=lambda c: c.declared_name)
+    async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypatch, case):
+        execution, progress = owner_turn
+        runner, comms = execution.runner, execution.runner.comms
+        waiting_owner(execution)
+        observed, syncs = [], []
+        emit, sync = runner.effects._emit_event, runner.sync_goal_execution
+    
+        async def observe(session, event, **kwargs):
+            observed.append(type(event))
+            await emit(session, event, **kwargs)
+    
+        async def observe_sync(session, name):
+            syncs.append(name)
+            await sync(session, name)
+    
+        monkeypatch.setattr(runner.effects, "_emit_event", observe)
+        monkeypatch.setattr(runner, "sync_goal_execution", observe_sync)
+        model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
+        thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
+        value = case()
+>       await progress.consume(ae.InputStarted(None))
+
+tests/test_s1_event_behavior.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc56d150>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+___________ test_transport_error_still_releases_real_wait_once[True] ___________
+
+owner_turn = (<agent_comms.owned_turn.OwnedTurn object at 0x7f91bc865e80>, <agent_comms.turn_progress.TurnProgress object at 0x7f91bca3ca50>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc58bd20>
+after_stream = True
+
+    @pytest.mark.parametrize("after_stream", [False, True])
+    async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeypatch, after_stream):
+        execution, progress = owner_turn
+        comms, runner = execution.runner.comms, execution.runner
+        waiting_owner(execution)
+        if after_stream:
+>           await progress.consume(ae.StreamSettled())
+
+tests/test_s1_event_behavior.py:244: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bcab0350>
+value = StreamSettled()
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+____ test_actual_native_stream_reaches_current_consumer_and_settlement[200] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f91bc867380>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc5e3310>
+provider_status = 200
+
+    @pytest.mark.parametrize("provider_status", [200, 503])
+    async def test_actual_native_stream_reaches_current_consumer_and_settlement(
+        native_backend, monkeypatch, provider_status
+    ):
+        native = native_backend
+        native.provider.status = provider_status
+        comms = Comms(native.root)
+        owner = CommsAgent(
+            comms,
+            agent_bin="pi",
+            private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+            private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        )
+        session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+        name = owner.sessions.bindings[session.session_id]
+        execution = OwnedTurn(
+            owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+        )
+        assert execution.admit()
+        execution.begin()
+        execution.prepare_prompt()
+        execution.open_stream()
+        progress = execution.progress
+        waiting_owner(execution)
+        try:
+            records = await native.run("native acceptance")
+            for event in records:
+>               await progress.consume(event)
+
+tests/test_s1_event_behavior.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bcb1b4d0>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+____ test_actual_native_stream_reaches_current_consumer_and_settlement[503] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f91bca3f750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f91bc5e3380>
+provider_status = 503
+
+    @pytest.mark.parametrize("provider_status", [200, 503])
+    async def test_actual_native_stream_reaches_current_consumer_and_settlement(
+        native_backend, monkeypatch, provider_status
+    ):
+        native = native_backend
+        native.provider.status = provider_status
+        comms = Comms(native.root)
+        owner = CommsAgent(
+            comms,
+            agent_bin="pi",
+            private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+            private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        )
+        session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+        name = owner.sessions.bindings[session.session_id]
+        execution = OwnedTurn(
+            owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+        )
+        assert execution.admit()
+        execution.begin()
+        execution.prepare_prompt()
+        execution.open_stream()
+        progress = execution.progress
+        waiting_owner(execution)
+        try:
+            records = await native.run("native acceptance")
+            for event in records:
+>               await progress.consume(event)
+
+tests/test_s1_event_behavior.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_progress.py:280: in consume
+    await self.publication.dispatch(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_progress.TurnEventPublication object at 0x7f91bc74c5f0>
+value = InputStarted(id=None)
+
+    async def dispatch(self, value: Any) -> Any:
+        for handler in self.handlers_for(value):
+>           replacement = await handler(value)
+                                ^^^^^^^^^^^^^^
+E           TypeError: TurnRunner.sync_goal_execution() missing 1 required positional argument: 'thread_name'
+
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[normal]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[tool]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[compaction]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[compaction_abort]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[settings]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[diagnostic_failure]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[reason_failure]
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[interrupted]
+FAILED tests/test_s1_event_behavior.py::test_transport_error_still_releases_real_wait_once[True]
+FAILED tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement[200]
+FAILED tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement[503]
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:132: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+11 failed, 2 passed in 46.18s
