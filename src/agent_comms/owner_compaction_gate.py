@@ -27,8 +27,8 @@ __all__ = ["OwnerCompactionAttestation"]
 class OwnerCompactionAttestation:
     """Evidence snapshot proving canonical owner authority at one instant.
 
-    Produced only by ``Registration.attest_owner_compaction`` while holding
-    the registry store lock. ``session_*`` fields are echoed caller values,
+    Projected by Thread and rechecked by Registration.guard_owner_compaction
+    while holding the registry store lock. ``session_*`` fields are echoed caller values,
     not registry observations.
     """
 
@@ -61,6 +61,8 @@ class OwnerCompactionAttestation:
     def require_current(
         self, owner: RegistryOwner, snapshot: RegistrySnapshot, expected: Thread
     ) -> None:
+        if self.thread != expected.name:
+            raise RelationViolationError("canonical owner thread changed")
         owner.require_exact(snapshot, expected, self.owner_generation)
         owner.thread.require_turn(TurnId(self.turn_id), owner.admission_generation)
         if owner.thread.goal_checkpoint != self.goal_checkpoint:

@@ -6,12 +6,12 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from agent_comms.child_process import ExitedOutcome
+from agent_comms.compaction_source import CompactionSource
 from agent_comms.compaction_states import (
     CommittedOperation,
     NativeOutcome,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_compaction_commit import CompactionSource
 from agent_comms.owner_compaction_prepare import NativeWitness
 
 
