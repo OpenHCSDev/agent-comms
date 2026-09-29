@@ -63,3 +63,18 @@ actual behavior evidence remains the basis for this correction.
 Final installed fork rerun passed after model-authority/signature closure; receipt
 actual-installed-fork-final.log. Focused private launch rejection/fence tests5pass,
 14deselected; rawPI_PROMPT remains refused. No optional full-suite or CI gate.
+
+
+## Current main integration
+
+Merged current main b39a3f4c (includes340/337/341/342). Only conflict was the
+add/add native regression file: retained340's expanded ordinary/fork cases once.
+No production conflict, alternate path, manifest downgrade or live change.
+Noneditable current merged wheel: actual native fork + launch guards6passed,
+14deselected in16.24s. Current-main census remains no foreign probe/chain growth;
+existing ratchet delta has no positive measure. Source merge commit495d5f3e.
+
+The complete native package remains at
+/home/ts/wt/comms-fork-first-input-compaction-20260929/.native-candidate/node_modules/@earendil-works/pi-coding-agent
+with complete digest4ffbd0b851b4d762f5e7a631bfd617952a83fd446b97a9be23057fcb21369918.
+Parent is copying this reviewed package to its immutable deployment root.
