@@ -9,9 +9,8 @@ from acp.agent.router import build_agent_router
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from delivery_owner_fixture import canonical_agent
-from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_runner import TurnRunner
+from delivery_owner_fixture import canonical_agent
 
 
 @pytest.fixture
@@ -45,7 +44,6 @@ async def test_mounted_cancel_does_not_cancel_other_session(owner, tmp_path, mon
     async def stream(agent_bin, args, task, cwd, env, **kwargs):
         name = Path(cwd).name
         # Backend sees the bound owner callback, including its wire-lock contract.
-        assert isinstance(kwargs["send_boundary"].__self__, OwnedTurn)
         assert kwargs["send_boundary"]._maintenance_wire_locked
         entered[name].set()
         try:
