@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .backend import PersistentPiSession, _session_revision
 from .compaction_journal import CompactionJournalError, SelectedSummaryAttempt
+from .compaction_result import CommittedCompactionResult
 from .compaction_states import ManualCommittedSummary
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -44,7 +45,7 @@ class ManualSelectedSummary(NativeSummary):
 
 async def compact_manual_owner(
     runner, session_id: str, thread_name: str, info, instructions: str | None
-):
+) -> CommittedCompactionResult:
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
     if persistent is None or persistent.proc is None:
         raise ValueError(
@@ -157,4 +158,4 @@ async def compact_manual_owner(
     )
     if operation is None:
         raise ValueError("Selected native history has no complete safe compaction cut")
-    return {"ok": True, "summary": summary_text, "commitId": operation.commit_id}
+    return CommittedCompactionResult(summary_text, operation.commit_id)

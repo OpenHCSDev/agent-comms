@@ -41,6 +41,7 @@ from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.compaction_result import RefusedCompactionResult
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.runtime import RuntimeProxy, socket_path
@@ -213,8 +214,8 @@ class TestHandlers:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         agent.turns.active_turns["proj"] = "running"
         result = await compact_context(agent.turns, "proj")
-        assert result["ok"] is False
-        assert "current response" in result["error"]
+        assert isinstance(result, RefusedCompactionResult)
+        assert "current response" in result.error
 
     async def test_live_model_change_waits_for_backend_confirmation(self, tmp_path, monkeypatch):
         from acp import RequestError

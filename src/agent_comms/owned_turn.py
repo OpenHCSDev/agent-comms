@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -14,18 +12,20 @@ from acp import RequestError
 
 from . import backend
 from .channel_targets import is_channel_target
-from .errors import RelationViolationError
-from .goal_attempt_phase import ClaimedAttempt
-from .goal_attempts import Generation, GoalAttemptError, LaunchPermit
-from .goal_generation import ReservedGeneration
+from .goal_attempts import GoalAttemptError, LaunchPermit
 from .messages import Message
+from .owned_send_admission import OwnedSendAdmission
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
-from .selected_source import SelectedAdmissionSource
-from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+from .selected_summary_admission import SelectedSummaryAdmission
 from .store_files import _store_lock
-from .text_digest import TextDigest
 from .thread_identity import TurnId
+from .turn_goal_permission import (
+    ContinuationGoalPermission,
+    InactiveGoalPermission,
+    OwnerGoalPermission,
+)
+from .turn_input_source import DependencyOriginalInput, OwnerOriginalInput, RoutedOriginalInput
 from .turn_progress import TurnProgress
 from .turn_runner import _goal_attempt_unavailable
 
@@ -196,281 +196,6 @@ class OwnedTurn:
             and self.task == "\n\n".join(admitted_texts)
         )
 
-    def input_keys_valid(self, public_id: str | None, keys: tuple[str, ...], text: str) -> bool:
-        # One authoritative user start proves every sequence in an exact
-        # channel batch. Never credit an omitted/reordered original input,
-        # a mixed direct batch, or a differently transformed native prompt.
-        return len(keys) <= 1 or (
-            public_id is None
-            and self.channel_batch
-            and keys == self.original_keys
-            and text == self.task
-        )
-
-    @contextmanager
-    def send_boundary(
-        self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
-    ) -> Iterator[bool | None]:
-        # This lock spans the final authority read and stdin.write only.
-        # Pi's turn, ACK, and provider response happen after it is released.
-        with _store_lock(self.runner.comms._wire_lock_path):
-            self.runner.comms.owners.maintenance.assert_open_unlocked()
-            snapshot = self.runner.comms.registry.snapshot()
-            canonical = snapshot.aliases.get(self.thread_name, self.thread_name)
-            current = snapshot.threads.get(canonical)
-            current_goal = current.goal if current is not None else None
-            current_wait = (
-                self.runner.comms.goals.goal_wait(canonical) if current is not None else None
-            )
-            if self.original_owner_input:
-                goal_ok = current_goal == self.goal
-            elif self.goal is not None and self.goal.state.active:
-                goal_ok = (
-                    current_goal is not None
-                    and current_goal.id == self.goal.id
-                    and current_goal.state.active
-                )
-            else:
-                goal_ok = current_goal is None or not current_goal.state.active
-            input_permit = self.goal_permit
-            admitted_goals = self.runner.inputs.steering_goal_ids.get(self.session_id, {})
-            owner_followup = public_id is not None and public_id in admitted_goals
-            if owner_followup:
-                assert public_id is not None
-                admitted_goal_id = admitted_goals[public_id]
-                current_goal_id = (
-                    current_goal.id
-                    if current_goal is not None and current_goal.state.active
-                    else None
-                )
-                goal_ok = admitted_goal_id == current_goal_id
-                # A freshly accepted human input is not a goal continuation.
-                # Its exact live receipt and captured goal/wait fence authorize
-                # it independently of an unrelated parked goal grant.
-                input_permit = None
-            keys = (
-                self.original_keys
-                if public_id is None
-                else (
-                    (key,)
-                    if (
-                        key := self.runner.inputs.steering_input_keys.get(self.session_id, {}).get(
-                            public_id
-                        )
-                    )
-                    else ()
-                )
-            )
-            owner_ok = (
-                current is not None
-                and self.input_keys_valid(public_id, keys, sent_text)
-                and snapshot.statuses[canonical].running
-                and snapshot.admission_generations.get(canonical) == self.turn_admission
-                and current.pid == self.thread.pid
-                and current.created_at == self.thread.created_at
-                and current.worktree == self.thread.worktree
-                and current.active_turn is not None
-                and current.active_turn.id == self.turn_id
-            )
-            accepted_id = public_id if public_id is not None else self.accepted_input_id
-            if owner_ok and accepted_id is not None:
-                accepted = self.runner.inputs.queued_inputs.get(self.session_id, {}).get(
-                    accepted_id
-                )
-                owner_ok = (
-                    accepted is not None
-                    and accepted.current(
-                        current, snapshot.admission_generations[canonical], current_wait
-                    )
-                    and keys == (f"acp:{accepted_id}",)
-                    and self.runner.inputs.steering_input_keys.get(self.session_id, {}).get(
-                        accepted_id
-                    )
-                    == keys[0]
-                )
-            # A newly activated goal may supersede a follow-up that has
-            # not yet been sent. Owner revocation still ends the turn.
-            defer_for_goal = (
-                public_id is not None
-                and owner_ok
-                and (self.goal is None or not self.goal.state.active)
-                and current_goal is not None
-                and current_goal.state.active
-            )
-            allowed = (
-                owner_ok
-                and goal_ok
-                and (
-                    current_wait is None
-                    or owner_followup
-                    or (public_id is None and self.original_owner_input)
-                    or (
-                        public_id is None
-                        and current_wait.wait_id == self.dependency_wait_id
-                        and any(
-                            current_wait.matches(origin, snapshot) for origin in self.direct_origins
-                        )
-                    )
-                )
-                and not (
-                    self.dependency_wait_id is not None
-                    and public_id is None
-                    and (current_wait is None or current_wait.wait_id != self.dependency_wait_id)
-                )
-                and not (
-                    keys
-                    and current_goal is not None
-                    and current_goal.state.active
-                    and not owner_followup
-                    and not (
-                        public_id is None
-                        and (self.original_owner_input or self.dependency_wait_id is not None)
-                    )
-                )
-            )
-            selected_admission = (
-                self.runner.inputs.selected_summary_admissions.get(self.session_id)
-                if public_id is None
-                else None
-            )
-            if allowed and selected_admission is None:
-                from .compaction_send_admission import native_input_admitted
-
-                # Under the same wire lock as the owner commit. A selected
-                # row blocks this ordinary path regardless of its status.
-                allowed = current is not None and native_input_admitted(
-                    self.runner.comms.root, current.session_file
-                )
-            if allowed and input_permit is not None:
-                attempt = input_permit.reservation
-                assert self.runner.goal_store is not None
-                allowed = self.runner.goal_store._is_attempt(
-                    attempt,
-                    ClaimedAttempt(),
-                    Generation(
-                        attempt.goal_id,
-                        attempt.generation,
-                        ReservedGeneration(),
-                        attempt.attempt_id,
-                    ),
-                )
-            if not allowed and selected_admission is not None:
-                selected_admission.invalidate()  # No later owner/turn ABA can revive it.
-            if allowed and selected_admission is not None:
-                # The only selected bypass is a post-fsync-ACK ephemeral
-                # one-shot, consumed at this same durable native-ID bind
-                # point under the wire lock, before any stdin.write. No
-                # admission is reconstructed from SQLite.
-                if (
-                    current is None
-                    or current.session_file is None
-                    or len(keys) != 1
-                    or already_bound
-                ) or (revision := backend._session_revision(current.session_file)) is None:
-                    selected_admission.invalidate()
-                    allowed = False
-                else:
-                    original = self.runner.inputs.dispositions.read().rows.get(keys[0])
-                    if original is None:
-                        selected_admission.invalidate()
-                        allowed = False
-                    else:
-                        digest = TextDigest.of(sent_text)
-                        identity = SelectedAdmissionIdentity(
-                            source=SelectedAdmissionSource(
-                                incarnation=current.incarnation,
-                                owner=current.process_identity,
-                                turn=TurnId(self.turn_id),
-                                ingress_key=keys[0],
-                                admission_generation=snapshot.admission_generations[canonical],
-                                correction_witness=f"{snapshot.admission_generations[canonical]}:{digest.value}",
-                                input_digest=digest,
-                                original_digest=original.digest,
-                                reserved_revision=selected_admission._identity.source.reserved_revision,
-                            ),
-                            session_revision=revision,
-                        )
-                        try:
-                            self.runner.inputs.dispositions.read().compaction_rows(
-                                current, keys[0], self.runner.inputs
-                            )
-                        except RelationViolationError:
-                            selected_admission.invalidate()
-                        allowed = selected_admission.consume_bound_original(
-                            wire_root=self.runner.comms.root,
-                            session_file=current.session_file,
-                            identity=identity,
-                            native_id=native_id,
-                            sent_text=sent_text,
-                            dispositions=self.runner.inputs.dispositions,
-                        )
-            elif allowed:
-                for key in keys:
-                    row = self.runner.inputs.dispositions.read().rows.get(key)
-                    if (
-                        row is None
-                        or not row.unresolved
-                        or row.admission != snapshot.admission_generations[canonical]
-                        or not (
-                            row.matches_native(
-                                native_id=native_id, turn_id=self.turn_id, text=sent_text
-                            )
-                            if already_bound
-                            else self.runner.inputs.dispositions.bind(
-                                key,
-                                admission=row.admission,
-                                turn_id=self.turn_id,
-                                native_id=native_id,
-                                text=sent_text,
-                            )
-                        )
-                    ):
-                        allowed = False
-                        break
-            if (
-                allowed
-                and current_wait is not None
-                and public_id is None
-                and self.dependency_wait_id is not None
-            ):
-                allowed = self.runner.comms.goals.consume_goal_wait(canonical, current_wait.wait_id)
-            if allowed:
-                if public_id is None:
-                    display = self.original_display
-                    input_origins = self.origins
-                else:
-                    row = self.runner.inputs.dispositions.read().rows.get(keys[0]) if keys else None
-                    display = row.source_text if row is not None else sent_text
-                    input_origins = ()
-                self.runner.comms.transcripts.routes.record_input_display(
-                    native_id,
-                    display,
-                    sent_text=sent_text,
-                    routing=TurnRouting(input_origins, None) if input_origins else None,
-                )
-            yield True if allowed else None if defer_for_goal else False
-
-    def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
-        keys = (
-            self.original_keys
-            if public_id is None
-            else (
-                (key,)
-                if (
-                    key := self.runner.inputs.steering_input_keys.get(self.session_id, {}).get(
-                        public_id
-                    )
-                )
-                else ()
-            )
-        )
-        return self.input_keys_valid(public_id, keys, sent_text) and all(
-            self.runner.inputs.dispositions.started(
-                key, turn_id=self.turn_id, native_id=native_id, text=sent_text
-            )
-            for key in keys
-        )
-
     def prepare_prompt(self):
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
@@ -621,6 +346,39 @@ class OwnedTurn:
         self.image_options: dict[str, Any] = {"images": self.images} if self.images else {}
 
     async def stream(self):
+        if self.original_owner_input:
+            permission = OwnerGoalPermission(self.goal)
+        elif self.goal is not None and self.goal.state.active:
+            permission = ContinuationGoalPermission(self.goal)
+        else:
+            permission = InactiveGoalPermission()
+        if self.original_owner_input:
+            source_type = OwnerOriginalInput
+        elif self.dependency_wait_id is not None:
+            source_type = DependencyOriginalInput
+        else:
+            source_type = RoutedOriginalInput
+        admission = OwnedSendAdmission(
+            comms=self.runner.comms,
+            inputs=self.runner.inputs,
+            goal_store=self.runner.goal_store,
+            session_id=self.session_id,
+            thread=self.thread,
+            turn=TurnId(self.turn_id),
+            admission=self.turn_admission,
+            goal_permit=self.goal_permit,
+            original=source_type(
+                keys=self.original_keys,
+                accepted_id=self.accepted_input_id,
+                goal_permission=permission,
+                prompt=self.task,
+                original_display=self.original_display,
+                origins=self.origins,
+                direct_origins=self.direct_origins,
+                dependency_wait_id=self.dependency_wait_id,
+                channel_batch=self.channel_batch,
+            ),
+        )
         async for event in backend.stream_agent_events(
             self.runner.agent_bin,
             self.runner.native_arguments(self.thread),
@@ -632,11 +390,11 @@ class OwnedTurn:
             fork_session=self.fork_session,
             steering_queue=self.backend_inbox,
             finish_event=self.finish_event,
-            send_boundary=self.send_boundary,
-            interrupt_boundary=lambda public_id, native_id, text: self.send_boundary(
+            send_boundary=admission,
+            interrupt_boundary=lambda public_id, native_id, text: admission(
                 public_id, native_id, text, already_bound=True
             ),
-            native_start=self.native_start,
+            native_start=admission.native_start,
             persistent_session=self.runner.persistent_backends.setdefault(
                 self.session_id, backend.PersistentPiSession()
             ),
@@ -700,6 +458,3 @@ class OwnedTurn:
             raise
         finally:
             await self.finish()
-
-
-OwnedTurn.send_boundary._maintenance_wire_locked = True

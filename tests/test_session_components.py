@@ -6,10 +6,14 @@ import pytest
 from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption
 
-from agent_comms import backend
 from agent_comms.acp import CommsClient
 from agent_comms.comms import wire
-from agent_comms.config_options import ConfigOption
+from agent_comms.config_options import (
+    CatalogConfigOption,
+    ConfigOption,
+    ModelConfigOption,
+    ThinkingLevelConfigOption,
+)
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from delivery_owner_fixture import canonical_agent
 
@@ -17,13 +21,18 @@ from delivery_owner_fixture import canonical_agent
 @pytest.fixture
 async def owner(tmp_path, monkeypatch):
     async def models(*args):
-        return [backend.Model("test/one", "One"), backend.Model("test/two", "Two")]
+        return [
+            SessionConfigSelectOption(value="test/one", name="One"),
+            SessionConfigSelectOption(value="test/two", name="Two"),
+        ]
 
     async def levels(*args):
-        return ["low", "medium", "high"]
+        return [
+            SessionConfigSelectOption(value=v, name=v.title()) for v in ("low", "medium", "high")
+        ]
 
-    monkeypatch.setattr(backend, "discover_models", models)
-    monkeypatch.setattr(backend, "discover_thinking_levels", levels)
+    monkeypatch.setattr(ModelConfigOption, "discover", models)
+    monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     agent = canonical_agent(
         wire(tmp_path / "wire"),
         agent_bin="pi",
@@ -66,27 +75,21 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
 ):
     monkeypatch.setattr(ConfigOption, "__registry__", dict(ConfigOption.__registry__))
 
-    class TaskNoteConfigOption(ConfigOption):
+    class TaskNoteConfigOption(CatalogConfigOption):
         title = "Task note"
         description = "Declaration extension fixture"
         category = "thought_level"
 
-        @classmethod
-        def current_value(cls, thread):
+        def current_value(self, thread):
             return thread.task or "medium"
 
-        @classmethod
-        async def describe(cls, config, thread):
-            return cls.select(
-                cls.current_value(thread),
-                [
-                    SessionConfigSelectOption(value=value, name=value.title())
-                    for value in ("medium", "high")
-                ],
-            )
+        async def discover(self, thread):
+            return [
+                SessionConfigSelectOption(value=value, name=value.title())
+                for value in ("medium", "high")
+            ]
 
-        @classmethod
-        async def change(cls, config, session_id, thread, value):
+        async def apply(self, config, session_id, thread, value):
             config.comms.registry.register(replace(thread, task=value))
 
     router = build_agent_router(owner)

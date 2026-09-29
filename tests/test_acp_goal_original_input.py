@@ -10,11 +10,11 @@ import pytest
 from acp import RequestError
 
 from agent_comms import agent_events as ae
-from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.input_disposition import InputDispositions
+from delivery_owner_fixture import canonical_agent
 
 
 async def owner(tmp_path, monkeypatch):
@@ -30,6 +30,10 @@ async def owner(tmp_path, monkeypatch):
             updates.append(update)
 
     agent.on_connect(Client())
+    (tmp_path / "project").mkdir()
+    agent.turns.adaptive_compaction_enabled = (
+        False  # This case tests ordinary goal/input admission.
+    )
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()

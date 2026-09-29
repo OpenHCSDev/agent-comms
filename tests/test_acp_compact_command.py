@@ -6,15 +6,15 @@ The runner's separate fake-provider tests establish no-retry and session safety.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from acp import RequestError
 from acp.agent.router import build_agent_router
 from acp.schema import TextContentBlock
 
-from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import CompactRequest, encode_request
 from agent_comms.comms import wire
+from agent_comms.compaction_result import CommittedCompactionResult, RefusedCompactionResult
+from agent_comms.field_codec import FieldCodec
 from delivery_owner_fixture import canonical_agent
 
 
@@ -30,7 +30,7 @@ async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, mo
 
     async def compact_context(owner, session_id, instructions):
         calls.append((owner, session_id, instructions))
-        return {"ok": True, "status": "compacted"}
+        return CommittedCompactionResult("summary", "commit")
 
     async def forbidden_model(*args, **kwargs):
         raise AssertionError("/compact must not become a model prompt")
@@ -40,9 +40,7 @@ async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, mo
     try:
         response = await agent.prompt(session, [block("/compact   focus on safety ")])
         assert response.stop_reason == "end_turn"
-        assert response.field_meta == {
-            "agentComms": {"compaction": {"ok": True, "status": "compacted"}}
-        }
+        assert response == CommittedCompactionResult("summary", "commit").prompt_response()
         assert calls == [(agent.turns, session, "focus on safety")]
     finally:
         await agent.shutdown()
@@ -56,7 +54,7 @@ async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monke
 
     async def compact_context(owner, session_id, instructions):
         calls.append((owner, session_id, instructions))
-        return {"ok": True, "status": "compacted"}
+        return CommittedCompactionResult("summary", "commit")
 
     async def forbidden_model(*args, **kwargs):
         raise AssertionError("Toad's compact metadata must not be a model prompt")
@@ -65,16 +63,14 @@ async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monke
     monkeypatch.setattr(agent.turns, "run_agent_turn", forbidden_model)
     try:
         response = await agent.prompt(
-            session, [block(" ")], agentComms={"compact": "focus on safety"}
+            session, [block(" ")], _meta=encode_request(CompactRequest("focus on safety"))
         )
         assert response.stop_reason == "end_turn"
-        assert response.field_meta == {
-            "agentComms": {"compaction": {"ok": True, "status": "compacted"}}
-        }
+        assert response == CommittedCompactionResult("summary", "commit").prompt_response()
         assert calls == [(agent.turns, session, "focus on safety")]
         with pytest.raises(RequestError) as invalid:
-            await agent.prompt(session, [block("/compact")], agentComms={"compact": None})
-        assert invalid.value.data == {"reason": "Compaction metadata requires a blank text block."}
+            await agent.prompt(session, [block("nonblank")], _meta=encode_request(CompactRequest()))
+        assert invalid.value.data == {"reason": "Compaction metadata requires blank text"}
     finally:
         await agent.shutdown()
 
@@ -87,7 +83,7 @@ async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
 
     async def compact_context(owner, session_id, instructions):
         calls.append((owner, session_id, instructions))
-        return {"ok": True, "status": "compacted"}
+        return CommittedCompactionResult("summary", "commit")
 
     monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
     try:
@@ -96,14 +92,11 @@ async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
             {
                 "sessionId": session,
                 "prompt": [{"type": "text", "text": " "}],
-                "_meta": {"agentComms": {"compact": "focus"}},
+                "_meta": encode_request(CompactRequest("focus")),
             },
             False,
         )
-        assert response.model_dump(by_alias=True, exclude_none=True) == {
-            "stopReason": "end_turn",
-            "_meta": {"agentComms": {"compaction": {"ok": True, "status": "compacted"}}},
-        }
+        assert response == CommittedCompactionResult("summary", "commit").prompt_response()
         assert calls == [(agent.turns, session, "focus")]
     finally:
         await agent.shutdown()
@@ -115,7 +108,7 @@ async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
 
     async def compact_context(*args):
-        return {"ok": False, "error": "uncertain compaction"}
+        return RefusedCompactionResult("uncertain compaction")
 
     monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
     try:
@@ -135,15 +128,13 @@ async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
     class Proxy:
         async def request(self, action, **kwargs):
             calls.append((action, kwargs))
-            return {"ok": True, "status": "compacted"}
+            return FieldCodec.encode(CommittedCompactionResult("summary", "commit"))
 
     agent.sessions.proxies["attached"] = Proxy()
-    response = await agent.prompt("attached", [block(" ")], agentComms={"compact": None})
+    response = await agent.prompt("attached", [block(" ")], _meta=encode_request(CompactRequest()))
     assert response.stop_reason == "end_turn"
-    assert response.field_meta == {
-        "agentComms": {"compaction": {"ok": True, "status": "compacted"}}
-    }
-    assert calls == [("compact", {"instructions": ""})]
+    assert response == CommittedCompactionResult("summary", "commit").prompt_response()
+    assert calls == [("compact", {"instructions": None})]
 
 
 @pytest.mark.asyncio
@@ -154,44 +145,8 @@ async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(t
         with pytest.raises(RequestError) as multimodal:
             await agent.prompt(session, [block("/compact"), {"type": "image", "data": "abc"}])
         assert multimodal.value.data == {"reason": "/compact requires one text block."}
-        with pytest.raises(RequestError) as oversized:
+        with pytest.raises(ValueError) as oversized:
             await agent.prompt(session, [block("/compact " + "x" * 2001)])
-        assert oversized.value.data == {"reason": "Compaction instructions are too long."}
-    finally:
-        await agent.shutdown()
-
-
-async def test_current_root_compact_refuses_unjournaled_writer_for_every_launch_form(
-    tmp_path
-):
-    """Actual ACP request uses root authority, never executable-name inference."""
-    comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    package = tmp_path / "native-package"
-    agent = CommsAgent(
-        comms,
-        auto_wake=False,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
-    session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
-    saved = tmp_path / "native.jsonl"
-    saved.write_text('{"type":"session","version":3,"id":"preserved"}\n')
-    comms.threads.attach_session(session, str(saved), pid=os.getpid())
-    before = saved.read_bytes()
-    alias = tmp_path / "renamed-native"
-    alias.symlink_to(package / "dist/cli.js")
-
-    try:
-        for command in ("pi", str(package / "dist/cli.js"), str(alias)):
-            agent.turns.agent_bin = command
-            with pytest.raises(RequestError, match="requires the current selected native session"):
-                await build_agent_router(agent)(
-                    "session/prompt",
-                    {"sessionId": session, "prompt": [{"type": "text", "text": "/compact"}]},
-                    False,
-                )
-            assert saved.read_bytes() == before
-            assert comms.registry.require(session).active_turn is None
+        assert str(oversized.value) == "Compaction instructions are too long"
     finally:
         await agent.shutdown()

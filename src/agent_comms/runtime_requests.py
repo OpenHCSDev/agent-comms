@@ -180,7 +180,9 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         from .manual_compaction_bridge import compact_context
 
-        return await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
+        return FieldCodec.encode(
+            await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
+        )
 
 
 @dataclass(frozen=True, kw_only=True)

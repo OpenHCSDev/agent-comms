@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+import asyncio
+from abc import abstractmethod
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
+from uuid import uuid4
 
 from . import agent_events as events
 from .declared_family import DeclaredFamily
@@ -32,6 +36,7 @@ from .pi_summary_payloads import (
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response
+    from .pi_rpc import PiRpcChannel
     from .turn_inputs import ForwardedInput
 
 
@@ -246,16 +251,74 @@ class GetSessionStats(SessionSnapshot, PiCommand):
                 session.finished = True
 
 
+class CatalogQuery(PiCommand):
+    """One read-only native query owns launch, correlation and child retirement."""
+
+    @property
+    @abstractmethod
+    def response_payload(self) -> type[PiResponseData]: ...
+
+    async def exchange(self, channel: PiRpcChannel, writer: asyncio.StreamWriter) -> Response:
+        from .pi_events import Response
+
+        command = replace(self, id=self.id or uuid4().hex)
+        future = channel.track(command)
+        try:
+            writer.write(channel.command_bytes(command))
+            await writer.drain()
+            while not future.done():
+                event = await channel.receive()
+                if event is None:
+                    raise EOFError("Pi RPC ended before the requested response")
+                if isinstance(event, Response):
+                    channel.correlate(event)
+            return future.result()
+        finally:
+            channel.pending.discard(type(command), command.id)
+            future.cancel()
+
+    async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.managed,
+                agent_bin,
+                (
+                    *arguments,
+                    "--no-extensions",
+                    "--no-skills",
+                    "--no-context-files",
+                    "--no-session",
+                ),
+                worktree=Path.cwd(),
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    response = await self.exchange(PiRpcChannel(child.stdout), child.stdin)
+                    if response.success is True and response.data is not None:
+                        return response.data
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except (TimeoutError, EOFError, ValueError, OSError, NativePiUnavailable):
+            pass
+        return self.response_payload()
+
+
 @dataclass(frozen=True, kw_only=True)
-class GetAvailableModels(PiCommand):
+class GetAvailableModels(CatalogQuery):
     response_payload = ModelsData
-    pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class GetAvailableThinkingLevels(PiCommand):
+class GetAvailableThinkingLevels(CatalogQuery):
     response_payload = ThinkingLevelsData
-    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -280,37 +343,39 @@ class InterruptSteering(PiCommand):
     )
 
 
+class SettingCommand(PiCommand):
+    @property
+    @abstractmethod
+    def result_type(self) -> type[events.SettingChangeResult]: ...
+
+    error_message: ClassVar[str]
+
+    @classmethod
+    async def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> AsyncIterator[events.AgentEvent]:
+        yield cls.result_type(
+            id=response.id,
+            ok=bool(response.success),
+            error=response.error or cls.error_message,
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
-class SetModel(PiCommand):
+class SetModel(SettingCommand):
+    result_type = events.ModelChanged
+    error_message = "Model change failed"
     provider: str | None = field(default=None, metadata={"wire_omit_default": True})
     model_id: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "modelId"}
     )
 
-    @classmethod
-    async def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
-        yield events.ModelChanged(
-            id=response.id,
-            ok=bool(response.success),
-            error=response.error or "Model change failed",
-        )
-
 
 @dataclass(frozen=True, kw_only=True)
-class SetThinkingLevel(PiCommand):
+class SetThinkingLevel(SettingCommand):
+    result_type = events.ThinkingChanged
+    error_message = "Thinking level change failed"
     level: str | None = field(default=None, metadata={"wire_omit_default": True})
-
-    @classmethod
-    async def on_response(
-        cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
-        yield events.ThinkingChanged(
-            id=response.id,
-            ok=bool(response.success),
-            error=response.error or "Thinking level change failed",
-        )
 
 
 @dataclass(frozen=True, kw_only=True)
