@@ -8,6 +8,22 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ### Latest verified checkpoint, 2026-09-29
 
+- LIVE warm-native checkpoint: merged core357/359 at12bd75ca, Toad160/166
+  at3031869c, unchanged Textual1738/native d396. Existing canonical idle restart
+  moved all nine idle owners and five launchers to the immutable installation;
+  full metadata retained except ProcessIdentity, no interrupted turns, resets
+  or input replay. Existing maintenance remains READYgeneration12.
+  The complete installed native/ACP/UI journey passes actual rendered leaf
+  retention on A/B/A, physical channel/participant navigation, slow/fast/reverse
+  preparation, End destination paint, idle shrink, immediate physical fork open,
+  first answer and automatic reply-author observation. Real configured Sol/high
+  private fork of affected41MB saved history replies and paints in19.94s.
+  Fresh nine live ACP loads and actual default saved-wire UI pass after activation.
+  The reproduced ready-pipe/watchdog race is fixed without longer deadlines;
+  the original intermittent trigger remains unproven. Final latency and repeated
+  raw-read optimization continue with Tesla; useful cache/adaptive checkpoint
+  is live. Restart Toad to load this UI. Carver167 remains source-review pending.
+
 - LIVE preflight-feedback checkpoint: core356 merged and immutable installed
   coreab0262c1/Toad16cfcb18/Textual1738/native d396, nine owners READYgeneration12.
   Actual native startup failure through physical Enter paints useful cause and
