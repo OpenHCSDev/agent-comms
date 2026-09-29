@@ -77,3 +77,9 @@ acceptance now decodes the ordinary family and checks the typed result; ACP acce
 still protects its real external response semantics. Earlier receipts are historical
 and do not certify this corrected head; internal-kind-installed.log is its installed
 current-path acceptance. Native journal/settings/session contracts are unchanged.
+
+Corrected installed checkpoint545cc323: internal-kind-installed.log **51 passed in
+59.52s**, covering ordinary-family result/new-case, canonical codec guards, ACP SDK,
+actual runtime socket compact reply, four actual native manual cases and actual selected
+original admission exactly once. Changed-file lint and diff checks pass. Shared
+DeclaredFamily/FieldCodec diff against main is empty. No remaining scoped blocker.
