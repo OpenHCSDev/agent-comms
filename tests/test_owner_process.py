@@ -135,3 +135,31 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
         assert child.alive()
     finally:
         child.stop_sync()
+
+
+def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
+    """The production detached launch retains a failure before socket creation."""
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", "invalid")
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", "/missing/native")
+    comms = Comms(tmp_path)
+    comms.threads.register(Thread("failed-start", frozenset(), str(tmp_path)))
+    result = comms.owners.start("failed-start")
+    owner = comms.registry.require("failed-start")
+    deadline = time.monotonic() + 5
+    try:
+        while owner.process_alive:
+            assert time.monotonic() < deadline, "Worker did not terminate on invalid launch"
+            time.sleep(.01)
+        logs = tuple((tmp_path / "diagnostics").glob("owner-*.log"))
+        assert len(logs) == 1
+        trace = logs[0].read_text()
+        assert "Owner launch: failed-start" in trace
+        assert "Traceback (most recent call last)" in trace
+        assert "PublicationActivationBlocked" in trace
+        assert "exact root ID and absolute reviewed package" in trace
+        assert logs[0].stat().st_mode & 0o777 == 0o600
+        assert not socket_path(tmp_path, result.pid).exists()
+        assert owner.session_file is None
+    finally:
+        if owner.process_alive:
+            DetachedProcess.attach(owner.process_identity).stop_sync()
