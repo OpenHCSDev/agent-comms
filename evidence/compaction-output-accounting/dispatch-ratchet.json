@@ -1,0 +1,38 @@
+{
+  "/home/ts/wt/comms-post-cancel-session-custody-20260929/src/agent_comms/agent_events.py": {
+    "StringDispatch": 0,
+    "TypeSwitch": 0,
+    "StringDispatchArms": 0,
+    "TypeSwitchArms": 0
+  },
+  "/home/ts/wt/comms-post-cancel-session-custody-20260929/src/agent_comms/owner_compaction_manual.py": {
+    "StringDispatch": 0,
+    "TypeSwitch": 0,
+    "StringDispatchArms": 0,
+    "TypeSwitchArms": 0
+  },
+  "/home/ts/wt/comms-post-cancel-session-custody-20260929/src/agent_comms/pi_events.py": {
+    "StringDispatch": 0,
+    "TypeSwitch": 0,
+    "StringDispatchArms": 0,
+    "TypeSwitchArms": 0
+  },
+  "/home/ts/wt/comms-post-cancel-session-custody-20260929/src/agent_comms/selected_pi_summary_rpc.py": {
+    "StringDispatch": 0,
+    "TypeSwitch": 0,
+    "StringDispatchArms": 0,
+    "TypeSwitchArms": 0
+  },
+  "/home/ts/wt/toad-agent-tab-state-latency-20260929/src/toad/live_output.py": {
+    "StringDispatch": 0,
+    "TypeSwitch": 0,
+    "StringDispatchArms": 0,
+    "TypeSwitchArms": 0
+  },
+  "/home/ts/wt/toad-agent-tab-state-latency-20260929/src/toad/widgets/conversation.py": {
+    "StringDispatch": 0,
+    "TypeSwitch": 0,
+    "StringDispatchArms": 0,
+    "TypeSwitchArms": 0
+  }
+}

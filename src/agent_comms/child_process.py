@@ -29,6 +29,7 @@ from typing import Any
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .sealed import Sealed
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -777,7 +778,7 @@ async def _join_retirement(task: asyncio.Task):
     return result
 
 
-class ChildProcess(ABC):
+class ChildProcess(Sealed, ABC):
     """The sole stop algorithm; cancellation retains the cleanup task."""
 
     def __init__(self, identity: ProcessIdentity):
