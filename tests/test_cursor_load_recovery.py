@@ -70,6 +70,14 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope
         assert recovered.revision > loaded.revision
+        for task in agent.inputs.drain_tasks.values():
+            task.cancel()
+        await asyncio.gather(*agent.inputs.drain_tasks.values(), return_exceptions=True)
+        await agent.inputs.drain_inbox(owner.name)
+        settled_revision = agent._private_cursor_revisions[owner.name]
+        for _ in range(20):
+            await agent.inputs.drain_inbox(owner.name)
+        assert agent._private_cursor_revisions[owner.name] == settled_revision
         assert comms.views.full_history() == []  # No input submitted or replayed.
     finally:
         for task in agent.inputs.drain_tasks.values():
