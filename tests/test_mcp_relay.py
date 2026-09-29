@@ -19,6 +19,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
@@ -91,7 +92,7 @@ import json, sys
 send = lambda row: print(json.dumps(row), flush=True)
 state = json.loads(sys.stdin.readline())
 send({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {{"nativeInputProofCapability": {json.dumps(backend.NATIVE_INPUT_CAPABILITY)},
+      "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)},
                 "sessionId": "fixture-pi-session"}}}})
 prompt = json.loads(sys.stdin.readline())
 send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
@@ -264,7 +265,7 @@ import json, sys
 send = lambda row: print(json.dumps(row), flush=True)
 preflight = json.loads(sys.stdin.readline())
 send({{"id":preflight["id"],"type":"response","command":"get_state","success":True,
-      "data":{{"nativeInputProofCapability":{json.dumps(backend.NATIVE_INPUT_CAPABILITY)},
+      "data":{{"nativeInputProofCapability":{json.dumps(CAPABILITY)},
               "sessionId":"fixture-session"}}}})
 prompt = json.loads(sys.stdin.readline())
 send({{"id":prompt["id"],"type":"response","command":"prompt","success":True}})

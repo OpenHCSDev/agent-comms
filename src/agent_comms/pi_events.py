@@ -207,7 +207,7 @@ class CompactionEnd(PiEvent):
             yield session.watchdog.state(
                 session, "failed", "prestart_compaction_failed", 0, event_phase="compaction"
             )
-            await session.proc.stop()
+            await session.native.proc.stop()
             session.finished = True
             return
         if self.will_retry:
@@ -345,7 +345,7 @@ class ExtensionUiRequest(PiEvent):
                 and (not session.agent_settled_seen)
                 and (not session.stats.requested)
                 and session.require_input_id
-                and session.native_capability_confirmed
+                and (not session.require_input_id or session.native.attestation.state is not None)
                 and session.initial_prompt_acknowledged
                 and session.initial_input_started
                 and session.initial_session_observed
@@ -366,7 +366,7 @@ class ExtensionUiRequest(PiEvent):
             session.output.record_failure(
                 failures.ExtensionUiFailed("Pi extension UI request lacked a bounded ID.")
             )
-            await session.proc.stop()
+            await session.native.proc.stop()
             session.finished = True
             return
         if session.method not in {"confirm", "select", "input", "editor"}:
@@ -390,17 +390,17 @@ class ExtensionUiRequest(PiEvent):
                 choice = await asyncio.wait_for(session.ui_request(self), timeout=15)
         response = choice.response(self)
         try:
-            if session.proc.stdin is None or session.proc.returncode is not None:
+            if session.native.proc.stdin is None or session.native.proc.returncode is not None:
                 raise BrokenPipeError
-            session.proc.stdin.write(session.reader.encode(response))
-            await asyncio.wait_for(session.proc.stdin.drain(), timeout=2)
+            session.native.proc.stdin.write(session.native.reader.encode(response))
+            await asyncio.wait_for(session.native.proc.stdin.drain(), timeout=2)
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             session.output.record_failure(
                 failures.ExtensionUiFailed(
                     "Pi extension UI response could not reach the requesting child."
                 )
             )
-            await session.proc.stop()
+            await session.native.proc.stop()
             session.finished = True
             return
         session.skip = True
@@ -517,7 +517,7 @@ class MessageStart(PiEvent):
                     yield events.InputStarted(id=None)
                 if (
                     session.steering_queue is not None
-                    and session.proc.stdin is not None
+                    and session.native.proc.stdin is not None
                     and (session.steering_task is None)
                 ):
                     session.steering_task = asyncio.create_task(session.inputs.forward(session))
@@ -644,7 +644,7 @@ class Response(PiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        owner = session.reader.correlate(self) or self.command
+        owner = session.native.reader.correlate(self) or self.command
         async for event in owner.on_response(self, session):
             yield event
 

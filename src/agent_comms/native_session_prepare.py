@@ -19,7 +19,8 @@ class NativeSessionPreparation(backend.TurnSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
 
     async def input_ready(self) -> None:
-        state = self.state
+        state = self.native.attestation.state
+        assert state is not None
         if (
             state.session_file != self.session_file
             or not state.session_id
@@ -35,10 +36,10 @@ class NativeSessionPreparation(backend.TurnSession):
 
     def can_retain(self) -> bool:
         return bool(
-            self.native_capability_confirmed
+            self.native.attestation.state is not None
             and not self.output.failure_text
             and not self.session_identity_uncertain
-            and self.proc.returncode is None
+            and self.native.proc.returncode is None
             and self.initial_session_id
             and self.active_session_file == self.session_file
             and self.revision is not None
@@ -82,7 +83,9 @@ class NativeSessionPreparation(backend.TurnSession):
                     async for event in stream:
                         if isinstance(event, events.Done) and not event.ok:
                             raise NativePiUnavailable(event.text)
-                return preparation.state
+                state = preparation.native.attestation.state
+                assert state is not None
+                return state
             finally:
                 startup.release()
                 if owner is not None:

@@ -75,7 +75,7 @@ class UntrackedOracleTurn(backend.TurnSession):
             commands.Prompt(id=self.prompt_id, message=self.task)
         )
         self.stdin_payload = (
-            PiRpcChannel.command_bytes(commands.GetState(id=self.preflight_id))
+            PiRpcChannel.command_bytes(commands.GetState(id=self.native.attestation.request.id))
             + self.prompt_payload
         )
 
