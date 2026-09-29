@@ -22,4 +22,10 @@ Deleted the317-line synthetic selected-session JS harness and its80-line Python 
 -Deleted synthetic-host failure receipt is retained and never reported green.
 -NRA full source context245files16.647s, zero raw findings on selected Python targets. Full payload lacks detector omission metadata; no claim of a globally clean architecture or equivalence proof.
 
-Actual installed Python/native manifest pairing pending final packaging check. No paintedUI behavior changed; parent owns live install and any final paired UI observation. No paid provider requests/CI wait.
+Actual installed Python/native pair passed2checks in23.20s atbe97bd9e: privateACP summary/commit/singleoriginal and heldslot mutation/cancellation/reopen. Confirmed imports and manifest resolve under noneditable wheel installation, notsrc. No paintedUI behavior changed; parent owns live install and any final paired UI observation. No paid provider requests/CI wait.
+
+## Current-main and final review
+
+Merged current main9251b823 including339 after that installed receipt.339 changes fork capture/workerstartup/OwnedTurn task consumption; no change to this RPC module, immutable native package, deleted protocol or its Python command/payload files. No unchanged installed matrix repeated; parent owns final combined deployment acceptance.340 and341 are both retained.
+
+Pinned9251b823 localratchet has ZERO increases; four obsolete classes removed, stringsubscrips−3. Exactlatestarchive census: both touched Python files foreign_absence_probe0delta, boolean_chain_terms0delta, codec_subclass0delta; classdefinitions−4, code_lines−39, unparsed0. No smallowner growth exception/approval needed. Tooling/build changes remove the entire obsolete stage and duplicate replacement helper. No old protocol/helper/caller references remain in src/tests/stack.

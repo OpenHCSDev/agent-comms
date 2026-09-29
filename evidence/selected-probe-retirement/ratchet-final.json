@@ -1,0 +1,11 @@
+{
+  "base": "9251b823423287e8ba48959ecd1582157cbe7e93",
+  "head": "8850e681a4ebe0ae3de865be06391128bcc07662",
+  "nonzero_deltas": {
+    "ClassSize:src/agent_comms/pi_summary_payloads.py::ProbeDeclinedData": -13,
+    "ClassSize:src/agent_comms/pi_summary_payloads.py::ProbeReadyData": -9,
+    "ClassSize:src/agent_comms/pi_summary_payloads.py::SelectedProbeData": -8,
+    "ClassSize:src/agent_comms/pi_commands.py::AgentCommsPrepareCompaction": -9,
+    "StringSubscript": -3
+  }
+}
