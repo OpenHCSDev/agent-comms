@@ -42,3 +42,10 @@ Boyle339 notified with exact retained stderr; Carver confirms same Toad ForkActi
 surface. Must fix caller without bypassing startup guard. Parent unchanged; user
 UNKNOWN untouched. First-send/no compaction/answer/no replay and child usage/leaf
 proof remain unexecuted behind this concrete caller defect.
+
+Latest live owner clarification: parent now35% (previous24%); greeting after forced
+hidden compaction is NOT a fork pass. Regression firstsend is bounded20seconds
+on local fixture and records measured latency, requires no ACP compaction phase or
+commit fact, zero physical compaction entries, exactlyparent+answer provider calls.
+These assertions remain pending real worker startup correction; no false GREEN.
+Live ACP log00_16_47 inspected read-only; never reused as test native session.

@@ -3,13 +3,18 @@
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
 from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsClient
-from agent_comms.acp_extension import decode_updates
+from agent_comms.acp_extension import (
+    CompactionChangedUpdate,
+    CompactionCommittedUpdate,
+    decode_updates,
+)
 from agent_comms.comms import Comms
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.thread_management import ForkSpec
@@ -125,8 +130,9 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
                     if not comms.registry.require(child.name).process_alive:
                         raise
                     await asyncio.sleep(0.1)
+        first_send_started = time.monotonic()
         try:
-            async with asyncio.timeout(60):
+            async with asyncio.timeout(20):
                 await attachment.prompt(
                     child.name, [TextContentBlock(type="text", text="hey Boss")]
                 )
@@ -144,6 +150,11 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
                 flush=True,
             )
             raise
+        latency = time.monotonic() - first_send_started
+        print("FIRST_SEND_LATENCY_SECONDS", latency, flush=True)
+        assert latency < 20
+        assert not any(isinstance(fact, CompactionChangedUpdate) for fact in facts)
+        assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
         thread = comms.registry.require(child.name)
         assert thread.session_file and thread.session_file != str(native.session)
         entries = [json.loads(line) for line in Path(thread.session_file).read_text().splitlines()]
