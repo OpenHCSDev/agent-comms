@@ -17,7 +17,6 @@ from agent_comms.pi_commands import GetState, Prompt
 from agent_comms.pi_events import ContextCommitted, InputCommitted, Response
 from native_proof_cases import read_proof_rows, write_proof_rows
 from test_backend_native_lifecycle import native_backend as native_backend
-from tools.cutover.native_proof_journal import convert
 
 
 def grow_proof(session, original, target_bytes):
@@ -191,23 +190,25 @@ async def test_actual_native_killed_context_commit_keeps_unknown(
     )
 
 
-async def test_actual_native_conversion_preserves_accepted_and_unknown(
+async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     native_backend,
     crash_preload,
     monkeypatch,
 ):
     owner = native_backend
-    assert (await owner.run("Real seed for durable conversion"))[-1].ok
+    accepted_text = "Real seed for durable native recovery"
+    unknown_text = "Uncertain native input retained across saved recovery"
+    assert (await owner.run(accepted_text))[-1].ok
     accepted_id = owner.starts[-1][1]
     accepted = NativeContextProof.read_evidence(owner.session, accepted_id)
     await owner.persistent.discard_for_external_write(str(owner.session))
-    receipt = owner.session.parent / "conversion-crash.txt"
+    receipt = owner.session.parent / "saved-recovery-crash.txt"
     with monkeypatch.context() as crash:
         crash.setenv("LD_PRELOAD", str(crash_preload))
         crash.setenv("PROOF_CRASH_POINT", "before-journal-sync")
         crash.setenv("PROOF_CRASH_FILE", str(owner.session) + ".input-proof")
         crash.setenv("PROOF_CRASH_RECEIPT", str(receipt))
-        failed = await owner.run("Uncertain native input retained across proof conversion")
+        failed = await owner.run(unknown_text)
     assert not failed[-1].ok and receipt.read_text() == "before-journal-sync"
     unknown_id = owner.starts[-1][1]
     # Let the ACTUAL native owner recover the hot database, with get_state only.
@@ -235,20 +236,6 @@ async def test_actual_native_conversion_preserves_accepted_and_unknown(
     await owner.persistent.discard_for_external_write(str(owner.session))
     assert len(owner.saved_inputs()) == 2 and owner.provider.posts == 1
     before = owner.session.read_bytes()
-    # Reconstruct ONLY the retired proof representation from actual native
-    # receipts; native saved history and its uncertain input are never fabricated.
-    rows = read_proof_rows(owner.session)
-    old = b"".join(
-        (json.dumps({key: value for key, value in row.items() if key != "kind"}) + "\n").encode()
-        for row in rows
-    )
-    proof = Path(str(owner.session) + ".input-proof")
-    proof.write_bytes(old)
-    backup = owner.session.parent / "original-proof.jsonl.backup"
-    converted = await asyncio.to_thread(convert, owner.session, backup)
-    assert converted == {"proof_rows": 1, "tracked_inputs": 2, "inputs_without_context_proof": 1}
-    assert backup.read_bytes() == old
-    assert owner.session.read_bytes() == before
     assert NativeContextProof.read_evidence(owner.session, accepted_id) == accepted
     with NativeContextJournal.open_evidence(owner.session) as db:
         assert NativeContextJournal.for_input(db, unknown_id) is None
@@ -290,8 +277,8 @@ async def test_actual_native_conversion_preserves_accepted_and_unknown(
     # Deliberate duplicates of this disposable test's IDs prove native dedup;
     # they must not append, produce receipts or invoke the local provider.
     for identifier, text in (
-        (accepted_id, "Real seed for durable conversion"),
-        (unknown_id, "Uncertain native input retained across proof conversion"),
+        (accepted_id, accepted_text),
+        (unknown_id, unknown_text),
     ):
         assert (
             await probe(Prompt(id="duplicate-" + identifier, input_id=identifier, message=text))
@@ -305,7 +292,7 @@ async def test_actual_native_conversion_preserves_accepted_and_unknown(
     assert owner.session.read_bytes() == before and owner.provider.posts == 1
     with NativeContextJournal.open_evidence(owner.session) as db:
         assert NativeContextJournal.for_input(db, unknown_id) is None
-    result = await owner.run("One genuinely new diagnostic input after offline conversion")
+    result = await owner.run("One genuinely new diagnostic input after saved recovery")
     assert result[-1].ok, result[-1]
     assert len(owner.saved_inputs()) == len(owner.starts) == 3
     assert len({row[1] for row in owner.starts}) == 3
@@ -315,7 +302,13 @@ async def test_actual_native_conversion_preserves_accepted_and_unknown(
         NativeContextProof.read_evidence(owner.session, accepted_id, request_generation=1)
         == accepted
     )
-    print("native_proof_conversion=" + json.dumps(converted))
+    print("native_saved_recovery=" + json.dumps({
+        "accepted_input_preserved": True,
+        "uncertain_input_replayed": False,
+        "duplicate_ids_refused_conflicts": True,
+        "new_explicit_inputs": 1,
+        "provider_calls": owner.provider.posts,
+    }))
 
 
 @pytest.mark.parametrize("damage", ["malformed", "torn", "foreign_source"])
