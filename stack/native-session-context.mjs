@@ -1,5 +1,5 @@
 /** Session context admission: history stays in EntryStore until the native policy can load it. */
-import { CompactionPolicy } from './compaction/agent-comms-policy.js';
+import { estimateTokens } from './compaction/compaction.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
 
 export class SessionContext {
@@ -11,9 +11,12 @@ export class SessionContext {
         const manager=session.sessionManager;
         const model=session.model;
         const settings=session.settingsManager.getCompactionSettings();
-        const policy=CompactionPolicy.fromEnvironment();
-        if (!model || !policy.contextFits(
-            manager.buildContextEntries().flatMap(sessionEntryToContextMessages), model, settings.reserveTokens)) {
+        // AgentSession owns measured selected-branch usage. After compaction it
+        // deliberately reports unknown until a new assistant response: estimate
+        // that current context without reusing stale pre-compaction usage.
+        const tokens=session.getContextUsage()?.tokens ?? manager.buildContextEntries()
+            .flatMap(sessionEntryToContextMessages).reduce((total, message)=>total+estimateTokens(message), 0);
+        if (!model || tokens > model.contextWindow - settings.reserveTokens) {
                 session.storedContext=new CompactionContext(manager);
                 session.storedContext.install(session.agent);
                 return session.storedContext;
