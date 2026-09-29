@@ -27,7 +27,7 @@ from .bus_publication import (
     has_private_wire_fields,
     public_envelope_digest,
     unique_wire_object,
-    validate_initial_record,
+    validate_delivery_record,
 )
 from .errors import RelationViolationError
 from .message_bus import MessageBus
@@ -278,7 +278,7 @@ class WakeCandidateIndex:
             ):
                 raise ProjectionUnavailableError("unknown candidate private row")
         if isinstance(private, dict) and set(private) == {"version", "initial"}:
-            initial = validate_initial_record(record, root_id)
+            initial = validate_delivery_record(record, root_id)
             rows: list[Candidate] = []
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True

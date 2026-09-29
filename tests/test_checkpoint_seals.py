@@ -75,7 +75,7 @@ def test_malformed_marker_denied_by_wire_and_registry_same_boundary(tmp_path, da
     elif damage == "seal-digest":
         seal["witness"]["digest"] = "z" * 64
     elif damage == "seal-witness-extra":
-        seal["witness"]["latest_initial_seq"] = 999
+        seal["witness"]["latest_source_seq"] = 999
     elif damage == "seal-missing-witness":
         del seal["witness"]
     comms.bus.log.metadata_path.write_text(json.dumps(raw))

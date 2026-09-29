@@ -15,7 +15,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedInitial
+from .bus_publication import CommittedDelivery
 from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import AcceptedCohort, _receipt_matches
@@ -23,7 +23,7 @@ from .historical_native_inputs import HistoricalNativeInput, read_historical_nat
 from .message_bus import MessageBus
 from .private_bus_checkpoint import (
     PrefixWitness,
-    certified_initial_page_unlocked,
+    certified_delivery_page_unlocked,
     verify_private_bus_checkpoint_unlocked,
 )
 from .wake import NoWakeDecision, WakeDecision
@@ -39,7 +39,7 @@ class ProvenSourceCoverage:
     injected_source_seqs: tuple[int, ...]
     no_wake_seqs: tuple[int, ...]
     blocked_seq: int | None
-    more_initials: bool = False
+    more_sources: bool = False
     source_witness: PrefixWitness = field(kw_only=True)
 
 
@@ -99,7 +99,7 @@ class SourceCoverage:
         if self.store.session._connection.in_transaction:
             raise IdentityConflict("source coverage requires a committed coordinator snapshot")
         witness, initials, more = self._page(limit, after_seq, partial)
-        horizon = initials[-1].message.seq if more else witness.latest_initial_seq
+        horizon = initials[-1].message.seq if more else witness.latest_source_seq
         covered, injected, no_wake, blocked = after_seq if partial else 0, [], [], None
         for initial in initials:
             seq = initial.message.seq
@@ -145,7 +145,7 @@ class SourceCoverage:
 
     def _page(
         self, limit: int, after_seq: int, partial: bool
-    ) -> tuple[PrefixWitness, tuple[CommittedInitial, ...], bool]:
+    ) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
         deadline = time.monotonic() + _MAX_SCAN_SECONDS
         with self.bus.log.locked(blocking=False):
             if time.monotonic() > deadline:
@@ -153,16 +153,16 @@ class SourceCoverage:
             marker = self.bus.log._private_marker_unlocked()
             if marker.root_id != self.wire_root_id:
                 raise IdentityConflict("source coverage private wire root changed")
-            witness, initials, more = certified_initial_page_unlocked(
+            witness, initials, more = certified_delivery_page_unlocked(
                 self.bus.log, marker, self.recipient_lookup, after=after_seq, limit=limit
             )
-            if after_seq > max(witness.latest_initial_seq, marker.admission_after_seq):
+            if after_seq > max(witness.latest_source_seq, marker.admission_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
             if more and not partial:
                 raise IdentityConflict("source coverage exceeded its bounded private initial scan")
             return witness, initials, more
 
-    def _receipt(self, initial: CommittedInitial) -> AcceptedCohort | None:
+    def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
@@ -239,7 +239,7 @@ class SourceCoverage:
             if (
                 (through_seq is not None and covered >= through_seq)
                 or page.blocked_seq is not None
-                or not page.more_initials
+                or not page.more_sources
             ):
                 return ProvenSourceCoverage(
                     self.wire_root_id,
@@ -248,7 +248,7 @@ class SourceCoverage:
                     tuple(injected),
                     tuple(no_wake),
                     page.blocked_seq,
-                    page.more_initials,
+                    page.more_sources,
                     source_witness=witness,
                 )
         raise IdentityConflict("source coverage exceeded bounded canonical page budget")

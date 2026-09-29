@@ -214,7 +214,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     monkeypatch,
 ):
     from agent_comms.bus_publication import stable_thread_lookup
-    from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+    from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
     from agent_comms.coordination_errors import StaleFence
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
@@ -234,7 +234,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_initial_cohort(comms.bus, root_id, source.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, source.seq, store)
         with pytest.raises(StaleFence, match="unresolved execution"):
             await runtime.SelectedExecution(
                 root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")

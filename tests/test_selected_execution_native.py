@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -43,9 +43,9 @@ async def test_native_full_four_tools_publish_and_release(
             marker.admission_after_seq = marker.last_seq
             comms.bus.log.write_metadata_unlocked(marker)
         fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
-        initial = comms.bus.log.read_initial_cohort(root_id, fresh.seq)
+        initial = comms.bus.log.read_delivery_cohort(root_id, fresh.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            accept_initial_cohort(comms.bus, root_id, fresh.seq, store)
+            accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
     (tmp_path / "input.txt").write_text("state=BEFORE\n")

@@ -112,11 +112,11 @@ class DeliveryMessage:
 
     @classmethod
     def from_wire(cls, record: Mapping, root_id: str | None) -> DeliveryMessage:
-        from .bus_publication import PRIVATE_WIRE_FIELD, validate_initial_record
+        from .bus_publication import PRIVATE_WIRE_FIELD, validate_delivery_record
 
         private = record.get(PRIVATE_WIRE_FIELD, {})
         if "initial" in private:
-            initial = validate_initial_record(record, root_id)
+            initial = validate_delivery_record(record, root_id)
             return cls(initial.message, initial.audience.sender_lookup)
         return cls(Message.from_wire(record))
 

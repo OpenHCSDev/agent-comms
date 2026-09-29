@@ -19,11 +19,11 @@ from agent_comms.coordination_tables.publications import (
 
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
-    CommittedInitial,
+    CommittedDelivery,
     has_private_wire_fields,
     public_envelope_digest,
     unique_wire_object,
-    validate_initial_record,
+    validate_delivery_record,
 )
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -169,11 +169,11 @@ class WireLog:
         *,
         on_row: (
             Callable[
-                [int, bytes, Message, Mapping[str, object] | None, CommittedInitial | None], None
+                [int, bytes, Message, Mapping[str, object] | None, CommittedDelivery | None], None
             ]
             | None
         ) = None,
-    ) -> Iterator[tuple[Message, Mapping[str, object] | None, CommittedInitial | None]]:
+    ) -> Iterator[tuple[Message, Mapping[str, object] | None, CommittedDelivery | None]]:
         """Validate the ENTIRE append-only log before any new append or trusted read.
 
         A later corrupt row cannot be skipped to attest an earlier row. No
@@ -244,7 +244,7 @@ class WireLog:
                         raise ValueError("Unsupported private bus record.")
                     if set(private) == {"version", "initial"}:
                         try:
-                            initial = validate_initial_record(record, metadata.root_id)
+                            initial = validate_delivery_record(record, metadata.root_id)
                         except (KeyError, TypeError, ValueError, OverflowError) as error:
                             raise RelationViolationError(
                                 "Malformed private initial bus sideband."
@@ -253,7 +253,7 @@ class WireLog:
                             on_row(offset, line, existing, None, initial)
                         yield existing, None, initial
                         continue
-                    if set(private) != {"version", "response"}:
+                    if set(private) != {"version", "initial", "response"}:
                         raise RelationViolationError(
                             "Conflicting or malformed private bus receipt."
                         )
@@ -279,10 +279,11 @@ class WireLog:
                         raise RelationViolationError(
                             "Conflicting or malformed private bus receipt."
                         )
+                    initial = validate_delivery_record(record, metadata.root_id)
                     seen_keys.add(receipt["publication_key"])
                     if on_row is not None:
-                        on_row(offset, line, existing, receipt, None)
-                    yield existing, receipt, None
+                        on_row(offset, line, existing, receipt, initial)
+                    yield existing, receipt, initial
                 except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
                     if isinstance(error, RelationViolationError):
                         raise
@@ -333,7 +334,7 @@ class WireLog:
         if certificate_enabled(self.path):
             private = row.get(PRIVATE_WIRE_FIELD)
             initial = (
-                validate_initial_record(row, metadata.root_id)
+                validate_delivery_record(row, metadata.root_id)
                 if isinstance(private, dict) and "initial" in private
                 else None
             )
@@ -350,7 +351,7 @@ class WireLog:
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
 
-    def read_initial_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedInitial:
+    def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
         from .audience_manifest import MAX_WIRE_SEQ
 
@@ -360,7 +361,7 @@ class WireLog:
             metadata = self._private_marker_unlocked()
             if wire_root_id != metadata.root_id:
                 raise RelationViolationError("Initial wire root does not match the bus marker.")
-            matched: CommittedInitial | None = None
+            matched: CommittedDelivery | None = None
             for _message, _receipt, initial in self._verified_private_rows_unlocked(metadata):
                 if initial is not None and initial.message.seq == wire_seq:
                     matched = initial

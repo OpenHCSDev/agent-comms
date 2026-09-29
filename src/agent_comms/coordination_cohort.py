@@ -12,7 +12,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass, field
 
-from agent_comms.bus_publication import CommittedInitial
+from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchMembers,
@@ -54,7 +54,7 @@ def _assignment_id(root: str, seq: int, lookup: str) -> str:
 
 
 def _expected_assignments(
-    initial: CommittedInitial, accepted_at_ms: int
+    initial: CommittedDelivery, accepted_at_ms: int
 ) -> tuple[WakeAssignment, ...]:
     result: list[WakeAssignment] = []
     for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True):
@@ -102,7 +102,7 @@ def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignm
     )
 
 
-def _receipt_matches(db: sqlite3.Connection, initial: CommittedInitial) -> AcceptedCohort:
+def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
     row = ClaimBatchReceipts.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
@@ -225,7 +225,7 @@ def _record_optional_owner_generations(
         db.execute("RELEASE optional_awareness_claims")
 
 
-def accept_initial_cohort(
+def accept_delivery_cohort(
     bus: MessageBus,
     wire_root_id: str,
     wire_seq: int,
@@ -245,7 +245,7 @@ def accept_initial_cohort(
             raise IdentityConflict("cohort admission wire root changed")
         if wire_seq <= marker.admission_after_seq:
             raise IdentityConflict("historical source precedes the current admission floor")
-    initial = bus.log.read_initial_cohort(wire_root_id, wire_seq)
+    initial = bus.log.read_delivery_cohort(wire_root_id, wire_seq)
     with store.session.transaction() as db:
         assert_cohort_schema(db)
         receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)

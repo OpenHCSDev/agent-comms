@@ -24,7 +24,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_cohort import accept_initial_cohort
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
@@ -493,7 +493,7 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
             )
         initial = comms.messaging.send_initial_cohort("sender", "beta", "one message")
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            accept_initial_cohort(comms.bus, root_id, initial.seq, store)
+            accept_delivery_cohort(comms.bus, root_id, initial.seq, store)
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         with pytest.raises(IdentityConflict, match="no takeover"):
             await foreground.run_foreground_once(

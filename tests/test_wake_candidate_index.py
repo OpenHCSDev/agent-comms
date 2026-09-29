@@ -18,7 +18,7 @@ from agent_comms.bus_publication import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_initial_cohort, sealed_cohort_assignments
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_tables.publications import canonical_publication_key
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -113,7 +113,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         for name in ("Alice", "Bob"):
             store.participants.register(lookup[name], name, name, committed=True)
         assert sealed_cohort_assignments(store, lookup["Alice"]) == ()
-        accept_initial_cohort(comms.bus, root_id, message.seq, store)
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert len(sealed_cohort_assignments(store, lookup["Alice"])) == 1
         assert sealed_cohort_assignments(store, lookup["Bob"]) == ()
     assert index.maintain()  # Exact no-new-bytes replay adds nothing.
@@ -254,7 +254,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
             required_through_seq=messages[2].seq,
         )
     with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
-        comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
+        comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
 
 
 @pytest.mark.parametrize(
@@ -295,7 +295,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
             required_through_seq=messages[2].seq,
         )
     with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
-        comms.bus.log.read_initial_cohort(root_id, messages[2].seq)
+        comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
 
 
 @pytest.mark.parametrize("first_batch_rows", [2, 4], ids=["stored-key", "same-batch"])
@@ -362,7 +362,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             required_through_seq=messages[3].seq,
         )
     with pytest.raises(RelationViolationError, match="Private bus checkpoint root/inode/size changed"):
-        comms.bus.log.read_initial_cohort(root_id, messages[3].seq)
+        comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
 
 
 def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:
