@@ -3,9 +3,33 @@
  * Provider/model selection, context window, and no-replay are not policy knobs.
  */
 const strategies = Object.freeze({
-    serial: Object.freeze({ plan: segments => ({ segments, workers: 1 }) }),
-    parallel: Object.freeze({ plan: (segments, policy) => ({ segments, workers: policy.concurrency }) }),
+    serial: Object.freeze({ plan: segments => new CompactionPlan(segments, 1) }),
+    parallel: Object.freeze({ plan: (segments, policy) => new CompactionPlan(segments, policy.concurrency) }),
 });
+
+/** One bounded scheduler for every native map and reduction source. */
+export class CompactionPlan {
+    constructor(segments, workers) { Object.assign(this, { segments, workers }); }
+    async execute(consume, controller) {
+        const iterator = this.segments[Symbol.iterator]();
+        let index = 0;
+        let failure;
+        const worker = async () => {
+            try {
+                while (!controller.signal.aborted) {
+                    const next = iterator.next();
+                    if (next.done) return;
+                    await consume(next.value, index++);
+                }
+            } catch (error) { failure ??= error; controller.abort(error); }
+        };
+        try {
+            await Promise.allSettled(Array.from({ length: this.workers }, worker));
+            if (failure) throw failure;
+            controller.signal.throwIfAborted();
+        } finally { iterator.return?.(); }
+    }
+}
 export class CompactionPolicy {
     static declarations = Object.freeze({
         strategy: Object.freeze({ default: 'parallel', choices: Object.keys(strategies) }),
