@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from agent_comms.acp_extension import (
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -26,9 +28,13 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 tmp_path = private_root_fixture
 
 
-@pytest.mark.parametrize("restart_after_reply", [False, True], ids=["reply", "saved-restart"])
+@pytest.mark.parametrize(
+    ("restart_after_reply", "contend_cursor"),
+    [(False, False), (True, False), (False, True)],
+    ids=["reply", "saved-restart", "contended-reply"],
+)
 async def test_native_channel_reply_automatically_reaches_original_sender(
-    tmp_path, monkeypatch, restart_after_reply
+    tmp_path, monkeypatch, restart_after_reply, contend_cursor
 ):
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
@@ -63,7 +69,15 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(body)
+                if contend_cursor and len(requests) == 2:
+                    # Return the real model result while another reader holds
+                    # the bus lock across the worker's cursor projection.
+                    with _store_lock(comms.bus.log.path):
+                        self.wfile.write(body)
+                        self.wfile.flush()
+                        time.sleep(0.8)
+                else:
+                    self.wfile.write(body)
             except Exception as error:
                 failures.append(repr(error))
                 self.send_error(400, "Local fixture assertion failed")

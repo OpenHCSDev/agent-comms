@@ -74,6 +74,17 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         await agent._publish_private_cursor(owner.name, owner.name)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(receive(), 0.05)
+        # A settled turn cannot lose its cursor update to the same lock. The
+        # idle observer must revisit the durable row once contention clears.
+        with _store_lock(comms.root / "bus.jsonl"):
+            await agent._publish_private_cursor(
+                owner.name, owner.name, selected_status="unavailable"
+            )
+        await agent._refresh_private_cursor(owner.name)
+        before = await receive(before.revision)
+        assert before.observation.status == "none"
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(receive(), 0.05)
         with _store_lock(comms.root / "bus.jsonl"):
             loaded = next(
                 update.envelope
