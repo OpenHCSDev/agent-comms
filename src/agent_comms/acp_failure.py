@@ -139,6 +139,11 @@ class PromptFailureReceipt:
 
         return {"agentCommsFailure": FieldCodec.encode(self)}
 
+    def request_error(self):
+        from acp import RequestError
+
+        return RequestError.internal_error(self.error_data())
+
     @classmethod
     def from_error(cls, code, message, data):
         from .field_codec import FieldCodec

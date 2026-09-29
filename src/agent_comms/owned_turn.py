@@ -445,6 +445,8 @@ class OwnedTurn:
             await self.prepare_native()
             await self.stream()
             await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
         except asyncio.CancelledError:
             self.progress.cancelled = True
             await backend.terminate_task_process(self.owner_task)
@@ -462,9 +464,7 @@ class OwnedTurn:
             await backend.terminate_task_process(self.owner_task)
             failure = self.runner.emitted_errors.get(self.session_id)
             if failure is not None:
-                raise RequestError.internal_error(
-                    PromptFailureReceipt(failure, True).error_data()
-                ) from error
+                raise PromptFailureReceipt(failure, True).request_error() from error
             raise
         finally:
             await self.finish()

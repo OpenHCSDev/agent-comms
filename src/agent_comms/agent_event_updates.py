@@ -252,4 +252,3 @@ class AcpEventConsumer(MroDispatch):
             # The existing emission owner deduplicates full typed evidence,
             # including a terminal not-sent transition with unchanged text.
             await self.agent._emit_event(session_id, events.Error(str(event.text)), client)
-        self.agent.turns.emitted_errors.pop(session_id, None)
