@@ -25,7 +25,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, private_nk_launch
+from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch, private_nk_launch
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -140,7 +140,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
         monkeypatch.delenv(name, raising=False)
     routed = wire()
     assert routed.root == root
-    assert routed.owners._private_nk_launch == (root, root_id, tmp_path)
+    assert routed.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path, None)
     selected = private_nk_entrypoint.private_nk_from_environment()
     assert selected is not None
     assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
@@ -468,6 +468,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
 def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     comms = Comms(root)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     other = tmp_path / "other"
@@ -493,6 +494,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
 
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     comms.registry.declare(Thread("late-owner", frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")

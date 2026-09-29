@@ -10,18 +10,15 @@ from collections.abc import Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity
+from .coordination_errors import PublicationActivationBlocked
 from .diagnostics import owner_process_output
-from .registration import Registration
-
-if TYPE_CHECKING:
-    pass
 from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
+from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .threads import Thread
@@ -71,14 +68,15 @@ class OwnerLifecycle:
         self._wire_lock_path = root / "wire"
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
-        self._private_nk_launch: tuple[Path, str, Path] | None = None
+        self._private_nk_launch: PrivateNkLaunch | None = None
 
     def pin_private_nk_launch(
         self, validated_root: Path, wire_root_id: str, native_package: Path
     ) -> None:
         """Bind an already preflighted ACP/worker launch to future owner handoffs.
 
-        Public Comms instances never opt in from a marker or ambient env.
+        A marker never grants authority. Service factories validate explicit
+        environment pairs; direct composition requires a caller-supplied pin.
         Recheck the root marker before retaining the exact lexical absolute
         path; child env is generated from this pin, not a later cwd/env read.
         """
@@ -94,7 +92,9 @@ class OwnerLifecycle:
             marker = self.bus.log._private_marker_unlocked()
             if marker.root_id != wire_root_id:
                 raise RelationViolationError("private owner launch root ID changed")
-        self._private_nk_launch = (validated_root, wire_root_id, native_package)
+        self._private_nk_launch = PrivateNkLaunch(
+            validated_root, wire_root_id, native_package, None
+        )
 
     def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
@@ -268,9 +268,20 @@ class OwnerLifecycle:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         env = os.environ.copy()
-        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_STARTUP_INPUT_KEY"):
+        for key in (
+            "PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_STARTUP_INPUT_KEY",
+            ROOT_ID_ENV, PACKAGE_ENV,
+        ):
             env.pop(key, None)
         private_launch = self._private_nk_launch
+        if private_launch is None:
+            with self.bus.log.locked():
+                if self.bus.log.read_metadata_unlocked().private:
+                    raise PublicationActivationBlocked(
+                        "private owner launch requires explicit matching root and package"
+                    )
+        else:
+            private_launch.validate()
         if private_launch is not None:
             if agent_bin == "pi":
                 # The default stock binary cannot attest native input IDs.
@@ -296,18 +307,14 @@ class OwnerLifecycle:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                # Preserve the preflight pin ONLY on explicit private launch.
-                # Ordinary/public roots keep their canonical child path, even
-                # when their original spelling was an absolute symlink.
-                "AGENT_COMMS_ROOT": str(
-                    private_launch[0] if private_launch is not None else self.root.resolve()
-                ),
                 "AGENT_COMMS_AGENT_BIN": agent_bin,
             }
         )
         if private_launch is not None:
-            env["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"] = private_launch[1]
-            env["AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"] = str(private_launch[2])
+            private_launch.apply_environment(env)
+        else:
+            # Ordinary roots keep their canonical child path across symlink changes.
+            env["AGENT_COMMS_ROOT"] = str(self.root.resolve())
         if thread.parent is not None:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:
