@@ -22,8 +22,45 @@ from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .threads import Thread
+from .thread_identity import OwnerIdentity
+from .restart_refusals import (
+    OwnerBusyRefusal,
+    OwnerSelectionChangedRefusal,
+    OwnerGenerationChangedRefusal,
+)
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerRestartSelection:
+    identity: OwnerIdentity
+    process: ProcessIdentity
+    admission_generation: int
+
+    @classmethod
+    def capture(cls, snapshot: RegistrySnapshot, name: str):
+        owner = snapshot.require_active(name)
+        if owner.process_identity is None:
+            raise OwnerSelectionChangedRefusal()
+        return cls(
+            snapshot.owner_identity(owner.name),
+            owner.process_identity,
+            snapshot.admission_generations[owner.name],
+        )
+
+    @property
+    def name(self) -> str:
+        return self.identity.incarnation.name
+
+    def require_current(self, snapshot: RegistrySnapshot) -> Thread:
+        try:
+            snapshot.require_owner_process(self.identity, self.process)
+        except RelationViolationError as error:
+            raise OwnerSelectionChangedRefusal() from error
+        if snapshot.admission_generations[self.name] != self.admission_generation:
+            raise OwnerGenerationChangedRefusal()
+        return snapshot.require_active(self.name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,7 +187,8 @@ class OwnerLifecycle:
         *,
         agent_bin: str = "pi",
         agent_args: Sequence[str] | None = None,
-        expected_incarnations: Mapping[str, tuple[int, float, int]] | None = None,
+        expected: OwnerRestartSelection | None = None,
+        environment: Mapping[str, str] | None = None,
     ) -> tuple[OwnerRestartResult, ...]:
         """Preflight every idle owner before stopping any exact process identity."""
         with _store_lock(self._wire_lock_path):
@@ -172,25 +210,21 @@ class OwnerLifecycle:
                     }.values()
                 )
             )
-            if expected_incarnations is not None and (
-                len(threads) != 1 or set(expected_incarnations) != {t.name for t in threads}
-            ):
-                raise RelationViolationError("Guarded restart requires exactly one queued owner.")
+            if expected is not None:
+                if len(threads) != 1 or threads[0].name != expected.name:
+                    raise OwnerSelectionChangedRefusal()
+                expected.require_current(snapshot)
             captured = []
             for thread in threads:
                 generation = snapshot.admission_generations[thread.name]
-                if expected_incarnations is not None and expected_incarnations[thread.name] != (
-                    thread.pid,
-                    thread.created_at,
-                    generation,
-                ):
-                    raise RelationViolationError("Queued owner changed before restart.")
                 if not thread.role.executable or not snapshot.statuses[thread.name].active:
                     raise RelationViolationError("Restart requires a running agent.")
                 if not thread.process_alive or thread.pid == os.getpid():
                     raise RelationViolationError("Restart requires another live owner.")
-                if thread.active_turn is not None:
-                    raise RelationViolationError("Wait until the owner is idle before restart.")
+                try:
+                    thread.require_idle()
+                except RelationViolationError as error:
+                    raise OwnerBusyRefusal() from error
                 captured.append((thread, generation))
             # Fence before the first signal, so a concurrent channel wake cannot
             # start a turn while shutdown is pending. No replay is scheduled.
@@ -219,6 +253,7 @@ class OwnerLifecycle:
                         self.registry.require(thread.name),
                         agent_bin,
                         agent_args,
+                        environment=environment,
                     ).pid,
                 )
                 for thread, _ in captured
@@ -264,13 +299,18 @@ class OwnerLifecycle:
         agent_args: Sequence[str] | None = None,
         *,
         startup_input_key: str | None = None,
+        environment: Mapping[str, str] | None = None,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
-        env = os.environ.copy()
+        env = dict(os.environ if environment is None else environment)
         for key in (
-            "PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_STARTUP_INPUT_KEY",
-            ROOT_ID_ENV, PACKAGE_ENV,
+            "PI_PROMPT",
+            "PI_PARENT_ID",
+            "PI_TASK",
+            "AGENT_COMMS_STARTUP_INPUT_KEY",
+            ROOT_ID_ENV,
+            PACKAGE_ENV,
         ):
             env.pop(key, None)
         private_launch = self._private_nk_launch
@@ -402,8 +442,9 @@ class OwnerLifecycle:
     def _release_current_owner_unlocked(self, canonical: str) -> None:
         snapshot = self.registry.snapshot()
         owner = snapshot.threads[canonical]
-        if owner.process_identity is not None and owner.process_identity != ProcessIdentity.capture(
-            os.getpid()
+        if (
+            owner.process_identity is not None
+            and owner.process_identity != ProcessIdentity.capture(os.getpid())
         ):
             raise RelationViolationError("Only the registered owner may release itself.")
         before = snapshot.admission_generations[canonical]

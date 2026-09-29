@@ -12,6 +12,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
+from .restart_refusals import OwnerBusyRefusal, OwnerChangedBeforeFenceRefusal, OwnerGenerationChangedRefusal
 from .thread_identity import GenerationCounter, OwnerIdentity
 from .thread_status import (
     ArchivedThreadStatus,
@@ -107,7 +108,9 @@ class RegistryDocument:
         if previous is not None:
             thread = thread.preserve_registration_history(previous)
             change = UpdatedRegistration(
-                thread=thread, status=status, previous=previous,
+                thread=thread,
+                status=status,
+                previous=previous,
                 previous_status=self.statuses[thread.name],
             )
             return change.restarted() if new_owner else change
@@ -206,11 +209,14 @@ class RegistryDocument:
         """
         snapshot = self.snapshot()
         current = snapshot.require_active(expected.name)
-        current.require_idle()
+        try:
+            current.require_idle()
+        except RelationViolationError as error:
+            raise OwnerBusyRefusal() from error
         if current != expected:
-            raise RelationViolationError("Idle owner changed before restart fence.")
+            raise OwnerChangedBeforeFenceRefusal()
         if snapshot.admission_generations[current.name] != expected_admission_generation:
-            raise RelationViolationError("Idle owner admission changed before restart fence.")
+            raise OwnerGenerationChangedRefusal()
         self.statuses[expected.name] = StoppedThreadStatus()
         self.admissions.advance(expected.name)
         self.owners.advance(expected.name)
@@ -336,11 +342,14 @@ class RegistrySnapshot:
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
     ) -> dict[str, str]:
         matching = {
-            name for name in self.threads.keys() & available.keys()
+            name
+            for name in self.threads.keys() & available.keys()
             if self.threads[name].incarnation == available[name].incarnation
         }
         unoccupied = self.aliases.keys() - available.keys() - retained.keys()
-        return {alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching}
+        return {
+            alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
+        }
 
     def require_active(self, name: str) -> Thread:
         canonical = self.aliases.get(name, name)
