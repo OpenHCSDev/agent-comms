@@ -1,0 +1,30 @@
+[
+  {
+    "name": "agent-comms-ux",
+    "old_launcher": "/home/ts/.local/share/agent-comms/runtime-native-tool-owners-20260928/bin/pi-comms-native",
+    "current_launcher": "/home/ts/.local/share/agent-comms/runtime-native-custody-terminal-20260928/bin/pi-comms-native",
+    "settings_and_session_preserved": true,
+    "restart": true
+  },
+  {
+    "name": "pr95-selected-pi-summary-owner",
+    "old_launcher": "/home/ts/.local/share/agent-comms/runtime-native-tool-owners-20260928/bin/pi-comms-native",
+    "current_launcher": "/home/ts/.local/share/agent-comms/runtime-native-custody-terminal-20260928/bin/pi-comms-native",
+    "settings_and_session_preserved": true,
+    "restart": true
+  },
+  {
+    "name": "nra-architecture",
+    "old_launcher": "/home/ts/.local/share/agent-comms/runtime-native-tool-owners-20260928/bin/pi-comms-native",
+    "current_launcher": "/home/ts/.local/share/agent-comms/runtime-native-custody-terminal-20260928/bin/pi-comms-native",
+    "settings_and_session_preserved": true,
+    "restart": true
+  },
+  {
+    "name": "nra-domain-mapping",
+    "old_launcher": "/home/ts/.local/share/agent-comms/runtime-native-tool-owners-20260928/bin/pi-comms-native",
+    "current_launcher": "/home/ts/.local/share/agent-comms/runtime-native-custody-terminal-20260928/bin/pi-comms-native",
+    "settings_and_session_preserved": true,
+    "restart": true
+  }
+]
