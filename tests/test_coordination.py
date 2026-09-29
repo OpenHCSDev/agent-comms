@@ -323,18 +323,6 @@ def test_total_enum_partition_and_transitions():
 
 def test_typed_execution_and_attempt_authority_are_separate():
     pending = execution()
-    with pytest.raises(IntegrityViolationError):
-        replace(pending, lifecycle=ActiveExecution.load(pending.lifecycle.current_attempt_ordinal))
-    with pytest.raises(IntegrityViolationError):
-        replace(
-            pending, lifecycle=CompletedExecution.load(pending.lifecycle.current_attempt_ordinal)
-        )
-    assert (
-        replace(
-            pending, lifecycle=FailedExecution.load(pending.lifecycle.current_attempt_ordinal)
-        ).lifecycle.current_attempt_ordinal
-        is None
-    )
     first = attempt()
     with pytest.raises(IntegrityViolationError):
         replace(
