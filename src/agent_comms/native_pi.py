@@ -143,6 +143,16 @@ class NativeContextJournal(NativeContextRecord):
 class NativeContextProof(NativeContextRecord):
     session_file: Path
 
+    def corroborates_input(self, input_id: str, session_dir: Path) -> bool:
+        """Check an already-observed live event against its isolated saved proof.
+
+        This grants neither replay nor recovery authority. History IO occurs
+        before the coordinator read transaction, as on the native return path.
+        """
+        if self.input_id != input_id or self.session_file.parent != session_dir:
+            return False
+        return self.read_evidence(self.session_file, input_id) == self
+
     @classmethod
     def read_evidence(
         cls, session_file: Path, input_id: str, *, request_generation: int | None = None

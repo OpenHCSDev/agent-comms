@@ -6,16 +6,21 @@ store at a quiet migration; admission remains fenced by the root authority.
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
+from .coordination_errors import StaleFence
 from .native_input_record import NativeInputRecord
 from .typed_table import Column, TypedTable
+
+if TYPE_CHECKING:
+    from .native_pi import NativeContextProof
 
 
 class NativeRuntimeTable:
@@ -91,6 +96,35 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
         "AND request_generation>0 AND length(llm_context_digest)=64)",
         "stage='triage' OR verdict IS NULL",
     )
+
+    def require_unproven(self, token_digest: str) -> None:
+        """Only the original reserved capability can acquire its first proof."""
+        if self.owner_token_digest != token_digest or self.session_id is not None:
+            raise StaleFence("native proof belongs to a different or already settled dispatch")
+
+    def commit_context(
+        self,
+        db: sqlite3.Connection,
+        context: NativeContextProof,
+        *,
+        verdict: Literal["ignore", "full"] | None = None,
+    ) -> None:
+        """Commit the five context facts together, once, after live verification."""
+        if context.input_id != self.input_id:
+            raise StaleFence("native context belongs to another reserved input")
+        updated = self.update(
+            db,
+            where="input_id=? AND session_id IS NULL",
+            parameters=(self.input_id,),
+            session_id=context.session_id,
+            session_file=str(context.session_file),
+            session_entry_id=context.session_entry_id,
+            request_generation=context.request_generation,
+            llm_context_digest=context.llm_context_digest,
+            verdict=verdict,
+        )
+        if updated.rowcount != 1:
+            raise StaleFence("native proof was previously committed")
 
     @classmethod
     def triggers(cls) -> dict[str, str]:

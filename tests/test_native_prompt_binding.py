@@ -12,7 +12,6 @@ import os
 import sqlite3
 import tempfile
 from contextlib import contextmanager
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -673,7 +672,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
 
 
 @pytest.mark.parametrize(
-    ("stage", "field", "bad"),
+    ("stage", "field", "value"),
     [
         ("triage", "owner_lookup", "f" * 32),
         ("triage", "owner_thread", "attacker"),
@@ -681,66 +680,6 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         ("full", "execution_id", "forged-execution"),
         ("full", "attempt_ordinal", 99),
         ("full", "owner_thread", "attacker"),
-    ],
-)
-async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
-    tmp_path, monkeypatch, stage, field, bad
-):
-    root, root_id, _, initial, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
-    fake, calls = _fake_model(decision="FULL")
-    real_read = runtime.read_expected_prompt_binding
-    tampered = False
-
-    async def fake_then_tamper(package, **kwargs):
-        nonlocal tampered
-        result = await fake(package, **kwargs)
-        if ("triage" if "bounded triage" in kwargs["prompt"] else "full") == stage:
-            tampered = True
-        return result
-
-    def changed_binding(store, input_id, **kwargs):
-        binding = real_read(store, input_id, **kwargs)
-        return replace(binding, **{field: bad}) if tampered and binding is not None else binding
-
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
-    monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
-    with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        ).run()
-    assert tampered and len(calls) == (1 if stage == "triage" else 2)
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        evidence = read_historical_native_inputs(
-            store,
-            wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
-            source_seq=initial.message.seq,
-        )
-        assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
-        assert (
-            store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input "
-                "WHERE stage=? AND session_id IS NOT NULL",
-                (stage,),
-            ).fetchone()[0]
-            == 0
-        )
-    assert (
-        await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
-        ).run()
-        is None
-    )
-    assert len(calls) == (1 if stage == "triage" else 2)
-
-
-@pytest.mark.parametrize(
-    ("stage", "field", "value"),
-    [
-        ("triage", "owner_thread", "attacker"),
-        ("full", "execution_id", "forged-execution"),
-        ("full", "attempt_ordinal", 99),
     ],
 )
 async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
@@ -769,7 +708,9 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         return result
 
     monkeypatch.setattr(TrackedTurnSession, "execute", mutate_after_admitted_send)
-    with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
+    with pytest.raises(
+        IdentityConflict, match="native send differs from its durable prompt binding"
+    ):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
@@ -789,6 +730,14 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
             ).fetchone()[0]
             == 1
         )
+
+    assert (
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        ).run()
+        is None
+    )
+    assert len(calls) == (1 if stage == "triage" else 2)
 
 
 async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(

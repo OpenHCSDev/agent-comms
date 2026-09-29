@@ -27,15 +27,16 @@ tmp_path = private_root_fixture
 
 
 @pytest.mark.parametrize(
-    "after_cutover, selected_write", [(False, False), (True, False), (False, True)]
+    "after_cutover, selected_write, triage",
+    [(False, False, False), (True, False, False), (False, True, False), (False, False, True)],
 )
 async def test_native_full_four_tools_publish_and_release(
-    tmp_path, monkeypatch, after_cutover, selected_write
+    tmp_path, monkeypatch, after_cutover, selected_write, triage
 ):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
-    root, root_id, comms, initial, people = _root(tmp_path, direct=True, claims=True)
+    root, root_id, comms, initial, people = _root(tmp_path, direct=not triage, claims=True)
     old_seq = initial.message.seq
     if after_cutover:
         with comms.bus.log.locked():
@@ -76,8 +77,13 @@ async def test_native_full_four_tools_publish_and_release(
                 requests.append(request)
                 assert request["model"] == "fixture"
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
-                assert len(requests) <= 2
-                if len(requests) == 1:
+                assert len(requests) <= 2 + triage
+                if triage and len(requests) == 1:
+                    assert "bounded triage" in json.dumps(request)
+                    assert not request.get("tools")
+                    delta = {"role": "assistant", "content": '{"decision":"FULL"}'}
+                    reason = "stop"
+                elif len(requests) == 1 + triage:
                     assert {t["function"]["name"] for t in request["tools"]} == {
                         name for name, _ in calls
                     }
@@ -171,7 +177,7 @@ async def test_native_full_four_tools_publish_and_release(
     try:
         outcome = await asyncio.wait_for(execution.run(), 40)
         assert not failures
-        assert len(requests) == 2
+        assert len(requests) == 2 + triage
         assert outcome.response_message_id
         responses = [
             m for m in comms.views.full_history() if m.message_id == outcome.response_message_id
@@ -200,14 +206,23 @@ async def test_native_full_four_tools_publish_and_release(
                 recipient_lookup=stable_thread_lookup(owner.created_at),
                 source_seq=initial.message.seq,
             )
-            assert len(proofs) == 1 and proofs[0].input_id == outcome.input_id
-            assert proofs[0].expected_prompt_equality_established
-            binding = read_expected_prompt_binding(store, outcome.input_id)
-            assert binding is not None
+            assert len(proofs) == 1 + triage
+            assert {proof.stage for proof in proofs} == ({"triage", "full"} if triage else {"full"})
             assert (
-                read_tracked_input_digest(proofs[0].context.session_file, outcome.input_id)
-                == binding.expected_prompt_digest
+                next(proof for proof in proofs if proof.stage == "full").input_id
+                == outcome.input_id
             )
+            for proof in proofs:
+                assert proof.expected_prompt_equality_established
+                binding = read_expected_prompt_binding(store, proof.input_id)
+                assert binding is not None
+                assert (
+                    read_tracked_input_digest(proof.context.session_file, proof.input_id)
+                    == binding.expected_prompt_digest
+                )
+            if triage:
+                assert len({proof.context.session_file for proof in proofs}) == 1
+                assert len({proof.input_id for proof in proofs}) == 2
             if after_cutover:
                 assert (
                     read_historical_native_inputs(
@@ -220,7 +235,7 @@ async def test_native_full_four_tools_publish_and_release(
                 )
         with pytest.raises(IdentityConflict, match="cannot be reused"):
             await execution.run()
-        assert len(requests) == 2
+        assert len(requests) == 2 + triage
     finally:
         server.shutdown()
         server.server_close()
