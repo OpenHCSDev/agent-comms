@@ -4,16 +4,16 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core664623a3 (301 coordinator owners,303 watchdog;
-300/305 current behavioral acceptance), Toad436514d8 (140 live output owners;
-138 observations and137 actual history paint),
+Latest installed pair: coreb77db612 (306 source cursor/coverage;301/303 owners),
+Toade46f8cb5 (129 functional workspace plus141 saved publication/reconnect and
+143 Project scroll restoration),
 Textualc9743801, native5fde. All five launchers select immutable
-runtime-watchdog-20260928. Four idle owners restarted through canonical fenced
+runtime-workspace-20260928. Four idle owners restarted through canonical fenced
 restart; actual installed native queue/reconnect/DM/channel/stopped-reopen passes,
-all four fresh ACP attachments pass, actual PR95 saved response paint passes.
-No runtime store reset, history rewrite, or input replay. Existing Toad loads140
-on its next normal restart.129 workspace remains separate until its actual
-reconstructed-view reconnect and Project scroll failures are fixed.
+all four fresh ACP attachments pass; actual PR95 and agent-comms-ux saved text
+paint105/61 matching phrases. No runtime store reset, history rewrite, or input
+replay. Existing Toad loads129/141/143 on its next normal restart. Full116/110
+persistent WorkspaceScreen/rebinding and30–40ms target continue in142.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
@@ -135,22 +135,20 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   pinned native host path and prove ordinary/private one-original admission,
   correction/queued input/refusal without replay.274 merged actual fixtures and
   retained-proof production fix;277 completes private queue/native rejection.
-- [ ] Tesla: finish129 integrated workspace/resource scope retaining116/126 and
-  merged136 sidebar retirement. Main still excludes129; no partial-install claim.
-  Actual64-tab native path, editor/draft/undo, shell and terminal continuity plus
-  actual painted replies on return are required. Use110 measurements.136/139 merged
-  into129, not main; combined installed sidebar64 gate passes. Parent integrates
-  main140 with129 in own persistent shipping tree and runs final paired native gate.
-  Full116/110 remains explicitly unfinished: persistent WorkspaceScreen/source
-  rebinding,30–40ms median and worst-case spike improvement. Tesla owns continuation;
-  shipping129 does not close those requirements. Reconcile126 after ancestry lands.
+- [x] Tesla/parent:129 functional workspace/resource scope preserving complete
+  116/126 ancestry and136/139 sidebar work merged e46f8cb5 and installed. One rich
+  Conversation, original editor/Agent/PTY ownership, actual returned text verified.
+  126 closed after its complete head was verified an ancestor of main.
   Parent combined129+140/core301 actual native64 passes: one rich view,8 inputs,
   same Agent/editor/undo, cropped reply paint;64 UI180146176bytes,243ms median.
-  Current-core303 short native path found a fresh-view reconnect bug: ACP drops
-  snapshots during reconnect and readiness skips a newly mounted view. Carver141
-  owns correction. Noether owns reproduced Project scroll11→2 restoration error.
-  Parent migrates stale test view handle, retains red receipts, and does not
-  claim the full combined workspace ready or deployed.
+- [x] Carver141/Noether143: fix reconstructed-view reconnect and Project scroll.
+  Original failing installed native path passes including checkpoint text and
+  stopped-owner reopen; original sidebar path preserves2/11/11 offsets and visible
+  selected file, project change/hydration. Seven mounted/family guards pass.
+  Both merged through129 and installed; red receipts retained. Parent migrated
+  App's cursor caller and fixed precreated checkpoint coroutine cancellation.
+- [ ] Tesla142: full116/110 persistent WorkspaceScreen/source rebinding,
+  30–40ms median and worst-case spike improvement. Functional129 does not close it.
 - [x] Noether: finish50 authenticated loopback browser path. Merged and installed;
   actual Chromium/ACP initialization/keyboard/authentication/streamed downloads pass.
   No external exposure and no model-turn claim from the browser-only acceptance.
@@ -203,7 +201,10 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   passes. Installed with303/Toad140; actual native and all live attachments pass.
 - [x] Dalton:300 executes original47 legality predicate/coupling behavior at
   current family/SQLite boundaries,111 installed checks. Merged e1115526.
-- [ ] Boyle: next S7 native cursor/proven coverage ownership with original fences.
+- [x] Boyle306: S7 native cursor/proven coverage owners, old helpers/callers deleted;
+  89 focused plus3 native/2guards; net49 production lines deleted. Merged b77db612
+  and installed; final combined actual native and live attachment/paint pass.
+- [ ] Boyle: remaining coordinated-runtime/send-boundary ownership and deletion.
 - [x] Dalton:305 current S1 event/settlement acceptance merged19281c46;16 final
   installed checks, actual native manual success/refusal, relay and native terminal
   release. OPEN2 resolved using current active-goal policy, not historical pause.
@@ -223,6 +224,9 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   independently of unfinished129; Conversation shrinks42 lines.
 - [ ] Carver: next whole planned T4 Conversation ownership/deletion surface,
   independent of Tesla workspace and Noether sidebar; no façade extraction.
+  141 saved transcript ownership is now merged/installed; source lifecycle
+  coordination with142 continues. 308 backend output ready for parent review;
+  307 current S4 acceptance continues with mounted read-ACK evidence.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
   run completed35.94s; its payload lacks detector coverage counts, so it is not
   claimed as complete-detector/zero-debt proof. Domain review rejected schema-index
