@@ -30,4 +30,34 @@ proofs, successful goal settlement, and preservation of unrelated uncertain inpu
 Run this journey against an installed wheel. Check the current baseline fails the
 same journey. No user-thread input replay or goal resumption is part of this fix.
 
-Results and deleted lines will be recorded before merge.
+## Native and structural results
+
+Installed wheel, real pinned native776, localhost provider: the new cold-saved
+goal journey passes. Exactly one journaled compaction precedes exactly one new
+native user start; summary progress/publication crosses ACP; goal generation
+advances after native completion. Saved bytes and an unrelated reserved input
+remain intact. The baseline fails the identical journey with a blocked generation.
+
+The existing failed-goal/retry journey also passes: provider failure is published
+once through the typed receipt, the failed attempt remains blocked, explicit Retry
+dispatches one fresh continuation, and the older uncertain input is preserved.
+Ordinary owner fences/flock and input-disposition checks pass. Seven ownership
+guards pass, including a new declaration-derived guard that every original case
+inherits reservation and compaction. The packaged ratchet reports no growth;
+one long chain and seven boolean terms were removed. Eighteen production lines
+were deleted relative to current main (including the owner-only override).
+
+The broader run exposed eight failures in the older adaptive test file: obsolete
+nullable row fields/status assumptions and synthetic native history rejected by
+current preparation. Mendel owns replacing that fixture with the existing real
+native fixture; those failures are recorded, not a claim of a green full suite.
+
+Toad204/205/201 are merged: same-open-view inbound replay, cancellation feedback,
+and reusable video/profile custody checks. The staged pair uses Core2f9f0f08,
+Toad8616aee5, Textual412b and unchanged native776. Arendt owns actual autonomous
+compaction/summary painting acceptance in this exact staged installation.
+
+Owned disposable scratch: `/home/ts/.cache/agent-scratch/comms-journaled-goal-input-20260929`;
+staged install: `/home/ts/.local/share/agent-comms/runtime-journaled-original-20260929`.
+The active bus, original failed goal/input, native sessions and running owners
+have not been reset, resumed, replayed or restarted for this candidate.
