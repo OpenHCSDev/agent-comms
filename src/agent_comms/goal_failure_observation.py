@@ -16,15 +16,14 @@ from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
-from .goal_attempt_phase import FailedAttempt
-from .goal_generation import BlockedGeneration
+from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_pauses import GoalPauseEvent
-from .goal_states import BlockedState, PausedGoal
 from .goals import Goal
 from .recovery_projection import _preflight
+from .thread_identity import OwnerIdentity, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
-from .turn_lease import TurnLeaseFence
+from .turn_lease import TurnFence, TurnLeaseFence
 from .typed_table import Column, ForeignKey, TypedTable
 
 if TYPE_CHECKING:
@@ -48,6 +47,46 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     goal_revision: int = field(metadata={"sql": Column(check="goal_revision>=0")})
     turn_id: str = field(metadata={"sql": Column(unique=True, check="length(turn_id)=32")})
     reason: FailureReason
+
+    def __post_init__(self) -> None:
+        # These are the durable observation's constraints, independent of any
+        # caller's authority. SQL/FieldCodec remains the single stored decoder.
+        if type(self.admission) is not int or self.admission <= 0:
+            raise ValueError("Observation admission must be positive")
+        if type(self.turn_generation) is not int or self.turn_generation <= 0:
+            raise ValueError("Observation turn generation must be positive")
+        if not math.isfinite(self.owner_created_at):
+            raise ValueError("Observation incarnation must be finite")
+        if not re.fullmatch(r"[0-9a-f]{32}", self.turn_id):
+            raise ValueError("Observation turn ID must be canonical")
+        if not isinstance(self.reason, FailureReason):
+            raise ValueError("Observation reason must be decoded")
+
+    @property
+    def identity(self) -> GoalAttemptIdentity:
+        return GoalAttemptIdentity(self.goal_id, self.generation, self.attempt_id)
+
+    @property
+    def incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner, self.owner_created_at)
+
+    @property
+    def owner_identity(self) -> OwnerIdentity:
+        return OwnerIdentity(self.incarnation, self.admission)
+
+    @property
+    def turn(self) -> TurnFence:
+        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.admission)
+
+    def matches_owner(self, owner: Thread, admission: int | None) -> bool:
+        if self.owner_identity != owner.owner_identity(admission):
+            return False
+        if self.worktree != owner.worktree:
+            return False
+        observed = owner.observed_turn(admission)
+        if observed is None or not self.turn.matches(observed):
+            return False
+        return owner.has_goal_revision(self.goal_id, self.goal_revision)
 
     @classmethod
     def references(cls):
@@ -75,55 +114,27 @@ class FailedTurnObservation:
         current_admission: int | None,
         reason: FailureReason,
     ) -> FailedTurnObservation | None:
-        # A mismatched observation is omitted, never repaired by name/time or
-        # made a reason to skip the existing failed-attempt write.
-        if (
-            current_owner is None
-            or current_owner.name != owner.name
-            or current_owner.created_at != owner.created_at
-            or current_owner.worktree != owner.worktree
-            or current_owner.process_identity != owner.process_identity
-            or current_owner.goal is None
-            or current_owner.goal.id != goal.id
-            or current_owner.goal.revision < goal.revision
-            or current_owner.turn_generation != lease.identity.generation
-            or (
-                current_owner.active_turn.id
-                if current_owner.active_turn is not None
-                else current_owner.last_finished_turn_id
+        # Observation is passive. Its failure never changes reservation
+        # disposition or makes the enclosing failure settlement optional.
+        try:
+            evidence = FailedTurnEvidence(
+                reservation.attempt_id, reservation.goal_id, reservation.generation,
+                owner.name, owner.created_at, owner.worktree, admission,
+                lease.identity.generation, goal.revision, turn_id, reason,
             )
-            != turn_id
-            or current_admission != admission
-            or owner.goal != goal
-            or reservation.goal_id != goal.id
-            or lease.identity.incarnation != owner.incarnation
-            or lease.turn_id != turn_id
-            or lease.admission_generation != admission
-            or type(admission) is not int
-            or admission <= 0
-            or type(lease.identity.generation) is not int
-            or lease.identity.generation <= 0
-            or not math.isfinite(owner.created_at)
-            or not re.fullmatch(r"[0-9a-f]{32}", turn_id)
-            or not isinstance(reason, FailureReason)
-        ):
+        except (ValueError, TypeError):
             return None
-        return cls(
-            reservation,
-            FailedTurnEvidence(
-                reservation.attempt_id,
-                reservation.goal_id,
-                reservation.generation,
-                owner.name,
-                owner.created_at,
-                owner.worktree,
-                admission,
-                lease.identity.generation,
-                goal.revision,
-                turn_id,
-                reason,
-            ),
-        )
+        if owner.goal != goal or reservation.goal_id != goal.id:
+            return None
+        if not lease.matches(evidence.turn):
+            return None
+        if current_owner is None:
+            return None
+        if current_owner.process_identity != owner.process_identity:
+            return None
+        if not evidence.matches_owner(current_owner, current_admission):
+            return None
+        return cls(reservation, evidence)
 
 
 def record_observation(
@@ -134,11 +145,7 @@ def record_observation(
     Savepoint errors which cannot be rolled back still escape to the store's
     normal StorageUncertainError path. They never yield a successful execution.
     """
-    if observation.reservation != reservation or (
-        observation.evidence.attempt_id,
-        observation.evidence.goal_id,
-        observation.evidence.generation,
-    ) != (reservation.attempt_id, reservation.goal_id, reservation.generation):
+    if observation.reservation != reservation or observation.evidence.identity != reservation.identity:
         return
     conn.execute("SAVEPOINT passive_observation")
     try:
@@ -182,14 +189,14 @@ def read_failed_turn_projection(
         return FailedTurnProjection("unavailable", reason)
 
     goal = owner.goal
-    if (
-        not isinstance(owner_status, ThreadStatus)
-        or not owner_status.active
-        or owner.pid <= 0
-        or goal is None
-        or not isinstance(goal.state, (BlockedState, PausedGoal))
-    ):
+    if goal is None or not owner_status.active or owner.pid <= 0:
         return unavailable("owner_or_goal_changed")
+    try:
+        # Resolve lifecycle eligibility before reading the ledger; active goals
+        # must not surface a historical failure, even from a damaged store.
+        goal.state.failure_projection("")
+    except FailureNotObserved as error:
+        return unavailable(str(error))
     if type(admission) is not int or admission <= 0:
         return unavailable("owner_or_goal_changed")
     if failure := _preflight(path):
@@ -215,38 +222,26 @@ def read_failed_turn_projection(
                 except StorageUncertainError:
                     return unavailable("unsupported_schema")
                 generation = Generation.one(conn, goal_id=goal.id)
-                if generation is None or not isinstance(generation.lifecycle, BlockedGeneration):
+                if generation is None:
                     return unavailable("missing_binding")
-                attempt = AttemptRecord.one(conn, attempt_id=generation.attempt_id)
-                if attempt is None or not isinstance(attempt.phase, FailedAttempt):
+                expected = generation.failure_identity()
+                attempt = AttemptRecord.one(conn, attempt_id=expected.attempt_id)
+                if attempt is None:
                     return unavailable("missing_binding")
-                row = FailedTurnEvidence.one(conn, attempt_id=generation.attempt_id)
-                if row is None or (row.goal_id, row.generation) != (goal.id, generation.number):
+                attempt.phase.require_failure()
+                row = FailedTurnEvidence.one(conn, attempt_id=expected.attempt_id)
+                if row is None:
                     return unavailable("missing_binding")
-                if (attempt.reservation.goal_id, attempt.reservation.generation) != (
-                    goal.id,
-                    generation.number,
-                ):
+                if row.identity != expected or attempt.reservation.identity != expected:
                     return unavailable("missing_binding")
-                if (
-                    (row.owner, row.owner_created_at, row.worktree, row.admission)
-                    != (owner.name, owner.created_at, owner.worktree, admission)
-                    or row.goal_revision > goal.revision
-                    or row.turn_generation != owner.turn_generation
-                    or (
-                        owner.active_turn.id
-                        if owner.active_turn is not None
-                        else owner.last_finished_turn_id
-                    )
-                    != row.turn_id
-                ):
+                if not row.matches_owner(owner, admission):
                     return unavailable("owner_or_goal_changed")
                 reason = row.reason.value
             finally:
                 conn.execute("ROLLBACK")
+    except FailureNotObserved as error:
+        return unavailable(str(error))
     except (sqlite3.Error, OSError, ValueError, TypeError):
         return unavailable("invalid_store")
-    if isinstance(goal.state, PausedGoal):
-        state, explanation = goal.state.source.failure_projection()
-        return FailedTurnProjection(state, explanation)
-    return FailedTurnProjection("backend_suspended", reason)
+    state, explanation = goal.state.failure_projection(reason)
+    return FailedTurnProjection(state, explanation)

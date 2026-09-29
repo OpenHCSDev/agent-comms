@@ -27,6 +27,7 @@ from typing import Literal, TypeVar
 from uuid import uuid4
 
 from .compaction_states import sql_names
+from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
@@ -86,6 +87,11 @@ class Generation(GoalLedgerTable, TypedTable):
         f"json_extract(lifecycle,'$.kind') IN {sql_names(GenerationState)}",
     )
 
+    def failure_identity(self) -> GoalAttemptIdentity:
+        self.lifecycle.require_failure()
+        assert self.attempt_id is not None
+        return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
+
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)
         if self.number < 1:
@@ -98,6 +104,10 @@ class Reservation:
     generation: int
     attempt_id: str
     token: str
+
+    @property
+    def identity(self) -> GoalAttemptIdentity:
+        return GoalAttemptIdentity(self.goal_id, self.generation, self.attempt_id)
 
 
 @dataclass(frozen=True)

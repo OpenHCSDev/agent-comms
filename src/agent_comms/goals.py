@@ -89,6 +89,10 @@ class Goal:
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
 
+    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
+        """Later revisions may describe the same failed goal, never a replacement."""
+        return self.id == goal_id and self.revision >= minimum_revision
+
     @property
     def summary(self) -> str:
         return f"Goal · {self.state.declared_name}: {self.text}"

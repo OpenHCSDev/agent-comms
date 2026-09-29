@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .declared_family import DeclaredFamily
+from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
 
 
@@ -14,6 +15,9 @@ from .lifecycle import LifecycleState
 class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
     terminal: ClassVar[bool] = False
     launched: ClassVar[bool] = False
+
+    def require_failure(self) -> None:
+        raise FailureNotObserved("missing_binding")
 
     @classmethod
     @abstractmethod
@@ -35,6 +39,9 @@ class ClaimedAttempt(GoalAttemptPhase):
 
 
 class FailedAttempt(GoalAttemptPhase):
+    def require_failure(self) -> None:
+        return None
+
     @classmethod
     def successors(cls):
         return (ResolvedAttempt,)
