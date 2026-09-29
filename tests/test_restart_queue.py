@@ -1,118 +1,27 @@
-"""Queued restarts are deferred, exact-incarnation and at-most-once."""
-
-from __future__ import annotations
+"""Actual queued owner handoff retains history and accepts a fresh native input."""
 
 import asyncio
 import json
 import os
 import select
+import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+from acp import spawn_agent_process
+from acp.schema import TextContentBlock
 
 from agent_comms import restart_queue as queue
-from agent_comms.comms import wire
+from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
+from agent_comms.private_nk_entrypoint import ROOT_ID_ENV
+from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
-from agent_comms.tools import ToolRequest
+from explicit_private_owner_installed_journey import Subscriber
+from test_backend_native_lifecycle import native_backend
 
 
-def fixture(tmp_path, monkeypatch):
-    root = tmp_path / "wire"
-    root.mkdir(parents=True)
-    owner = SimpleNamespace(
-        name="one",
-        pid=411,
-        created_at=123.5,
-        role=SimpleNamespace(executable=True),
-        process_alive=True,
-        active_turn=object(),
-    )
-
-    def snapshot():
-        return SimpleNamespace(
-            threads={"one": owner},
-            statuses={"one": SimpleNamespace(active=True)},
-            admission_generations={"one": 9},
-        )
-
-    calls = []
-
-    def restart(names, **kwargs):
-        calls.append((names, kwargs, os.environ.copy()))
-        return (SimpleNamespace(previous_pid=411, pid=512),)
-
-    comms = SimpleNamespace(
-        root=root,
-        _wire_lock_path=root / "wire",
-        registry=SimpleNamespace(
-            snapshot=snapshot,
-            require=lambda name: owner,
-        ),
-        owners=SimpleNamespace(
-            restart_owners=restart,
-            _is_local_participant=lambda *a, **k: True,
-        ),
-    )
-    monkeypatch.setattr(queue.subprocess, "Popen", lambda *a, **k: SimpleNamespace(pid=501))
-    monkeypatch.setattr(
-        queue,
-        "_owner_environment",
-        lambda *a: {
-            "AGENT_COMMS_THREAD": "one",
-            "AGENT_COMMS_AGENT_BIN": "/native/pi",
-            "PYTHONPATH": "/original",
-            "OWNER_SETTING": "kept",
-        },
-    )
-    return comms, owner, calls
-
-
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
-def test_busy_owner_defers_then_restarts_with_exact_original_launch(tmp_path, monkeypatch):
-    comms, owner, calls = fixture(tmp_path, monkeypatch)
-    record = queue.enqueue(comms, "one")
-    assert record["state"] == "pending" and record["incarnation"] == [411, 123.5, 9]
-    queue.step(comms)
-    assert not calls and queue.status(comms, "one")[0]["state"] == "pending"
-    owner.active_turn = None
-    queue.step(comms)
-    assert len(calls) == 1
-    assert calls[0][1]["expected_incarnations"] == {"one": (411, 123.5, 9)}
-    assert calls[0][1]["agent_bin"] == "/native/pi"
-    assert calls[0][2]["PYTHONPATH"] == "/original"
-    assert os.environ.get("PYTHONPATH") != "/original"
-    assert queue.status(comms, "one")[0]["state"] == "restarted"
-    queue.step(comms)
-    assert len(calls) == 1
-
-
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
-def test_changed_owner_is_stale_and_uncertain_restart_is_never_retried(tmp_path, monkeypatch):
-    comms, owner, calls = fixture(tmp_path, monkeypatch)
-    queue.enqueue(comms, "one")
-    owner.pid = 412
-    owner.active_turn = None
-    queue.step(comms)
-    assert queue.status(comms, "one")[0]["state"] == "stale"
-    assert not calls
-    comms, owner, calls = fixture(tmp_path / "other", monkeypatch)
-    queue.enqueue(comms, "one")
-    owner.active_turn = None
-
-    def uncertain(*a, **k):
-        calls.append(True)
-        raise RuntimeError("signal may have been sent")
-
-    comms.owners.restart_owners = uncertain
-    queue.step(comms)
-    assert queue.status(comms, "one")[0]["state"] == "uncertain"
-    queue.step(comms)
-    assert calls == [True]
-
-
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
 def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
     root = tmp_path / "wire"
     root.mkdir()
@@ -126,64 +35,166 @@ def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
         assert select.select([fd], [], [], 1)[0] == [fd]
 
 
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
-async def test_real_queue_replaces_idle_owner_without_provider(tmp_path, monkeypatch):
-    from agent_comms.runtime import socket_path
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
+async def test_actual_queued_restart_retains_history_and_accepts_new_input(
+    native_backend, monkeypatch
+):
+    fixture = native_backend
+    comms = Comms(fixture.root)
+    comms.owners.pin_private_nk_launch(
+        comms.root, os.environ[ROOT_ID_ENV], Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    )
+    comms.registry.declare(
+        Thread(
+            "worker",
+            frozenset(),
+            str(fixture.project),
+            session_file=str(fixture.session),
+            model="response-local/fixture",
+            thinking_level="off",
+        )
+    )
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+    monkeypatch.setenv(
+        "AGENT_COMMS_AGENT_ARGS",
+        "--offline --no-extensions --no-skills --no-context-files --no-tools",
+    )
+    start_watcher = queue._start_watcher
+    watchers = []
 
-    package = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not package:
-        pytest.skip("Requires local provider-free Pi test package")
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    session = tmp_path / "session.jsonl"
-    session.write_text("")
-    comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    def retained_watcher(root):
+        watcher = start_watcher(root)
+        watchers.append(watcher)
+        return watcher
+
+    monkeypatch.setattr(queue, "_start_watcher", retained_watcher)
     original = comms.owners.ensure_owner("worker", agent_bin="pi")
+    owners = [original.process_identity]
 
-    async def ready(pid):
-        async with asyncio.timeout(10):
-            while not socket_path(comms.root, pid).exists():
+    async def attach_and_prompt(text):
+        subscriber = Subscriber()
+        environment = dict(os.environ, AGENT_COMMS_ROOT=str(comms.root))
+        async with spawn_agent_process(
+            subscriber,
+            sys.executable,
+            "-m",
+            "agent_comms.acp",
+            env=environment,
+            cwd=fixture.project,
+        ) as (connection, child):
+            async with asyncio.timeout(25):
+                await connection.initialize(protocol_version=1)
+                await connection.load_session(
+                    cwd=str(fixture.project), session_id="worker", mcp_servers=[]
+                )
+                await connection.prompt("worker", [TextContentBlock(type="text", text=text)])
+            assert any(fixture.provider.text in str(update) for update in subscriber.updates)
+
+    async def ready():
+        async with asyncio.timeout(15):
+            while not socket_path(comms.root, comms.registry.require("worker").pid).exists():
                 assert comms.registry.require("worker").process_alive
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.02)
 
     try:
-        await ready(original.pid)
-        # Exercise the queue and execution, without starting an unattended
-        # background watcher in the test process.
-        with monkeypatch.context() as patch:
-            patch.setattr(queue.subprocess, "Popen", lambda *a, **k: None)
+        await ready()
+        await attach_and_prompt("QUEUE_INITIAL_MARKER")
+        before = fixture.session.read_bytes()
+        baseline_posts = fixture.provider.posts
+        assert baseline_posts == 1
+        entered, release = asyncio.Event(), asyncio.Event()
+        provider_handle = fixture.provider.handle
+
+        async def held_response(reader, writer):
+            entered.set()
+            await release.wait()
+            await provider_handle(reader, writer)
+
+        fixture.provider.handle = held_response
+        active = asyncio.create_task(attach_and_prompt("BUSY_BEFORE_QUEUE_HANDOFF"))
+        try:
+            await asyncio.wait_for(entered.wait(), 15)
             request = queue.enqueue(comms, "worker")
-        assert request["state"] == "pending"
+            assert request.state.pending and request.selection.process == original.process_identity
+            await asyncio.to_thread(queue.step, comms)
+            assert queue.status(comms, "worker")[0].state.pending
+            assert comms.registry.require("worker").process_identity == original.process_identity
+        finally:
+            release.set()
+            await active
+            fixture.provider.handle = provider_handle
+        async with asyncio.timeout(20):
+            while not isinstance(
+                (receipt := queue.status(comms, "worker")[0]).state, queue.RestartedRestart
+            ):
+                assert receipt.state.active, receipt
+                await asyncio.sleep(0.02)
+        replacement = comms.registry.require("worker")
+        owners.append(replacement.process_identity)
+        assert receipt.state.previous == original.process_identity
+        assert receipt.state.current == replacement.process_identity
+        assert not original.process_alive
+        await ready()
+        assert replacement.session_file == str(fixture.session)
+        assert fixture.session.read_bytes().startswith(before)
+        await attach_and_prompt("AFTER_QUEUE_NEW_INPUT")
+        assert fixture.provider.posts == baseline_posts + 2
+        messages = fixture.saved_inputs()
+        assert len(messages) == 3
+        assert len({message["inputId"] for message in messages}) == 3
+        assert all(
+            sum(text in str(message) for message in messages) == 1
+            for text in (
+                "QUEUE_INITIAL_MARKER",
+                "BUSY_BEFORE_QUEUE_HANDOFF",
+                "AFTER_QUEUE_NEW_INPUT",
+            )
+        )
+        completed = queue.status(comms, "worker")[0]
         await asyncio.to_thread(queue.step, comms)
-        receipt = queue.status(comms, "worker")[0]
-        assert receipt["state"] == "restarted"
-        assert receipt["old_pid"] == original.pid
-        assert receipt["new_pid"] != original.pid
-        await ready(receipt["new_pid"])
-        assert comms.registry.require("worker").session_file == str(session)
+        assert queue.status(comms, "worker")[0] == completed
+        assert comms.registry.require("worker").process_identity == replacement.process_identity
+        raw = (comms.root / queue.DIRECTORY / f"{request.id}.json").read_text()
+        assert "local-only" not in raw
+        assert FieldCodec.decode(queue.QueuedRestart, json.loads(raw)) == completed
+
+        for watcher in watchers:
+            await asyncio.wait_for(watcher.wait(), 5)
+        # The remaining controls exercise actual queue transitions and owner
+        # signals synchronously, with no unattended background watcher race.
+        monkeypatch.setattr(queue, "_start_watcher", lambda root: None)
+        cancelled = queue.enqueue(comms, "worker")
+        (cancelled,) = queue.cancel(comms, "worker")
+        assert isinstance(cancelled.state, queue.CancelledRestart)
+        await asyncio.to_thread(queue.step, comms)
+        assert comms.registry.require("worker").process_identity == replacement.process_identity
+        stale = queue.enqueue(comms, "worker")
+        await asyncio.to_thread(comms.owners.restart_owners, ["worker"], expected=stale.selection)
+        changed = comms.registry.require("worker")
+        owners.append(changed.process_identity)
+        await ready()
+        await asyncio.to_thread(queue.step, comms)
+        assert isinstance(next(row.state for row in queue.status(comms, "worker") if row.id == stale.id), queue.StaleRestart)
+        assert comms.registry.require("worker").process_identity == changed.process_identity
+        uncertain = queue.enqueue(comms, "worker")
+        before_uncertain = fixture.session.read_bytes()
+
+        def fail_after_retirement(*args, **kwargs):
+            raise RuntimeError("Fixture fault after retirement, before replacement launch")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(comms.owners, "_launch_owner_unlocked", fail_after_retirement)
+            await asyncio.to_thread(queue.step, comms)
+        states = {row.id: row.state for row in queue.status(comms, "worker")}
+        assert isinstance(states[uncertain.id], queue.UncertainRestart)
+        assert not changed.process_alive
+        await asyncio.to_thread(queue.step, comms)
+        assert {row.id: row.state for row in queue.status(comms, "worker")} == states
+        assert fixture.session.read_bytes() == before_uncertain
+        assert fixture.provider.posts == baseline_posts + 2
     finally:
         await asyncio.to_thread(comms.owners.stop, "worker")
-
-
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
-def test_watcher_exits_after_last_request_for_runtime_upgrade(tmp_path, monkeypatch):
-    comms, _, _ = fixture(tmp_path, monkeypatch)
-    queue.run(comms)
-    queue.run(comms)  # The first invocation released its lease.
-
-
-@pytest.mark.skipif(queue.sys.platform != "linux", reason="Linux watcher")
-def test_tool_is_registered_and_queue_record_has_no_secrets(tmp_path, monkeypatch):
-    comms, _, _ = fixture(tmp_path, monkeypatch)
-    names = {type_.declared_name for type_ in ToolRequest.members_with(ToolRequest)}
-    assert {"comms_queue_restart", "comms_restart_queue", "comms_cancel_restart"} <= names
-    monkeypatch.setenv("TEST_SECRET", "should-not-persist")
-    record = queue.enqueue(comms, "one")
-    raw = (comms.root / queue.DIRECTORY / f"{record['id']}.json").read_text()
-    assert "should-not-persist" not in raw
-    assert json.loads(raw)["state"] == "pending"
-    assert queue.cancel(comms, "one")[0]["state"] == "cancelled"
-    queue.step(comms)
-    assert queue.status(comms, "one")[0]["state"] == "cancelled"
+        for watcher in watchers:
+            await watcher.stop()
+        assert all(not identity.alive() for identity in owners)
+        assert all(not watcher.alive() for watcher in watchers)

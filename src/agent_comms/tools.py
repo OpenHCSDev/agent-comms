@@ -703,7 +703,9 @@ class CommsForkTool(ToolRequest):
     name: str = tool_field("Child thread name")
     parent: str = tool_field("Parent thread name", binding=SubjectBinding)
     task: str = tool_field("Optional task for the child", default="")
-    tags: str | None = tool_field("Comma-separated tags; omitted inherits parent tags", default=None)
+    tags: str | None = tool_field(
+        "Comma-separated tags; omitted inherits parent tags", default=None
+    )
     prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms) -> JsonObject:
@@ -765,7 +767,7 @@ class CommsQueueRestartTool(ToolRequest):
     name: str = tool_field("Live agent thread", binding=SubjectBinding)
 
     def apply(self, comms: Comms) -> JsonObject:
-        return {"restart": enqueue_restart(comms, self.name)}
+        return {"restart": FieldCodec.encode(enqueue_restart(comms, self.name))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -775,7 +777,9 @@ class CommsRestartQueueTool(ToolRequest):
     name: str = tool_field("Agent thread")
 
     def apply(self, comms: Comms) -> JsonObject:
-        return {"restarts": restart_status(comms, self.name)}
+        return {
+            "restarts": [FieldCodec.encode(record) for record in restart_status(comms, self.name)]
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -785,7 +789,9 @@ class CommsCancelRestartTool(ToolRequest):
     name: str = tool_field("Agent thread")
 
     def apply(self, comms: Comms) -> JsonObject:
-        return {"cancelled": cancel_restart(comms, self.name)}
+        return {
+            "cancelled": [FieldCodec.encode(record) for record in cancel_restart(comms, self.name)]
+        }
 
 
 @dataclass(frozen=True, kw_only=True)

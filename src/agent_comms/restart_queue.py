@@ -12,10 +12,19 @@ import json
 import os
 import select
 import shlex
-import subprocess
 import sys
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass, field, fields, replace
+from typing import ClassVar
+from collections.abc import Mapping
+
+from .child_process import ProcessIdentity, Platform, ParentedProcess
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
+from .owner_lifecycle import OwnerRestartSelection
+from .private_nk_entrypoint import ROOT_ID_ENV, PACKAGE_ENV
+from .restart_refusals import RestartRefusal
 from pathlib import Path
 
 try:
@@ -30,6 +39,116 @@ from .store_files import _store_lock
 DIRECTORY = "owner-restart-queue"
 
 
+@dataclass(frozen=True, kw_only=True)
+class RestartState(DeclaredFamily, affix="Restart"):
+    reason: str = field(default="", metadata={"wire_omit_default": True})
+    pending: ClassVar[bool] = False
+    attempting: ClassVar[bool] = False
+    active: ClassVar[bool] = False
+
+
+class PendingRestart(RestartState):
+    pending = active = True
+
+
+class AttemptingRestart(RestartState):
+    attempting = active = True
+
+
+class CancelledRestart(RestartState):
+    pass
+
+
+class StaleRestart(RestartState):
+    pass
+
+
+class BlockedRestart(RestartState):
+    pass
+
+
+class UncertainRestart(RestartState):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class RestartedRestart(RestartState):
+    previous: ProcessIdentity
+    current: ProcessIdentity
+
+
+@dataclass(frozen=True)
+class QueuedRestart:
+    id: str
+    selection: OwnerRestartSelection
+    interpreter: str
+    state: RestartState
+
+    @property
+    def name(self) -> str:
+        return self.selection.name
+
+    def transition(self, state: RestartState):
+        return replace(self, state=state)
+
+
+@dataclass(frozen=True)
+class RestartEnvironment:
+    """Declared inheritance policy for the credential-free resident watcher.
+
+    Private launch variable spellings belong to PrivateNkLaunch. Owner credentials
+    stay in /proc and are read only from the exact selected process at execution.
+    """
+
+    home: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"}
+    )
+    path: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "PATH"}
+    )
+    pythonpath: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH"}
+    )
+    virtual_env: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV"}
+    )
+    config: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
+    )
+    root: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT"}
+    )
+    root_id: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": ROOT_ID_ENV}
+    )
+    package: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": PACKAGE_ENV}
+    )
+    owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
+    binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
+    arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
+
+    @classmethod
+    def inherit(cls, environment: Mapping[str, str]):
+        return cls(**{f.name: environment.get(f.metadata["wire_name"]) for f in fields(cls)})
+
+    def encode(self) -> dict[str, str]:
+        return FieldCodec.encode(self)
+
+    @classmethod
+    def require_owner(cls, environment: Mapping[str, str], name: str):
+        if environment.get(cls.owner_key) != name or not environment.get(cls.binary_key):
+            raise ValueError("Owner launch configuration cannot be verified")
+
+    @classmethod
+    def restart_arguments(cls, environment: Mapping[str, str]):
+        arguments = environment.get(cls.arguments_key)
+        return dict(
+            agent_bin=environment[cls.binary_key],
+            agent_args=shlex.split(arguments) if arguments is not None else None,
+        )
+
+
 def _directory(comms: Comms) -> Path:
     path = comms.root / DIRECTORY
     path.mkdir(mode=0o700, exist_ok=True)
@@ -38,12 +157,12 @@ def _directory(comms: Comms) -> Path:
     return path
 
 
-def _save(path: Path, record: dict) -> None:
+def _save(path: Path, record: QueuedRestart) -> None:
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
         with temporary.open("x", encoding="utf-8") as stream:
             os.chmod(temporary, 0o600)
-            json.dump(record, stream, sort_keys=True)
+            json.dump(FieldCodec.encode(record), stream, sort_keys=True)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
@@ -60,7 +179,7 @@ def _records(comms: Comms):
     for path in sorted(_directory(comms).glob("*.json")):
         if path.is_symlink():
             raise ValueError("Restart queue record must not be a symlink")
-        yield path, json.loads(path.read_text(encoding="utf-8"))
+        yield path, FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding="utf-8")))
 
 
 def _owner_environment(pid: int, name: str, interpreter: str) -> dict[str, str]:
@@ -71,12 +190,11 @@ def _owner_environment(pid: int, name: str, interpreter: str) -> dict[str, str]:
     raw = Path(f"/proc/{pid}/environ").read_bytes()
     values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
     env = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
-    if env.get("AGENT_COMMS_THREAD") != name or not env.get("AGENT_COMMS_AGENT_BIN"):
-        raise ValueError("Owner launch configuration cannot be verified")
+    RestartEnvironment.require_owner(env, name)
     return env
 
 
-def enqueue(comms: Comms, name: str) -> dict:
+def enqueue(comms: Comms, name: str) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     directory = _directory(comms)
@@ -86,153 +204,101 @@ def enqueue(comms: Comms, name: str) -> dict:
         status = snapshot.statuses[owner.name]
         if not owner.role.executable or not status.active or not owner.process_alive:
             raise RelationViolationError("Queued restart requires a live agent owner")
-        incarnation = [owner.pid, owner.created_at, snapshot.admission_generations[owner.name]]
+        selection = OwnerRestartSelection.capture(snapshot, owner.name)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
             for _, previous in _records(comms):
-                if previous["name"] == owner.name and previous["state"] in (
-                    "pending",
-                    "attempting",
-                ):
-                    if previous["incarnation"] != incarnation:
+                if previous.name == owner.name and previous.state.active:
+                    if previous.selection != selection:
                         raise RelationViolationError("Previous owner restart requires review")
                     result = previous
                     break
             else:
-                result = {
-                    "version": 1,
-                    "id": uuid.uuid4().hex,
-                    "name": owner.name,
-                    "incarnation": incarnation,
-                    "interpreter": sys.executable,
-                    "state": "pending",
-                }
-                _save(directory / f"{result['id']}.json", result)
+                result = QueuedRestart(
+                    uuid.uuid4().hex, selection, sys.executable, PendingRestart()
+                )
+                _save(directory / f"{result.id}.json", result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
-    subprocess.Popen(
-        [sys.executable, "-m", "agent_comms.restart_queue", str(comms.root.resolve())],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        close_fds=True,
-        # The watcher is resident. It must not inherit provider credentials or
-        # impersonate the requesting thread; the exact owner's environment is
-        # read only at execution time and never persisted.
-        env={
-            key: value
-            for key, value in os.environ.items()
-            if key
-            in {
-                "HOME",
-                "PATH",
-                "PYTHONPATH",
-                "VIRTUAL_ENV",
-                "XDG_CONFIG_HOME",
-                "AGENT_COMMS_ROOT",
-                "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
-                "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
-            }
-        },
-    )
+    _start_watcher(comms.root)
     return result
 
 
-def status(comms: Comms, name: str) -> list[dict]:
+def _start_watcher(root: Path) -> ParentedProcess:
+    # The resident watcher inherits only its declared runtime configuration.
+    return ParentedProcess.launch(
+        (sys.executable, "-m", "agent_comms.restart_queue", str(root.resolve())),
+        env=RestartEnvironment.inherit(os.environ).encode(),
+    )
+
+
+def status(comms: Comms, name: str) -> list[QueuedRestart]:
     canonical = comms.registry.require(name).name
     with _store_lock(_directory(comms) / "queue"):
-        return [record for _, record in _records(comms) if record["name"] == canonical]
+        return [record for _, record in _records(comms) if record.name == canonical]
 
 
-def cancel(comms: Comms, name: str) -> list[dict]:
+def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     """Cancel only requests not yet attempted; never claim a signal was undone."""
     canonical = comms.registry.require(name).name
     directory = _directory(comms)
     changed = []
     with _store_lock(directory / "queue"):
         for path, record in _records(comms):
-            if record["name"] == canonical and record["state"] == "pending":
-                record.update(state="cancelled")
-                _save(path, record)
-                changed.append(record)
+            if record.name == canonical and record.state.pending:
+                cancelled = record.transition(CancelledRestart())
+                _save(path, cancelled)
+                changed.append(cancelled)
     return changed
 
 
 def step(comms: Comms) -> None:
     directory = _directory(comms)
     for path, initial in _records(comms):
-        if initial["state"] != "pending":
+        if not initial.state.pending:
             continue
         with _store_lock(directory / "queue"):
-            record = json.loads(path.read_text(encoding="utf-8"))
-            if record != initial or record["state"] != "pending":
+            record = FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding="utf-8")))
+            if record != initial or not record.state.pending:
                 continue
             snapshot = comms.registry.snapshot()
-            owner = snapshot.threads.get(record["name"])
-            expected = tuple(record["incarnation"])
-            observed = (
-                (owner.pid, owner.created_at, snapshot.admission_generations.get(owner.name))
-                if owner is not None
-                else None
-            )
-            if observed != expected or not snapshot.statuses[owner.name].active:
-                record.update(state="stale", reason="Owner incarnation or status changed")
-            elif owner.active_turn is not None:
+            try:
+                owner = record.selection.require_current(snapshot)
+                owner.require_idle()
+            except RestartRefusal as refusal:
+                record = record.transition(refusal.queue_state())
+            except RelationViolationError:
+                # Idle is checked before persisting an attempt or signalling.
                 continue
-            elif not owner.process_alive:
-                record.update(state="stale", reason="Owner process exited")
-            elif record["interpreter"] != sys.executable:
-                record.update(state="blocked", reason="Watcher runtime changed")
             else:
-                # Persist before any side effect. A crash here leaves an explicit
-                # uncertain attempt, never an automatic replay.
-                record["state"] = "attempting"
+                if not owner.process_alive:
+                    record = record.transition(StaleRestart(reason="Owner process exited"))
+                elif record.interpreter != sys.executable:
+                    record = record.transition(BlockedRestart(reason="Watcher runtime changed"))
+                else:
+                    # Persist before any side effect; crashes cannot authorize replay.
+                    record = record.transition(AttemptingRestart())
             _save(path, record)
-        if record["state"] != "attempting":
+        if not record.state.attempting:
             continue
         try:
-            if not owner.process_alive:
-                raise ValueError("Original owner is no longer alive")
-            original = _owner_environment(owner.pid, owner.name, record["interpreter"])
-            if not owner.process_alive:
-                raise ValueError("Original owner changed during environment read")
-            saved = os.environ.copy()
-            try:
-                os.environ.clear()
-                os.environ.update(original)
-                (receipt,) = comms.owners.restart_owners(
-                    [owner.name],
-                    agent_bin=original["AGENT_COMMS_AGENT_BIN"],
-                    agent_args=(
-                        shlex.split(original["AGENT_COMMS_AGENT_ARGS"])
-                        if "AGENT_COMMS_AGENT_ARGS" in original
-                        else None
-                    ),
-                    expected_incarnations={owner.name: expected},
-                )
-            finally:
-                os.environ.clear()
-                os.environ.update(saved)
-        except RelationViolationError as exc:
-            reason = str(exc)
-            # Only these errors attest that no signal was issued.
-            if reason in (
-                "Wait until the owner is idle before restart.",
-                "Idle owner changed before restart fence.",
-            ):
-                record.update(state="pending")
-            elif reason in (
-                "Queued owner changed before restart.",
-                "Owner selection changed before restart.",
-                "Owner epochs changed before restart.",
-            ):
-                record.update(state="stale", reason=reason)
-            else:
-                record.update(state="uncertain", reason=reason)
+            Platform.current().require(record.selection.process)
+            original = _owner_environment(owner.pid, owner.name, record.interpreter)
+            Platform.current().require(record.selection.process)
+            (receipt,) = comms.owners.restart_owners(
+                [owner.name], expected=record.selection, environment=original,
+                **RestartEnvironment.restart_arguments(original),
+            )
+        except RestartRefusal as refusal:
+            record = record.transition(refusal.queue_state())
         except Exception as exc:
-            record.update(state="uncertain", reason=f"{type(exc).__name__}: {exc}")
+            record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
         else:
-            record.update(state="restarted", old_pid=receipt.previous_pid, new_pid=receipt.pid)
+            record = record.transition(
+                RestartedRestart(
+                    previous=record.selection.process,
+                    current=ProcessIdentity.capture(receipt.pid),
+                )
+            )
         with _store_lock(directory / "queue"):
             _save(path, record)
 
@@ -279,7 +345,7 @@ def run(comms: Comms) -> None:
                 # lease under the same queue lock used by enqueue: a new
                 # request cannot slip between the empty check and release.
                 with _store_lock(directory / "queue"):
-                    if not any(record["state"] == "pending" for _, record in _records(comms)):
+                    if not any(record.state.pending for _, record in _records(comms)):
                         fcntl.flock(lock, fcntl.LOCK_UN)
                         return
                 select.select([fd], [], [])
@@ -298,11 +364,13 @@ def main() -> None:
         directory = _directory(comms)
         with _store_lock(directory / "queue"):
             for path, record in _records(comms):
-                if record["state"] == "pending":
-                    record.update(
-                        state="blocked", reason=f"Watcher failed: {type(exc).__name__}: {exc}"
+                if record.state.pending:
+                    _save(
+                        path,
+                        record.transition(
+                            BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
+                        ),
                     )
-                    _save(path, record)
         raise
 
 
