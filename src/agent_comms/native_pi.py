@@ -344,6 +344,12 @@ class NativePiTerminalFailure(NativePiUnavailable):
 
 @dataclass(frozen=True, slots=True)
 class NativeTurnResult:
+    def require_publishable(self) -> None:
+        from .coordination_errors import IdentityConflict
+
+        if not self.text:
+            raise IdentityConflict("successful model produced no publishable response")
+
     text: str
     context: NativeContextProof
     selected_tool_call_id: str | None = None

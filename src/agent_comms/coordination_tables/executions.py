@@ -36,6 +36,14 @@ class ExecutionOrigin(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class CurrentExecutions(CoordinatorTable, TypedTable):
+    def require_idle(self) -> None:
+        from agent_comms.coordination_errors import StaleFence
+
+        if self.execution_id is not None:
+            raise StaleFence(
+                "selected owner has an unresolved execution; new claims remain pending"
+            )
+
     owner_lookup: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
     execution_id: str | None = dataclass_field(metadata={"sql": Column()})
     attempt_ordinal: int | None = dataclass_field(metadata={"sql": Column()})

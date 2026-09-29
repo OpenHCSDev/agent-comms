@@ -194,12 +194,13 @@ async def test_native_full_four_tools_publish_and_release(
         if not selected_write:
             assert not comms.bus.log.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            snapshot = store.snapshots.get(execution.execution_id)
+            assignment = store.assignments.get(outcome.assignment_id)
+            snapshot = store.snapshots.get(assignment.lifecycle.require_completion().execution_id)
             assert snapshot.execution.lifecycle.completed
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
-            assert execution.assignment.wire_seq == initial.message.seq
+            assert assignment.wire_seq == initial.message.seq
             cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
                 owner_name="beta"
             )

@@ -25,13 +25,14 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.selected_request import SelectedRequest
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
 def failed_owner(directory, output, exit_allowed):
     # Persist the historical pre-settlement failure shape for operator recovery.
-    runtime.SelectedExecution._uncertain_failure = lambda self, error: None
+    SelectedRequest._uncertain_failure = lambda self, error: None
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     runtime._trusted_package = lambda path: path
     fake, _calls = _fake_model()
@@ -224,9 +225,7 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
     # A historical unresolved attempt still blocks; current live failures are
     # settled separately by DurableTurn and do not produce this old shape.
     with monkeypatch.context() as historical:
-        historical.setattr(
-            runtime.SelectedExecution, "_uncertain_failure", lambda self, error: None
-        )
+        historical.setattr(SelectedRequest, "_uncertain_failure", lambda self, error: None)
         with pytest.raises(NativePiUnavailable):
             await runtime.SelectedExecution(
                 root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
@@ -243,7 +242,9 @@ async def test_unresolved_execution_does_not_engage_a_new_source(
         assert len(claims) == 1
         assert type(claims[0].lifecycle) is FullPendingAssignment
         assert len(calls) == 1
-        assert store.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
+        assert (
+            store.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
+        )
 
 
 def replacement_release(root):

@@ -9,11 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from .assignment_states import DeferredAssignment, IgnoredAssignment, TriagePendingAssignment
+from .assignment_states import DeferredAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
+from .durable_turn import DurableTurn
 from .native_admission_rules import (
     NativeBindingCheck,
     NativeClaimCheck,
@@ -29,9 +30,9 @@ from .native_prompt_binding import (
     read_expected_prompt_binding,
 )
 from .native_runtime_input import NativeRuntimeInput
-from .durable_turn import DurableTurn
 from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
+from .selected_triage import SelectedTriage
 from .text_digest import TextDigest
 
 
@@ -64,6 +65,9 @@ class NativeSendStage(ABC):
     @abstractmethod
     def fail_terminal(self) -> None:
         """Settle only the stage's proved, reaped failure; never grant replay."""
+
+    def fail_unknown(self, bus, owner, witness) -> None:
+        owner.require_registry(bus._registry)
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = secrets.token_hex(16)
@@ -229,33 +233,14 @@ class TriageNativeSend(NativeSendStage):
         input_id: str,
         token_digest: str,
         context: NativeContextProof,
-        decision: str,
+        decision: SelectedTriage,
     ) -> None:
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             current = store.assignments.get(self.assignment.assignment_id)
             self.require_phase(store, current)
-            row.commit_context(db, context, verdict=decision.lower())
-            if decision == "IGNORE":
-                # Both declared edges are atomic. Never expose a retryable
-                # TRIAGE_PENDING row after the native request was sent.
-                now = store.session.now(current.updated_at_ms)
-                WakeAssignment.update(
-                    db,
-                    where="assignment_id=?",
-                    parameters=(current.assignment_id,),
-                    lifecycle=TriagePendingAssignment(),
-                    revision=current.revision + 1,
-                    updated_at_ms=now,
-                )
-                WakeAssignment.update(
-                    db,
-                    where="assignment_id=?",
-                    parameters=(current.assignment_id,),
-                    lifecycle=IgnoredAssignment(),
-                    revision=current.revision + 2,
-                    updated_at_ms=store.session.now(now),
-                )
+            row.commit_context(db, context, verdict=decision.declared_name.lower())
+            decision.settle(store, db, current)
 
     def matches_attempt(self, row: NativeInputRecord) -> bool:
         return row.execution_id is None and row.attempt_ordinal is None
@@ -291,6 +276,13 @@ class FullNativeSend(NativeSendStage):
 
     def fail_terminal(self) -> None:
         self.progress.fail_terminal()
+
+    def fail_unknown(self, bus, owner, witness) -> None:
+        from .coordination_response import _response_boundary
+
+        with _response_boundary(bus) as registry:
+            witness.require_live(registry, self.fence)
+            self.progress.fail_unknown()
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         snapshot, _ = store.attempts.require_fence(self.fence)

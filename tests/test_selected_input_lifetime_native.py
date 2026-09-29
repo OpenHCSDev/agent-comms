@@ -17,10 +17,10 @@ from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_delivery_cohort
+from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import PassiveWake
 from compaction_loopback import LoopbackProvider
@@ -178,10 +178,13 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in delivery.decisions)
     with Coordination(str(journey.root / "coordination.sqlite3")) as store:
-        assignment = store.assignments.get(failed.assignment.assignment_id)
+        failed_input = NativeRuntimeInput.one(
+            store.session._connection, input_id=caught.value.context.input_id
+        )
+        assignment = store.assignments.get(failed_input.assignment_id)
         if journey.direct or triage_pass:
             assert type(assignment.lifecycle) is FailedAssignment
-            snapshot = store.snapshots.get(failed.execution_id)
+            snapshot = store.snapshots.get(failed_input.execution_id)
             assert not snapshot.is_current and not snapshot.can_retry
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
@@ -218,6 +221,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
 @pytest.mark.parametrize("direct", [True])
 async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
     await journey.seed()
+    prior_ids = {row.input_id for row in journey.records()}
     journey.send("This new input loses its native transport after provider dispatch")
     pending_provider = LoopbackProvider(status=0)
     journey.replies.append(pending_provider)
@@ -230,8 +234,9 @@ async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
         with pytest.raises(NativePiUnavailable) as error:
             await running
         assert not isinstance(error.value, NativePiTerminalFailure)
+        (failed_input,) = [row for row in journey.records() if row.input_id not in prior_ids]
         with Coordination(str(journey.root / "coordination.sqlite3")) as store:
-            snapshot = store.snapshots.get(failed.execution_id)
+            snapshot = store.snapshots.get(failed_input.execution_id)
             assert not snapshot.is_current and not snapshot.can_retry
             assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
             assert not snapshot.replay.replay_safe
@@ -243,7 +248,7 @@ async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
         journey.text("AFTER_UNKNOWN_COMPLETED")
         result = await journey.execution().run()
         assert result.disposition is CompletedAssignment
-        assert result.input_id != failed.input_id
+        assert result.input_id != failed_input.input_id
         assert all(row in journey.records() for row in before)
         assert all(not child.alive() for child in journey.children)
         print("SAVED_NATIVE_EOF: UNKNOWN preserved, old input not replayed, new input completed")
@@ -251,3 +256,47 @@ async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
         if not running.done():
             running.cancel()
         await asyncio.gather(running, return_exceptions=True)
+
+
+@pytest.mark.parametrize("direct", [False])
+async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
+    journey.text('{"decision":"FULL"}')
+    journey.text("FRESH_TRIAGE_FULL_COMPLETED")
+    result = await SelectedExecution(
+        root=journey.root,
+        wire_root_id=journey.root_id,
+        owner_name="beta",
+        native_package=journey.package,
+        fresh_private_enrollment=True,
+    ).run()
+    assert result.disposition is CompletedAssignment
+    assert result.fresh_session is not None
+    rows = journey.records()
+    assert {row.stage for row in rows} == {"triage", "full"}
+    assert len(rows) == 2 and len(journey.received) == 2
+    assert {Path(row.session_file) for row in rows} == {result.fresh_session.path}
+    assert all(not child.alive() for child in journey.children)
+    assert journey.comms.registry.require("beta").active_turn is None
+    print(
+        "FRESH_NATIVE: enrollment retained through triage and full, original input completed once"
+    )
+
+
+@pytest.mark.parametrize("direct", [False])
+async def test_actual_selected_first_start_preserves_unreviewed_cli_refusal(journey):
+    with pytest.raises(NativePiUnavailable, match="first-source CLI builtins are unreviewed"):
+        await SelectedExecution(
+            root=journey.root,
+            wire_root_id=journey.root_id,
+            owner_name="beta",
+            native_package=journey.package,
+            fresh_private_enrollment=True,
+            selected_thinking_level="low",
+        ).run()
+    assert not journey.received
+    assert journey.comms.registry.require("beta").active_turn is None
+    before = journey.records()
+    assert len(before) == 1
+    assert await journey.execution().run() is None
+    assert journey.records() == before and not journey.received
+    print("FIRST_START_REFUSAL: no provider call, lease released, reserved input never replayed")
