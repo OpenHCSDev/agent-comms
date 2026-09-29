@@ -1,0 +1,135 @@
+.F
+=================================== FAILURES ===================================
+__________ test_native_channel_input_receipt_and_revocation[deliver] ___________
+
+case = 'deliver'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f096047ab10>
+
+    @pytest.mark.parametrize(
+        "case", ["deliver", "batch", "goal", "stop", "reopen", "steer", "rename", "batch_rename"]
+    )
+    async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
+        native = os.environ.get("AC_NATIVE_STACK_BIN")
+        if not native:
+            pytest.skip("Requires prepared native Pi stack")
+        with TemporaryDirectory(prefix="ac-native-channel-", dir="/var/tmp") as directory:
+            root = Path(directory)
+            requests = []
+            release = threading.Event()
+            started = threading.Event()
+    
+            class Handler(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    requests.append(request)
+                    started.set()
+                    assert release.wait(15), "Test did not release localhost response"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.end_headers()
+                    chunk = {
+                        "id": f"response-{len(requests)}",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "z-ai/glm-5.3-flash",
+                        "choices": [
+                            {"index": 0, "delta": {"content": "RECEIVED"}, "finish_reason": "stop"}
+                        ],
+                        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                    }
+                    self.wfile.write(f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+                    self.wfile.flush()
+    
+                def log_message(self, *_args):
+                    pass
+    
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            serving = threading.Thread(target=server.serve_forever, daemon=True)
+            serving.start()
+            config = root / "agent"
+            config.mkdir(mode=0o700)
+            auth_file = config / "auth.json"
+            auth_file.write_text("{}")
+            auth_file.chmod(0o600)
+            (config / "models.json").write_text(
+                json.dumps(
+                    {
+                        "providers": {
+                            "openrouter": {"baseUrl": f"http://127.0.0.1:{server.server_port}/v1"}
+                        }
+                    }
+                )
+            )
+            for key, value in {
+                "PI_CODING_AGENT_DIR": str(config),
+                "OPENROUTER_API_KEY": "local-only",
+                "AGENT_COMMS_ROOT": str(root / "wire"),
+                "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            }.items():
+                monkeypatch.setenv(key, value)
+            install_local_provider(monkeypatch, root, f"http://127.0.0.1:{server.server_port}/v1")
+            args = [
+                "--offline",
+                "--no-extensions",
+                "--no-skills",
+                "--no-context-files",
+                "--no-prompt-templates",
+                "--no-tools",
+                "--provider",
+                "openrouter",
+                "--model",
+                "z-ai/glm-5.3-flash",
+                "--thinking",
+                "off",
+            ]
+            comms = wire(root / "wire")
+            agent = canonical_agent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+            monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", agent._private_nk_wire_root_id)
+            monkeypatch.setenv(
+                "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(agent._private_nk_native_package)
+            )
+            monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+            monkeypatch.setattr(agent.inputs, "schedule_wake", lambda _session: None)
+            project = root / "worker"
+            project.mkdir()
+            turn = None
+            warmup_proc = None
+            try:
+                await agent.new_session(str(project))
+                comms.channels.update_tags("worker", add=frozenset({"team"}))
+                comms.threads.register(Thread("peer", frozenset({"team"}), str(project)))
+                turn = asyncio.create_task(agent.inputs.run_owned_input("worker", "worker", "Warmup"))
+                assert await asyncio.to_thread(started.wait, 15)
+                if case != "steer":
+                    release.set()
+                    await asyncio.wait_for(turn, 20)
+                    warmup_proc = agent.turns.persistent_backends["worker"].custody.idle().child.proc
+                    message = comms.messaging.send_user_message(
+                        "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
+                    )
+                else:
+                    message = comms.messaging.send_message(
+                        "peer", "#team", "@worker STEER_CHANNEL_REQUEST"
+                    )
+                messages = [message]
+                if case in {"batch", "batch_rename"}:
+                    messages.append(
+                        comms.messaging.send_user_message(
+                            "#team", "SECOND_CHANNEL_REQUEST", worktree=str(project)
+                        )
+                    )
+                if case in {"rename", "batch_rename"}:
+                    comms.registry.rename("worker", "renamed-worker")
+                await agent.inputs.drain_inbox("worker")
+                key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
+>               assert agent.inputs.dispositions.read().rows[key].declared_name == "reserved"
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'bus:2:owner:0x1.aaecaa867155bp+30'
+
+tests/test_stack_channel_delivery.py:138: KeyError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+=========================== short test summary info ============================
+FAILED tests/test_stack_channel_delivery.py::test_native_channel_input_receipt_and_revocation[deliver]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 passed in 29.31s

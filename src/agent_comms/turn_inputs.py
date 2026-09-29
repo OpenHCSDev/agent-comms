@@ -31,12 +31,21 @@ class ForwardedInput:
 
 @dataclass
 class InputForwarding:
+    queue: asyncio.Queue[str | dict[str, Any]] | None = None
     pending: list[tuple[str | None, str, str | dict[str, Any], str]] = field(default_factory=list)
     accepted: set[str] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     generation: int = 0
     started: bool = False
     uncertain: bool = False
+
+    @property
+    def unresolved(self) -> bool:
+        return bool(self.pending) or (self.queue is not None and not self.queue.empty())
+
+    @property
+    def settled(self) -> bool:
+        return not self.uncertain and not self.unresolved
 
     def acknowledge(self, response: Response) -> None:
         if response.success is True and any(item[0] == response.id for item in self.pending):
@@ -45,7 +54,7 @@ class InputForwarding:
 
     async def forward(self, session: TurnSession) -> None:
         while True:
-            message = await session.steering_queue.get()
+            message = await self.queue.get()
             original = dict(message) if isinstance(message, dict) else message
             wire = (
                 dict(original)
@@ -168,13 +177,3 @@ class InputForwarding:
                 self.started = True
                 return (True, input_id)
         return (False, None)
-
-    def restore(self, session: TurnSession) -> None:
-        if session.steering_queue is None or not self.pending:
-            return
-        queued: list[str | dict[str, Any]] = []
-        while not session.steering_queue.empty():
-            queued.append(session.steering_queue.get_nowait())
-        for item in queued:
-            session.steering_queue.put_nowait(item)
-        self.pending.clear()

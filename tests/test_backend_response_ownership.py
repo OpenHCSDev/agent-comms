@@ -4,6 +4,8 @@ import ast
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
+from agent_comms.native_attestation import ObservedAttestation
 
 from agent_comms import pi_commands as commands
 from agent_comms.backend import TurnSession
@@ -26,9 +28,11 @@ def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(
     session = TurnSession(
         NativePiRpcLaunch(("unused",), Path.cwd(), {}, Path.cwd(), None, Path.cwd()), "unused"
     )
-    session.initial_session_observed = True
-    session.initial_session_id = "selected"
-    session.initial_session_file = "/selected.jsonl"
+    session.native = SimpleNamespace(
+        attestation=ObservedAttestation(
+            StateData(session_id="selected", session_file="/selected.jsonl")
+        )
+    )
     import json
 
     def response(owner, identity, path):
@@ -66,11 +70,14 @@ def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
         "initialize_output",
         "record_failure",
         "fail_reason",
+        "reusable",
+        "can_retain",
     }
     assert not any(
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in retired
         for node in ast.walk(backend)
     )
+    assert "_ACTIVE_INPUT_RESTORERS" not in (root / "backend.py").read_text()
     turn = next(
         node
         for node in backend.body
