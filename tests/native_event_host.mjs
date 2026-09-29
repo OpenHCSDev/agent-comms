@@ -22,8 +22,9 @@ const runtime = await pi.ModelRuntime.create({
   authPath: join(agentDir, 'auth.json'), modelsPath: join(agentDir, 'models.json'),
   modelsStorePath: join(agentDir, 'models-store.json'),
 });
-await runtime.setRuntimeApiKey('openrouter', 'localhost-only');
-const settings = pi.SettingsManager.inMemory({compaction: {enabled: false}, retry: {enabled: false}});
+await runtime.setRuntimeApiKey(option('--provider'), 'localhost-only');
+const settings = pi.SettingsManager.inMemory(process.env.S1_NATIVE_SETTINGS ?
+  JSON.parse(process.env.S1_NATIVE_SETTINGS) : {compaction: {enabled: false}, retry: {enabled: false}});
 const extensions = [];
 if (process.env.S1_DELAY_SETTLEMENT) {
   extensions.push((api) => {

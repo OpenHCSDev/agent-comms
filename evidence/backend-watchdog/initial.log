@@ -1,0 +1,107 @@
+....................F................................................... [ 36%]
+........................................................................ [ 73%]
+...F................................................                     [100%]
+=================================== FAILURES ===================================
+_ TestRpcParsing.test_large_end_of_turn_record_does_not_fail_completed_reply[True] _
+
+self = <test_backend.TestRpcParsing object at 0x7f830a0a9f40>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/baseline-tests/test_large_end_of_turn_record_1')
+managed_finish = True
+
+        @pytest.mark.parametrize("managed_finish", [False, True])
+        async def test_large_end_of_turn_record_does_not_fail_completed_reply(
+            self, tmp_path, managed_finish
+        ):
+            stub = _stub(
+                tmp_path,
+                f"#!{sys.executable}\n"
+                + """
+    import json, sys
+    def emit(value):
+        print(json.dumps(value), flush=True)
+    for line in sys.stdin:
+        command = json.loads(line)["type"]
+        if command == "prompt":
+            emit({"type": "response", "command": "prompt", "id": "agent-comms-prompt", "success": True})
+            emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+            emit({"type": "message_update", "assistantMessageEvent": {
+                "type": "text_delta", "delta": "completed reply"}})
+            # Pi includes the turn's messages in one large agent_end record.
+            emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
+            emit({"type": "agent_end", "messages": [{"role": "assistant", "content": "x" * 1048576}]})
+            emit({"type": "agent_settled"})
+        elif command == "get_session_stats":
+            emit({"type": "response", "command": command, "success": True,
+                "data": {"contextUsage": {"tokens": 64330, "contextWindow": 1048576}}})
+            break
+    """,
+            )
+            finish = asyncio.Event() if managed_finish else None
+            events = []
+            async for event in backend.stream_agent_events(
+                stub, [], "task", str(tmp_path), finish_event=finish
+            ):
+                events.append(event)
+                if isinstance(event, ae.StreamSettled) and finish is not None:
+                    finish.set()
+            assert [event.text for event in events if isinstance(event, ae.Chunk)] == [
+                "completed reply"
+            ]
+>           assert any(
+                event.context_used == 64330 for event in events if isinstance(event, ae.AgentInfo)
+            )
+E           assert False
+E            +  where False = any(<generator object TestRpcParsing.test_large_end_of_turn_record_does_not_fail_completed_reply.<locals>.<genexpr> at 0x7f8308c72880>)
+
+tests/test_backend.py:307: AssertionError
+_ TestNativeInputBinding.test_inbox_queued_at_settled_but_not_dispatched_is_not_success _
+
+self = <test_backend.TestNativeInputBinding object at 0x7f8309e7c1f0>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/baseline-tests/test_inbox_queued_at_settled_b0')
+
+        async def test_inbox_queued_at_settled_but_not_dispatched_is_not_success(self, tmp_path):
+            stub = _stub(
+                tmp_path,
+                f"#!{sys.executable}\n"
+                + """
+    import json, sys
+    send = lambda event: print(json.dumps(event), flush=True)
+    state = json.loads(sys.stdin.readline())
+    send({"type":"response","command":"get_state","id":state["id"],
+          "success":True,"data":{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+    prompt = json.loads(sys.stdin.readline())
+    send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
+    send({"type":"message_start","message":{"role":"user", "content":prompt["message"],
+          "inputId":prompt["inputId"]}})
+    send({"type":"message_end","message":{"role":"assistant", "stopReason":"stop"}})
+    send({"type":"agent_settled"})
+    for line in sys.stdin:
+        request = json.loads(line)
+        if request["type"] == "get_session_stats":
+            send({"type":"response","command":"get_session_stats","success":True,"data":{}})
+            break
+    """,
+            )
+            queue: asyncio.Queue[str] = asyncio.Queue()
+            finish = asyncio.Event()
+            events = []
+            async with asyncio.timeout(4):
+                async for event in backend.stream_agent_events(
+                    stub, [], "initial turn", str(tmp_path), steering_queue=queue, finish_event=finish
+                ):
+                    events.append(event)
+                    if isinstance(event, ae.StreamSettled):
+                        queue.put_nowait("late inbox update")
+                        finish.set()
+            assert events[-1].ok is False
+>           assert events[-1].reason_code == "queued_input_start_missing"
+E           AssertionError: assert 'pi_invalid_rpc_event' == 'queued_input_start_missing'
+E             
+E             - queued_input_start_missing
+E             + pi_invalid_rpc_event
+
+tests/test_backend.py:2265: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_backend.py::TestRpcParsing::test_large_end_of_turn_record_does_not_fail_completed_reply[True]
+FAILED tests/test_backend.py::TestNativeInputBinding::test_inbox_queued_at_settled_but_not_dispatched_is_not_success
+2 failed, 194 passed in 28.92s

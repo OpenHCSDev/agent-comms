@@ -1,0 +1,276 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 52 items
+
+tests/test_s1_event_behavior.py ..........EEEE.
+tests/test_agent_events.py ........
+tests/test_backend_settlement.py ....
+tests/test_goal_standby_liveness.py .........................
+
+==================================== ERRORS ====================================
+_ ERROR at setup of test_actual_native_stream_reaches_current_consumer_and_settlement[200] _
+file /home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py, line 277
+  @pytest.mark.parametrize("provider_status", [200, 503])
+  async def test_actual_native_stream_reaches_current_consumer_and_settlement(
+      native_backend, monkeypatch, provider_status
+  ):
+      native = native_backend
+      native.provider.status = provider_status
+      comms = Comms(native.root)
+      owner = CommsAgent(
+          comms,
+          agent_bin="pi",
+          private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+          private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+      )
+      session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+      name = owner.sessions.bindings[session.session_id]
+      execution = OwnedTurn(
+          owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+      )
+      assert execution.admit()
+      execution.begin()
+      execution.prepare_prompt()
+      execution.open_stream()
+      progress = TurnProgress(execution)
+      waiting_owner(execution)
+      try:
+          records = await native.run("native acceptance")
+          for event in records:
+              await progress.consume(event)
+          assert progress.terminal_ok is (provider_status == 200)
+          assert progress.settled
+          assert comms.goals.goal_wait("waiting") is not None
+          await progress.publish_result()
+          await owner.turns.settle_turn(
+              session.session_id,
+              name,
+              execution.turn_id,
+              execution.turn_lease,
+              stream_settled=progress.settled,
+              terminal_fence=progress.terminal_fence,
+          )
+          assert comms.goals.goal_wait("waiting") is None
+          assert native.provider.posts == 1
+          assert len(native.starts) == 1
+          rows = comms.bus.log.full_history()
+          if provider_status == 200:
+              assert any(row.body == "Native response lifecycle." for row in rows)
+          else:
+              assert any(row.notice and "[Open diagnostic]" in row.body for row in rows)
+              assert not any(row.body == "Native response lifecycle." for row in rows)
+      finally:
+          await owner.shutdown()
+E       fixture 'native_backend' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _deferred_candidate_scheduler_is_explicit, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, comms, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, native_rpc_fixture, owner_turn, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, root, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, wired
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py:277
+_ ERROR at setup of test_actual_native_stream_reaches_current_consumer_and_settlement[503] _
+file /home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py, line 277
+  @pytest.mark.parametrize("provider_status", [200, 503])
+  async def test_actual_native_stream_reaches_current_consumer_and_settlement(
+      native_backend, monkeypatch, provider_status
+  ):
+      native = native_backend
+      native.provider.status = provider_status
+      comms = Comms(native.root)
+      owner = CommsAgent(
+          comms,
+          agent_bin="pi",
+          private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+          private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+      )
+      session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+      name = owner.sessions.bindings[session.session_id]
+      execution = OwnedTurn(
+          owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+      )
+      assert execution.admit()
+      execution.begin()
+      execution.prepare_prompt()
+      execution.open_stream()
+      progress = TurnProgress(execution)
+      waiting_owner(execution)
+      try:
+          records = await native.run("native acceptance")
+          for event in records:
+              await progress.consume(event)
+          assert progress.terminal_ok is (provider_status == 200)
+          assert progress.settled
+          assert comms.goals.goal_wait("waiting") is not None
+          await progress.publish_result()
+          await owner.turns.settle_turn(
+              session.session_id,
+              name,
+              execution.turn_id,
+              execution.turn_lease,
+              stream_settled=progress.settled,
+              terminal_fence=progress.terminal_fence,
+          )
+          assert comms.goals.goal_wait("waiting") is None
+          assert native.provider.posts == 1
+          assert len(native.starts) == 1
+          rows = comms.bus.log.full_history()
+          if provider_status == 200:
+              assert any(row.body == "Native response lifecycle." for row in rows)
+          else:
+              assert any(row.notice and "[Open diagnostic]" in row.body for row in rows)
+              assert not any(row.body == "Native response lifecycle." for row in rows)
+      finally:
+          await owner.shutdown()
+E       fixture 'native_backend' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _deferred_candidate_scheduler_is_explicit, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, comms, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, native_rpc_fixture, owner_turn, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, root, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, wired
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py:277
+_ ERROR at setup of test_manual_bridge_real_native_terminal_releases_dependency[False] _
+file /home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py, line 330
+  @pytest.mark.parametrize("enabled", [False, True])
+  async def test_manual_bridge_real_native_terminal_releases_dependency(
+      native_backend, monkeypatch, enabled
+  ):
+      import json
+
+      from agent_comms.manual_compaction_bridge import compact_context
+      from agent_comms.transcript_updates import StartedTranscriptUpdate
+
+      native = native_backend
+      await native.run("History to compact")
+      await native.persistent.close()
+      config = Path(os.environ["AGENT_COMMS_NATIVE_CONFIG_DIR"])
+      settings = json.loads((config / "settings.json").read_text())
+      settings["compaction"] = {"enabled": enabled, "reserveTokens": 128, "keepRecentTokens": 32}
+      (config / "settings.json").write_text(json.dumps(settings))
+      comms = Comms(native.root)
+      owner = CommsAgent(
+          comms,
+          agent_bin="pi",
+          private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+          private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+      )
+      session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+      name = owner.sessions.bindings[session.session_id]
+      comms.threads.set_thread_model(name, "response-local/fixture")
+      comms.threads.attach_session(name, str(native.session))
+      observed = []
+      emit = owner._emit_event
+
+      async def observe(session_id, event, **kwargs):
+          await emit(session_id, event, **kwargs)
+          observed.append(type(event))
+          if isinstance(event, StartedTranscriptUpdate):
+              comms.threads.register(
+                  Thread(
+                      "waiting",
+                      frozenset(),
+                      str(native.project),
+                      process_identity=ProcessIdentity.capture(os.getpid()),
+                  )
+              )
+              goal = comms.goals.update_goal("waiting", SetGoalAction(text="Wait for maintenance"))
+              comms.goals.update_goal(
+                  "waiting",
+                  StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
+              )
+          if isinstance(event, ae.ManualCompactionEnd):
+              assert comms.goals.goal_wait("waiting") is not None
+
+      monkeypatch.setattr(owner, "_emit_event", observe)
+      try:
+          async with asyncio.timeout(40):
+              result = await compact_context(owner.turns, session.session_id)
+          print("manual_bridge_result", enabled, result["ok"], native.provider.posts, result.get("error", ""))
+          assert type(result["ok"]) is bool
+          assert comms.registry.require(name).active_turn is None
+          assert comms.goals.goal_wait("waiting") is None
+          assert comms.registry.require("waiting").goal.state.active
+          assert observed.index(ae.ManualCompactionEnd) < observed.index(ae.TurnSettled)
+          assert len(native.saved_inputs()) == 1  # Manual maintenance never admits/replays input.
+      finally:
+          await owner.shutdown()
+E       fixture 'native_backend' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _deferred_candidate_scheduler_is_explicit, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, comms, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, native_rpc_fixture, owner_turn, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, root, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, wired
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py:330
+_ ERROR at setup of test_manual_bridge_real_native_terminal_releases_dependency[True] _
+file /home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py, line 330
+  @pytest.mark.parametrize("enabled", [False, True])
+  async def test_manual_bridge_real_native_terminal_releases_dependency(
+      native_backend, monkeypatch, enabled
+  ):
+      import json
+
+      from agent_comms.manual_compaction_bridge import compact_context
+      from agent_comms.transcript_updates import StartedTranscriptUpdate
+
+      native = native_backend
+      await native.run("History to compact")
+      await native.persistent.close()
+      config = Path(os.environ["AGENT_COMMS_NATIVE_CONFIG_DIR"])
+      settings = json.loads((config / "settings.json").read_text())
+      settings["compaction"] = {"enabled": enabled, "reserveTokens": 128, "keepRecentTokens": 32}
+      (config / "settings.json").write_text(json.dumps(settings))
+      comms = Comms(native.root)
+      owner = CommsAgent(
+          comms,
+          agent_bin="pi",
+          private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+          private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+      )
+      session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+      name = owner.sessions.bindings[session.session_id]
+      comms.threads.set_thread_model(name, "response-local/fixture")
+      comms.threads.attach_session(name, str(native.session))
+      observed = []
+      emit = owner._emit_event
+
+      async def observe(session_id, event, **kwargs):
+          await emit(session_id, event, **kwargs)
+          observed.append(type(event))
+          if isinstance(event, StartedTranscriptUpdate):
+              comms.threads.register(
+                  Thread(
+                      "waiting",
+                      frozenset(),
+                      str(native.project),
+                      process_identity=ProcessIdentity.capture(os.getpid()),
+                  )
+              )
+              goal = comms.goals.update_goal("waiting", SetGoalAction(text="Wait for maintenance"))
+              comms.goals.update_goal(
+                  "waiting",
+                  StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
+              )
+          if isinstance(event, ae.ManualCompactionEnd):
+              assert comms.goals.goal_wait("waiting") is not None
+
+      monkeypatch.setattr(owner, "_emit_event", observe)
+      try:
+          async with asyncio.timeout(40):
+              result = await compact_context(owner.turns, session.session_id)
+          print("manual_bridge_result", enabled, result["ok"], native.provider.posts, result.get("error", ""))
+          assert type(result["ok"]) is bool
+          assert comms.registry.require(name).active_turn is None
+          assert comms.goals.goal_wait("waiting") is None
+          assert comms.registry.require("waiting").goal.state.active
+          assert observed.index(ae.ManualCompactionEnd) < observed.index(ae.TurnSettled)
+          assert len(native.saved_inputs()) == 1  # Manual maintenance never admits/replays input.
+      finally:
+          await owner.shutdown()
+E       fixture 'native_backend' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _deferred_candidate_scheduler_is_explicit, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, comms, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, native_rpc_fixture, owner_turn, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, root, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, wired
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/home/ts/wt/comms-t2-boundary-sol-20260928/tests/test_s1_event_behavior.py:330
+=========================== short test summary info ============================
+ERROR tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement[200]
+ERROR tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement[503]
+ERROR tests/test_s1_event_behavior.py::test_manual_bridge_real_native_terminal_releases_dependency[False]
+ERROR tests/test_s1_event_behavior.py::test_manual_bridge_real_native_terminal_releases_dependency[True]
+========================= 48 passed, 4 errors in 5.22s =========================

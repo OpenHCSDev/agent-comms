@@ -1,0 +1,36 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 10 items
+
+tests/test_s1_event_behavior.py .F.......F                               [100%]
+
+=================================== FAILURES ===================================
+___________ test_current_stream_effects_then_terminal_release[tool] ____________
+tests/test_s1_event_behavior.py:142: in test_current_stream_effects_then_terminal_release
+    assert len(syncs) == value.goal_syncs
+E   AssertionError: assert 5 == 4
+E    +  where 5 = len(['test_current_stream_effects_th1', 'test_current_stream_effects_th1', 'test_current_stream_effects_th1', 'test_current_stream_effects_th1', 'test_current_stream_effects_th1'])
+E    +  and   4 = <test_s1_event_behavior.ToolCase object at 0x7f3a8efd12b0>.goal_syncs
+______ test_actual_native_stream_reaches_current_consumer_and_settlement _______
+tests/test_s1_event_behavior.py:192: in test_actual_native_stream_reaches_current_consumer_and_settlement
+    owner = CommsAgent(comms,agent_bin='pi',private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),private_nk_native_package=Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
+                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/messaging.py:96: in initialize_private_initial_protocol
+    return self.bus.publisher.initialize_private_protocol()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/publisher.py:172: in initialize_private_protocol
+    return self._initialize_private_protocol_unlocked()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/publisher.py:177: in _initialize_private_protocol_unlocked
+    self.log.require_fresh_private_root_unlocked()
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/wire_log.py:743: in require_fresh_private_root_unlocked
+    raise RelationViolationError(
+E   agent_comms.errors.RelationViolationError: Existing unmarked bus data is read-only until its history is rewritten into the current source format.
+=========================== short test summary info ============================
+FAILED tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release[tool]
+FAILED tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement
+========================= 2 failed, 8 passed in 3.97s ==========================

@@ -20,7 +20,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
 ):
     comms, agent, _root_id = _session(tmp_path)
     counts = {"accept": 0, "cursor": 0}
-    accept, cursor = acp._accept_visible_initials, acp.advance_current_native_cursor
+    accept, cursor = acp._accept_visible_initials, acp.NativeSourceCursor.advance
 
     def accepted(*args, **kwargs):
         counts["accept"] += 1
@@ -34,7 +34,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
         raise AssertionError("idle observation must not hash the native package")
 
     monkeypatch.setattr(acp, "_accept_visible_initials", accepted)
-    monkeypatch.setattr(acp, "advance_current_native_cursor", covered)
+    monkeypatch.setattr(acp.NativeSourceCursor, "advance", covered)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", no_package)
     assert await agent.inputs.drain_inbox("beta") == 0

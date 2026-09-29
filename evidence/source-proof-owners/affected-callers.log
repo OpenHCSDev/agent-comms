@@ -1,0 +1,82 @@
+........F....F..................................                         [100%]
+=================================== FAILURES ===================================
+_______ test_private_rename_intent_fences_inflight_reserved_native_send ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-4ao691p_')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef3570a990>
+
+    async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def held_before_raw_send(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", held_before_raw_send)
+        invoke_tool(
+            comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}
+        )
+        running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+            reserved_count = len(NativeRuntimeInput.select(store.session._connection))
+            assert reserved_count == 1
+    
+        def fail_before_sql(*args, **kwargs):
+            raise OSError("synthetic SQL rename CAS outage")
+    
+>       monkeypatch.setattr(Coordination, "advance_owner_generation", fail_before_sql)
+E       AttributeError: <class 'agent_comms.coordinator.Coordination'> has no attribute 'advance_owner_generation'
+
+tests/test_acp_private_nk_delivery.py:281: AttributeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+____ test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-_pho37k7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef35752510>
+
+    async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model()
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+        updates = []
+    
+        async def record_update(*, session_id, update):
+            if cursor := cursor_fact(update.field_meta):
+                updates.append(cursor.envelope)
+    
+        monkeypatch.setattr(agent._runtime, "session_update", record_update)
+        comms.messaging.send_message("sender", "beta", "first")
+        assert await agent.inputs.drain_inbox("beta") == 1
+        assert updates[-1].status == "proven"
+        before = len(updates)
+        with _store_lock(comms.root / "wire"):
+            # This is an actual contended flock in the canonical read path, not a
+            # mocked error. A new attachment cannot claim an unread observation.
+            loaded = agent._private_cursor_metadata("beta", "beta")
+            assert loaded.status == "unavailable"
+            await agent._publish_private_cursor("beta", "beta")
+        assert len(updates) == before
+        await agent._publish_private_cursor("beta", "beta")
+>       assert len(updates) == before  # Same proof; no spurious transition on unlock.
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 3 == 2
+E        +  where 3 = len([CursorEnvelope(scope=CursorScope(session_id='beta', wire_root_id='3f1c68ede7d443e3a9ca1757fdd827b9', owner=OwnerIdent...995a6943f2f1588ade9f0d71e963f0ff6eb3d933dd6bfcd', stage='full', session_id='isolated-session', request_generation=1)))])
+
+tests/test_acp_private_nk_delivery.py:497: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:214 Optional awareness omitted; original delivered alone (ValueError)
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_private_rename_intent_fences_inflight_reserved_native_send
+FAILED tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof
+2 failed, 46 passed in 19.89s

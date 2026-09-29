@@ -1,0 +1,29 @@
+{
+  "baseline": "03b6f9f4",
+  "candidate": "7c8765ff",
+  "normalizations": [
+    "absolute isolated session path",
+    "elapsed_ms wall clock"
+  ],
+  "cases": {
+    "failure": {
+      "equal": true
+    },
+    "stall": {
+      "equal": true
+    },
+    "provider_retry": {
+      "equal": true
+    },
+    "overflow_compaction": {
+      "equal": true
+    },
+    "compaction_failure": {
+      "equal": true
+    },
+    "compaction_abort": {
+      "equal": true
+    }
+  },
+  "scope": "Decoded AgentEvent receipts from real native executions; not raw RPC transcript replay. Steering is covered by actual assertions in both runs, not this serialized comparison."
+}

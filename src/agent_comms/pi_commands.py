@@ -181,18 +181,20 @@ class Prompt(PiCommand):
         from . import turn_phase as phases
 
         if response.id == session.prompt_id:
-            session.last_model_progress = session.now
+            session.watchdog.progress()
             if response.success:
                 session.initial_prompt_acknowledged = True
-                session.prompt_accepted = True
-                session.phase = phases.ModelWaitPhase()
+                session.watchdog.prompt_accepted = True
+                session.watchdog.phase = phases.ModelWaitPhase()
             else:
                 session.error_message = (
                     "Image prompt failed; backend diagnostics withheld."
                     if session.image_input_sent or session.inherited_image_sensitive
                     else str(response.error or "Prompt was rejected")
                 )
-                yield session.turn_state("failed", "prompt_rejected", 0, event_phase="shutdown")
+                yield session.watchdog.state(
+                    session, "failed", "prompt_rejected", 0, event_phase="shutdown"
+                )
                 yield events.Error(text=session.error_message)
                 session.finished = True
                 return

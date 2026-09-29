@@ -4,12 +4,16 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core03b6f9f (299 idle cursor recovery plus298 combined
-288/290/292/294 ownership and acceptance), Toad06003aff (138 observation owners;137 actual history paint),
+Latest installed pair: core664623a3 (301 coordinator owners,303 watchdog;
+300/305 current behavioral acceptance), Toad436514d8 (140 live output owners;
+138 observations and137 actual history paint),
 Textualc9743801, native5fde. All five launchers select immutable
-runtime-observation-20260928. Four core03b6f9f owners remain in the prior
-runtime-coordinator-idle slot; UI138 activation does not restart them.
-No runtime store reset, history rewrite, or input replay. Existing Toad loads138 on its next normal restart;137 already fixed actual paint.
+runtime-watchdog-20260928. Four idle owners restarted through canonical fenced
+restart; actual installed native queue/reconnect/DM/channel/stopped-reopen passes,
+all four fresh ACP attachments pass, actual PR95 saved response paint passes.
+No runtime store reset, history rewrite, or input replay. Existing Toad loads140
+on its next normal restart.129 workspace remains separate until its actual
+reconstructed-view reconnect and Project scroll failures are fixed.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
@@ -134,8 +138,19 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
 - [ ] Tesla: finish129 integrated workspace/resource scope retaining116/126 and
   merged136 sidebar retirement. Main still excludes129; no partial-install claim.
   Actual64-tab native path, editor/draft/undo, shell and terminal continuity plus
-  actual painted replies on return are required. Use110 measurements.136 merged
-  into129, not main; reconcile116/126/110 only after complete scope lands.
+  actual painted replies on return are required. Use110 measurements.136/139 merged
+  into129, not main; combined installed sidebar64 gate passes. Parent integrates
+  main140 with129 in own persistent shipping tree and runs final paired native gate.
+  Full116/110 remains explicitly unfinished: persistent WorkspaceScreen/source
+  rebinding,30–40ms median and worst-case spike improvement. Tesla owns continuation;
+  shipping129 does not close those requirements. Reconcile126 after ancestry lands.
+  Parent combined129+140/core301 actual native64 passes: one rich view,8 inputs,
+  same Agent/editor/undo, cropped reply paint;64 UI180146176bytes,243ms median.
+  Current-core303 short native path found a fresh-view reconnect bug: ACP drops
+  snapshots during reconnect and readiness skips a newly mounted view. Carver141
+  owns correction. Noether owns reproduced Project scroll11→2 restoration error.
+  Parent migrates stale test view handle, retains red receipts, and does not
+  claim the full combined workspace ready or deployed.
 - [x] Noether: finish50 authenticated loopback browser path. Merged and installed;
   actual Chromium/ACP initialization/keyboard/authentication/streamed downloads pass.
   No external exposure and no model-turn claim from the browser-only acceptance.
@@ -181,14 +196,31 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   ownership merged and installed, procedural executor and duplicate stats removed.
 - [x] Wegener:299 idle observation recovery merged and installed; real periodic
   lock/socket regression and unchanged-idle no-extra-read assertion pass.
-- [ ] Boyle: remaining planned MutationStore ownership/deletion closure.
-- [ ] Dalton: execute original47 legality predicate/coupling behavior independently
-  at current rule/SQLite boundaries; source accounting alone is insufficient.
-- [ ] Wegener: remaining S2 backend ownership and actual failure/retry/steering
-  acceptance, coordinated separately from Boyle/Dalton.
+- [x] Boyle:301 MutationStore ownership/deletion closure merged420476a7. Deleted
+  1711-line aggregate and obsolete247-line replay script; real stores share one
+  transaction owner. Production1951 deleted/2204 added for separate ownership.
+  Current300 caller migration and165 installed checks pass; real native peer/restart
+  passes. Installed with303/Toad140; actual native and all live attachments pass.
+- [x] Dalton:300 executes original47 legality predicate/coupling behavior at
+  current family/SQLite boundaries,111 installed checks. Merged e1115526.
+- [ ] Boyle: next S7 native cursor/proven coverage ownership with original fences.
+- [x] Dalton:305 current S1 event/settlement acceptance merged19281c46;16 final
+  installed checks, actual native manual success/refusal, relay and native terminal
+  release. OPEN2 resolved using current active-goal policy, not historical pause.
+- [ ] Dalton: current binding S4 PartB acceptance gaps; no retired format or
+  deleted-consumer reconstruction.
+- [x] Wegener:303 S2 watchdog owns clocks/progress/cancellation/timeouts, old root
+  methods deleted;196 backend checks,11 installed native then5 after clock fix.
+  Merged664623a3 and installed. Backend shrinks165lines, total322added255deleted.
+- [ ] Wegener: remaining S2 native launch/attestation/retention/outcome ownership,
+  independent of Boyle cursor and Dalton acceptance.
 - [x] Carver:138 goal/delivery observation owners and complete caller deletion,
   actual live/saved response paint added to maintained native tests; duplicate
  98-line renderer pilot deleted. Merged/installed; parent real NRA reads pass.
+- [x] Carver:140 live output ownership merged436514d8. Deleted root response/thought
+  fields, posting helpers, lock and new_block; actual callers use public stream
+  family and shared output owner. Native ACP/UI/cropped paint passes. Installed
+  independently of unfinished129; Conversation shrinks42 lines.
 - [ ] Carver: next whole planned T4 Conversation ownership/deletion surface,
   independent of Tesla workspace and Noether sidebar; no façade extraction.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA

@@ -24,7 +24,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import CurrentNativeCursor
-from agent_comms.native_source_cursor import read_current_native_cursor
+from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_native_prompt_binding import _fake_model
@@ -103,8 +103,8 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     assert second_turn is not None and second_turn.cursor_status == "proven"
     assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        current = read_current_native_cursor(
-            Comms(root).bus, reopened, wire_root_id=root_id, owner_name="alpha"
+        current = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha"
         )
         assert current is not None
         assert current.covered_seq == current.injected_seq == second.seq
@@ -166,8 +166,8 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        retained = read_current_native_cursor(
-            Comms(root).bus, reopened, wire_root_id=root_id, owner_name="alpha"
+        retained = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha"
         )
         assert retained is not None and retained.input_id == turn.input_id
         assert retained.injected_seq == first.seq
@@ -178,7 +178,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
     root, root_id, comms, first, lookup = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            read_current_native_cursor(comms.bus, store, wire_root_id=root_id, owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
             is None
         )
     index = root / "private_bus_checkpoint.sqlite3"
@@ -186,8 +186,8 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
         db.execute("DELETE FROM addressed WHERE lookup=? AND seq=?", (lookup, first.seq))
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         with pytest.raises((RelationViolationError, IdentityConflict)):
-            read_current_native_cursor(
-                Comms(root).bus, reopened, wire_root_id=root_id, owner_name="alpha"
+            NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+                owner_name="alpha"
             )
         assert (
             reopened.session._connection.execute(

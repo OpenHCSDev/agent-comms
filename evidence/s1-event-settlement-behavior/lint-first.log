@@ -1,0 +1,198 @@
+E501 Line too long (255 > 100)
+  --> tests/test_s1_event_behavior.py:49:101
+   |
+47 | …
+48 | …
+49 | …'Read after summary'),ae.CompactionEnd(summary='summary'),ae.AgentInfo(model='model',session_name='saved',context_used=20,context_size=1000),ae.Chunk('answer'))
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+50 | …
+51 | …
+   |
+
+E501 Line too long (176 > 100)
+  --> tests/test_s1_event_behavior.py:59:101
+   |
+57 | …
+58 | …
+59 | …),ae.AgentInfo(model='model',session_name='saved',context_used=20,context_size=1000),ae.Chunk('answer'))
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+E501 Line too long (154 > 100)
+  --> tests/test_s1_event_behavior.py:64:101
+   |
+62 | …
+63 | …
+64 | …ed('same',False,'level unavailable'),ae.ModelChanged('same',False,'late'),ae.Chunk('answer'))
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+E501 Line too long (161 > 100)
+  --> tests/test_s1_event_behavior.py:88:101
+   |
+86 | …
+87 | …
+88 | …root_id=comms.messaging.initialize_private_initial_protocol(),private_nk_native_package=tmp_path)
+   |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+89 | …ers=[])
+90 | …
+   |
+
+E501 Line too long (105 > 100)
+   --> tests/test_s1_event_behavior.py:101:101
+    |
+ 99 |     finally:
+100 |         if comms.registry.require(name).active_turn is not None:
+101 |             await owner.turns.settle_turn(session.session_id,name,execution.turn_id,execution.turn_lease)
+    |                                                                                                     ^^^^^
+102 |         await owner.shutdown()
+    |
+
+E501 Line too long (167 > 100)
+   --> tests/test_s1_event_behavior.py:143:101
+    |
+141 | …
+142 | …
+143 | … 'provider failed',value.successful,'backend_failed' if not value.successful else None,diagnostic))
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+144 | …
+145 | …
+    |
+
+E501 Line too long (182 > 100)
+   --> tests/test_s1_event_behavior.py:155:101
+    |
+153 | …n messages)
+154 | …
+155 | …cution.turn_id,execution.turn_lease,stream_settled=progress.settled,terminal_fence=progress.terminal_fence)
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+156 | …
+157 | …
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_s1_event_behavior.py:164:23
+    |
+162 |             await thinking
+163 |     else:
+164 |         model.cancel();thinking.cancel()
+    |                       ^
+    |
+
+E501 Line too long (124 > 100)
+   --> tests/test_s1_event_behavior.py:182:101
+    |
+180 |     kwargs=dict(stream_settled=progress.settled,terminal_fence=progress.terminal_fence)
+181 |     if after_stream:
+182 |         await runner.settle_turn(execution.session_id,execution.thread_name,execution.turn_id,execution.turn_lease,**kwargs)
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^
+183 |     else:
+184 |         with pytest.raises(ConnectionError,match='client disconnected'):
+    |
+
+E501 Line too long (128 > 100)
+   --> tests/test_s1_event_behavior.py:185:101
+    |
+183 |     else:
+184 |         with pytest.raises(ConnectionError,match='client disconnected'):
+185 |             await runner.settle_turn(execution.session_id,execution.thread_name,execution.turn_id,execution.turn_lease,**kwargs)
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+186 |     assert comms.goals.goal_wait('waiting') is None
+187 |     goal = comms.registry.require('waiting').goal
+    |
+
+E501 Line too long (120 > 100)
+   --> tests/test_s1_event_behavior.py:193:101
+    |
+192 | @pytest.mark.parametrize('provider_status',[200,503])
+193 | async def test_actual_native_stream_reaches_current_consumer_and_settlement(native_backend,monkeypatch,provider_status):
+    |                                                                                                     ^^^^^^^^^^^^^^^^^^^^
+194 |     native = native_backend
+195 |     native.provider.status = provider_status
+    |
+
+E501 Line too long (191 > 100)
+   --> tests/test_s1_event_behavior.py:197:101
+    |
+195 | …
+196 | …
+197 | …AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],private_nk_native_package=Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+198 | …
+199 | …
+    |
+
+E501 Line too long (102 > 100)
+   --> tests/test_s1_event_behavior.py:200:101
+    |
+198 |     session = await owner.new_session(cwd=str(native.project),mcp_servers=[])
+199 |     name = owner.sessions.bindings[session.session_id]
+200 |     execution = OwnedTurn(owner.turns,session.session_id,name,'native work',reply_targets=('#comms',))
+    |                                                                                                     ^^
+201 |     assert execution.admit()
+202 |     execution.begin();execution.prepare_prompt();execution.open_stream()
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_s1_event_behavior.py:202:22
+    |
+200 |     execution = OwnedTurn(owner.turns,session.session_id,name,'native work',reply_targets=('#comms',))
+201 |     assert execution.admit()
+202 |     execution.begin();execution.prepare_prompt();execution.open_stream()
+    |                      ^
+203 |     progress = TurnProgress(execution)
+204 |     waiting_owner(execution)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/test_s1_event_behavior.py:202:49
+    |
+200 |     execution = OwnedTurn(owner.turns,session.session_id,name,'native work',reply_targets=('#comms',))
+201 |     assert execution.admit()
+202 |     execution.begin();execution.prepare_prompt();execution.open_stream()
+    |                                                 ^
+203 |     progress = TurnProgress(execution)
+204 |     waiting_owner(execution)
+    |
+
+E501 Line too long (172 > 100)
+   --> tests/test_s1_event_behavior.py:213:101
+    |
+211 | …
+212 | …
+213 | …n.turn_id,execution.turn_lease,stream_settled=progress.settled,terminal_fence=progress.terminal_fence)
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+214 | …
+215 | …
+    |
+
+E501 Line too long (106 > 100)
+   --> tests/test_s1_event_behavior.py:228:101
+    |
+227 | @pytest.mark.parametrize('enabled',[False,True])
+228 | async def test_manual_bridge_real_native_terminal_releases_dependency(native_backend,monkeypatch,enabled):
+    |                                                                                                     ^^^^^^
+229 |     import json
+    |
+
+E501 Line too long (191 > 100)
+   --> tests/test_s1_event_behavior.py:242:101
+    |
+240 | …
+241 | …
+242 | …AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],private_nk_native_package=Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+243 | …
+244 | …
+    |
+
+E501 Line too long (105 > 100)
+   --> tests/test_s1_event_behavior.py:272:101
+    |
+272 | async def test_recovery_failure_report_preserves_original_and_does_not_duplicate(owner_turn,monkeypatch):
+    |                                                                                                     ^^^^^
+273 |     execution,progress = owner_turn
+274 |     emitted = []
+    |
+
+Found 23 errors (4 fixed, 19 remaining).
