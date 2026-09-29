@@ -454,10 +454,10 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
         builder = _projection(index, store, owner, 0, initial.message.seq)
         original = OptionalAwarenessProjection._open_obligations
 
-        def race(self, db, lookup, owner_name):
+        def race(self, db, lookup):
             with Coordination(str(index.bus.log.path.with_name("coordination.sqlite3"))) as other:
                 other.participants.advance_generation(lookup, owner.name, expected_generation=1)
-            return original(self, db, lookup, owner_name)
+            return original(self, db, lookup)
 
         monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
         stale = builder(initial, assignment, owner)
