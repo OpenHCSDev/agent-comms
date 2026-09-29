@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
-from .backend import PersistentPiSession, _session_revision
+from .backend import PersistentPiSession
 from .field_codec import FieldCodec
+from .native_pi import NativePiUnavailable
+from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
 from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, PiCommand
@@ -123,21 +125,13 @@ async def _exchange_observation(
     if not 0 < timeout <= 5:
         raise ValueError("Bounded selected Pi deadline required")
     async with persistent.lock:
-        proc, reader = persistent.proc, persistent.reader
-        if (
-            persistent.reopen_required is not None
-            or proc is None
-            or proc.returncode is not None
-            or proc.stdin is None
-            or reader is None
-            or persistent.session_file != session_file
-            or persistent.session_id != session_id
-            or persistent.revision is None
-            or persistent.revision != _session_revision(session_file)
-            or persistent.launch_key is None
-            or persistent.launch_key[0].package != expected_package
-        ):
-            raise SelectedPiProbeUnknownError("Selected idle Pi child is unavailable or stale")
+        try:
+            retained = persistent.custody.idle().selected(
+                NativeSessionIdentity(session_id, session_file), expected_package
+            )
+        except NativePiUnavailable as error:
+            raise SelectedPiProbeUnknownError(str(error)) from error
+        proc, reader = retained.child.proc, retained.child.reader
         transmitted = False
         try:
             proc.stdin.write(PiRpcChannel.command_bytes(request))
@@ -150,17 +144,14 @@ async def _exchange_observation(
                     else await reader.readline(max_bytes=max_response)
                 )
             outcome = decode(raw, request)
-            if proc.returncode is not None or persistent.revision != _session_revision(
-                session_file
-            ):
+            if not retained.current:
                 raise SelectedPiProbeUnknownError("Selected Pi source changed during dry run")
             return outcome
         except BaseException as error:
             if transmitted:
                 # Poison before a cancellable await. No next borrower may use
                 # old in-memory history or treat this as a paid-summary receipt.
-                persistent.reopen_required = session_file
-                persistent.reopen_session_id = session_id
+                persistent.require_reopen(session_file)
                 # close() retains its independently shielded reap task if
                 # cancellation interrupts this caller's join.
                 with suppress(asyncio.CancelledError):
@@ -205,7 +196,7 @@ async def read_selected_compaction_decision(
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
-    session_id = persistent.session_id
+    session_id = persistent.custody.idle().identity.session_id
     if (
         not session_id
         or not session_file

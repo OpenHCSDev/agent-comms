@@ -1,0 +1,203 @@
+"""Native child custody: empty, borrowed, retained, retiring and strict reopen."""
+
+from __future__ import annotations
+
+import asyncio
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from .child_process import AttachedChild
+from .native_attestation import NativeAttestation, PendingAttestation, SavedSessionReopenError
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
+from .pi_rpc import PiRpcChannel
+
+if TYPE_CHECKING:
+    from .backend import _FileRevision
+
+
+@dataclass
+class PiSessionChild:
+    proc: AttachedChild
+    reader: PiRpcChannel
+    stderr_task: asyncio.Task[str]
+    key: tuple[NativePiRpcLaunch, tuple[int, int]]
+    attestation: NativeAttestation
+    sensitive_diagnostics: bool = False
+
+    @classmethod
+    async def start(cls, key, expected):
+        launch, _ = key
+        proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
+        assert proc.stdout is not None and proc.stderr is not None
+        return cls(
+            proc,
+            PiRpcChannel(proc.stdout),
+            asyncio.create_task(cls.stderr_tail(proc.stderr)),
+            key,
+            PendingAttestation(expected),
+        )
+
+    @staticmethod
+    async def stderr_tail(stream: asyncio.StreamReader) -> str:
+        tail = b""
+        while chunk := await stream.read(4096):
+            tail = (tail + chunk)[-16000:]
+        return tail.decode(errors="replace").strip()
+
+    async def close(self) -> None:
+        await self.proc.stop()
+        await asyncio.gather(self.stderr_task, return_exceptions=True)
+
+
+class NativeCustody(ABC):
+    """State owns the legal child capabilities, including its retirement successor."""
+
+    @property
+    @abstractmethod
+    def available(self) -> bool: ...
+
+    def reuse(self, key, session_file: str | None) -> PiSessionChild | None:
+        return None
+
+    def idle(self) -> RetainedNative:
+        raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
+
+    async def expected(
+        self, launch, session_file, require_input_id
+    ) -> NativeSessionIdentity | None:
+        return None
+
+    def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
+        return successor if successor is not None else self
+
+    async def closed(self) -> NativeCustody:
+        return self
+
+    def reopen(self, session_file: str) -> ReopenNative:
+        return ReopenNative(session_file)
+
+    def retains(self, child: PiSessionChild) -> bool:
+        return False
+
+
+class EmptyNative(NativeCustody):
+    available = False
+
+
+@dataclass
+class ReopenNative(NativeCustody):
+    available = False
+    session_file: str
+    session_id: str | None = None
+
+    async def expected(self, launch, session_file, require_input_id):
+        if session_file != self.session_file or not require_input_id:
+            raise SavedSessionReopenError(
+                "Saved native session requires explicit validated reopen."
+            )
+        try:
+            identity = await asyncio.to_thread(
+                validate_native_reopen,
+                launch.package,
+                session_file,
+                expected_session_id=self.session_id,
+            )
+        except ValueError as error:
+            raise SavedSessionReopenError(
+                "Saved native session failed strict reopen validation."
+            ) from error
+        return NativeSessionIdentity(identity, session_file)
+
+    def reopen(self, session_file: str) -> ReopenNative:
+        if session_file != self.session_file:
+            raise ValueError("Idle manager belongs to a different saved session")
+        return self
+
+
+@dataclass
+class RetiringNative(NativeCustody):
+    available = False
+    task: asyncio.Task[None]
+    successor: NativeCustody
+
+    def retire(self, successor=None):
+        if successor is not None:
+            self.successor = successor
+        return self
+
+    async def closed(self):
+        await asyncio.shield(self.task)
+        return self.successor
+
+    def reopen(self, session_file):
+        return self.successor.reopen(session_file)
+
+
+@dataclass
+class BorrowedNative(NativeCustody):
+    child: PiSessionChild
+    successor: NativeCustody
+    available = True
+
+    def retire(self, successor=None):
+        return RetiringNative(
+            asyncio.create_task(self.child.close()),
+            self.successor if successor is None else successor,
+        )
+
+    def reopen(self, session_file):
+        identity = self.child.attestation.identity
+        if identity is not None:
+            if identity.session_file != session_file:
+                raise ValueError("Idle manager belongs to a different saved session")
+            return ReopenNative(session_file, identity.session_id)
+        return self.successor.reopen(session_file)
+
+
+@dataclass
+class RetainedNative(NativeCustody):
+    child: PiSessionChild
+    identity: NativeSessionIdentity
+    revision: tuple[_FileRevision, _FileRevision | None]
+    available = True
+
+    @property
+    def current(self) -> bool:
+        from .backend import _session_revision
+
+        return self.child.proc.alive() and self.revision == _session_revision(
+            self.identity.session_file
+        )
+
+    def idle(self):
+        if not self.current:
+            return super().idle()
+        return self
+
+    def selected(self, identity: NativeSessionIdentity, package: Path) -> RetainedNative:
+        if self.identity != identity or self.child.key[0].package != package:
+            raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
+        return self.idle()
+
+    def reuse(self, key, session_file):
+        if self.child.key == key and self.identity.session_file == session_file and self.current:
+            self.child.attestation = PendingAttestation(self.identity)
+            return self.child
+        return None
+
+    def retire(self, successor=None):
+        return RetiringNative(
+            asyncio.create_task(self.child.close()),
+            EmptyNative() if successor is None else successor,
+        )
+
+    def reopen(self, session_file):
+        if self.identity.session_file != session_file:
+            raise ValueError("Idle manager belongs to a different saved session")
+        return ReopenNative(session_file, self.identity.session_id)
+
+    def retains(self, child):
+        return self.child is child

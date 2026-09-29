@@ -94,7 +94,7 @@ class AgentSettled(PiEvent):
         if session.persistent_session is not None and session.inputs.pending:
             session.skip = True
             return
-        session.agent_settled_seen = True
+        session.admission = session.admission.settle(self)
         if not session.stats.requested:
             session.watchdog.tick()
             session.watchdog.progress()
@@ -182,7 +182,7 @@ class CompactionEnd(PiEvent):
         ):
             yield session.usage.charge(session.result.usage)
         if session.completed:
-            session.watchdog.compacted(session.initial_input_started)
+            session.watchdog.compacted(session.admission.started)
         session.usage.invalidate()
         yield session.context_info()
         session.reason = self.reason
@@ -198,7 +198,7 @@ class CompactionEnd(PiEvent):
             context_used=None,
             will_retry=self.will_retry is True,
         )
-        if not session.completed and (not session.initial_input_started):
+        if not session.completed and (not session.admission.started):
             session.output.record_failure(
                 failures.PrestartCompactionFailed(
                     "Context compaction failed before this input started; inspect ACP diagnostics."
@@ -342,16 +342,11 @@ class ExtensionUiRequest(PiEvent):
         if self.method == "setStatus":
             if (
                 not session.live_status_seen
-                and (not session.agent_settled_seen)
+                and (not session.admission.settled)
                 and (not session.stats.requested)
                 and session.require_input_id
-                and session.native.attestation.state is not None
-                and session.initial_prompt_acknowledged
-                and session.initial_input_started
-                and session.initial_session_observed
-                and isinstance(session.initial_session_id, str)
-                and bool(session.initial_session_id)
-                and (not session.session_identity_uncertain)
+                and session.admission.started
+                and session.native.attestation.identity is not None
                 and (not session.inputs.uncertain)
             ):
                 session.receipt = _pi_mcp_live_receipt(self, session.original_input_id)
@@ -377,12 +372,8 @@ class ExtensionUiRequest(PiEvent):
             session.request_id not in session.ui_seen
             and len(session.ui_seen) < 64
             and (session.ui_request is not None)
-            and session.initial_prompt_acknowledged
-            and session.initial_input_started
-            and session.initial_session_observed
-            and isinstance(session.initial_session_id, str)
-            and session.initial_session_id
-            and (not session.session_identity_uncertain)
+            and session.admission.started
+            and session.native.attestation.identity is not None
             and (not session.inputs.uncertain)
         ):
             session.ui_seen.add(session.request_id)
@@ -425,21 +416,20 @@ class MessageEnd(PiEvent):
             session.committed_text = session.message.text
             if (
                 session.message.stop_reason == "toolUse"
-                and session.initial_prompt_acknowledged
-                and session.initial_input_started
+                and session.admission.started
                 and (not session.inputs.uncertain)
-                and (not session.session_identity_uncertain)
+                and (not session.native.attestation.uncertain)
                 and session.output.matches_message(session.committed_text)
             ):
                 yield events.CommittedProgress(text=session.committed_text)
             session.output.start_message()
             session.provider_usage = session.message.usage
-            if session.provider_usage is not None and (not session.session_identity_uncertain):
+            if session.provider_usage is not None and (not session.native.attestation.uncertain):
                 yield session.usage.charge(session.provider_usage)
             session.stop_reason = session.message.stop_reason
             session.output.final_assistant_stop = (
                 session.stop_reason == "stop"
-                and session.initial_input_started
+                and session.admission.started
                 and (not session.inputs.uncertain)
             )
             if session.stop_reason in {"error", "aborted"}:
@@ -461,7 +451,7 @@ class MessageEnd(PiEvent):
                     if session.message.usage is not None
                     else None
                 )
-                if session.tokens is not None and (not session.session_identity_uncertain):
+                if session.tokens is not None and (not session.native.attestation.uncertain):
                     session.usage.used = session.tokens
                     session.usage.confirmed = session.tokens
                     yield session.context_info()
@@ -496,8 +486,7 @@ class MessageStart(PiEvent):
             session.user_text = session.message.text
             session.native_id = session.message.input_id
             if (
-                session.initial_prompt_acknowledged
-                and (not session.initial_input_started)
+                session.admission.awaiting_start
                 and (not session.inputs.uncertain)
                 and (session.user_text == session.task)
                 and (not session.require_input_id or session.native_id == session.original_input_id)
@@ -512,7 +501,7 @@ class MessageStart(PiEvent):
                     await session.abort_stalled_rpc()
                     session.finished = True
                     return
-                session.initial_input_started = True
+                session.admission = session.admission.start(self)
                 if session.native_start is not None:
                     yield events.InputStarted(id=None)
                 if (
@@ -523,7 +512,7 @@ class MessageStart(PiEvent):
                     session.steering_task = asyncio.create_task(session.inputs.forward(session))
                     if session.owner is not None:
                         _ACTIVE_STEERING[session.owner] = session.steering_task
-            elif session.initial_input_started and (not session.inputs.uncertain):
+            elif session.admission.started and (not session.inputs.uncertain):
                 session.matched, session.input_id = session.inputs.mark_started(session, self)
                 if session.matched:
                     yield events.InputStarted(id=session.input_id)
@@ -562,7 +551,7 @@ class MessageStart(PiEvent):
         return self.message is not None and self.message.assistant
 
     def observe_abort(self, session: TurnSession) -> None:
-        if not session.session_identity_uncertain:
+        if not session.native.attestation.uncertain:
             matched, identity = session.inputs.mark_started(session, self)
             if matched:
                 session.started_during_abort.append(identity)
@@ -583,7 +572,7 @@ class MessageUpdate(PiEvent):
             session.tokens = (
                 message_usage.positive_tokens if message_usage is not None else None
             ) or (self.usage.positive_tokens if self.usage is not None else None)
-            if session.tokens is not None and (not session.session_identity_uncertain):
+            if session.tokens is not None and (not session.native.attestation.uncertain):
                 session.usage.used = session.tokens
                 session.usage.provisional = True
                 yield session.context_info()

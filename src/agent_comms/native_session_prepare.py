@@ -13,6 +13,14 @@ from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NativeStartupAdmission
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
+from .turn_admission import PromptAdmission
+
+
+class PreparedSession(PromptAdmission):
+    acknowledged = False
+
+    def permits_retention(self, session):
+        return session.output.clean
 
 
 class NativeSessionPreparation(backend.TurnSession):
@@ -21,29 +29,18 @@ class NativeSessionPreparation(backend.TurnSession):
     async def input_ready(self) -> None:
         state = self.native.attestation.state
         assert state is not None
+        identity = self.native.attestation.identity
+        if identity is None or identity.session_file != self.session_file:
+            raise NativePiUnavailable("Native preparation did not attest the saved session")
         if (
-            state.session_file != self.session_file
-            or not state.session_id
-            or state.is_streaming is not False
+            state.is_streaming is not False
             or state.is_compacting is not False
             or state.pending_message_count != 0
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
-        self.active_session_file = state.session_file
-        self.initial_session_file = state.session_file
-        self.initial_session_id = state.session_id
+        self.active_session_file = identity.session_file
+        self.admission = PreparedSession()
         self.finished = True
-
-    def can_retain(self) -> bool:
-        return bool(
-            self.native.attestation.state is not None
-            and not self.output.failure_text
-            and not self.session_identity_uncertain
-            and self.native.proc.returncode is None
-            and self.initial_session_id
-            and self.active_session_file == self.session_file
-            and self.revision is not None
-        )
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.retained:

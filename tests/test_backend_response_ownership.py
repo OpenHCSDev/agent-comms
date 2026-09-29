@@ -4,6 +4,8 @@ import ast
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
+from agent_comms.native_attestation import ObservedAttestation
 
 from agent_comms import pi_commands as commands
 from agent_comms.backend import TurnSession
@@ -26,9 +28,11 @@ def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(
     session = TurnSession(
         NativePiRpcLaunch(("unused",), Path.cwd(), {}, Path.cwd(), None, Path.cwd()), "unused"
     )
-    session.initial_session_observed = True
-    session.initial_session_id = "selected"
-    session.initial_session_file = "/selected.jsonl"
+    session.native = SimpleNamespace(
+        attestation=ObservedAttestation(
+            StateData(session_id="selected", session_file="/selected.jsonl")
+        )
+    )
     import json
 
     def response(owner, identity, path):

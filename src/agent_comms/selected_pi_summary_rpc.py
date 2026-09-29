@@ -12,11 +12,13 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession, _session_revision
+from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession
 from .compaction_journal import CompactionJournal, SelectedSummarySource
 from .field_codec import FieldCodec
 from .fresh_private_session import FreshPrivateSession
 from .input_disposition import FutureInputQueue
+from .native_pi import NativePiUnavailable
+from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_provider import NativeSummary
 from .pi_commands import AgentCommsSummarizeCompaction
@@ -157,24 +159,16 @@ class SelectedSummarySlot:
         ):
             raise ValueError("Exact selected owner, session and bounded deadline required")
         async with self.lock, persistent.lock:
-            proc, reader = persistent.proc, persistent.reader
             session_file = witness.session_file
-            revision = _session_revision(session_file)
-            if (
-                persistent.reopen_required is not None
-                or proc is None
-                or proc.returncode is not None
-                or proc.stdin is None
-                or reader is None
-                or persistent.session_file != session_file
-                or persistent.session_id != self.session
-                or revision is None
-                or persistent.revision != revision
-                or witness.revision != ":".join(map(str, revision[0]))
-                or persistent.launch_key is None
-                or persistent.launch_key[0].package != expected_package
-            ):
-                raise SelectedChildUnknown("Selected idle Pi child is unavailable or stale")
+            try:
+                retained = persistent.custody.idle().selected(
+                    NativeSessionIdentity(self.session, session_file), expected_package
+                )
+            except NativePiUnavailable as error:
+                raise SelectedChildUnknown(str(error)) from error
+            if witness.revision != ":".join(map(str, retained.revision[0])):
+                raise SelectedChildUnknown("Selected source witness is stale")
+            proc, reader = retained.child.proc, retained.child.reader
             operation = journal.reserve_selected_summary(
                 session_file,
                 source,
@@ -204,7 +198,7 @@ class SelectedSummarySlot:
                         sequence = event.sequence
                         deadline = loop.time() + idle_timeout_seconds
                 result = _summary_response(raw, request, tokens_before)
-                if proc.returncode is not None or _session_revision(session_file) != revision:
+                if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
                 if isinstance(result, SummaryFailedData):
                     journal.fail_selected_summary(operation, result.reason)
@@ -214,8 +208,7 @@ class SelectedSummarySlot:
                 }:
                     journal.refuse_selected_summary(operation, result.decline_reason)
             except BaseException as error:
-                persistent.reopen_required = session_file
-                persistent.reopen_session_id = self.session
+                persistent.require_reopen(session_file)
                 # Keep the child marked unusable even if cancellation interrupts
                 # its reap. PersistentPiSession owns the shielded close task.
                 try:

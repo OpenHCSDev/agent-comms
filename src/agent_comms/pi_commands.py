@@ -45,19 +45,10 @@ class SessionSnapshot:
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
-        data = response.data
         return bool(
             response.success
-            and data is not None
-            and session.initial_session_observed
-            and (
-                session.initial_session_id
-                and data.session_id
-                and data.session_id != session.initial_session_id
-                or session.initial_session_file
-                and data.session_file
-                and data.session_file != session.initial_session_file
-            )
+            and response.data is not None
+            and session.native.attestation.conflicts(response.data)
         ) or super().invalidates_identity(response, session)
 
 
@@ -188,7 +179,7 @@ class Prompt(PiCommand):
         if response.id == session.prompt_id:
             session.watchdog.progress()
             if response.success:
-                session.initial_prompt_acknowledged = True
+                session.admission = session.admission.acknowledge(response)
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
             else:
@@ -213,10 +204,7 @@ class GetState(SessionSnapshot, PiCommand):
     ) -> AsyncIterator[events.AgentEvent]:
         if response.success:
             state = response.data or StateData()
-            if not session.initial_session_observed:
-                session.initial_session_id = state.session_id
-                session.initial_session_file = state.session_file
-                session.initial_session_observed = True
+            session.native.attestation = session.native.attestation.observe(state)
             session.model_name = state.model.display_name if state.model else None
             session.session_name = state.session_name
             session.active_session_file = state.session_file or session.active_session_file
@@ -244,7 +232,7 @@ class GetSessionStats(SessionSnapshot, PiCommand):
             if context is not None:
                 if context.tokens is not None and context.tokens > 0:
                     session.usage.confirm(context.tokens)
-                if not session.session_identity_uncertain:
+                if not session.native.attestation.uncertain:
                     session.usage.size = context.context_window or session.usage.size
             yield session.context_info()
             if session.persistent_session is None:

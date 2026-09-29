@@ -614,61 +614,6 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
 
 
 @pytest.mark.asyncio
-async def test_owner_summary_discards_idle_manager_before_external_native_write(
-    session, monkeypatch
-):
-    root = session.parent.parent
-    registry = Registration(root / "registry.json")
-    registry.register(
-        Thread(
-            "owner",
-            frozenset(),
-            str(root),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            session_file=str(session),
-            goal=Goal("task", "goal"),
-        )
-    )
-    owner, owner_generation = registry.live_owner_with_generation("owner")
-    owner, owner_generation = registry.lease_live_turn_with_generation(
-        owner, "turn", expected_owner_generation=owner_generation
-    )
-    bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
-    persistent = PersistentPiSession()
-    persistent.session_file = str(session)
-    persistent.session_id = json.loads(session.read_bytes().splitlines()[0])["id"]
-    native_call = bridge._call
-
-    def checked_call(*args, **kwargs):
-        assert persistent.proc is None
-        assert persistent.reopen_required == str(session)
-        assert (
-            persistent.reopen_session_id == json.loads(session.read_bytes().splitlines()[0])["id"]
-        )
-        return native_call(*args, **kwargs)
-
-    monkeypatch.setattr(bridge, "_call", checked_call)
-
-    async def synthetic_summary(metadata):
-        assert metadata.witness.session_id == persistent.session_id
-        assert persistent.reopen_required is None  # preparation before retirement
-        return NativeSummary("Synthetic provider-free summary", None, None)
-
-    result = await compact_owner_once(
-        bridge,
-        owner,
-        owner_generation,
-        persistent,
-        synthetic_summary,
-        settings=PiCompactionSettings(16384, 1),
-        context_window=128000,
-    )
-    assert result is not None and result.state.declared_name == "committed"
-    assert persistent.reopen_required == str(session)
-    assert len(bridge.journal.pending_publications(str(session))) == 1
-
-
-@pytest.mark.asyncio
 async def test_late_correction_after_summary_refuses_write_without_reusing_manager(session):
     root = session.parent.parent
     registry = Registration(root / "registry.json")
@@ -707,7 +652,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
             settings=PiCompactionSettings(16384, 1),
             context_window=128000,
         )
-    assert persistent.reopen_required == str(session)
+    assert persistent.custody.session_file == str(session)
     assert session.read_bytes() == original
     assert bridge.journal.unresolved(str(session)) == ()
 
@@ -816,7 +761,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     pending = bridge.journal.pending_publications(str(session))
     assert len(pending) == 1
     assert bridge.journal.get(pending[0].commit_id).state.declared_name == "committed"
-    assert persistent.reopen_required == str(session)
+    assert persistent.custody.session_file == str(session)
     assert (
         len(
             [
@@ -1020,7 +965,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             )
             assert operation is not None and operation.state.declared_name == "committed"
             commit_ids.append(operation.commit_id)
-            assert persistent.reopen_required == str(session)
+            assert persistent.custody.session_file == str(session)
             assert await publish_pending_local(agent, "project", "project") == 1
             assert bridge.journal.pending_publications(str(session)) == ()
             assert comms.registry.require("project").goal.id == "goal-e2e"

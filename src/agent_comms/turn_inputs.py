@@ -37,6 +37,11 @@ class InputForwarding:
     generation: int = 0
     started: bool = False
     uncertain: bool = False
+    unresolved: bool = False
+
+    @property
+    def settled(self) -> bool:
+        return not self.uncertain and not self.unresolved
 
     def acknowledge(self, response: Response) -> None:
         if response.success is True and any(item[0] == response.id for item in self.pending):
@@ -169,12 +174,8 @@ class InputForwarding:
                 return (True, input_id)
         return (False, None)
 
-    def restore(self, session: TurnSession) -> None:
-        if session.steering_queue is None or not self.pending:
-            return
-        queued: list[str | dict[str, Any]] = []
-        while not session.steering_queue.empty():
-            queued.append(session.steering_queue.get_nowait())
-        for item in queued:
-            session.steering_queue.put_nowait(item)
+    def finish(self, session: TurnSession) -> None:
+        self.unresolved |= bool(self.pending) or (
+            session.steering_queue is not None and not session.steering_queue.empty()
+        )
         self.pending.clear()
