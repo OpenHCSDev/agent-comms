@@ -1,0 +1,11 @@
+# Paired168 canonical raw-page identity
+
+Base cored7745d0e (361/362). Producer src/agent_comms/transcripts.py owns TranscriptReadIdentity and deferred TranscriptRead, canonical source selection/metadata, existing file_revision identity of native bytes, routing/input annotations and bus receipts. Read checks identity before/after parsing; changed source raises existing StaleRevision. No cache, legacy wire format or page mirror is added to core. Existing raw reader remains the sole parser and reports actual page_reads for resource evidence.
+
+Consumer OpenHCSDev/toad168 extends existing PreparationRuntime/ContentAddressedWork/SerializedWork/ThreadWork. Same global byte/entry/queue budgets; no per-tab pool. Native pager retirement no longer revokes operational source reuse. Copied cached page is checked against this canonical identity again at final delivery. Existing routing, inherited fork context, input display and tool receipt semantics unchanged. Parent target-thread presentation change is independently owned in history_views/thread_presentation; this source owns only transcripts.py and relevant tests.
+
+Latest NRA/refactor-audit archive applied: IDEN-1 canonical identity covers every projection input, IDEN-3 owned captured read state, IMPL-4/5 inherited worker/copy behavior, BOUND-1 no repeated raw-map decode, TIME-9 consumer caller deletion instead of second cache. Small correct source owner stays below500; no new god owner.
+
+Focused installed source behavior:12 tests passed0.72s (tests/test_transcript_read_identity.py, tests/test_transcript_pages.py, tests/test_transcript_input_display.py). Existing saved replay test expected a deleted transcript wire key; migrated to current decode_updates/TranscriptSnapshotUpdate, removed its retired opt-in flag, kept all expected input/hidden-context/reply assertions. Core annotation/native append/inherited-to-own-source identity rejection uses real private files and SQLite without mocks.
+
+Paired actual native continuous journey is running from installed ownwheel, Toad168 including merged167, framework1738/native d396. Not a final ready/deployed claim until its actual paint/zero repeated-read/End/channel/fork/undo/process EXIT0 evidence passes. Parent owns merge/latest paired installation/affected LIVE gate. CI/final50ms deferred; remaining latency stays168 scope.
