@@ -74,8 +74,11 @@ Two real owners launch through normal production entry points. B receives A's
 question, publishes a real response, idle A automatically receives it with no
 explicit drain/user kick, attached ACP proves its exact native input ID/source,
 and IGNORE results in exactly two provider requests and two wire messages.
-No paid provider was called. Dalton was sent `ce05cc04` directly for a final
-independent post-caller-correction run; record its separate result when received.
+No paid provider was called. Dalton independently installed `ce05cc04` and
+reported **34 passed in 15.63s**: final full/certified receipt, candidate caller
+cases and the actual native330 round trip, including exact attached input proof,
+awareness, distinct sessions, no ACK loop/replay and cleanup. His original RED
+and final receipts remain in PR330. This closes the post-correction native check.
 
 Original RED receipts are retained. `native-return.log` initially waited on an
 absent ephemeral selected-status field; the authoritative test now checks the
@@ -106,7 +109,16 @@ of bus/index/metadata, rewrites in place, certifies a staged derived index,
 refreshes inode-bound seals after rename, publishes the marker last and fsyncs.
 It refuses a pre-existing backup/repeated conversion. An interrupted cutover
 fails closed and requires explicit operator recovery; runtime has no old/new
-reader or implicit repair. Remove the extracted operator after use.
+reader or implicit repair. Remove the extracted operator after use. Also explicitly rebuild the disposable
+`WakeCandidateIndex` after conversion: the replaced bus inode intentionally
+invalidates any old candidate checkpoint. Use the existing `maintain(rebuild=True)`
+then bounded `maintain()` until complete, before restoring normal traffic. This
+uses the shared canonical decoder and does not authorize a wake. On the converted
+162-message copy this completed in four bounded batches
+(`copied-candidate-rebuild.log`). The selective history copy had no live registry;
+a separate empty registry satisfied MessageBus construction, and the projection
+read only frozen wire declarations, not registry membership. The live root keeps
+its real registry. No historical audiences were invented.
 
 `live-copy-tagged-final.log` records the successful copied-live rehearsal:
 
@@ -142,6 +154,11 @@ claim is made. Ruff and diff whitespace checks passed for changed owners/tests.
 
 No diagnosed source/caller blocker remains in this response correction. Parent
 must review, run the one-time conversion on the stopped live root and activate
-the installed candidate. Independent final native PR330 result is tracked with
-Dalton. S15's authoritative plan file was not found; optional advice did not
+the installed candidate. Independent final native PR330 passed at `ce05cc04` (34 tests, 15.63s). S15's authoritative plan file was not found; optional advice did not
 block this fix, and this receipt does not claim implementation of unseen S15.
+
+
+Owned cleanup: two orphan native-test workers from a removed isolated test root
+were identified by this worktree's interpreter and exact test-root environment,
+then stopped with pidfd signalling. They were not live owners. Test roots and
+local environments are disposable and removed after receipt publication.
