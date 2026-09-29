@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import ObservedProcess, ParentedProcess
+from agent_comms.child_process import (
+    ExitedOutcome,
+    ObservedProcess,
+    ParentedProcess,
+    SignaledOutcome,
+)
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 
@@ -61,7 +66,7 @@ while True: time.sleep(0.01)
         # A release handler deliberately resists TERM to exercise escalation.
         if child.alive():
             child.force()
-        child._process.wait(timeout=5)
+        child.reap()
         current = comms.registry.snapshot().threads.get("worker")
         if (
             current is not None
@@ -93,7 +98,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         assert result.previous_pid == original.pid
     assert (comms.root / "released").exists()
     assert not child.alive()
-    assert child._process.wait(timeout=1) == -signal.SIGKILL
+    assert child.reap() == SignaledOutcome(signal.SIGKILL)
     receipt = comms.owners.releases.read()["worker"]
     assert receipt.thread.process_identity == original.process_identity
     assert receipt.after > receipt.before
@@ -106,7 +111,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
         wait_for(comms.root / "released")
         (comms.root / "exit").touch()
         stopping.result(timeout=5)
-    assert child._process.wait(timeout=1) == 0
+    assert child.reap() == ExitedOutcome(0)
     assert not child.alive()
 
 

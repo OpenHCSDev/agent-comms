@@ -1,0 +1,10 @@
+{
+  "root": "src/agent_comms/",
+  "base_revision": "13d92f80b6d1715bbde3ef3b0d2785ac813d9647",
+  "head_revision": "813cfff667b7e7761339b17f30910097fe24a877",
+  "paths": [
+    "src/agent_comms/child_process.py",
+    "src/agent_comms/owner_lifecycle.py"
+  ],
+  "delta": {}
+}
