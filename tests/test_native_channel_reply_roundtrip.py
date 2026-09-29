@@ -36,6 +36,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
     package = Path(pin).resolve(strict=True)
     requests = []
     failures = []
+    seed_count = 2 if restart_after_reply else 0
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -43,7 +44,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 assert self.headers["Authorization"] == "Bearer local-only"
                 requests.append(request)
-                assert len(requests) <= 2 + restart_after_reply, "Reply observation caused replay or ping-pong"
+                assert len(requests) <= 2 + seed_count + restart_after_reply, "Reply observation caused replay or ping-pong"
                 text = (
                     '{"decision":"IGNORE"}'
                     if "bounded triage" in json.dumps(request)
@@ -174,11 +175,22 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         for name in projects:
             await asyncio.to_thread(comms.owners.start, name)
         await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
+        if restart_after_reply:
+            for name, project in projects.items():
+                await attachment.load_session(cwd=str(project), session_id=name)
+                async with asyncio.timeout(35):
+                    seed = await attachment.prompt(
+                        session_id=name,
+                        prompt=[{"type": "text", "text": f"RETAINED_NATIVE_HISTORY_{name}"}],
+                    )
+                assert seed.stop_reason == "end_turn"
+                assert comms.registry.require(name).session_file
+            assert len(requests) == seed_count
         facts.clear()
         question = comms.messaging.send_message(
             "questioner", "#team", "@answerer ROUNDTRIP_QUESTION"
         )
-        await until(lambda: len(requests) >= 1, "B actual native request")
+        await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
             lambda: len(comms.views.channel_history("#team")) >= 2, "B published actual reply"
         )
@@ -186,7 +198,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         assert reply.sender == "answerer" and reply.body == "ROUNDTRIP_NATIVE_REPLY"
         # No user prompt, explicit inbox drain, participant insertion, or selected claim seeding.
         try:
-            await until(lambda: len(requests) == 2, "A automatically observed native reply")
+            await until(lambda: len(requests) == seed_count + 2, "A automatically observed native reply")
         except TimeoutError:
             print(
                 "RED: native reply published but sender never automatically received it",
@@ -199,7 +211,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 flush=True,
             )
             raise
-        users = [item for item in requests[1]["messages"] if item["role"] == "user"]
+        users = [item for item in requests[seed_count + 1]["messages"] if item["role"] == "user"]
         assert reply.body in json.dumps(users[-1]["content"])
         # The same response remains available through canonical natural-turn awareness.
         # Reading this projection proves neither model delivery nor ACK; native delivery
@@ -239,7 +251,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         assert len({row[0] for row in rows}) == 2
         assert len({row[1] for row in rows}) == 2  # Two actual native owners/children.
         await asyncio.sleep(1.2)  # Beyond the watcher fallback interval; no recursive wake/replay.
-        assert len(requests) == 2 and not failures
+        assert len(requests) == seed_count + 2 and not failures
         assert len(comms.views.channel_history("#team")) == 2
         if restart_after_reply:
             # Continue the same real owner/ACP/native journey from saved state.
@@ -261,7 +273,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert after.admission_generations[name] > before.admission_generations[name]
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
-            assert len(requests) == 2, "Restart replayed saved input"
+            assert len(requests) == seed_count + 2, "Restart replayed saved input"
             attachment = CommsClient(
                 comms, runtime_enabled=True, private_nk_native_package=package,
                 private_nk_wire_root_id=root_id,
@@ -274,7 +286,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                     prompt=[{"type": "text", "text": "EXPLICIT_POST_RESTART_INPUT"}],
                 )
             assert answer.stop_reason == "end_turn"
-            assert len(requests) == 3
+            assert len(requests) == seed_count + 3
             assert not failures, failures
             entries = [json.loads(line) for line in Path(after.threads['questioner'].session_file).read_text().splitlines()]
             inputs = [row['message'] for row in entries if row['type'] == 'message' and row['message']['role'] == 'user']
