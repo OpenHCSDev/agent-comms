@@ -1,5 +1,15 @@
 # Owner decisions
 
+## 2026-09-29 — Ship useful performance progress
+
+Owner: "regrding eprformance, we can merge prs once substantia lprogress is made even thoug its not the final taarget so at least the live intal lcan make sue of it and anothe pr contining hte work can be opened"
+
+Merge coherent, substantial performance improvements after focused local and
+actual affected-path verification, install them, and continue remaining work in
+a follow-up PR. The final performance target is not a gate for useful progress.
+Report measured results and remaining scope honestly; this does not complete the
+overall performance or nominal refactor goal. CI remains deferred.
+
 ## 2026-09-28 — D22: round-two durable wire history
 
 Owner: "Rewrite once into the current format, preserving history in place (plan default)"
