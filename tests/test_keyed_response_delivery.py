@@ -61,3 +61,76 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
         assert sealed_cohort_assignments(case.store, lookup) == assignments
     finally:
         case.close()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("wire_root_id", "0" * 32),
+        ("envelope_digest", "0" * 64),
+        ("publication_key", "publication:v1:exec:wrong-route"),
+        ("execution_id", 3),
+        ("publication_key", None),
+        ("unexpected", "not permitted"),
+    ],
+)
+def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, value):
+    import json
+
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        prepare_fenced_response(
+            case.store, case.bus, case.fence, "answer", owner_witness=case.witness
+        )
+        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        marker = case.bus.log._private_marker_unlocked()
+        rows = [json.loads(line) for line in case.bus.log.path.read_bytes().splitlines()]
+        rows[-1]["_agent_comms_private_v1"]["response"][field] = value
+        case.bus.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        # Explicit cold certification must reject a corrupt candidate rather
+        # than trusting a stale index or accepting a merely well-shaped receipt.
+        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        marker.checkpoint_version = None
+        marker.checkpoint_seal = None
+        case.bus.log.write_metadata_unlocked(marker)
+        with pytest.raises((ValueError, RelationViolationError)):
+            install_private_bus_checkpoint(case.bus.log)
+    finally:
+        case.close()
+
+
+def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
+    import json
+    from dataclasses import replace
+
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+    from agent_comms.response_conversation import ResponseConversation
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, "answer", owner_witness=case.witness
+        ).value
+        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        response = case.bus.log.read_keyed_response(intent)
+        with case.bus.log.locked():
+            conversation = ResponseConversation.capture(case.bus, case.store.snapshots.get("exec"))
+            duplicate = conversation.record(
+                case.root_id, replace(response, seq=response.seq + 1), intent
+            )
+            marker = case.bus.log._private_marker_unlocked()
+        with case.bus.log.path.open("a") as stream:
+            stream.write(json.dumps(duplicate) + "\n")
+        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        marker.last_seq = response.seq + 1
+        marker.checkpoint_version = None
+        marker.checkpoint_seal = None
+        case.bus.log.write_metadata_unlocked(marker)
+        with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+            install_private_bus_checkpoint(case.bus.log)
+    finally:
+        case.close()

@@ -19,7 +19,6 @@ from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     HumanOrigin,
     initial_sideband,
-    public_envelope_digest,
     stable_thread_lookup,
     validate_delivery_record,
 )
@@ -451,18 +450,23 @@ class Publisher:
             decisions = resolve_wake_cohort(
                 stored, frozen_audience=audience, control=classification
             )
+            from .delivery_policy import InitialDeliveryPolicy
+            from .field_codec import FieldCodec
+
             row = {
                 **stored.to_wire(),
-                PRIVATE_WIRE_FIELD: {
-                    "version": 1,
-                    "initial": initial_sideband(
-                        metadata.root_id,
-                        stored,
-                        audience,
-                        decisions,
-                        control=classification.value,
-                    ),
-                },
+                PRIVATE_WIRE_FIELD: FieldCodec.encode(
+                    InitialDeliveryPolicy(
+                        version=1,
+                        initial=initial_sideband(
+                            metadata.root_id,
+                            stored,
+                            audience,
+                            decisions,
+                            control=classification.value,
+                        ),
+                    )
+                ),
             }
             # Check the exact bytes and one coherent source revision before any append.
             validate_delivery_record(row, metadata.root_id)
@@ -532,29 +536,7 @@ class Publisher:
         )
         if stored.message_id != intent.expected_message_id:
             raise RelationViolationError("Stored response does not match expected Message ID.")
-        from .delivery_policy import ResponseDeliveryPolicy
-        from .wake import ControlClassification
-
-        audience = conversation.audience(stored)
-        decisions = ResponseDeliveryPolicy().resolve(
-            stored, audience, ControlClassification.ORDINARY
-        )
-        public = stored.to_wire()
-        row = {
-            **public,
-            PRIVATE_WIRE_FIELD: {
-                "version": 1,
-                "initial": initial_sideband(
-                    metadata.root_id, stored, audience, decisions, control="ordinary"
-                ),
-                "response": {
-                    "wire_root_id": metadata.root_id,
-                    "execution_id": intent.execution_id,
-                    "publication_key": intent.publication_key,
-                    "envelope_digest": public_envelope_digest(public),
-                },
-            },
-        }
+        row = conversation.record(metadata.root_id, stored, intent)
         validate_delivery_record(row, metadata.root_id)
         self.log._append_private_unlocked(metadata, row)
         return stored

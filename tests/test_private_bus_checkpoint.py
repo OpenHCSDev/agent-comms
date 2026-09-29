@@ -140,7 +140,7 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
             assert (
                 db.execute("SELECT key FROM response_keys").fetchone()[0] == intent.publication_key
             )
-            assert db.execute("SELECT COUNT(*) FROM initials").fetchone()[0] == 2
+            assert db.execute("SELECT COUNT(*) FROM delivery_sources").fetchone()[0] == 2
         page_witness, page_rows, _ = _page(comms, case.owner_lookup)
         assert page_rows[0].message.seq == case.origin_seq
         assert page_witness.latest_source_seq == response.seq

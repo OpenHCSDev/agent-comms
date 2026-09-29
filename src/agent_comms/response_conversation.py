@@ -67,3 +67,27 @@ class ResponseConversation:
             sender_lookup=self.responder.recipient_lookup,
             sender_name=self.responder.canonical_thread,
         )
+
+    def record(self, root_id, message, intent):
+        from .bus_publication import PRIVATE_WIRE_FIELD, initial_sideband, public_envelope_digest
+        from .delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
+        from .field_codec import FieldCodec
+        from .wake import ControlClassification
+
+        audience = self.audience(message)
+        decisions = ResponseDeliveryPolicy.resolve(
+            message, audience, ControlClassification.ORDINARY
+        )
+        publication = ResponseDeliveryPolicy(
+            version=1,
+            initial=initial_sideband(
+                root_id, message, audience, decisions, control=ControlClassification.ORDINARY.value
+            ),
+            response=KeyedResponseReceipt(
+                root_id,
+                intent.execution_id,
+                intent.publication_key,
+                public_envelope_digest(message.to_wire()),
+            ),
+        )
+        return {**message.to_wire(), PRIVATE_WIRE_FIELD: FieldCodec.encode(publication)}
