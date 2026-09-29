@@ -6,10 +6,10 @@ regressions are not declared fixed by those receipts. CI is deferred.
 
 ## Installed baseline
 
-Core406/407, Toad198, Textual12 and matched native context-budget package are
+Core408, Toad195/197/200/203, Textual12 and matched native context-budget package are
 selected by the default launchers. Ten running owners reloaded while idle; their
-new native-package environment pins were verified. The actual default
-`toad-comms` PTY displayed saved history and Ready, then exited normally.
+new native-package environment pins were verified before the unchanged-Core/native UI update. The actual default
+`toad-comms` PTY displayed saved history and Ready, then was closed by the test harness.
 The user's already open Toad is not restarted automatically.
 
 ## Complete user paths
@@ -18,7 +18,7 @@ The user's already open Toad is not restarted automatically.
 | --- | --- | --- |
 | Saved-history startup | Default installed entrypoint passes. | Parent; preserve original bus/native sessions and unknown inputs. |
 | Channel input, receipt, handling and reply | Earlier continuous installed/native journeys passed; retain ongoing receiver-view coverage. | Parent integrates current paired journey; no claim of exhaustive delivery coverage from startup alone. |
-| Streamed reply presentation | Multiple headers reported; old tiny fixture did not reject the old build. | Arendt, Toad199: realistic delayed/chunked reply must fail old build and render one continuous message in installed UI. |
+| Streamed reply presentation | Toad199 merged: installed continuous 2,800-character / 70-chunk stream failed the old build with duplicate headers and passed candidate with one response. Default installation underway. | Arendt, Toad199: realistic delayed/chunked reply must fail old build and render one continuous message in installed UI. |
 | Cancel, model change, next message | Real ACP cancel returned cancelled; following model controls and prompts returned empty-details internal errors. | Arendt: delayed-provider actual ACP/UI journey, unambiguous terminal outcomes, subsequent controls/send usable, uncertain inputs preserved without replay. |
 | Owner attachment after startup | nra-architecture startup failed before input; retry is now alive and processing with the current native pin. Earlier diagnostic launches include old-package mismatch and absent private launch configuration. Cause of the latest failure remains under investigation. | Parent traces launch authority; Arendt owns precise Not sent feedback. Never replay the original input or restart an active owner to hide failure. |
 | Parent/child opening | Toad203 is merged; installed actual right-sidebar parent/channel child click journey passed. Final default activation is underway. | Heisenberg: supported owner binding, actual right-sidebar/channel/child opening clicks and retained native source identity. |
@@ -47,3 +47,17 @@ The user's already open Toad is not restarted automatically.
 
 The goal remains incomplete until its full requirements are verified. This
 checklist describes current delivery, not a reduction of the goal's scope.
+
+## New paired checkpoint
+
+Core409 adds the updated skill's packaged dispatch subject/arm screens. Actual
+installed CLI/Git checks passed and measured real-history arm growth. Toad199
+merges streamed-response identity and queue feedback. This pair preserves the
+reviewed native package and all runtime/durable formats. Parent owns installed
+continuous journey and default-entrypoint verification before activation.
+
+Toad204 (Schrodinger) owns repeated old inbound blocks in an already open view,
+not merely reconnect. Existing native wake records have not advanced for the
+reported old inputs; UI projection is the current hypothesis, not proof that
+all duplicate execution is impossible. Its acceptance covers ordinary repeated
+activity updates and checkpoint retirement as well as reconnect/A/B/A/reopen.
