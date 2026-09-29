@@ -21,11 +21,17 @@ class TurnFailure(DeclaredFamily):
     precedence: ClassVar[int] = 0
     input_uncertain: ClassVar[bool] = False
 
+    def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
+        return self
+
     def supersedes(self, previous: TurnFailure | None) -> bool:
         return previous is None or self.precedence >= previous.precedence
 
 
 class InputIdUnavailable(TurnFailure):
+    def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
+        return type(self)(self.text + "\nThe prompt was not sent. Backend startup reported:\n" + stderr)
+
     code = FailureReason.INPUT_ID_UNAVAILABLE
     precedence = 100
 

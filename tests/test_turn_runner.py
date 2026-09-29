@@ -228,7 +228,7 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
 
     async def compact(*args, **kwargs):
         assert args[4].model == "response-local/fixture"
-        assert args[6].proc is not None and args[6].proc.alive()
+        assert args[6].custody.child.proc.alive()
         attempts.append(args[5])
         raise failure from source
 
@@ -248,6 +248,10 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
     assert len(failed_inputs) == 1
     assert failed_inputs[0].text == "Original stays unknown"
     assert failed_inputs[0].failure == errors[0].failure
+    from agent_comms.input_attempt import NotSentInput
+
+    assert errors[0].failure.input_state is NotSentInput
+    assert "Not sent" in errors[0].failure.feedback
     assert owner.inputs.dispositions.read().rows[attempts[0]].declared_name == "not_sent"
     assert native.provider.posts == 1
     assert native.session.read_bytes() == before
