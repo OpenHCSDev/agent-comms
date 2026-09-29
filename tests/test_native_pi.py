@@ -11,6 +11,8 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from native_proof_cases import child_writer_imports, read_proof_rows, write_proof_rows
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -67,7 +69,7 @@ def _evidence(tmp_path: Path) -> Path:
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     proof = Path(str(session) + ".input-proof")
-    proof.write_text("".join(json.dumps(row) + "\n" for row in journal))
+    write_proof_rows(session, journal)
     session.chmod(0o600)
     proof.chmod(0o600)
     return session
@@ -88,40 +90,42 @@ def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> N
 @pytest.mark.parametrize(
     "damage",
     [
-        "duplicate_json_key",
-        "missing_newline",
+        "malformed_database",
+        "truncated_database",
         "world_readable",
         "wrong_entry",
-        "duplicate_generation",
         "wrong_session",
         "symlink",
+        "hardlink",
+        "removed_constraint",
     ],
 )
 def test_corrupt_or_redirected_journal_cannot_assert_context(tmp_path: Path, damage: str) -> None:
+    import sqlite3
+    from agent_comms.native_pi import NativeContextJournal
+
     session = _evidence(tmp_path)
     journal = Path(str(session) + ".input-proof")
-    if damage == "duplicate_json_key":
-        journal.write_text(journal.read_text().replace('"schema": 1,', '"schema": 1, "schema": 1,'))
-    elif damage == "missing_newline":
-        journal.write_text(journal.read_text().rstrip("\n"))
+    if damage == "malformed_database":
+        journal.write_bytes(b"not a SQLite database")
+    elif damage == "truncated_database":
+        journal.write_bytes(journal.read_bytes()[:-4096])
     elif damage == "world_readable":
         journal.chmod(0o644)
-    elif damage == "wrong_entry":
-        journal.write_text(
-            journal.read_text().replace('"sessionEntryId": "entry"', '"sessionEntryId": "other"')
-        )
-    elif damage == "duplicate_generation":
-        journal.write_text(journal.read_text() * 2)
-    elif damage == "wrong_session":
-        journal.write_text(
-            journal.read_text().replace('"sessionId": "sid"', '"sessionId": "other"')
-        )
-    elif damage == "symlink":
+    elif damage in {"wrong_entry", "wrong_session"}:
+        rows = read_proof_rows(session)
+        rows[0]["sessionEntryId" if damage == "wrong_entry" else "sessionId"] = "other"
+        write_proof_rows(session, rows)
+    elif damage in {"symlink", "hardlink"}:
         replacement = tmp_path / "replacement"
-        replacement.write_text(journal.read_text())
-        replacement.chmod(0o600)
-        journal.unlink()
-        journal.symlink_to(replacement)
+        journal.rename(replacement)
+        if damage == "symlink":
+            journal.symlink_to(replacement)
+        else:
+            os.link(replacement, journal)
+    elif damage == "removed_constraint":
+        with sqlite3.connect(journal) as db:
+            db.execute(f"DROP TRIGGER {NativeContextJournal.declared_name}_append")
     with pytest.raises(NativePiUnavailable):
         NativeContextProof.read_evidence(session, INPUT_ID)
 
@@ -133,7 +137,7 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     session = _evidence(tmp_path)
     journal = Path(str(session) + ".input-proof")
     original = journal.read_bytes()
-    row = json.loads(original)
+    row = read_proof_rows(session)[0]
     decoded = FieldCodec.decode(NativeContextJournal, row)
     assert FieldCodec.encode(decoded) == row
     assert decoded.at(session) == NativeContextProof.read_evidence(session, INPUT_ID)
@@ -148,10 +152,8 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
         {**row, "extra": "not-native"},
         {key: value for key, value in row.items() if key != "schema"},
     ):
-        journal.write_text(json.dumps(changed) + "\n")
-        with pytest.raises(NativePiUnavailable):
-            NativeContextProof.read_evidence(session, INPUT_ID)
-    journal.write_bytes(original)
+        with pytest.raises((ValueError, TypeError)):
+            FieldCodec.decode(NativeContextJournal, changed)
     assert NativeContextProof.read_evidence(session, INPUT_ID) == decoded.at(session)
     assert journal.read_bytes() == original
 
@@ -554,7 +556,7 @@ async def test_context_proof_alone_cannot_validate_a_failed_model_reply(
     import agent_comms.native_pi as native
 
     fake = tmp_path / "fake_rpc.py"
-    fake.write_text("""import json, os, sys
+    fake.write_text(child_writer_imports() + """import json, os, sys
 from pathlib import Path
 file = Path(sys.argv[1])
 reason = sys.argv[2]
@@ -572,7 +574,7 @@ file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry
 proof = {'schema':1,'type':'context_committed','sessionId':'sid',
     'inputId':input_id,'sessionEntryId':'entry','requestGeneration':1,
     'llmContextDigest':'c'*64}
-Path(str(file)+'.input-proof').write_text(json.dumps(proof)+'\\n')
+write_proof_rows(file, [proof])
 os.chmod(file,0o600)
 os.chmod(str(file)+'.input-proof',0o600)
 send({'type':'response','id':command['id'],'command':'prompt','success':True})
@@ -947,17 +949,23 @@ def durable_attempt(tmp_path):
     with Coordination(tmp_path / "attempt.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
-        pending = store.executions.mark_pending("e", expected_revision=created.execution.revision).value
-        started = store.attempts.start(AttemptStart(
-            "e",
-            1,
-            "owner",
-            1,
-            prepare_fence_token(),
-            expected_execution_revision=pending.execution.revision,
-            expected_pointer_revision=pending.pointer_revision,
-        )).value
-        yield DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, INPUT_ID)
+        pending = store.executions.mark_pending(
+            "e", expected_revision=created.execution.revision
+        ).value
+        started = store.attempts.start(
+            AttemptStart(
+                "e",
+                1,
+                "owner",
+                1,
+                prepare_fence_token(),
+                expected_execution_revision=pending.execution.revision,
+                expected_pointer_revision=pending.pointer_revision,
+            )
+        ).value
+        yield DurableTurn(
+            store.attempts, started.fence, started.snapshot.pointer_revision, INPUT_ID
+        )
 
 
 @pytest.mark.parametrize(
@@ -1269,8 +1277,9 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         assert "compaction_start" not in observed
         proof_files = list(sessions.glob("*.jsonl.input-proof"))
         assert len(proof_files) == 1
-        assert len(proof_files[0].read_text().splitlines()) == 1
-        assert json.loads(proof_files[0].read_text())["requestGeneration"] == 1
+        durable_proofs = read_proof_rows(Path(str(proof_files[0]).removesuffix(".input-proof")))
+        assert len(durable_proofs) == 1
+        assert durable_proofs[0]["requestGeneration"] == 1
         if outcome == "restarted":
             # A second real child reopens the first child's saved private history.
             # The outer worker still has its isolated PI_CODING_AGENT_DIR.
@@ -1287,7 +1296,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 == result.context
             )
             assert calls == ["/v1/chat/completions"] * 2
-            proofs = [json.loads(line) for line in proof_files[0].read_text().splitlines()]
+            proofs = read_proof_rows(result.context.session_file)
             assert [(row["inputId"], row["requestGeneration"]) for row in proofs] == [
                 (INPUT_ID, 1),
                 (INPUT_ID, 2),
@@ -1400,41 +1409,52 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     session = _evidence(tmp_path)
     recorded = NativeContextProof.read_evidence(session, INPUT_ID)
     journal = Path(str(session) + ".input-proof")
-    first = json.loads(journal.read_text())
+    first = read_proof_rows(session)[0]
     later = {**first, "requestGeneration": 2, "llmContextDigest": "d" * 64}
-    with journal.open("a") as output:
-        output.write(json.dumps(later) + "\n")
+    import sqlite3
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_pi import NativeContextJournal
+
+    with sqlite3.connect(journal) as db:
+        FieldCodec.decode(NativeContextJournal, later).insert(db)
     assert NativeContextProof.read_evidence(session, INPUT_ID).request_generation == 2
     assert NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1) == recorded
     with pytest.raises(NativePiUnavailable, match="no assembled-context"):
         NativeContextProof.read_evidence(session, INPUT_ID, request_generation=3)
 
 
-def test_retained_proof_beyond_old_reader_quota_preserves_first_generation(tmp_path):
+def test_native_proof_database_enforces_generation_and_digest_without_scanning(tmp_path):
+    import sqlite3
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_pi import NativeContextJournal
+
     session = _evidence(tmp_path)
-    journal = Path(str(session) + ".input-proof")
-    first = json.loads(journal.read_text())
-    with journal.open("a") as stream:
-        for generation in range(2, 80002):
-            stream.write(json.dumps({**first, "requestGeneration": generation}) + "\n")
-    assert journal.stat().st_size > 16 * 1024 * 1024
-    observed = NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1)
+    first = read_proof_rows(session)[0]
+    with sqlite3.connect(Path(str(session) + ".input-proof")) as db:
+        later = FieldCodec.decode(NativeContextJournal, {**first, "requestGeneration": 2})
+        later.insert(db)
+        for invalid in (
+            first,
+            {**first, "inputId": "d" * 32},
+            {**first, "inputId": "d" * 32, "requestGeneration": 2, "llmContextDigest": "e" * 64},
+        ):
+            with pytest.raises(sqlite3.IntegrityError):
+                FieldCodec.decode(NativeContextJournal, invalid).insert(db)
     assert (
-        observed.request_generation == 1
-        and observed.llm_context_digest == first["llmContextDigest"]
+        NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1).request_generation
+        == 1
     )
-    # Historical corroboration never gains live delivery/acceptance authority.
-    assert observed.input_id == INPUT_ID
 
 
-def test_proof_observation_rejects_file_mutation(tmp_path):
-    from agent_comms.native_pi import _read_private_file
+def test_proof_observation_rejects_file_replacement(tmp_path):
+    from agent_comms.native_pi import NativeContextJournal
 
     session = _evidence(tmp_path)
     journal = Path(str(session) + ".input-proof")
-    rows = _read_private_file(journal)
-    assert next(rows)["inputId"] == INPUT_ID
-    with journal.open("a") as stream:
-        stream.write("\n")
-    with pytest.raises(NativePiUnavailable, match="changed during observation"):
-        next(rows)
+    with pytest.raises(NativePiUnavailable, match="inode changed"):
+        with NativeContextJournal.open_evidence(session) as db:
+            assert NativeContextJournal.for_input(db, INPUT_ID).input_id == INPUT_ID
+            changed = journal.with_name("replacement")
+            changed.write_bytes(journal.read_bytes())
+            changed.chmod(0o600)
+            changed.replace(journal)

@@ -17,7 +17,9 @@ def write_proof_rows(session: Path, rows) -> None:
         NativeContextJournal.create(db)
         with db:
             for row in rows:
-                FieldCodec.decode(NativeContextJournal, row).insert(db)
+                FieldCodec.decode(
+                    NativeContextJournal, {"kind": NativeContextJournal.declared_name, **row}
+                ).insert(db)
 
 
 def read_proof_rows(session: Path) -> list[dict]:
@@ -26,3 +28,15 @@ def read_proof_rows(session: Path) -> list[dict]:
             FieldCodec.encode(row)
             for row in NativeContextJournal.select(db, order_by=("request_generation", "input_id"))
         ]
+
+
+def child_writer_imports() -> str:
+    """Recorded-RPC children use the same current declaration as their parent."""
+    from agent_comms import native_pi
+
+    return (
+        "import sys\n"
+        f"sys.path.insert(0, {str(Path(native_pi.__file__).parents[1])!r})\n"
+        f"sys.path.insert(0, {str(Path(__file__).parent)!r})\n"
+        "from native_proof_cases import write_proof_rows\n"
+    )

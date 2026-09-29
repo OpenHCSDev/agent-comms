@@ -1,0 +1,12 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_selected_original_survives_auxiliary_cursor_over_100_initials ______
+.artifacts/native-proof-checkpoint/baseline-main/tests/test_coordinated_runtime.py:832: in test_selected_original_survives_auxiliary_cursor_over_100_initials
+    assert cursor.covered_seq == 102 and cursor.injected_seq == _initial.message.seq
+E   AssertionError: assert (103 == 102)
+E    +  where 103 = CurrentNativeCursor(wire_root_id='8f7021f3e66f468eb9c63cb8428986d5', recipient_lookup='f61339a2b251950bfbeea2a8636375e...eb37788424dbc5f7daa10cc71ac15aa4562a83ca2783094529', stage='full', session_id='isolated-session', request_generation=1).covered_seq
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:212 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+=========================== short test summary info ============================
+FAILED .artifacts/native-proof-checkpoint/baseline-main/tests/test_coordinated_runtime.py::test_selected_original_survives_auxiliary_cursor_over_100_initials
+1 failed in 4.50s

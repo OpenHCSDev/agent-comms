@@ -202,14 +202,18 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
     @classmethod
     @contextmanager
     def open_evidence(cls, session_file: Path) -> Iterator[sqlite3.Connection]:
-        """Read an indexed snapshot; only native recovery may repair a hot journal.
+        """Read an indexed snapshot after SQLite's bounded hot-journal recovery.
 
         A read is corroboration, never a fresh receipt. Keep the private inode
         pinned across SQLite's transaction and refuse redirection or schema drift.
+        Open existing storage read/write for SQLite rollback, then forbid SQL
+        writes. A cold history view can recover without a model turn or receipt.
         """
         path = Path(str(session_file) + ".input-proof")
         try:
-            with closing(os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")) as held:
+            with closing(
+                os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
+            ) as held:
                 before = os.fstat(held.fileno())
                 if not stat.S_ISREG(before.st_mode):
                     raise NativePiUnavailable("Native proof must be a regular file")
@@ -219,7 +223,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                     1,
                 ):
                     raise NativePiUnavailable("Native proof must be private and unaliased")
-                with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
+                with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)) as db:
+                    db.execute("PRAGMA query_only=ON")
                     db.execute("BEGIN")
                     actual = SQLiteSchemaObject.read(
                         db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")

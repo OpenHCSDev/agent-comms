@@ -52,7 +52,15 @@ def convert(session: Path, backup: Path) -> dict[str, int]:
                 with db:
                     NativeContextJournal.create(db)
                     for raw in _read_private_file(proof):
-                        row = FieldCodec.decode(NativeContextJournal, raw)
+                        if "kind" in raw:
+                            raise ValueError("Prior native proof has an unexpected family tag")
+                        row = FieldCodec.decode(
+                            NativeContextJournal,
+                            {
+                                "kind": NativeContextJournal.declared_name,
+                                **raw,
+                            },
+                        )
                         row.corroborate(session, header, tracked)
                         row.insert(db)  # Same append/generation/digest constraints as native.
                         count += 1

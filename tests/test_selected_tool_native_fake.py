@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from native_proof_cases import child_writer_imports, read_proof_rows, write_proof_rows
+
 import pytest
 
 from agent_comms import native_pi as native
@@ -31,7 +33,7 @@ async def test_fake_rpc_tool_event_and_terminal_gate(
     (tmp_path / "dist/selected_claimed_write.mjs").write_bytes(
         Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes()
     )
-    fake.write_text("""import json, os, socket, sys
+    fake.write_text(child_writer_imports() + """import json, os, socket, sys
 from pathlib import Path
 session_dir = Path(sys.argv[1]); variant = sys.argv[2]
 file = session_dir / 'test.jsonl'
@@ -45,7 +47,7 @@ entry = {'type':'message','id':'entry','message':{'role':'user','inputId':iid,'i
 file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry)+'\\n')
 proof = {'schema':1,'type':'context_committed','sessionId':'sid','inputId':iid,
     'sessionEntryId':'entry','requestGeneration':1,'llmContextDigest':'c'*64}
-Path(str(file)+'.input-proof').write_text(json.dumps(proof)+'\\n')
+write_proof_rows(file, [proof])
 os.chmod(file,0o600); os.chmod(str(file)+'.input-proof',0o600)
 send({'type':'response','id':command['id'],'command':'prompt','success':True})
 send({'type':'input_committed','sessionId':'sid','inputId':iid,'sessionEntryId':'entry'})
