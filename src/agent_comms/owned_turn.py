@@ -344,6 +344,7 @@ class OwnedTurn:
                     input_text=self.task,
                     on_admission=admit_original,
                     future_queue=self.runner.inputs,
+                    on_event=self.progress.consume,
                 )
             except Exception:
                 # A selected adaptive operation may already have paid or
