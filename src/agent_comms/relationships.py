@@ -296,7 +296,7 @@ class RelationshipDocument:
 
 
 class RelationshipStore(LockedStore[RelationshipDocument]):
-    """One current typed schema. Version1 conversion is an explicit offline operation."""
+    """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"
     json_indent = 2

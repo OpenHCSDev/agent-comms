@@ -94,3 +94,14 @@ Ready for parent review/integration and affected LIVE fork/history/relationships
 entry check. No live claim, public-root mutation, durable migration/reset or CI
 hold. All generated own test/build scratch is cleaned after process-reference
 inspection; source/RED evidence/final receipts remain persistent.
+
+## Retired relationship converter deleted
+
+Whole current relationship source/caller tracing found the unused v1 offline
+converter still under src. It had no runtime imports, only its obsolete conversion
+fixture. Read-only inspection confirms the optional live relationships document
+already uses current version2. **Delete120 production converter lines and173
+obsolete fixture lines**, rather than adapting its old pair codec to this refactor.
+Current RelationshipStore rejects old formats directly; all9 current strict store
+acceptance cases remain. No user file conversion, deletion or schema mutation.
+Historical receipts of the old migration are preserved, not rewritten.
