@@ -1,0 +1,27 @@
+[
+  {
+    "root": "/home/ts/.local/share/agent-comms/runtime-viewport-layout-20260928",
+    "processes": [],
+    "links": [],
+    "removed": true,
+    "logical_bytes": 73296350
+  },
+  {
+    "root": "/home/ts/.local/share/agent-comms/runtime-frame-damage-20260928",
+    "processes": [
+      3371354,
+      3371431,
+      3371488,
+      3371540,
+      3371550,
+      3371719,
+      3371859,
+      3383455,
+      3383586,
+      3383845,
+      3387476
+    ],
+    "links": [],
+    "removed": false
+  }
+]

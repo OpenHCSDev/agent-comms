@@ -1,0 +1,1 @@
+PASS actual resize/mode-return/shutdown: remove_mode during awaited unmount, all pumps/resources retired
