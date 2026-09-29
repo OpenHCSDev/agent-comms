@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RegistryAdmissionCheck(RuleCheck):
+class RegistryIdentityCheck(RuleCheck):
     expected: Thread
     actual: Thread
     expected_admission: int
@@ -28,23 +28,31 @@ class RegistryAdmissionCheck(RuleCheck):
     process: ProcessIdentity
 
 
-class GoalRegistryAdmissionCheck(RegistryAdmissionCheck):
+class RegistryAdmissionCheck(RegistryIdentityCheck):
+    """A send also requires the captured active turn to remain unchanged."""
+
+
+class GoalRegistryIdentityCheck(RegistryIdentityCheck):
+    """Fresh turn claims capture the goal, not the earlier turn state."""
+
+
+class GoalRegistryAdmissionCheck(GoalRegistryIdentityCheck, RegistryAdmissionCheck):
     """Selected input/awareness also captures the goal; reply settlement does not."""
 
 
 class RegistryIncarnationRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryIdentityCheck
     explanation = "The registered thread incarnation changed before native send."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.actual.incarnation != check.expected.incarnation
 
 
 class RegistryProcessRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryIdentityCheck
     explanation = "The registered process is not the captured current owner process."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: RegistryIdentityCheck) -> bool:
         return (
             check.actual.process_identity != check.expected.process_identity
             or check.actual.process_identity != check.process
@@ -52,26 +60,26 @@ class RegistryProcessRule(ReservationRule):
 
 
 class RegistryAdmissionRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryIdentityCheck
     explanation = "The registry admission generation changed."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.admission != check.expected_admission
 
 
 class RegistryRoleRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner role changed."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.actual.role != check.expected.role
 
 
 class RegistryWorktreeRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryIdentityCheck
     explanation = "The captured owner worktree changed."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: RegistryIdentityCheck) -> bool:
         return check.actual.worktree != check.expected.worktree
 
 
@@ -84,10 +92,10 @@ class RegistryTurnRule(ReservationRule):
 
 
 class RegistryGoalRule(ReservationRule):
-    check_type = GoalRegistryAdmissionCheck
+    check_type = GoalRegistryIdentityCheck
     explanation = "The captured goal changed."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: GoalRegistryIdentityCheck) -> bool:
         return check.actual.goal != check.expected.goal
 
 
