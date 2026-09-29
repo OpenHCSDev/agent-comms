@@ -1,0 +1,32 @@
+{
+  "process_references": {
+    "/home/ts/.local/share/agent-comms/runtime-workspace-20260928": [],
+    "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928": []
+  },
+  "unreadable_same_user": [
+    "1786010",
+    "1786012",
+    "2476148"
+  ],
+  "removed": [
+    "/home/ts/.local/share/agent-comms/runtime-workspace-20260928",
+    "/home/ts/.local/share/agent-comms/runtime-watchdog-20260928"
+  ],
+  "non_runtime_processes": [
+    {
+      "pid": "1786010",
+      "name": "systemd",
+      "state": "S"
+    },
+    {
+      "pid": "1786012",
+      "name": "(sd-pam)",
+      "state": "S"
+    },
+    {
+      "pid": "2476148",
+      "name": "aplay",
+      "state": "Z"
+    }
+  ]
+}
