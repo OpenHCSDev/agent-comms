@@ -11,11 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_commands import GetState, Prompt
 from agent_comms.pi_events import ContextCommitted, InputCommitted, Response
-from native_proof_cases import read_proof_rows
+from native_proof_cases import read_proof_rows, write_proof_rows
 from test_backend_native_lifecycle import native_backend as native_backend
 from tools.cutover.native_proof_journal import convert
 
@@ -316,3 +316,53 @@ async def test_actual_native_conversion_preserves_accepted_and_unknown(
         == accepted
     )
     print("native_proof_conversion=" + json.dumps(converted))
+
+
+@pytest.mark.parametrize("damage", ["malformed", "torn", "foreign_source"])
+async def test_actual_native_bad_proof_refuses_before_any_input(native_backend, damage):
+    owner = native_backend
+    assert (await owner.run("Real seed before proof damage"))[-1].ok
+    await owner.persistent.discard_for_external_write(str(owner.session))
+    proof = Path(str(owner.session) + ".input-proof")
+    complete, history = proof.read_bytes(), owner.session.read_bytes()
+    if damage == "malformed":
+        proof.write_bytes(b"incomplete SQLite header")
+    elif damage == "torn":
+        proof.write_bytes(complete[: len(complete) // 2])
+    else:
+        rows = read_proof_rows(owner.session)
+        rows[0]["sessionEntryId"] = "foreign-native-entry"
+        write_proof_rows(owner.session, rows)
+    damaged = proof.read_bytes()
+    try:
+        with pytest.raises(NativePiUnavailable):
+            await NativeSessionPreparation.open(
+                owner.persistent,
+                "pi",
+                [
+                    "--provider",
+                    "response-local",
+                    "--model",
+                    "fixture",
+                    "--thinking",
+                    "off",
+                    "--offline",
+                    "--no-extensions",
+                    "--no-skills",
+                    "--no-context-files",
+                    "--no-prompt-templates",
+                    "--no-tools",
+                ],
+                worktree=str(owner.project),
+                environment=dict(os.environ),
+                session_file=str(owner.session),
+            )
+        assert owner.session.read_bytes() == history
+        assert proof.read_bytes() == damaged
+        assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
+    finally:
+        await owner.persistent.close()
+        proof.write_bytes(complete)  # Restore only this disposable fixture's exact proof.
+    recovered = await owner.run("New diagnostic input after explicit fixture restoration")
+    assert recovered[-1].ok, recovered[-1]
+    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 2

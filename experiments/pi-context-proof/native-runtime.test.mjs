@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
-import fs, { chmodSync, readFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
+import { chmodSync, readFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { proofRecords } from './proof-records.mjs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 const packageDir = process.env.PI_PACKAGE_DIR;
-if (!packageDir || !packageDir.startsWith('/var/tmp/')) {
-  throw new Error('PI_PACKAGE_DIR must name a disposable copied Pi under /var/tmp');
-}
+if (!packageDir) throw new Error('PI_PACKAGE_DIR must name the matched immutable Pi package');
 const pi = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);
 const ID_A = 'a'.repeat(32);
 const ID_B = 'b'.repeat(32);
@@ -79,7 +77,7 @@ test('real SDK pipeline durably binds two identical prompts to distinct input ID
       requests.push(context.messages.filter(m => m.role === 'user').map(m => m.inputId));
       const disk = records(sm.getSessionFile());
       assert(disk.some(e => e.type === 'message' && e.message.inputId === requests.at(-1).at(-1)));
-      assert(records(sm.getSessionFile() + '.input-proof').length >= requests.length);
+      assert(proofRecords(sm.getSessionFile() + '.input-proof').length >= requests.length);
       return fakeResponse(model);
     };
     await session.prompt('identical text', { inputId: ID_A });
@@ -91,9 +89,9 @@ test('real SDK pipeline durably binds two identical prompts to distinct input ID
     const committed = events.filter(e=>e.type === 'context_committed');
     assert(committed.some(e=>e.inputId === ID_A && e.requestGeneration === 1));
     assert(committed.some(e=>e.inputId === ID_B && e.requestGeneration === 2));
-    const before = sm.getEntries().length;
+    const before = records(sm.getSessionFile()).length;
     await session.prompt('identical text', { inputId: ID_B });
-    assert.equal(sm.getEntries().length, before, 'exact replay must not duplicate a user or assistant');
+    assert.equal(records(sm.getSessionFile()).length, before, 'exact replay must not duplicate a user or assistant');
     assert.equal(requests.length, 2);
     await assert.rejects(session.prompt('different text', { inputId: ID_B }), /Conflicting replay/);
     assert.equal(requests.length, 2);
@@ -205,7 +203,7 @@ test('context transform preserving ID succeeds; removing tracked ID fails closed
       ? {...m, inputId: undefined} : m);
     await session.prompt('second', {inputId: ID_B});
     assert.equal(sent, 1, 'provider must not receive context with stripped tracked identity');
-    assert(!records(session.sessionFile + '.input-proof').some(row=>row.inputId===ID_B));
+    assert(!proofRecords(session.sessionFile + '.input-proof').some(row=>row.inputId===ID_B));
   });
 });
 
@@ -294,7 +292,7 @@ for (const {label, kind, streamingBehavior} of [
             const users=records(sm.getSessionFile())
               .filter(row=>row.type==='message'&&row.message.role==='user');
             assert.deepEqual(users.map(row=>row.message.inputId),[ID_A,ID_B,ID_C]);
-            const proofs=records(sm.getSessionFile()+'.input-proof');
+            const proofs=proofRecords(sm.getSessionFile()+'.input-proof');
             assert(proofs.some(row=>row.inputId===ID_B));
             assert(proofs.some(row=>row.inputId===ID_C));
           }
@@ -322,7 +320,7 @@ for (const {label, kind, streamingBehavior} of [
         if(++providerStarts===1){entered();await held;}
         if(providerStarts===2){
           assert.equal(context.messages.at(-1).inputId,ID_B);
-          assert(records(sm.getSessionFile()+'.input-proof').some(row=>row.inputId===ID_B),
+          assert(proofRecords(sm.getSessionFile()+'.input-proof').some(row=>row.inputId===ID_B),
             'native proof must precede model transport');
         }
         return fakeResponse(model);
@@ -351,12 +349,13 @@ for (const {label, kind, streamingBehavior} of [
         assert.equal(observed,1,'a throwing subscriber must not hide later observers');
         assert.equal(providerStarts,2,'the selected queued input reaches fake provider once');
         assert.deepEqual(core.messages,[]);
-        assert.equal(session._nativeInputClaims.has(ID_B),true);
-        assert(sm.getTrackedInput(ID_B));
+        assert.equal(session._nativeInputClaims.has(ID_B),false,
+          "committed claims belong to the durable native index, not a second live map");
+        assert.match(sm.getTrackedInput(ID_B).message.inputDigest,/^[a-f0-9]{64}$/);
         const users=records(sm.getSessionFile()).filter(row=>
           row.type==='message' && row.message.inputId===ID_B);
         assert.equal(users.length,1);
-        assert(records(sm.getSessionFile()+'.input-proof').some(row=>row.inputId===ID_B));
+        assert(proofRecords(sm.getSessionFile()+'.input-proof').some(row=>row.inputId===ID_B));
         await enqueue();
         assert.equal(providerStarts,2,'exact replay must not start another model turn');
         assert.deepEqual(session.clearQueue(),{steering:[],followUp:[]});
@@ -395,7 +394,7 @@ for (const eventType of ['message_start','message_end']) {
         assert(sm.getTrackedInput(ID_B));
         assert.equal(records(sm.getSessionFile()).filter(row=>
           row.type==='message'&&row.message.inputId===ID_B).length,1);
-        assert(records(sm.getSessionFile()+'.input-proof').some(row=>row.inputId===ID_B));
+        assert(proofRecords(sm.getSessionFile()+'.input-proof').some(row=>row.inputId===ID_B));
         await session.followUp('second',undefined,ID_B);
         assert.equal(providerStarts,2);
       } finally {unsubscribe();witness();release();await first;}
@@ -436,7 +435,7 @@ test('observer containment never hides a tracked-user fsync failure', async () =
       assert.equal(contextReceipts,0);
       assert.equal(sm.getTrackedInput(ID_B)?.message?.inputId,ID_B,
         'an append can remain even though its required fsync failed');
-      assert.equal(records(sm.getSessionFile()+'.input-proof').filter(row=>
+      assert.equal(proofRecords(sm.getSessionFile()+'.input-proof').filter(row=>
         row.inputId===ID_B).length,0,'an append is not a live context receipt');
     } finally {
       unsubscribe();sm.flushInputDurably=original;release();await first;
@@ -535,7 +534,7 @@ test('two identical queued follow-ups retain distinct IDs and durable individual
     const users = records(session.sessionFile)
       .filter(row=>row.type==='message'&&row.message.role==='user');
     assert.deepEqual(users.map(row=>row.message.inputId),[ID_A,ID_B,ID_C]);
-    const proofs = records(session.sessionFile+'.input-proof');
+    const proofs = proofRecords(session.sessionFile+'.input-proof');
     assert(proofs.some(row=>row.inputId===ID_B));
     assert(proofs.some(row=>row.inputId===ID_C));
     assert.equal(session.pendingMessageCount,0);
@@ -554,7 +553,7 @@ test('a later context prune cannot forge another proof for an old removed input'
     };
     await session.prompt('second', {inputId:ID_B});
     assert.equal(sent,2);
-    const proofs=records(session.sessionFile+'.input-proof');
+    const proofs=proofRecords(session.sessionFile+'.input-proof');
     assert.deepEqual(proofs.filter(row=>row.requestGeneration===2).map(row=>row.inputId),[ID_B]);
   });
 });
@@ -578,11 +577,11 @@ test('tracked 429 with default Pi retry enabled has one provider opportunity and
     };
     await session.prompt('one authorized request',{inputId:ID_A});
     assert.equal(providerStarts,1);
-    assert.deepEqual(records(sm.getSessionFile()+'.input-proof').map(row=>row.requestGeneration),[1]);
+    assert.deepEqual(proofRecords(sm.getSessionFile()+'.input-proof').map(row=>row.requestGeneration),[1]);
     assert.deepEqual(events.filter(event=>event.type==='context_committed').map(event=>event.inputId),[ID_A]);
     assert.equal(events.filter(event=>event.type==='auto_retry_start').length,0);
     assert.equal(events.find(event=>event.type==='agent_end')?.willRetry,false);
-    assert.equal(sm.getEntries().filter(row=>row.type==='message'&&
+    assert.equal(records(sm.getSessionFile()).filter(row=>row.type==='message'&&
       row.message?.role==='assistant').at(-1)?.message.stopReason,'error');
     await session.prompt('one authorized request',{inputId:ID_A});
     assert.equal(providerStarts,1,'same-ID replay cannot retry a failed provider call');
@@ -609,7 +608,7 @@ test('tracked context-overflow provider error never triggers auto-compaction ret
     assert.equal(events.filter(event=>event.type==='context_committed').length,1);
     assert.equal(events.filter(event=>event.type==='auto_retry_start').length,0);
     assert.equal(events.filter(event=>event.type==='compaction_start').length,0);
-    assert.equal(records(sm.getSessionFile()+'.input-proof').length,1);
+    assert.equal(proofRecords(sm.getSessionFile()+'.input-proof').length,1);
   }, {}, {compaction:{enabled:true},retry:{baseDelayMs:1,maxRetries:1}});
 });
 
@@ -671,7 +670,7 @@ test('tracked truncated tool-call response never auto-continues to a second prov
     };
     await session.prompt('truncated tool use',{inputId:ID_A});
     assert.equal(providerStarts,1);
-    assert.deepEqual(records(sm.getSessionFile()+'.input-proof').map(row=>row.requestGeneration),[1]);
+    assert.deepEqual(proofRecords(sm.getSessionFile()+'.input-proof').map(row=>row.requestGeneration),[1]);
   });
 });
 
@@ -689,7 +688,7 @@ test('a tool turn generates two context generations for one durable input', asyn
     };
     await session.prompt('use a tool', {inputId:ID_A});
     assert.equal(sent,2);
-    const rows=records(session.sessionFile+'.input-proof');
+    const rows=proofRecords(session.sessionFile+'.input-proof');
     assert.deepEqual(rows.map(row=>row.requestGeneration),[1,2]);
     assert(rows.every(row=>row.inputId===ID_A));
     assert.equal(records(session.sessionFile).filter(e=>e.type==='message'&&e.message.inputId===ID_A).length,1);
@@ -911,113 +910,17 @@ test('post-preflight error after user append retains the claim and suppresses du
     };
     await assert.rejects(session.prompt('attempt',{inputId:ID_A}),/after durable user append/);
     assert(sm.getTrackedInput(ID_A));
-    assert(session._nativeInputClaims.has(ID_A));
-    const entries=sm.getEntries().length;
+    assert.equal(session._nativeInputClaims.has(ID_A),false);
+    assert.match(sm.getTrackedInput(ID_A).message.inputDigest,/^[a-f0-9]{64}$/);
+    const entries=records(sm.getSessionFile()).length;
     await session.prompt('attempt',{inputId:ID_A});
-    assert.equal(sm.getEntries().length,entries);
+    assert.equal(records(sm.getSessionFile()).length,entries);
     assert.equal(providerStarts,1);
   });
 });
 
-for (const restart of [false,true]) {
-  test(`failed first proof-directory fsync is retried before another receipt/provider (${restart ? 'reopen' : 'live'})`, async () => {
-    await withSession(async ({session,sm,model,runtime,settings,loader,cwd,agentDir}) => {
-      let providerStarts=0,firstReceipts=0,dirAttempts=0,proofFileSynced=false;
-      const file=sm.getSessionFile(),proof=file+'.input-proof';
-      session.agent.streamFunction=async()=>{providerStarts++;return fakeResponse(model);};
-      session.subscribe(event=>{if(event.type==='context_committed') firstReceipts++;});
-      const original=fs.fsyncSync;
-      fs.fsyncSync=(fd)=>{
-        const path=fs.readlinkSync(`/proc/self/fd/${fd}`);
-        if(path===proof){
-          const result=original(fd);
-          proofFileSynced=true;
-          return result;
-        }
-        if(path===dirname(proof) && proofFileSynced){
-          proofFileSynced=false;
-          if(++dirAttempts===1) throw Error('injected first proof-directory fsync failure');
-        }
-        return original(fd);
-      };
-      syncBuiltinESMExports();
-      let reopened;
-      try {
-        await session.prompt('first attempt',{inputId:ID_A});
-        assert.equal(providerStarts,0,'failed directory fsync blocks provider');
-        assert.equal(firstReceipts,0,'a visible proof row is not a live receipt');
-        assert.equal(dirAttempts,1);
-        assert.deepEqual(records(proof).map(row=>row.requestGeneration),[1]);
-        await session.prompt('first attempt',{inputId:ID_A});
-        assert.equal(providerStarts,0,'exact replay cannot automatically retry uncertain attempt');
-        assert.equal(dirAttempts,1);
-        let active=session;
-        if(restart){
-          const reopenedSm=pi.SessionManager.open(file,dirname(file));
-          ({session:reopened}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,model,
-            sessionManager:reopenedSm,settingsManager:settings,resourceLoader:loader,noTools:'all'}));
-          active=reopened;
-          assert.equal(reopened._nativeRequestGeneration,1,'old row only reserves generation');
-        }
-        const secondReceipts=[];
-        active.subscribe(event=>{if(event.type==='context_committed') secondReceipts.push(event);});
-        active.agent.streamFunction=async (_m,context)=>{
-          providerStarts++;
-          assert.deepEqual(context.messages.filter(m=>m.role==='user').map(m=>m.inputId),[ID_A,ID_B]);
-          assert.equal(dirAttempts,2,'successful parent fsync precedes provider transport');
-          return fakeResponse(model);
-        };
-        await active.prompt('second distinct explicit attempt',{inputId:ID_B});
-        assert.equal(providerStarts,1);
-        assert.equal(dirAttempts,2);
-        assert.deepEqual(secondReceipts.map(event=>event.inputId),[ID_A,ID_B]);
-        assert(secondReceipts.every(event=>event.requestGeneration===2));
-        assert.equal(firstReceipts,restart ? 0 : 2,
-          'no event for failed generation; live subscriber sees only new generation');
-        assert.deepEqual(records(proof).map(row=>row.requestGeneration),[1,2,2]);
-      } finally {
-        fs.fsyncSync=original;syncBuiltinESMExports();reopened?.dispose();
-      }
-    });
-  });
-}
-
-test('full journal line after failed fsync is NOT a recovered context commitment', async () => {
-  await withSession(async ({session,sm,model,runtime,settings,loader,cwd,agentDir}) => {
-    const observed=[];
-    session.subscribe(e=>{if(e.type==='context_committed') observed.push(e);});
-    let sent=0;
-    session.agent.streamFunction=async()=>{sent++;return fakeResponse(model);};
-    const original=fs.fsyncSync;
-    fs.fsyncSync=(fd)=>{
-      const path=fs.readlinkSync(`/proc/self/fd/${fd}`);
-      if(path.endsWith('.input-proof')) throw Error('injected journal fsync failure');
-      return original(fd);
-    };
-    syncBuiltinESMExports();
-    try { await session.prompt('attempt',{inputId:ID_A}); }
-    finally {fs.fsyncSync=original;syncBuiltinESMExports();}
-    assert.equal(sent,0);
-    assert.equal(observed.length,0);
-    const file=sm.getSessionFile();
-    // Exact independent offline repro: ONE complete JSONL row survives failed
-    // proof fsync, but is not an emitted or recoverable context receipt.
-    const unsynced=records(file+'.input-proof');
-    assert.equal(unsynced.length,1);
-    assert.equal(unsynced[0].inputId,ID_A);
-    const resumed=pi.SessionManager.open(file,dirname(file));
-    const {session:reopened}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,
-      model,sessionManager:resumed,settingsManager:settings,resourceLoader:loader,noTools:'all'});
-    try {
-      let replayEvents=0,replayCalls=0;
-      reopened.subscribe(e=>{if(e.type==='context_committed') replayEvents++;});
-      reopened.agent.streamFunction=async()=>{replayCalls++;throw Error('no recovered replay');};
-      assert.equal(resumed.getTrackedInput(ID_A).message.inputId,ID_A);
-      assert.equal(reopened._nativeRequestGeneration,1,'the old row only reserves generation');
-      assert.equal(replayEvents,0,'reading a journal is never a live fsync event');
-      await reopened.prompt('attempt',{inputId:ID_A});
-      assert.equal(replayEvents,0);
-      assert.equal(replayCalls,0);
-    } finally {reopened.dispose();}
-  });
-});
+// Retired JSONL fsync interception cases are now actual OS-boundary SIGKILL
+// cases in tests/test_native_proof_recovery.py: five transaction boundaries,
+// three schema-publication boundaries, plus accepted/UNKNOWN conversion and
+// native duplicate/conflict/no-receipt/new-input recovery. They exercise the
+// installed SQLite/native process, which JS fs.fsyncSync mocking cannot intercept.

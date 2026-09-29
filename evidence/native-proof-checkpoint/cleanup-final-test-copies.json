@@ -1,0 +1,22 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/wt/.p107-callers",
+      "logical_bytes": 117765
+    },
+    {
+      "path": "/home/ts/wt/.p107-installed",
+      "logical_bytes": 141836934
+    },
+    {
+      "path": "/home/ts/wt/.p107-remaining",
+      "logical_bytes": 1833304
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-proof-checkpoint/scratch",
+      "logical_bytes": 0
+    }
+  ],
+  "references_preserved": [],
+  "preserved": "source/evidence, branch, current installed wheel/runtime, fcadec native package until parent copy verification; all live/global data untouched"
+}
