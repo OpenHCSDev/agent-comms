@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import backend, native_session_reopen
+from agent_comms.native_pi import CAPABILITY
 from agent_comms.native_session_reopen import NativeReopenError, validate_native_reopen
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -113,7 +114,7 @@ async def test_discarded_manager_rechecks_disk_and_rpc_identity_before_prompt(
         f"identity=Path({str(state_identity)!r}).read_text()\n"
         "print(json.dumps({'type':'response','command':'get_state','id':state['id'],"
         "'success':True,'data':{'nativeInputProofCapability':"
-        f"{backend.NATIVE_INPUT_CAPABILITY!r},'sessionId':identity,"
+        f"{CAPABILITY!r},'sessionId':identity,"
         f"'sessionFile':{str(file)!r}}}}}),flush=True)\n"
         "if select.select([sys.stdin],[],[],0.1)[0]:\n"
         f"    Path({str(marker)!r}).write_text(sys.stdin.readline())\n"

@@ -1,0 +1,26 @@
+{
+  "stage": "published",
+  "context": "full src/agent_comms with --context-root src",
+  "raw_count": 21,
+  "detectors": {
+    "repeated_builder_calls": 1,
+    "semantic_mirror_without_descent": 20
+  },
+  "timing": {
+    "parse_seconds": 0.755,
+    "analysis_seconds": 5.976,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.527,
+    "analysis_cache_status": "partial",
+    "total_seconds": 7.258
+  },
+  "scan_status": null,
+  "coverage_note": "CLI omits scan_status and analyzed/omitted detector counts. No zero-debt or complete detector-coverage claim. Published scan includes main306/307 integration; aggregate changes are not solely this PR.",
+  "R1": {
+    "mapping_read": 0,
+    "unmodeled_record_shape": 0,
+    "redundant_type_check": 0
+  },
+  "owner_findings": [],
+  "source": "fc73cb8d"
+}

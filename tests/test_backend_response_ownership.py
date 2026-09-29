@@ -71,6 +71,33 @@ def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
         isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in retired
         for node in ast.walk(backend)
     )
+    turn = next(
+        node
+        for node in backend.body
+        if isinstance(node, ast.ClassDef) and node.name == "TurnSession"
+    )
+    assert not any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in {"attest_input", "validate_reopen", "spawn_child", "stderr_tail"}
+        for node in ast.walk(turn)
+    )
+    assert not any(
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+        and node.attr
+        in {
+            "proc",
+            "reader",
+            "stderr_task",
+            "preflight_id",
+            "native_capability_confirmed",
+            "reused",
+            "validated_session_id",
+            "launch_key",
+        }
+        for node in ast.walk(turn)
+    )
     retired_fields = {
         "text_parts",
         "assistant_message_parts",
