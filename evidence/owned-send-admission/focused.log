@@ -1,0 +1,2666 @@
+...FFFF.FFFFFF..F.FFFFFF.FFF.....................FFF..........           [100%]
+=================================== FAILURES ===================================
+__________ test_uncaught_failure_feedback_once_even_after_done[None] ___________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fae10422780>
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_uncaught_failure_feedback0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae106c19b0>
+prior = None
+
+    @pytest.mark.parametrize("prior", [None, "error", "done"])
+    async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
+        _, session = await new_session(owner, tmp_path, "feedback")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+    
+        async def stream(*args, **kwargs):
+            if prior == "error":
+                yield events.Error("specific provider failure")
+            elif prior == "done":
+                yield events.Done("specific provider failure", False)
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        errors = [u for u in updates if "[agent error]" in str(u)]
+>       assert len(errors) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_turn_runner.py:162: AssertionError
+__________ test_uncaught_failure_feedback_once_even_after_done[error] __________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fae10310640>
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_uncaught_failure_feedback1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae106af050>
+prior = 'error'
+
+    @pytest.mark.parametrize("prior", [None, "error", "done"])
+    async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
+        _, session = await new_session(owner, tmp_path, "feedback")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+    
+        async def stream(*args, **kwargs):
+            if prior == "error":
+                yield events.Error("specific provider failure")
+            elif prior == "done":
+                yield events.Done("specific provider failure", False)
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        errors = [u for u in updates if "[agent error]" in str(u)]
+>       assert len(errors) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_turn_runner.py:162: AssertionError
+__________ test_uncaught_failure_feedback_once_even_after_done[done] ___________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fae1013d7f0>
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_uncaught_failure_feedback2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae103e7ac0>
+prior = 'done'
+
+    @pytest.mark.parametrize("prior", [None, "error", "done"])
+    async def test_uncaught_failure_feedback_once_even_after_done(owner, tmp_path, monkeypatch, prior):
+        _, session = await new_session(owner, tmp_path, "feedback")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+    
+        async def stream(*args, **kwargs):
+            if prior == "error":
+                yield events.Error("specific provider failure")
+            elif prior == "done":
+                yield events.Done("specific provider failure", False)
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        errors = [u for u in updates if "[agent error]" in str(u)]
+>       assert len(errors) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_turn_runner.py:162: AssertionError
+________ test_compaction_fault_reaches_acp_client_without_original_send ________
+
+owner = <agent_comms.acp.CommsAgent object at 0x7fae101a1480>
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_compaction_fault_reaches_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae107b39b0>
+
+    async def test_compaction_fault_reaches_acp_client_without_original_send(
+        owner, tmp_path, monkeypatch
+    ):
+        from dataclasses import replace
+    
+        from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
+    
+        _, session = await new_session(owner, tmp_path, "compacting")
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        # No native process or provider is started. The real ACP input admission and
+        # TurnRunner adaptive hook execute; only the selected operation is substituted.
+        owner.turns.agent_bin = "pi"
+        owner._comms.registry.register(
+            replace(owner._comms.registry.require(session), session_file=str(tmp_path / "saved.jsonl"))
+        )
+        source = OSError("402: insufficient credits on this model")
+        failure = SelectedChildUnknown("402: insufficient credits on this model")
+        attempts = []
+    
+        async def compact(*args, **kwargs):
+            attempts.append(args[5])
+            raise failure from source
+    
+        async def forbidden_stream(*args, **kwargs):
+            pytest.fail("original input must not reach native after uncertain compaction")
+            yield
+    
+        monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
+        monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
+        with pytest.raises(SelectedChildUnknown) as caught:
+>           await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
+
+tests/test_turn_runner.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:216: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:299: in _prompt_request
+    return await self.turns.prompt_owned(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:226: in prompt_owned
+    await self.inputs.run_owned_input(
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:302: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:83: in open
+    async for event in stream:
+.venv/lib/python3.14/site-packages/agent_comms/backend.py:830: in run
+    async for event in self.finish_result():
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.native_session_prepare.NativeSessionPreparation object at 0x7fae102a97f0>
+
+    async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
+        if not self.retained:
+>           raise NativePiUnavailable(
+                self.output.failure_text or "Native session preparation failed"
+            )
+E           agent_comms.native_pi.NativePiUnavailable: Native session preparation failed
+
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:50: NativePiUnavailable
+____ test_origin_goal_allows_only_followup_admitted_after_activation[False] ____
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0f7996a0>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+>           request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+metadata = {}
+expanded = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+        """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("ACP metadata must be an object")
+        extension = expanded.get("agentComms", metadata.get("agentComms"))
+        if extension is None:
+            return QueuePromptRequest()
+        if not isinstance(extension, dict) or set(extension) != {"request"}:
+>           raise ValueError("Comms metadata requires one declared request")
+E           ValueError: Comms metadata requires one declared request
+
+.venv/lib/python3.14/site-packages/agent_comms/acp_extension.py:486: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_origin_goal_allows_only_f0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae1014e190>
+queued_before_activation = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("queued_before_activation", [False, True])
+    async def test_origin_goal_allows_only_followup_admitted_after_activation(
+        tmp_path, monkeypatch, queued_before_activation
+    ):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        observed = {}
+    
+        async def events(*args, **kwargs):
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            persist_user(session, "a" * 32, args[2])
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            yield ae.InputStarted(id=None)
+            if queued_before_activation:
+                public_id, command = await queue_followup(agent, kwargs)
+            goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
+            yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
+            assert agent.turns.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()
+            if not queued_before_activation:
+                public_id, command = await queue_followup(agent, kwargs)
+            observed.update(goal=goal, public_id=public_id)
+            with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
+                assert allowed is (not queued_before_activation)
+            if queued_before_activation:
+                yield ae.InputRefused(id=public_id)
+            else:
+                persist_user(session, "b" * 32, command["message"])
+                assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+                yield ae.InputStarted(id=public_id)
+            yield ae.Chunk(text="Goal set and work completed this turn.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Goal set and work completed this turn.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn(
+                "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
+            )
+
+tests/test_acp_goal_input_authority.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:444: in run
+    await self.stream()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:377: in stream
+    async for event in backend.stream_agent_events(
+tests/test_acp_goal_input_authority.py:107: in events
+    public_id, command = await queue_followup(agent, kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_acp_goal_input_authority.py:59: in queue_followup
+    response = await agent.prompt(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0f7996a0>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+        except (ValueError, TypeError) as error:
+>           raise RequestError.invalid_params({"reason": str(error)}) from error
+E           acp.exceptions.RequestError: Invalid params
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:210: RequestError
+____ test_origin_goal_allows_only_followup_admitted_after_activation[True] _____
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0ea77250>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+>           request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+metadata = {}
+expanded = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+        """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("ACP metadata must be an object")
+        extension = expanded.get("agentComms", metadata.get("agentComms"))
+        if extension is None:
+            return QueuePromptRequest()
+        if not isinstance(extension, dict) or set(extension) != {"request"}:
+>           raise ValueError("Comms metadata requires one declared request")
+E           ValueError: Comms metadata requires one declared request
+
+.venv/lib/python3.14/site-packages/agent_comms/acp_extension.py:486: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_origin_goal_allows_only_f1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0edb59b0>
+queued_before_activation = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("queued_before_activation", [False, True])
+    async def test_origin_goal_allows_only_followup_admitted_after_activation(
+        tmp_path, monkeypatch, queued_before_activation
+    ):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        observed = {}
+    
+        async def events(*args, **kwargs):
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            persist_user(session, "a" * 32, args[2])
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            yield ae.InputStarted(id=None)
+            if queued_before_activation:
+                public_id, command = await queue_followup(agent, kwargs)
+            goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
+            yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
+            assert agent.turns.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()
+            if not queued_before_activation:
+                public_id, command = await queue_followup(agent, kwargs)
+            observed.update(goal=goal, public_id=public_id)
+            with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
+                assert allowed is (not queued_before_activation)
+            if queued_before_activation:
+                yield ae.InputRefused(id=public_id)
+            else:
+                persist_user(session, "b" * 32, command["message"])
+                assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+                yield ae.InputStarted(id=public_id)
+            yield ae.Chunk(text="Goal set and work completed this turn.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Goal set and work completed this turn.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn(
+                "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
+            )
+
+tests/test_acp_goal_input_authority.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:444: in run
+    await self.stream()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:377: in stream
+    async for event in backend.stream_agent_events(
+tests/test_acp_goal_input_authority.py:102: in events
+    public_id, command = await queue_followup(agent, kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_acp_goal_input_authority.py:59: in queue_followup
+    response = await agent.prompt(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0ea77250>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+        except (ValueError, TypeError) as error:
+>           raise RequestError.invalid_params({"reason": str(error)}) from error
+E           acp.exceptions.RequestError: Invalid params
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:210: RequestError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[None] _
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0eabc350>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+>           request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+metadata = {}
+expanded = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+        """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("ACP metadata must be an object")
+        extension = expanded.get("agentComms", metadata.get("agentComms"))
+        if extension is None:
+            return QueuePromptRequest()
+        if not isinstance(extension, dict) or set(extension) != {"request"}:
+>           raise ValueError("Comms metadata requires one declared request")
+E           ValueError: Comms metadata requires one declared request
+
+.venv/lib/python3.14/site-packages/agent_comms/acp_extension.py:486: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_autonomous_goal_followup_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0eb1b070>
+change = None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change
+    ):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        original_goal = comms.goals.update_goal(
+            "project", SetGoalAction(text="Read files until stopped"), owner_store=store
+        )
+        observed = {}
+    
+        async def events(*args, **kwargs):
+            assert "Persistent goal" in args[2]
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            persist_user(session, "a" * 32, args[2])
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            yield ae.InputStarted(id=None)
+            public_id, command = await queue_followup(agent, kwargs)
+            observed["public_id"] = public_id
+            if change == "clear":
+                comms.goals.update_goal("project", ClearGoalAction())
+            elif change == "replace":
+                observed["replacement"] = comms.goals.update_goal(
+                    "project", SetGoalAction(text="A different goal"), owner_store=store
+                )
+            with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
+                assert allowed is (change is None)
+            if change is None:
+                persist_user(session, "b" * 32, command["message"])
+                assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+                yield ae.InputStarted(id=public_id)
+            else:
+                yield ae.InputRefused(id=public_id)
+            yield ae.Chunk(text="Finished reading this section.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=change is None, text="Finished reading this section.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn(
+                "project", "project", "Continue working toward the active goal.", autonomous_goal=True
+            )
+
+tests/test_acp_goal_input_authority.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:444: in run
+    await self.stream()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:377: in stream
+    async for event in backend.stream_agent_events(
+tests/test_acp_goal_input_authority.py:159: in events
+    public_id, command = await queue_followup(agent, kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_acp_goal_input_authority.py:59: in queue_followup
+    response = await agent.prompt(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0eabc350>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+        except (ValueError, TypeError) as error:
+>           raise RequestError.invalid_params({"reason": str(error)}) from error
+E           acp.exceptions.RequestError: Invalid params
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:210: RequestError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[clear] _
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0ee69310>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+>           request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+metadata = {}
+expanded = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+        """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("ACP metadata must be an object")
+        extension = expanded.get("agentComms", metadata.get("agentComms"))
+        if extension is None:
+            return QueuePromptRequest()
+        if not isinstance(extension, dict) or set(extension) != {"request"}:
+>           raise ValueError("Comms metadata requires one declared request")
+E           ValueError: Comms metadata requires one declared request
+
+.venv/lib/python3.14/site-packages/agent_comms/acp_extension.py:486: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_autonomous_goal_followup_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0ea5f850>
+change = 'clear'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change
+    ):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        original_goal = comms.goals.update_goal(
+            "project", SetGoalAction(text="Read files until stopped"), owner_store=store
+        )
+        observed = {}
+    
+        async def events(*args, **kwargs):
+            assert "Persistent goal" in args[2]
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            persist_user(session, "a" * 32, args[2])
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            yield ae.InputStarted(id=None)
+            public_id, command = await queue_followup(agent, kwargs)
+            observed["public_id"] = public_id
+            if change == "clear":
+                comms.goals.update_goal("project", ClearGoalAction())
+            elif change == "replace":
+                observed["replacement"] = comms.goals.update_goal(
+                    "project", SetGoalAction(text="A different goal"), owner_store=store
+                )
+            with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
+                assert allowed is (change is None)
+            if change is None:
+                persist_user(session, "b" * 32, command["message"])
+                assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+                yield ae.InputStarted(id=public_id)
+            else:
+                yield ae.InputRefused(id=public_id)
+            yield ae.Chunk(text="Finished reading this section.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=change is None, text="Finished reading this section.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn(
+                "project", "project", "Continue working toward the active goal.", autonomous_goal=True
+            )
+
+tests/test_acp_goal_input_authority.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:444: in run
+    await self.stream()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:377: in stream
+    async for event in backend.stream_agent_events(
+tests/test_acp_goal_input_authority.py:159: in events
+    public_id, command = await queue_followup(agent, kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_acp_goal_input_authority.py:59: in queue_followup
+    response = await agent.prompt(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0ee69310>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+        except (ValueError, TypeError) as error:
+>           raise RequestError.invalid_params({"reason": str(error)}) from error
+E           acp.exceptions.RequestError: Invalid params
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:210: RequestError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[replace] _
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0ee94140>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+>           request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+metadata = {}
+expanded = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    def decode_request(metadata: object = None, **expanded) -> CommsRequest:
+        """ACP SDK keyword expansion is normalized here, once, before dispatch."""
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("ACP metadata must be an object")
+        extension = expanded.get("agentComms", metadata.get("agentComms"))
+        if extension is None:
+            return QueuePromptRequest()
+        if not isinstance(extension, dict) or set(extension) != {"request"}:
+>           raise ValueError("Comms metadata requires one declared request")
+E           ValueError: Comms metadata requires one declared request
+
+.venv/lib/python3.14/site-packages/agent_comms/acp_extension.py:486: ValueError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_autonomous_goal_followup_2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0eebcd70>
+change = 'replace'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change
+    ):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        original_goal = comms.goals.update_goal(
+            "project", SetGoalAction(text="Read files until stopped"), owner_store=store
+        )
+        observed = {}
+    
+        async def events(*args, **kwargs):
+            assert "Persistent goal" in args[2]
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            persist_user(session, "a" * 32, args[2])
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            yield ae.InputStarted(id=None)
+            public_id, command = await queue_followup(agent, kwargs)
+            observed["public_id"] = public_id
+            if change == "clear":
+                comms.goals.update_goal("project", ClearGoalAction())
+            elif change == "replace":
+                observed["replacement"] = comms.goals.update_goal(
+                    "project", SetGoalAction(text="A different goal"), owner_store=store
+                )
+            with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
+                assert allowed is (change is None)
+            if change is None:
+                persist_user(session, "b" * 32, command["message"])
+                assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+                yield ae.InputStarted(id=public_id)
+            else:
+                yield ae.InputRefused(id=public_id)
+            yield ae.Chunk(text="Finished reading this section.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=change is None, text="Finished reading this section.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.turns.run_agent_turn(
+                "project", "project", "Continue working toward the active goal.", autonomous_goal=True
+            )
+
+tests/test_acp_goal_input_authority.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:444: in run
+    await self.stream()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:377: in stream
+    async for event in backend.stream_agent_events(
+tests/test_acp_goal_input_authority.py:159: in events
+    public_id, command = await queue_followup(agent, kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_acp_goal_input_authority.py:59: in queue_followup
+    response = await agent.prompt(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7fae0ee94140>
+session_id = 'project'
+prompt = [TextContentBlock(annotations=None, text='follow-up for model', field_meta=None, type='text')]
+kwargs = {'agentComms': {'userText': 'follow-up as typed', 'deferDisplay': True}}
+
+    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+        from .acp_extension import decode_request
+        from .acp_request_consumer import AcpRequestConsumer
+    
+        try:
+            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+        except (ValueError, TypeError) as error:
+>           raise RequestError.invalid_params({"reason": str(error)}) from error
+E           acp.exceptions.RequestError: Invalid params
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:210: RequestError
+________ test_idle_owner_original_input_preserves_autonomous_goal_grant ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_idle_owner_original_input0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0ee7e200>
+
+    @pytest.mark.asyncio
+    async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_path, monkeypatch):
+        agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+        prior_generation = store.snapshot(goal.id)
+    
+        async def events(*args, **kwargs):
+            native_id = "a" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            session.write_text(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "id": "owner-input",
+                        "message": {
+                            "role": "user",
+                            "inputId": native_id,
+                            "content": [{"type": "text", "text": args[2]}],
+                        },
+                    }
+                )
+                + "\n"
+            )
+            assert kwargs["native_start"](None, native_id, args[2])
+            yield ae.InputStarted(id=None)
+            yield ae.Chunk(text="Read the requested file.")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="Read the requested file.")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.inputs.run_owned_input("project", "project", "testing steering")
+
+tests/test_acp_goal_original_input.py:77: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:302: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:67: in open
+    launch = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:330: in managed
+    cwd = worktree.resolve(strict=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+filename = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_idle_owner_original_input0/project'
+strict = True
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_idle_owner_original_input0/project'
+
+<frozen posixpath>:457: FileNotFoundError
+____________ test_original_goal_input_cannot_send_after_owner_stops ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_original_goal_input_canno0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0eebed60>
+
+    @pytest.mark.asyncio
+    async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
+        agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+        store = agent.turns.open_goal_store()
+        goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
+        prior_generation = store.snapshot(goal.id)
+        boundaries = []
+    
+        async def events(*args, **kwargs):
+            comms.registry.unregister("project")
+            with kwargs["send_boundary"](None, "b" * 32, args[2]) as allowed:
+                boundaries.append(allowed)
+            yield ae.Done(ok=False, text="Owner stopped before send")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.inputs.run_owned_input("project", "project", "do not send after stop")
+
+tests/test_acp_goal_original_input.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:302: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:67: in open
+    launch = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:330: in managed
+    cwd = worktree.resolve(strict=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+filename = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_original_goal_input_canno0/project'
+strict = True
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_original_goal_input_canno0/project'
+
+<frozen posixpath>:457: FileNotFoundError
+____ test_acp_original_send_denied_before_input_bind_with_unresolved_commit ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_original_send_denied_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0f7888a0>
+
+    @pytest.mark.asyncio
+    async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit(
+        tmp_path, monkeypatch
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+        await agent.new_session(str(tmp_path / "project"))
+        agent.inputs.drain_tasks["project"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
+        session = tmp_path / "saved.jsonl"
+        session.write_text("{}\n")
+        comms.threads.attach_session("project", str(session), pid=os.getpid())
+        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
+        commit_id = journal.begin(
+            str(session),
+            {"source": "pre-summary"},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+        observed = []
+    
+        async def events(*args, **kwargs):
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                observed.append(allowed)
+            yield ae.Done(ok=False, text="No provider send")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.inputs.run_owned_input("project", "project", "new correction")
+
+tests/test_compaction_send_admission.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:302: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:67: in open
+    launch = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:330: in managed
+    cwd = worktree.resolve(strict=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+filename = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_original_send_denied_0/project'
+strict = True
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_original_send_denied_0/project'
+
+<frozen posixpath>:457: FileNotFoundError
+____ test_selected_default_strategy_refuses_detached_provider_before_commit ____
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae10664ad0>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646559.2046506))
+
+    async def test_selected_default_strategy_refuses_detached_provider_before_commit(admitted):
+        registry, session, info = admitted
+        before = session.read_bytes()
+        with pytest.raises(PiSettingsEvidenceError, match="selected live Pi|Selected live Pi"):
+            await maybe_compact_owner_turn(
+                registry,
+                "pi-native",
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                PersistentPiSession(),
+            )
+        assert session.read_bytes() == before
+        assert (
+            InputDispositions(session.parent.parent / InputDispositions.filename)
+            .read()
+            .rows.get("acp:original")
+>           .native_id
+             ^^^^^^^^^
+            is None
+        )
+E       AttributeError: 'ReservedInput' object has no attribute 'native_id'
+
+tests/test_owner_compaction_adaptive.py:125: AttributeError
+____ test_adaptive_owner_one_original_input_native_commit_without_provider _____
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_owner_one_origin0/sessions/2026-09-29T01-49-19-438Z_01a0eada-22cd-76fc-9645-b25ad3f821ce.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+>           result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_compaction_prepare.PrepareCompactionHelper'>
+request = PreparationRequest(package='/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-w...ings=PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True), context_window=1000)
+cwd = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_owner_one_origin0/sessions')
+env = None
+
+    @classmethod
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+        node = shutil.which("node")
+        if node is None:
+            raise PiHelperError("Pi helper needs Node")
+        environment = dict(os.environ if env is None else env)
+        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            environment.pop(key, None)
+        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        environment["PI_OFFLINE"] = "1"
+        package = Path(request.package)
+        command = (node, "--no-global-search-paths")
+        # Every current caller supplies the verified native deployment.
+        fence = package / "dist/agent-comms-import-fence.mjs"
+        command += ("--import", str(fence))
+        payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        outcome = await BoundedRun.run(
+            (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),
+            timeout=10,
+            cwd=cwd,
+            env=environment,
+        )
+        if not outcome.outcome.successful or len(outcome.stdout) > 4096:
+>           raise PiHelperError(f"{cls.declared_name} failed or exceeded its output bound")
+E           agent_comms.pi_helper.PiHelperError: prepare_compaction failed or exceeded its output bound
+
+.venv/lib/python3.14/site-packages/agent_comms/pi_helper.py:62: PiHelperError
+
+The above exception was the direct cause of the following exception:
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae11cb4c90>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646559.5182905))
+
+    async def test_adaptive_owner_one_original_input_native_commit_without_provider(admitted):
+        registry, session, info = admitted
+        seen = []
+    
+        async def summarize(prepared):
+            seen.append(prepared)
+            assert prepared.witness.session_id
+            assert prepared.witness.session_file == str(session)
+            return NativeSummary("Provider-free synthetic owner summary", None, None)
+    
+>       result = await maybe_compact_owner_turn(
+            registry,
+            "unused-launcher",
+            "owner",
+            "turn",
+            info,
+            "acp:original",
+            PersistentPiSession(),
+            summary_strategy=summarize,
+        )
+
+tests/test_owner_compaction_adaptive.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_adaptive.py:243: in maybe_compact_owner_turn
+    operation = await compact_owner_once(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:93: in compact_owner_once
+    prepared_source = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:277: in prepare_source
+    prepared = prepare_native_source(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_owner_one_origin0/sessions/2026-09-29T01-49-19-438Z_01a0eada-22cd-76fc-9645-b25ad3f821ce.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+            result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+            after = file.stat()
+    
+            def revision(info: os.stat_result) -> tuple[int, ...]:
+                return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    
+            if revision(before) != revision(after):
+                raise NativePreparationError("Native preparation failed or changed")
+            return result.checked(file, ":".join(map(str, revision(before))))
+        except (OSError, ValueError, TypeError) as error:
+            if isinstance(error, NativePreparationError):
+                raise
+>           raise NativePreparationError("Native source cannot be prepared") from error
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Native source cannot be prepared
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:144: NativePreparationError
+_____ test_adaptive_owner_correction_during_summary_refuses_native_commit ______
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_owner_correction0/sessions/2026-09-29T01-49-21-737Z_01a0eada-2bc8-7693-b773-154d5defe1bf.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+>           result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_compaction_prepare.PrepareCompactionHelper'>
+request = PreparationRequest(package='/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-w...ings=PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True), context_window=1000)
+cwd = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_owner_correction0/sessions')
+env = None
+
+    @classmethod
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+        node = shutil.which("node")
+        if node is None:
+            raise PiHelperError("Pi helper needs Node")
+        environment = dict(os.environ if env is None else env)
+        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            environment.pop(key, None)
+        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        environment["PI_OFFLINE"] = "1"
+        package = Path(request.package)
+        command = (node, "--no-global-search-paths")
+        # Every current caller supplies the verified native deployment.
+        fence = package / "dist/agent-comms-import-fence.mjs"
+        command += ("--import", str(fence))
+        payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        outcome = await BoundedRun.run(
+            (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),
+            timeout=10,
+            cwd=cwd,
+            env=environment,
+        )
+        if not outcome.outcome.successful or len(outcome.stdout) > 4096:
+>           raise PiHelperError(f"{cls.declared_name} failed or exceeded its output bound")
+E           agent_comms.pi_helper.PiHelperError: prepare_compaction failed or exceeded its output bound
+
+.venv/lib/python3.14/site-packages/agent_comms/pi_helper.py:62: PiHelperError
+
+The above exception was the direct cause of the following exception:
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae0eb41fd0>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646561.8054473))
+
+    async def test_adaptive_owner_correction_during_summary_refuses_native_commit(admitted):
+        registry, session, info = admitted
+        before = session.read_bytes()
+    
+        async def summarize(_prepared):
+            owner = registry.require("owner")
+            assert owner.active_turn is not None
+            InputDispositions(session.parent.parent / InputDispositions.filename).record(
+                "acp:correction",
+                seq=None,
+                owner="owner",
+                admission=owner.active_turn.admission_generation,
+                target="owner",
+                text="Retain correction",
+            )
+            return NativeSummary("Stale synthetic summary", None, None)
+    
+        with pytest.raises(RelationViolationError, match="Unsettled"):
+>           await maybe_compact_owner_turn(
+                registry,
+                "unused-launcher",
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                PersistentPiSession(),
+                summary_strategy=summarize,
+            )
+
+tests/test_owner_compaction_adaptive.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_adaptive.py:243: in maybe_compact_owner_turn
+    operation = await compact_owner_once(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:93: in compact_owner_once
+    prepared_source = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:277: in prepare_source
+    prepared = prepare_native_source(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_owner_correction0/sessions/2026-09-29T01-49-21-737Z_01a0eada-2bc8-7693-b773-154d5defe1bf.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+            result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+            after = file.stat()
+    
+            def revision(info: os.stat_result) -> tuple[int, ...]:
+                return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    
+            if revision(before) != revision(after):
+                raise NativePreparationError("Native preparation failed or changed")
+            return result.checked(file, ":".join(map(str, revision(before))))
+        except (OSError, ValueError, TypeError) as error:
+            if isinstance(error, NativePreparationError):
+                raise
+>           raise NativePreparationError("Native source cannot be prepared") from error
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Native source cannot be prepared
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:144: NativePreparationError
+______ test_adaptive_settings_change_after_summary_refuses_native_commit _______
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_settings_change_0/sessions/2026-09-29T01-49-24-039Z_01a0eada-34c6-77aa-9ae3-7c53cdc61130.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+>           result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_compaction_prepare.PrepareCompactionHelper'>
+request = PreparationRequest(package='/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-w...ings=PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True), context_window=1000)
+cwd = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_settings_change_0/sessions')
+env = None
+
+    @classmethod
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+        node = shutil.which("node")
+        if node is None:
+            raise PiHelperError("Pi helper needs Node")
+        environment = dict(os.environ if env is None else env)
+        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            environment.pop(key, None)
+        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        environment["PI_OFFLINE"] = "1"
+        package = Path(request.package)
+        command = (node, "--no-global-search-paths")
+        # Every current caller supplies the verified native deployment.
+        fence = package / "dist/agent-comms-import-fence.mjs"
+        command += ("--import", str(fence))
+        payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        outcome = await BoundedRun.run(
+            (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),
+            timeout=10,
+            cwd=cwd,
+            env=environment,
+        )
+        if not outcome.outcome.successful or len(outcome.stdout) > 4096:
+>           raise PiHelperError(f"{cls.declared_name} failed or exceeded its output bound")
+E           agent_comms.pi_helper.PiHelperError: prepare_compaction failed or exceeded its output bound
+
+.venv/lib/python3.14/site-packages/agent_comms/pi_helper.py:62: PiHelperError
+
+The above exception was the direct cause of the following exception:
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae0f87b020>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646564.1048865))
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_settings_change_0')
+
+    async def test_adaptive_settings_change_after_summary_refuses_native_commit(admitted, tmp_path):
+        registry, session, info = admitted
+        before = session.read_bytes()
+    
+        async def summarize(_prepared):
+            (tmp_path / "private-pi-agent" / "settings.json").write_text(
+                '{"compaction":{"keepRecentTokens":500}}'
+            )
+            return NativeSummary("Stale synthetic summary", None, None)
+    
+        with pytest.raises(RelationViolationError, match="source changed"):
+>           await maybe_compact_owner_turn(
+                registry,
+                "unused-launcher",
+                "owner",
+                "turn",
+                info,
+                "acp:original",
+                PersistentPiSession(),
+                summary_strategy=summarize,
+            )
+
+tests/test_owner_compaction_adaptive.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_adaptive.py:243: in maybe_compact_owner_turn
+    operation = await compact_owner_once(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:93: in compact_owner_once
+    prepared_source = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:277: in prepare_source
+    prepared = prepare_native_source(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_settings_change_0/sessions/2026-09-29T01-49-24-039Z_01a0eada-34c6-77aa-9ae3-7c53cdc61130.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+            result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+            after = file.stat()
+    
+            def revision(info: os.stat_result) -> tuple[int, ...]:
+                return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    
+            if revision(before) != revision(after):
+                raise NativePreparationError("Native preparation failed or changed")
+            return result.checked(file, ":".join(map(str, revision(before))))
+        except (OSError, ValueError, TypeError) as error:
+            if isinstance(error, NativePreparationError):
+                raise
+>           raise NativePreparationError("Native source cannot be prepared") from error
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Native source cannot be prepared
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:144: NativePreparationError
+________ test_adaptive_unproven_project_settings_skips_without_provider ________
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae0f8e9900>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646566.4447227))
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_adaptive_unproven_project0')
+
+    async def test_adaptive_unproven_project_settings_skips_without_provider(admitted, tmp_path):
+        registry, session, info = admitted
+        project_settings = tmp_path / ".pi" / "settings.json"
+        project_settings.parent.mkdir()
+        project_settings.write_text('{"compaction":{"enabled":true}}')
+        called = False
+    
+        async def summarize(_prepared):
+            nonlocal called
+            called = True
+            return NativeSummary("forbidden", None, None)
+    
+        assert not await maybe_compact_owner_turn(
+            registry,
+            "unused-launcher",
+            "owner",
+            "turn",
+            info,
+            "acp:original",
+            PersistentPiSession(),
+            summary_strategy=summarize,
+        )
+        assert not called
+>       assert (
+            InputDispositions(session.parent.parent / InputDispositions.filename)
+            .read()
+            .rows["acp:original"]
+            .declared_name
+            == "unknown"
+        )
+E       AssertionError: assert 'reserved' == 'unknown'
+E         
+E         - unknown
+E         + reserved
+
+tests/test_owner_compaction_adaptive.py:241: AssertionError
+_________ test_acp_owner_turn_compacts_then_sends_original_once[False] _________
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t0/sessions/2026-09-29T01-49-27-005Z_01a0eada-405c-7513-8ebb-c1e8bf715b36.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+>           result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_compaction_prepare.PrepareCompactionHelper'>
+request = PreparationRequest(package='/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-w...ings=PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True), context_window=1000)
+cwd = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t0/sessions')
+env = None
+
+    @classmethod
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+        node = shutil.which("node")
+        if node is None:
+            raise PiHelperError("Pi helper needs Node")
+        environment = dict(os.environ if env is None else env)
+        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            environment.pop(key, None)
+        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        environment["PI_OFFLINE"] = "1"
+        package = Path(request.package)
+        command = (node, "--no-global-search-paths")
+        # Every current caller supplies the verified native deployment.
+        fence = package / "dist/agent-comms-import-fence.mjs"
+        command += ("--import", str(fence))
+        payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        outcome = await BoundedRun.run(
+            (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),
+            timeout=10,
+            cwd=cwd,
+            env=environment,
+        )
+        if not outcome.outcome.successful or len(outcome.stdout) > 4096:
+>           raise PiHelperError(f"{cls.declared_name} failed or exceeded its output bound")
+E           agent_comms.pi_helper.PiHelperError: prepare_compaction failed or exceeded its output bound
+
+.venv/lib/python3.14/site-packages/agent_comms/pi_helper.py:62: PiHelperError
+
+The above exception was the direct cause of the following exception:
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae0f8a5310>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646567.0752747))
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0f8c6ba0>
+correction = False
+
+    @pytest.mark.parametrize("correction", [False, True])
+    async def test_acp_owner_turn_compacts_then_sends_original_once(
+        admitted, tmp_path, monkeypatch, correction
+    ):
+        _registry, session, info = admitted
+        root = tmp_path / "wire"
+        comms = wire(root)
+        project = tmp_path / "proj"
+        project.mkdir()
+        received = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                received.append(kwargs)
+    
+        async def synthetic_summary(prepared):
+            assert prepared.witness.session_file == str(session)
+            if correction:
+                owner = comms.registry.require("proj")
+                assert owner.active_turn is not None
+                InputDispositions(root / InputDispositions.filename).record(
+                    "acp:correction",
+                    seq=None,
+                    owner="proj",
+                    admission=owner.active_turn.admission_generation,
+                    target="proj",
+                    text="Changed requirement before native write",
+                )
+            return NativeSummary(
+                "Provider-free ACP-owner summary",
+                FieldCodec.decode(
+                    SummaryFiles,
+                    {"readFiles": ["src/retained.py"], "modifiedFiles": ["src/changed.py"]},
+                ),
+                FieldCodec.decode(
+                    SummaryUsage,
+                    {
+                        "input": 7,
+                        "output": 4,
+                        "cacheRead": 0,
+                        "cacheWrite": 0,
+                        "totalTokens": 11,
+                        "cost": {
+                            "input": 0.0,
+                            "output": 0.0,
+                            "cacheRead": 0.0,
+                            "cacheWrite": 0.0,
+                            "total": 0.0,
+                        },
+                    },
+                ),
+            )
+    
+        agent = canonical_agent(
+            comms,
+            agent_bin="pi",
+            agent_args=[],
+            runtime_enabled=True,
+            adaptive_compaction_enabled=True,
+            adaptive_summary_strategy=synthetic_summary,
+            auto_wake=False,
+        )
+        agent.on_connect(Client())
+        await agent.new_session(cwd=str(project), mcp_servers=[])
+        agent.inputs.drain_tasks["proj"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+        current = comms.registry.require("proj")
+        comms.registry.register(
+            replace(
+                current,
+                goal=Goal("retain history", "goal-acp"),
+                session_file=str(session),
+                model=info.model,
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.set_agent_info(
+            "proj",
+            model=info.model,
+            context_used=info.context_used,
+            context_size=info.context_size,
+        )
+        from agent_comms.goal_attempts import GoalAttemptStore
+    
+        private = root / "goal-private"
+        private.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal("goal-acp")
+        agent.turns.goal_store = store
+        goal_before = comms.registry.require("proj").goal
+        grant_before = store.snapshot("goal-acp")
+        admission = comms.registry.snapshot().admission_generations["proj"]
+        InputDispositions(root / InputDispositions.filename).record(
+            "acp:original",
+            seq=None,
+            owner="proj",
+            admission=admission,
+            target="proj",
+            text="Original new task",
+        )
+        dispatched = []
+    
+        async def fake_native_stream(*args, **kwargs):
+            task = args[2]
+            native_id = "a" * 32
+            assert agent.turns.persistent_backends["proj"].reopen_required == str(session)
+            with kwargs["send_boundary"](None, native_id, task) as allowed:
+                assert allowed is True
+                dispatched.append(native_id)
+            assert kwargs["native_start"](None, native_id, task)
+            yield ae.InputStarted(id=None)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="processed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", fake_native_stream)
+        assert comms.registry.require("proj").role.executable
+        try:
+            turn = agent.turns.run_agent_turn(
+                "proj",
+                "proj",
+                "Original new task",
+                original_keys=("acp:original",),
+                original_owner_input=True,
+                original_goal_id="goal-acp",
+            )
+            if correction:
+                with pytest.raises(RelationViolationError, match="Unsettled"):
+                    await turn
+                assert dispatched == []
+                assert (
+                    InputDispositions(root / InputDispositions.filename)
+                    .read()
+                    .rows["acp:original"]
+                    .declared_name
+                    == "unknown"
+                )
+                # Fresh owner input does not consume or block the autonomous grant.
+                assert comms.registry.require("proj").goal == goal_before
+                assert store.snapshot("goal-acp") == grant_before
+            else:
+>               await turn
+
+tests/test_owner_compaction_adaptive.py:409: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:306: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_adaptive.py:243: in maybe_compact_owner_turn
+    operation = await compact_owner_once(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:93: in compact_owner_once
+    prepared_source = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:277: in prepare_source
+    prepared = prepare_native_source(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t0/sessions/2026-09-29T01-49-27-005Z_01a0eada-405c-7513-8ebb-c1e8bf715b36.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+            result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+            after = file.stat()
+    
+            def revision(info: os.stat_result) -> tuple[int, ...]:
+                return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    
+            if revision(before) != revision(after):
+                raise NativePreparationError("Native preparation failed or changed")
+            return result.checked(file, ":".join(map(str, revision(before))))
+        except (OSError, ValueError, TypeError) as error:
+            if isinstance(error, NativePreparationError):
+                raise
+>           raise NativePreparationError("Native source cannot be prepared") from error
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Native source cannot be prepared
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:144: NativePreparationError
+_________ test_acp_owner_turn_compacts_then_sends_original_once[True] __________
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t1/sessions/2026-09-29T01-49-29-665Z_01a0eada-4ac0-7351-89d2-6ac96463d99e.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+>           result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.owner_compaction_prepare.PrepareCompactionHelper'>
+request = PreparationRequest(package='/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-w...ings=PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True), context_window=1000)
+cwd = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t1/sessions')
+env = None
+
+    @classmethod
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+        node = shutil.which("node")
+        if node is None:
+            raise PiHelperError("Pi helper needs Node")
+        environment = dict(os.environ if env is None else env)
+        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            environment.pop(key, None)
+        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        environment["PI_OFFLINE"] = "1"
+        package = Path(request.package)
+        command = (node, "--no-global-search-paths")
+        # Every current caller supplies the verified native deployment.
+        fence = package / "dist/agent-comms-import-fence.mjs"
+        command += ("--import", str(fence))
+        payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        outcome = await BoundedRun.run(
+            (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),
+            timeout=10,
+            cwd=cwd,
+            env=environment,
+        )
+        if not outcome.outcome.successful or len(outcome.stdout) > 4096:
+>           raise PiHelperError(f"{cls.declared_name} failed or exceeded its output bound")
+E           agent_comms.pi_helper.PiHelperError: prepare_compaction failed or exceeded its output bound
+
+.venv/lib/python3.14/site-packages/agent_comms/pi_helper.py:62: PiHelperError
+
+The above exception was the direct cause of the following exception:
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae0ec4e8a0>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...er', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646569.7291896))
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0f8c70e0>
+correction = True
+
+    @pytest.mark.parametrize("correction", [False, True])
+    async def test_acp_owner_turn_compacts_then_sends_original_once(
+        admitted, tmp_path, monkeypatch, correction
+    ):
+        _registry, session, info = admitted
+        root = tmp_path / "wire"
+        comms = wire(root)
+        project = tmp_path / "proj"
+        project.mkdir()
+        received = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                received.append(kwargs)
+    
+        async def synthetic_summary(prepared):
+            assert prepared.witness.session_file == str(session)
+            if correction:
+                owner = comms.registry.require("proj")
+                assert owner.active_turn is not None
+                InputDispositions(root / InputDispositions.filename).record(
+                    "acp:correction",
+                    seq=None,
+                    owner="proj",
+                    admission=owner.active_turn.admission_generation,
+                    target="proj",
+                    text="Changed requirement before native write",
+                )
+            return NativeSummary(
+                "Provider-free ACP-owner summary",
+                FieldCodec.decode(
+                    SummaryFiles,
+                    {"readFiles": ["src/retained.py"], "modifiedFiles": ["src/changed.py"]},
+                ),
+                FieldCodec.decode(
+                    SummaryUsage,
+                    {
+                        "input": 7,
+                        "output": 4,
+                        "cacheRead": 0,
+                        "cacheWrite": 0,
+                        "totalTokens": 11,
+                        "cost": {
+                            "input": 0.0,
+                            "output": 0.0,
+                            "cacheRead": 0.0,
+                            "cacheWrite": 0.0,
+                            "total": 0.0,
+                        },
+                    },
+                ),
+            )
+    
+        agent = canonical_agent(
+            comms,
+            agent_bin="pi",
+            agent_args=[],
+            runtime_enabled=True,
+            adaptive_compaction_enabled=True,
+            adaptive_summary_strategy=synthetic_summary,
+            auto_wake=False,
+        )
+        agent.on_connect(Client())
+        await agent.new_session(cwd=str(project), mcp_servers=[])
+        agent.inputs.drain_tasks["proj"].cancel()
+        await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+        current = comms.registry.require("proj")
+        comms.registry.register(
+            replace(
+                current,
+                goal=Goal("retain history", "goal-acp"),
+                session_file=str(session),
+                model=info.model,
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        comms.agents.set_agent_info(
+            "proj",
+            model=info.model,
+            context_used=info.context_used,
+            context_size=info.context_size,
+        )
+        from agent_comms.goal_attempts import GoalAttemptStore
+    
+        private = root / "goal-private"
+        private.mkdir(mode=0o700)
+        store = GoalAttemptStore.initialize(private)
+        store.create_goal("goal-acp")
+        agent.turns.goal_store = store
+        goal_before = comms.registry.require("proj").goal
+        grant_before = store.snapshot("goal-acp")
+        admission = comms.registry.snapshot().admission_generations["proj"]
+        InputDispositions(root / InputDispositions.filename).record(
+            "acp:original",
+            seq=None,
+            owner="proj",
+            admission=admission,
+            target="proj",
+            text="Original new task",
+        )
+        dispatched = []
+    
+        async def fake_native_stream(*args, **kwargs):
+            task = args[2]
+            native_id = "a" * 32
+            assert agent.turns.persistent_backends["proj"].reopen_required == str(session)
+            with kwargs["send_boundary"](None, native_id, task) as allowed:
+                assert allowed is True
+                dispatched.append(native_id)
+            assert kwargs["native_start"](None, native_id, task)
+            yield ae.InputStarted(id=None)
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="processed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", fake_native_stream)
+        assert comms.registry.require("proj").role.executable
+        try:
+            turn = agent.turns.run_agent_turn(
+                "proj",
+                "proj",
+                "Original new task",
+                original_keys=("acp:original",),
+                original_owner_input=True,
+                original_goal_id="goal-acp",
+            )
+            if correction:
+                with pytest.raises(RelationViolationError, match="Unsettled"):
+>                   await turn
+
+tests/test_owner_compaction_adaptive.py:396: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:306: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_adaptive.py:243: in maybe_compact_owner_turn
+    operation = await compact_owner_once(
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:93: in compact_owner_once
+    prepared_source = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:277: in prepare_source
+    prepared = prepare_native_source(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent')
+session_file = '/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_acp_owner_turn_compacts_t1/sessions/2026-09-29T01-49-29-665Z_01a0eada-4ac0-7351-89d2-6ac96463d99e.jsonl'
+settings = PiCompactionDecision(reserve_tokens=100, keep_recent_tokens=100, enabled=True, trigger=True)
+context_window = 1000
+
+    def prepare_native_source(
+        package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    ) -> NativePreparation | None:
+        """Derive Pi's actual cut point without a model call or a session mutation.
+    
+        The caller supplies the actual selected window and effective settings.
+        The returned witness is not authority: the owner captures source and the
+        writer later CASes on disk.
+        """
+        try:
+            package = package.resolve(strict=True)
+            verify_native_package(package)
+            file = Path(session_file).absolute()
+            if file != file.resolve(strict=True):
+                raise NativePreparationError("Native session path is not canonical")
+            before = file.stat()
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_uid not in (0, os.getuid())
+                or before.st_size <= 0
+            ):
+                raise NativePreparationError("Native session is not regular storage")
+            result = asyncio.run(
+                PrepareCompactionHelper.run(
+                    PreparationRequest(
+                        str(package),
+                        str(file),
+                        settings,
+                        context_window,
+                    ),
+                    cwd=file.parent,
+                )
+            )
+            after = file.stat()
+    
+            def revision(info: os.stat_result) -> tuple[int, ...]:
+                return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+    
+            if revision(before) != revision(after):
+                raise NativePreparationError("Native preparation failed or changed")
+            return result.checked(file, ":".join(map(str, revision(before))))
+        except (OSError, ValueError, TypeError) as error:
+            if isinstance(error, NativePreparationError):
+                raise
+>           raise NativePreparationError("Native source cannot be prepared") from error
+E           agent_comms.owner_compaction_prepare.NativePreparationError: Native source cannot be prepared
+
+.venv/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:144: NativePreparationError
+______ test_adaptive_owner_selected_model_mismatch_skips_without_provider ______
+
+admitted = (<agent_comms.registration.Registration object at 0x7fae0ebae3a0>, PosixPath('/home/ts/wt/comms-owned-send-admission-2...ner', model='openrouter/fixture', session_name=None, context_used=950, context_size=1000, timestamp=1790646572.356514))
+
+    async def test_adaptive_owner_selected_model_mismatch_skips_without_provider(admitted):
+        registry, session, info = admitted
+        called = False
+    
+        async def summarize(_prepared):
+            nonlocal called
+            called = True
+            return NativeSummary("forbidden", None, None)
+    
+        different = AgentRuntimeInfo(
+            thread="owner",
+            model="other/model",
+            context_used=950,
+            context_size=1000,
+        )
+        assert not await maybe_compact_owner_turn(
+            registry,
+            "unused-launcher",
+            "owner",
+            "turn",
+            different,
+            "acp:original",
+            PersistentPiSession(),
+            summary_strategy=summarize,
+        )
+        assert not called
+        assert (
+            InputDispositions(session.parent.parent / InputDispositions.filename)
+            .read()
+            .rows.get("acp:original")
+>           .native_id
+             ^^^^^^^^^
+            is None
+        )
+E       AttributeError: 'ReservedInput' object has no attribute 'native_id'
+
+tests/test_owner_compaction_adaptive.py:462: AttributeError
+______ test_sent_tool_message_is_visible_live_and_in_saved_history[#test] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_sent_tool_message_is_visi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0df295c0>
+target = '#test'
+
+    @pytest.mark.parametrize("target", ["#test", "peer"])
+    async def test_sent_tool_message_is_visible_live_and_in_saved_history(
+        tmp_path, monkeypatch, target
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.threads.register(Thread("peer", frozenset({"test"}), str(tmp_path)))
+        session = tmp_path / "session.jsonl"
+        session.touch()
+        comms.threads.attach_session("worker", str(session))
+        updates = []
+        receipts = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        agent.sessions.client = Client()
+    
+        async def events(*args, **kwargs):
+            yield ae.ToolStart(id="send1", name="comms_send")
+            receipt = invoke_tool(
+                comms,
+                "comms_send",
+                {
+                    "from": "worker",
+                    "to": target,
+                    "body": "Actual sent text",
+                },
+            )
+            receipts.append(receipt)
+            session.write_text(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "id": "tool-result",
+                        "message": {
+                            "role": "toolResult",
+                            "toolName": "comms_send",
+                            "toolCallId": "send1",
+                            "content": [{"type": "text", "text": json.dumps(receipt)}],
+                        },
+                    }
+                )
+                + "\n"
+            )
+            yield ae.ToolEnd(id="send1", name="comms_send", ok=True, output=json.dumps(receipt))
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.prompt("worker", [{"type": "text", "text": "!agent send this"}])
+
+tests/test_reply_routing.py:72: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:216: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:299: in _prompt_request
+    return await self.turns.prompt_owned(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:226: in prompt_owned
+    await self.inputs.run_owned_input(
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:302: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:67: in open
+    launch = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:328: in managed
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>, command = '/bin/echo'
+
+    @classmethod
+    def package_for_command(cls, command: str) -> Path:
+        """Resolve an explicitly supported launcher to the reviewed package.
+    
+        Executable names never establish capability. Configured commands must
+        name this installation's entrypoint, its pinned CLI, or the source stack
+        launcher; execution always uses the verified native package.
+        """
+        import hashlib
+    
+        from .native_package import MANIFEST
+        from .private_nk_entrypoint import private_nk_from_environment
+    
+        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
+        executable = (
+            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+        )
+        route = private_nk_from_environment()
+        if route is not None:
+            package = route.native_package
+        elif executable is not None and executable == stack_launcher.resolve():
+            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+            package = (
+                MANIFEST.parent
+                / f".pi-native-{build}"
+                / "node_modules/@earendil-works/pi-coding-agent"
+            )
+        else:
+            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        allowed = (
+            Path(sys.executable).with_name("pi-comms-native").resolve(),
+            stack_launcher.resolve(),
+            (package / "dist" / "cli.js").resolve(),
+        )
+        if executable is not None and executable not in allowed:
+>           raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+E           agent_comms.native_pi.NativePiUnavailable: Configured command is not a validated native Pi launcher
+
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:293: NativePiUnavailable
+______ test_sent_tool_message_is_visible_live_and_in_saved_history[peer] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_sent_tool_message_is_visi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae106efcb0>
+target = 'peer'
+
+    @pytest.mark.parametrize("target", ["#test", "peer"])
+    async def test_sent_tool_message_is_visible_live_and_in_saved_history(
+        tmp_path, monkeypatch, target
+    ):
+        comms = wire(tmp_path / "wire")
+        agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.threads.register(Thread("peer", frozenset({"test"}), str(tmp_path)))
+        session = tmp_path / "session.jsonl"
+        session.touch()
+        comms.threads.attach_session("worker", str(session))
+        updates = []
+        receipts = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        agent.sessions.client = Client()
+    
+        async def events(*args, **kwargs):
+            yield ae.ToolStart(id="send1", name="comms_send")
+            receipt = invoke_tool(
+                comms,
+                "comms_send",
+                {
+                    "from": "worker",
+                    "to": target,
+                    "body": "Actual sent text",
+                },
+            )
+            receipts.append(receipt)
+            session.write_text(
+                json.dumps(
+                    {
+                        "type": "message",
+                        "id": "tool-result",
+                        "message": {
+                            "role": "toolResult",
+                            "toolName": "comms_send",
+                            "toolCallId": "send1",
+                            "content": [{"type": "text", "text": json.dumps(receipt)}],
+                        },
+                    }
+                )
+                + "\n"
+            )
+            yield ae.ToolEnd(id="send1", name="comms_send", ok=True, output=json.dumps(receipt))
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+>           await agent.prompt("worker", [{"type": "text", "text": "!agent send this"}])
+
+tests/test_reply_routing.py:72: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:216: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+.venv/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:299: in _prompt_request
+    return await self.turns.prompt_owned(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:226: in prompt_owned
+    await self.inputs.run_owned_input(
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:677: in run_owned_input
+    await self.effects.turns.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:787: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.prepare_native()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:302: in prepare_native
+    await self.runner.prepare_selected_session(self.session_id, self.thread)
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.venv/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:67: in open
+    launch = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:328: in managed
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>, command = '/bin/echo'
+
+    @classmethod
+    def package_for_command(cls, command: str) -> Path:
+        """Resolve an explicitly supported launcher to the reviewed package.
+    
+        Executable names never establish capability. Configured commands must
+        name this installation's entrypoint, its pinned CLI, or the source stack
+        launcher; execution always uses the verified native package.
+        """
+        import hashlib
+    
+        from .native_package import MANIFEST
+        from .private_nk_entrypoint import private_nk_from_environment
+    
+        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
+        executable = (
+            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+        )
+        route = private_nk_from_environment()
+        if route is not None:
+            package = route.native_package
+        elif executable is not None and executable == stack_launcher.resolve():
+            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+            package = (
+                MANIFEST.parent
+                / f".pi-native-{build}"
+                / "node_modules/@earendil-works/pi-coding-agent"
+            )
+        else:
+            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        allowed = (
+            Path(sys.executable).with_name("pi-comms-native").resolve(),
+            stack_launcher.resolve(),
+            (package / "dist" / "cli.js").resolve(),
+        )
+        if executable is not None and executable not in allowed:
+>           raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+E           agent_comms.native_pi.NativePiUnavailable: Configured command is not a validated native Pi launcher
+
+.venv/lib/python3.14/site-packages/agent_comms/native_pi.py:293: NativePiUnavailable
+____________ test_route_is_forwarded_live_and_preserved_by_entry_id ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-final/test_route_is_forwarded_live_a0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fae0e6eb8c0>
+
+    async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        agent = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False)
+        await agent.new_session(str(tmp_path / "worker"))
+        comms.channels.update_tags("worker", add=frozenset({"test"}))
+        session = tmp_path / "session.jsonl"
+        session.write_text('{"type":"session","id":"session","version":3}\n')
+        comms.threads.attach_session("worker", str(session))
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        agent.sessions.client = Client()
+    
+        async def events(*args, **kwargs):
+            native_id = "a" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed
+            assert kwargs["native_start"](None, native_id, args[2])
+            with session.open("a") as output:
+                for identity, role, content in (
+                    ("u1", "user", args[2]),
+                    ("a1", "assistant", "Channel answer"),
+                ):
+                    output.write(
+                        json.dumps(
+                            {
+                                "type": "message",
+                                "id": identity,
+                                "message": {
+                                    "role": role,
+                                    "content": content,
+                                    **({"inputId": native_id} if role == "user" else {}),
+                                },
+                            }
+                        )
+                        + "\n"
+                    )
+            yield ae.Chunk(text="Channel answer")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="")
+    
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+        try:
+            message = comms.messaging.send_user_message(
+                "#test", "Question in channel", worktree=str(tmp_path)
+            )
+            # Routing persists by entry identity on the current owned turn. Native
+            # channel notification/admission is covered by the canonical drain tests.
+            await asyncio.wait_for(agent.turns.run_agent_turn(
+                "worker", "worker", message.body,
+                reply_targets=(message.target,), origins=(message,),
+            ), 2)
+            routed = [
+                update
+                for update in updates
+                if (update.field_meta or {}).get("agentComms", {}).get("route")
+            ]
+>           assert routed[0].field_meta["agentComms"]["route"]["targets"] == ("#test",)
+                   ^^^^^^^^^
+E           IndexError: list index out of range
+
+tests/test_reply_routing.py:158: IndexError
+=========================== short test summary info ============================
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[error]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[done]
+FAILED tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send
+FAILED tests/test_acp_goal_input_authority.py::test_origin_goal_allows_only_followup_admitted_after_activation[False]
+FAILED tests/test_acp_goal_input_authority.py::test_origin_goal_allows_only_followup_admitted_after_activation[True]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[None]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[clear]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[replace]
+FAILED tests/test_acp_goal_original_input.py::test_idle_owner_original_input_preserves_autonomous_goal_grant
+FAILED tests/test_acp_goal_original_input.py::test_original_goal_input_cannot_send_after_owner_stops
+FAILED tests/test_compaction_send_admission.py::test_acp_original_send_denied_before_input_bind_with_unresolved_commit
+FAILED tests/test_owner_compaction_adaptive.py::test_selected_default_strategy_refuses_detached_provider_before_commit
+FAILED tests/test_owner_compaction_adaptive.py::test_adaptive_owner_one_original_input_native_commit_without_provider
+FAILED tests/test_owner_compaction_adaptive.py::test_adaptive_owner_correction_during_summary_refuses_native_commit
+FAILED tests/test_owner_compaction_adaptive.py::test_adaptive_settings_change_after_summary_refuses_native_commit
+FAILED tests/test_owner_compaction_adaptive.py::test_adaptive_unproven_project_settings_skips_without_provider
+FAILED tests/test_owner_compaction_adaptive.py::test_acp_owner_turn_compacts_then_sends_original_once[False]
+FAILED tests/test_owner_compaction_adaptive.py::test_acp_owner_turn_compacts_then_sends_original_once[True]
+FAILED tests/test_owner_compaction_adaptive.py::test_adaptive_owner_selected_model_mismatch_skips_without_provider
+FAILED tests/test_reply_routing.py::test_sent_tool_message_is_visible_live_and_in_saved_history[#test]
+FAILED tests/test_reply_routing.py::test_sent_tool_message_is_visible_live_and_in_saved_history[peer]
+FAILED tests/test_reply_routing.py::test_route_is_forwarded_live_and_preserved_by_entry_id
+23 failed, 39 passed in 59.14s

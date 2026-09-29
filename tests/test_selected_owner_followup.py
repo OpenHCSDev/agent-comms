@@ -429,6 +429,13 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
 
     controller = SimpleNamespace(session_update=session_update)
     agent.sessions.client = controller
+
+    async def permission(session_id, turn_id, actual_controller, request):
+        assert session_id == "beta" and turn_id
+        assert actual_controller is controller
+        return request
+
+    monkeypatch.setattr(agent.turns, "extension_ui_permission", permission)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -442,17 +449,16 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         return await fake(package, **kwargs)
 
     async def native(*args, **kwargs):
-        execution = kwargs["send_boundary"].__self__
-        assert execution.controller is controller
+        request = object()
+        assert await kwargs["ui_request"](request) is request
         assert kwargs["images"][0].data == "eA=="
         owner = comms.registry.require("beta")
-        receipts = agent.inputs.future_inputs(owner, execution.original_keys[0])
+        original_key = agent.inputs.turn_original_input_keys["beta"][0]
+        receipts = agent.inputs.future_inputs(owner, original_key)
         assert len(receipts) == 2
         # The adaptive compaction owner accepts the same live queued receipts.
-        agent.inputs.dispositions.read().compaction_rows(
-            owner, execution.original_keys[0], agent.inputs
-        )
-        first_id = execution.accepted_input_id
+        agent.inputs.dispositions.read().compaction_rows(owner, original_key, agent.inputs)
+        first_id = original_key.removeprefix("acp:")
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True
         assert kwargs["native_start"](None, "a" * 32, args[2])

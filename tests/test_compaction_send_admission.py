@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-
 import asyncio
 import os
 
 import pytest
 
 from agent_comms import agent_events as ae
-from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.compaction_states import CommittedOperation, UnknownOperation
 from agent_comms.input_disposition import InputDispositions
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Durable POSIX compaction journal")
 
@@ -51,6 +50,10 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
 ):
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+    (tmp_path / "project").mkdir()
+    agent.turns.adaptive_compaction_enabled = (
+        False  # This case tests ordinary goal/input admission.
+    )
     await agent.new_session(str(tmp_path / "project"))
     agent.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(agent.inputs.drain_tasks["project"], return_exceptions=True)
@@ -79,7 +82,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
             .read()
             .unknown(frozenset({"project"}))
         )
-        assert len(rows) == 1 and rows[0].native_id is None
+        assert len(rows) == 1 and not rows[0].has_native_binding
         assert journal.get(commit_id).state.declared_name == "intent"
         journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "uncertain"})
         await agent.inputs.run_owned_input("project", "project", "distinct later input")

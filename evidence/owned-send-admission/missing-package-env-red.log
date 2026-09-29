@@ -1,0 +1,886 @@
+EEEEEEE.FFFFFFFFF.Fsssssssss..................s..FFFFFFFFFFFFF           [100%]
+==================================== ERRORS ====================================
+_____ ERROR at setup of test_mounted_cancel_does_not_cancel_other_session ______
+
+comms = <agent_comms.comms.Comms object at 0x7fef4343f8c0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef433f08a0>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...9.1.1', 'PYTEST_CURRENT_TEST': 'tests/test_turn_runner.py::test_mounted_cancel_does_not_cancel_other_session (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_turn_failure_preserves_exact_exception_cause_and_releases_state _
+
+comms = <agent_comms.comms.Comms object at 0x7fef43351d10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef42533410>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...RENT_TEST': 'tests/test_turn_runner.py::test_turn_failure_preserves_exact_exception_cause_and_releases_state (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_shutdown_joins_running_turn_before_releasing_session __
+
+comms = <agent_comms.comms.Comms object at 0x7fef43353c50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef433f57b0>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...'PYTEST_CURRENT_TEST': 'tests/test_turn_runner.py::test_shutdown_joins_running_turn_before_releasing_session (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_uncaught_failure_feedback_once_even_after_done[None] __
+
+comms = <agent_comms.comms.Comms object at 0x7fef427442b0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef4337a050>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...'PYTEST_CURRENT_TEST': 'tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None] (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_uncaught_failure_feedback_once_even_after_done[error] _
+
+comms = <agent_comms.comms.Comms object at 0x7fef42745940>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef427d08c0>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...PYTEST_CURRENT_TEST': 'tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[error] (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_uncaught_failure_feedback_once_even_after_done[done] __
+
+comms = <agent_comms.comms.Comms object at 0x7fef4335e0f0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef4269b930>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...'PYTEST_CURRENT_TEST': 'tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[done] (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ ERROR at setup of test_compaction_fault_reaches_acp_client_without_original_send _
+
+comms = <agent_comms.comms.Comms object at 0x7fef42727ce0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef433fa5d0>
+
+    @pytest.fixture
+    async def owner(comms, monkeypatch):
+        async def models(*args):
+            return []
+    
+        monkeypatch.setattr(backend, "discover_models", models)
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_runner.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...ST_CURRENT_TEST': 'tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send (setup)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=================================== FAILURES ===================================
+____ test_origin_goal_allows_only_followup_admitted_after_activation[False] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_origin_goal_allows_only_f0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef426326d0>
+queued_before_activation = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("queued_before_activation", [False, True])
+    async def test_origin_goal_allows_only_followup_admitted_after_activation(
+        tmp_path, monkeypatch, queued_before_activation
+    ):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...t_origin_goal_allows_only_followup_admitted_after_activation[False] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_origin_goal_allows_only_followup_admitted_after_activation[True] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_origin_goal_allows_only_f1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef4277a0d0>
+queued_before_activation = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("queued_before_activation", [False, True])
+    async def test_origin_goal_allows_only_followup_admitted_after_activation(
+        tmp_path, monkeypatch, queued_before_activation
+    ):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...st_origin_goal_allows_only_followup_admitted_after_activation[True] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[None] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_autonomous_goal_followup_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef448f4dd0>
+change = None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change
+    ):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...s_goal_followup_checks_current_goal_and_hides_internal_prompt[None] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[clear] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_autonomous_goal_followup_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef426e41a0>
+change = 'clear'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change
+    ):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'..._goal_followup_checks_current_goal_and_hides_internal_prompt[clear] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[replace] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_autonomous_goal_followup_2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef426e7a10>
+change = 'replace'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change
+    ):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...oal_followup_checks_current_goal_and_hides_internal_prompt[replace] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+________ test_idle_owner_original_input_preserves_autonomous_goal_grant ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_idle_owner_original_input0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef42756040>
+
+    @pytest.mark.asyncio
+    async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_path, monkeypatch):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'....py::test_idle_owner_original_input_preserves_autonomous_goal_grant (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[activated] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_changed_goal_before_origi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef427579a0>
+existing_goal = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...ged_goal_before_original_turn_does_not_consume_new_grant[activated] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_changed_goal_before_origi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef42784210>
+existing_goal = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...nged_goal_before_original_turn_does_not_consume_new_grant[replaced] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____________ test_original_goal_input_cannot_send_after_owner_stops ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_original_goal_input_canno0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef427865f0>
+
+    @pytest.mark.asyncio
+    async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:137: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:23: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...al_input.py::test_original_goal_input_cannot_send_after_owner_stops (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_acp_original_send_denied_before_input_bind_with_unresolved_commit ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_acp_original_send_denied_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef433055c0>
+
+    @pytest.mark.asyncio
+    async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit(
+        tmp_path, monkeypatch
+    ):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_send_admission.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...sts/test_compaction_send_admission.py::test_acp_original_send_denied_before_input_bind_with_unresolved_commit (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+______ test_sent_tool_message_is_visible_live_and_in_saved_history[#test] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_sent_tool_message_is_visi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef414491d0>
+target = '#test'
+
+    @pytest.mark.parametrize("target", ["#test", "peer"])
+    async def test_sent_tool_message_is_visible_live_and_in_saved_history(
+        tmp_path, monkeypatch, target
+    ):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reply_routing.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...RRENT_TEST': 'tests/test_reply_routing.py::test_sent_tool_message_is_visible_live_and_in_saved_history[#test] (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+______ test_sent_tool_message_is_visible_live_and_in_saved_history[peer] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_sent_tool_message_is_visi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef42784e50>
+target = 'peer'
+
+    @pytest.mark.parametrize("target", ["#test", "peer"])
+    async def test_sent_tool_message_is_visible_live_and_in_saved_history(
+        tmp_path, monkeypatch, target
+    ):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reply_routing.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...URRENT_TEST': 'tests/test_reply_routing.py::test_sent_tool_message_is_visible_live_and_in_saved_history[peer] (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____________ test_route_is_forwarded_live_and_preserved_by_entry_id ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_route_is_forwarded_live_a0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef40a23d20>
+
+    async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reply_routing.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'..._routing.py::test_route_is_forwarded_live_and_preserved_by_entry_id (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_coordination_context_does_not_override_scheduled_response_policy _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_coordination_context_does0')
+
+    async def test_coordination_context_does_not_override_scheduled_response_policy(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reply_routing.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...NT_TEST': 'tests/test_reply_routing.py::test_coordination_context_does_not_override_scheduled_response_policy (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+___ test_retry_during_unrelated_turn_is_ready_once_without_overlap[success] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_retry_during_unrelated_tu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef4089e510>
+outcome = 'success'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        tmp_path, monkeypatch, outcome
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'..._retry_during_unrelated_turn_is_ready_once_without_overlap[success] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[error] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_retry_during_unrelated_tu1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef4089f4d0>
+outcome = 'error'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        tmp_path, monkeypatch, outcome
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...st_retry_during_unrelated_turn_is_ready_once_without_overlap[error] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_retry_during_unrelated_tu2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef408c5a20>
+outcome = 'eof'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        tmp_path, monkeypatch, outcome
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+__ test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception] ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_retry_during_unrelated_tu3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef408c5fd0>
+outcome = 'exception'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        tmp_path, monkeypatch, outcome
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...etry_during_unrelated_turn_is_ready_once_without_overlap[exception] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[cancel] ____
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_retry_during_unrelated_tu4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef408c5860>
+outcome = 'cancel'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        tmp_path, monkeypatch, outcome
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...t_retry_during_unrelated_turn_is_ready_once_without_overlap[cancel] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+______ test_busy_retry_keeps_unresolved_attempt_and_owner_fences[claimed] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_busy_retry_keeps_unresolv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef408e6f90>
+fence = 'claimed'
+
+    @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+    async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...:test_busy_retry_keeps_unresolved_attempt_and_owner_fences[claimed] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_____ test_busy_retry_keeps_unresolved_attempt_and_owner_fences[reserved] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_busy_retry_keeps_unresolv1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef408e5d30>
+fence = 'reserved'
+
+    @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+    async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...test_busy_retry_keeps_unresolved_attempt_and_owner_fences[reserved] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_______ test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_busy_retry_keeps_unresolv2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef408e69e0>
+fence = 'owner'
+
+    @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+    async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...y::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+______ test_busy_retry_keeps_unresolved_attempt_and_owner_fences[origin] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-owned-send-admission-20260928/.test-owned-focused/test_busy_retry_keeps_unresolv3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fef4090eb30>
+fence = 'origin'
+
+    @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+    async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_retry_running.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[origin] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_acp_goal_input_authority.py::test_origin_goal_allows_only_followup_admitted_after_activation[False]
+FAILED tests/test_acp_goal_input_authority.py::test_origin_goal_allows_only_followup_admitted_after_activation[True]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[None]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[clear]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[replace]
+FAILED tests/test_acp_goal_original_input.py::test_idle_owner_original_input_preserves_autonomous_goal_grant
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[activated]
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced]
+FAILED tests/test_acp_goal_original_input.py::test_original_goal_input_cannot_send_after_owner_stops
+FAILED tests/test_compaction_send_admission.py::test_acp_original_send_denied_before_input_bind_with_unresolved_commit
+FAILED tests/test_reply_routing.py::test_sent_tool_message_is_visible_live_and_in_saved_history[#test]
+FAILED tests/test_reply_routing.py::test_sent_tool_message_is_visible_live_and_in_saved_history[peer]
+FAILED tests/test_reply_routing.py::test_route_is_forwarded_live_and_preserved_by_entry_id
+FAILED tests/test_reply_routing.py::test_coordination_context_does_not_override_scheduled_response_policy
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[success]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[error]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[cancel]
+FAILED tests/test_runtime_goal_retry_running.py::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[claimed]
+FAILED tests/test_runtime_goal_retry_running.py::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[reserved]
+FAILED tests/test_runtime_goal_retry_running.py::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner]
+FAILED tests/test_runtime_goal_retry_running.py::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[origin]
+ERROR tests/test_turn_runner.py::test_mounted_cancel_does_not_cancel_other_session
+ERROR tests/test_turn_runner.py::test_turn_failure_preserves_exact_exception_cause_and_releases_state
+ERROR tests/test_turn_runner.py::test_shutdown_joins_running_turn_before_releasing_session
+ERROR tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None]
+ERROR tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[error]
+ERROR tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[done]
+ERROR tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send
+23 failed, 22 passed, 10 skipped, 7 errors in 18.20s
