@@ -1,0 +1,88 @@
+native_excursion provider_retry [AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/excursions/test_actual_native_retry_and_c0/sessions/enrolled-c737fb2159484c8d9c1bdd220b714da3.jsonl', context_used=None, context_size=2000000, thinking_level='off'), InputStarted(id=None), ProviderUsage(response_id='1', usage=PiUsage(input=0, output=0, cache_read=0, cache_write=0, total_tokens=0, cost=PiCost(input=0, output=0, cache_read=0, cache_write=0, total=0), reasoning=None, cache_write_1h=None)), Error(text='503: {"message":"loopback retryable failure","type":"server_error"}', reason_code=None, command=None, id=None, diagnostics=()), AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/excursions/test_actual_native_retry_and_c0/sessions/enrolled-c737fb2159484c8d9c1bdd220b714da3.jsonl', context_used=None, context_size=2000000, thinking_level='off'), AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/excursions/test_actual_native_retry_and_c0/sessions/enrolled-c737fb2159484c8d9c1bdd220b714da3.jsonl', context_used=9, context_size=2000000, thinking_level=None), StreamSettled(), Done(text='503: {"message":"loopback retryable failure","type":"server_error"}', ok=False, reason_code=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>, diagnostic={'exit_code': 0})]
+Fnative_excursion overflow_compaction [AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/excursions/test_actual_native_retry_and_c1/sessions/enrolled-59f011aafbe247239caa364dfdc8d24c.jsonl', context_used=None, context_size=2000000, thinking_level='off'), InputStarted(id=None), ProviderUsage(response_id='1', usage=PiUsage(input=0, output=0, cache_read=0, cache_write=0, total_tokens=0, cost=PiCost(input=0, output=0, cache_read=0, cache_write=0, total=0), reasoning=None, cache_write_1h=None)), Error(text='400: {"message":"maximum context length exceeded; private prompt","type":"context_length_exceeded"}', reason_code=None, command=None, id=None, diagnostics=()), AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/excursions/test_actual_native_retry_and_c1/sessions/enrolled-59f011aafbe247239caa364dfdc8d24c.jsonl', context_used=None, context_size=2000000, thinking_level='off'), AgentInfo(model='response-local/fixture', session_name=None, session_file='/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/watchdog/excursions/test_actual_native_retry_and_c1/sessions/enrolled-59f011aafbe247239caa364dfdc8d24c.jsonl', context_used=18016, context_size=2000000, thinking_level=None), StreamSettled(), Done(text='400: {"message":"maximum context length exceeded; private prompt","type":"context_length_exceeded"}', ok=False, reason_code=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>, diagnostic={'exit_code': 0})]
+F
+=================================== FAILURES ===================================
+______ test_actual_native_retry_and_compaction_excursions[provider_retry] ______
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fda6b3c2a50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fda6b3e2fd0>
+excursion = 'provider_retry'
+
+    @pytest.mark.parametrize("excursion", ["provider_retry", "overflow_compaction"])
+    async def test_actual_native_retry_and_compaction_excursions(native_backend, monkeypatch, excursion):
+        from native_event_host import install_event_host
+    
+        owner = native_backend
+        configuration = json.loads((owner.config / "models.json").read_text())
+        origin = configuration["providers"]["response-local"]["baseUrl"].removesuffix("/v1")
+        install_event_host(monkeypatch, "pi", origin, native_settings={
+            "compaction": {"enabled": True, "keepRecentTokens": 500, "reserveTokens": 16384},
+            "retry": {"enabled": True, "maxRetries": 1, "baseDelayMs": 1,
+                      "provider": {"maxRetries": 0}},
+        })
+        prior = 0
+        if excursion == "overflow_compaction":
+            owner.provider.text = "Prior retained context. " * 3000
+            seeded = await owner.run("Seed actual retained context")
+            assert seeded[-1].ok, seeded[-1]
+            prior = owner.provider.posts
+        owner.provider.text = "Recovered actual native turn."
+        original = owner.provider.handle
+    
+        async def respond(reader, writer):
+            owner.provider.status = (503 if excursion == "provider_retry" else 400) if owner.provider.posts == prior else 200
+            await original(reader, writer)
+    
+        owner.provider.handle = respond
+        result = await owner.run("Recover without replaying this input")
+        print("native_excursion", excursion, repr(result), flush=True)
+>       assert result[-1].ok and result[-1].text == owner.provider.text, result[-1]
+E       AssertionError: Done(text='503: {"message":"loopback retryable failure","type":"server_error"}', ok=False, reason_code=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>, diagnostic={'exit_code': 0})
+E       assert (False)
+E        +  where False = Done(text='503: {"message":"loopback retryable failure","type":"server_error"}', ok=False, reason_code=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>, diagnostic={'exit_code': 0}).ok
+
+tests/test_backend_native_watchdog.py:85: AssertionError
+___ test_actual_native_retry_and_compaction_excursions[overflow_compaction] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fda6b22ead0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fda6b3a5480>
+excursion = 'overflow_compaction'
+
+    @pytest.mark.parametrize("excursion", ["provider_retry", "overflow_compaction"])
+    async def test_actual_native_retry_and_compaction_excursions(native_backend, monkeypatch, excursion):
+        from native_event_host import install_event_host
+    
+        owner = native_backend
+        configuration = json.loads((owner.config / "models.json").read_text())
+        origin = configuration["providers"]["response-local"]["baseUrl"].removesuffix("/v1")
+        install_event_host(monkeypatch, "pi", origin, native_settings={
+            "compaction": {"enabled": True, "keepRecentTokens": 500, "reserveTokens": 16384},
+            "retry": {"enabled": True, "maxRetries": 1, "baseDelayMs": 1,
+                      "provider": {"maxRetries": 0}},
+        })
+        prior = 0
+        if excursion == "overflow_compaction":
+            owner.provider.text = "Prior retained context. " * 3000
+            seeded = await owner.run("Seed actual retained context")
+            assert seeded[-1].ok, seeded[-1]
+            prior = owner.provider.posts
+        owner.provider.text = "Recovered actual native turn."
+        original = owner.provider.handle
+    
+        async def respond(reader, writer):
+            owner.provider.status = (503 if excursion == "provider_retry" else 400) if owner.provider.posts == prior else 200
+            await original(reader, writer)
+    
+        owner.provider.handle = respond
+        result = await owner.run("Recover without replaying this input")
+        print("native_excursion", excursion, repr(result), flush=True)
+>       assert result[-1].ok and result[-1].text == owner.provider.text, result[-1]
+E       AssertionError: Done(text='400: {"message":"maximum context length exceeded; private prompt","type":"context_length_exceeded"}', ok=False, reason_code=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>, diagnostic={'exit_code': 0})
+E       assert (False)
+E        +  where False = Done(text='400: {"message":"maximum context length exceeded; private prompt","type":"context_length_exceeded"}', ok=False, reason_code=<FailureReason.FINAL_STOP_MISSING: 'assistant_final_stop_missing'>, diagnostic={'exit_code': 0}).ok
+
+tests/test_backend_native_watchdog.py:85: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_backend_native_watchdog.py::test_actual_native_retry_and_compaction_excursions[provider_retry]
+FAILED tests/test_backend_native_watchdog.py::test_actual_native_retry_and_compaction_excursions[overflow_compaction]
+2 failed, 3 deselected in 4.09s

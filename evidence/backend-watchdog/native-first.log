@@ -1,0 +1,46 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+__________ test_actual_native_watchdog_failure_never_replays[failure] __________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f9a6606acf0>
+outcome = 'failure'
+
+    @pytest.mark.parametrize('outcome', ['failure', 'stall'])
+    async def test_actual_native_watchdog_failure_never_replays(native_backend, outcome):
+        owner = native_backend
+        owner.provider.status = 503 if outcome == 'failure' else 0
+        result = await owner.run('One diagnostic input', model_wait_timeout=.35)
+        assert isinstance(result[-1], events.Done) and not result[-1].ok, result[-1]
+>       assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f9a6606acf0>.starts
+E        +  and   1 = len([{'role': 'user', 'content': [{'type': 'text', 'text': 'One diagnostic input'}], 'timestamp': 1790642472863, 'inputId': 'bdb5bbc08709ffaf5bae0c787acccbb5', ...}])
+E        +    where [{'role': 'user', 'content': [{'type': 'text', 'text': 'One diagnostic input'}], 'timestamp': 1790642472863, 'inputId': 'bdb5bbc08709ffaf5bae0c787acccbb5', ...}] = saved_inputs()
+E        +      where saved_inputs = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f9a6606acf0>.saved_inputs
+
+tests/test_backend_native_watchdog.py:16: AssertionError
+___________ test_actual_native_watchdog_failure_never_replays[stall] ___________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f9a653f60d0>
+outcome = 'stall'
+
+    @pytest.mark.parametrize('outcome', ['failure', 'stall'])
+    async def test_actual_native_watchdog_failure_never_replays(native_backend, outcome):
+        owner = native_backend
+        owner.provider.status = 503 if outcome == 'failure' else 0
+        result = await owner.run('One diagnostic input', model_wait_timeout=.35)
+        assert isinstance(result[-1], events.Done) and not result[-1].ok, result[-1]
+>       assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f9a653f60d0>.starts
+E        +  and   1 = len([{'role': 'user', 'content': [{'type': 'text', 'text': 'One diagnostic input'}], 'timestamp': 1790642475872, 'inputId': '736d6b0632a45561c55cbbe802d79fb7', ...}])
+E        +    where [{'role': 'user', 'content': [{'type': 'text', 'text': 'One diagnostic input'}], 'timestamp': 1790642475872, 'inputId': '736d6b0632a45561c55cbbe802d79fb7', ...}] = saved_inputs()
+E        +      where saved_inputs = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f9a653f60d0>.saved_inputs
+
+tests/test_backend_native_watchdog.py:16: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_backend_native_watchdog.py::test_actual_native_watchdog_failure_never_replays[failure]
+FAILED tests/test_backend_native_watchdog.py::test_actual_native_watchdog_failure_never_replays[stall]
+2 failed, 1 passed in 9.35s

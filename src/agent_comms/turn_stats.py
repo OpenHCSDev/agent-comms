@@ -92,7 +92,7 @@ class StatsRequest:
             or session.inputs.generation != self.generation
         ):
             self._pending = ()
-            session.phase = phases.ModelWaitPhase()
+            session.watchdog.phase = phases.ModelWaitPhase()
             if (
                 session.settlement_count > self.settlement_count or queued
             ) and not session.inputs.pending:
