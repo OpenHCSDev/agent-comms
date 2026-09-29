@@ -126,7 +126,7 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
         if self.timestamp is not None:
             try:
                 recorded = datetime.fromisoformat(self.timestamp)
-                if recorded.tzinfo is not None:
+                if recorded.utcoffset() is not None:
                     timestamp = recorded.timestamp()
             except (ValueError, OverflowError):
                 pass
