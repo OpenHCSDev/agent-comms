@@ -7,7 +7,7 @@ import sqlite3
 import stat
 import tempfile
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self
 
@@ -41,7 +41,7 @@ class CoordinationStore:
         self._connection = sqlite3.connect(self.path, isolation_level=None, timeout=lock_timeout)
         self._connection.create_function(
             "coordination_validate_publication_intent",
-            10,
+            sum(field.init for field in fields(PublicationIntents)),
             PublicationIntents.validate_sql,
             deterministic=True,
         )

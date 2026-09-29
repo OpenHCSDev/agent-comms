@@ -60,7 +60,6 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
                 on_delete="RESTRICT",
             ),
         )
@@ -124,15 +123,12 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
                 on_delete="RESTRICT",
             ),
             ForeignKey(
                 ("execution_id", "attempt"),
                 AttemptRecord,
                 ("execution_id", "attempt_ordinal"),
-                deferred=False,
-                on_delete=None,
             ),
         )
 

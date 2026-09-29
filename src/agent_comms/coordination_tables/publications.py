@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
 
 from agent_comms.coordination_contracts import (
@@ -192,7 +192,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
                 on_delete="RESTRICT",
             ),
             ForeignKey(
@@ -200,7 +199,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
                 ResponseObligation,
                 ("execution_id", "intent_settled"),
                 deferred=True,
-                on_delete=None,
             ),
         )
 
@@ -208,13 +206,10 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     def triggers(cls):
         return {
             "publication_intent_envelope_authority": (
-                """CREATE TRIGGER publication_intent_envelope_authority BEFORE INSERT ON
+                f"""CREATE TRIGGER publication_intent_envelope_authority BEFORE INSERT ON
 publication_intents
 WHEN coordination_validate_publication_intent(
-  NEW.execution_id, NEW.sender, NEW.exact_target, NEW.message_type,
-  NEW.notice,
-  NEW.timestamp, NEW.payload, NEW.payload_digest, NEW.publication_key,
-  NEW.expected_message_id) != 1
+  {", ".join("NEW." + field.name for field in fields(cls) if field.init)}) != 1
 BEGIN SELECT RAISE(ABORT, 'publication intent envelope is invalid' );
 END"""
             ),
@@ -246,35 +241,10 @@ END"""
         }
 
     @classmethod
-    def validate_sql(
-        cls,
-        execution_id: str,
-        sender: str,
-        exact_target: str,
-        message_type: str,
-        notice: int,
-        timestamp: float,
-        payload: str,
-        payload_digest: str,
-        publication_key: str,
-        expected_message_id: str,
-    ) -> int:
-        """Fail closed through the existing typed envelope and Message-ID authority."""
+    def validate_sql(cls, *values: object) -> int:
+        """SQLite positional input follows the declared constructor; validate once."""
         try:
-            if not isinstance(payload, str):
-                return 0
-            cls(
-                execution_id=execution_id,
-                sender=sender,
-                exact_target=exact_target,
-                message_type=MessageType(message_type),
-                notice=bool(notice),
-                timestamp=timestamp,
-                payload=payload,
-                payload_digest=payload_digest,
-                publication_key=publication_key,
-                expected_message_id=expected_message_id,
-            )
+            cls(*values)
         except Exception:
             return 0
         return 1
@@ -363,15 +333,12 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
                 ("execution_id",),
                 PublicationIntents,
                 ("execution_id",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "obligation_receipt_required"),
                 ResponseObligation,
                 ("execution_id", "receipt_settled"),
                 deferred=True,
-                on_delete=None,
             ),
         )
 

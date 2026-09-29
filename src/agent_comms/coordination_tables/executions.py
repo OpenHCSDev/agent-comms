@@ -73,22 +73,18 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
                 ("owner_lookup",),
                 Participants,
                 ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
                 ExecutionRecord,
                 ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "required_active"),
                 AttemptRecord,
                 ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
                 deferred=True,
-                on_delete=None,
             ),
         )
 
@@ -406,8 +402,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                 ("owner_lookup",),
                 Participants,
                 ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 (
@@ -419,49 +413,42 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                 AttemptRecord,
                 ("execution_id", "attempt_ordinal", "owner_lookup", "phase_kind"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("owner_lookup", "active_execution_id", "active_attempt_ordinal"),
                 CurrentExecutions,
                 ("owner_lookup", "execution_id", "attempt_ordinal"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("wire_execution_id", "wire_claim_ordinal"),
                 ExecutionAssignmentLink,
                 ("execution_id", "ordinal"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("wire_execution_id",),
                 ResponseObligation,
                 ("execution_id",),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("completed_wire_id", "required_obligation_terminal"),
                 ResponseObligation,
                 ("execution_id", "success_terminal"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("deferred_replay_id", "deferred_replay_required"),
                 ReplayAssessments,
                 ("execution_id", "retry_authorized"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("deferred_obligation_id", "deferred_obligation_required"),
                 ResponseObligation,
                 ("execution_id", "retryable"),
                 deferred=True,
-                on_delete=None,
             ),
         )
 

@@ -210,22 +210,17 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 ("owner_lookup",),
                 Participants,
                 ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
                 ExecutionRecord,
                 ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
                 deferred=True,
-                on_delete=None,
             ),
         )
 
@@ -351,7 +346,6 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
                 on_delete="RESTRICT",
             ),
         )

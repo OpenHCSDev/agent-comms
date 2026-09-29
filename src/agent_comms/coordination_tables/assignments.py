@@ -193,29 +193,23 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
                 ("recipient_lookup",),
                 Participants,
                 ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "assignment_id"),
                 ExecutionAssignmentLink,
                 ("execution_id", "assignment_id"),
                 deferred=True,
-                on_delete=None,
             ),
             ForeignKey(
                 ("execution_id", "claim_status_kind"),
                 ExecutionRecord,
                 ("execution_id", "claim_status_kind"),
                 deferred=True,
-                on_delete=None,
             ),
         )
 
@@ -294,15 +288,12 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
                 on_delete="RESTRICT",
             ),
             ForeignKey(
                 ("assignment_id", "execution_id"),
                 WakeAssignment,
                 ("assignment_id", "execution_id"),
-                deferred=False,
-                on_delete=None,
             ),
         )
 

@@ -71,8 +71,6 @@ class ParticipantAliases(CoordinatorTable, TypedTable):
                 ("participant_lookup",),
                 Participants,
                 ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
             ),
         )
 
@@ -111,8 +109,6 @@ class OwnerGenerations(CoordinatorTable, TypedTable):
                 ("owner_lookup",),
                 Participants,
                 ("participant_lookup",),
-                deferred=False,
-                on_delete=None,
             ),
         )
 

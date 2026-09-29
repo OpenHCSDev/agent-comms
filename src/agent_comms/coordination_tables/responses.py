@@ -182,7 +182,6 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
                 ("execution_id",),
                 ExecutionRecord,
                 ("execution_id",),
-                deferred=False,
                 on_delete="RESTRICT",
             ),
         )
