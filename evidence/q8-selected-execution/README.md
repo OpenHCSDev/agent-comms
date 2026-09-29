@@ -2,6 +2,11 @@
 
 ## Deletion first
 
+**899 production lines deleted /1115 added; SelectedExecution690→86 lines.**
+`ratchet-final.json` against670f0995 reports no increase: god-class excess-218,
+type identity checks-3, long chains-3/terms-12, foreign absence probes-6,
+string-key subscripts-3. No touched-file increase or codec subclass.
+
 Removes the 690-line partially initialized SelectedExecution role, three ACP write callbacks, its repeated instruction/tool/post-write dispatch and raw triage JSON key inspection. The runner now orders declared lifetimes; it no longer carries optional progress/native-input/lease scratch, dynamic assignment/model/token/prompt fields or callback completeness checks. All production/result/file-write imports and test callers use their actual owners; no compatibility reexports. No new store, native package, codec or send authority.
 
 - SelectedParticipant owns one exact registry lease and its accepted frozen source. Uses existing RegistryOwner/ParticipantOwner and complete FrozenRecipient/WakeDecision values. Lexical cleanup covers source/preparation failure too.
@@ -21,7 +26,9 @@ Noneditable `.installed/lib/python3.14/site-packages/agent_comms`, using unchang
 - `installed-lifetime-final.txt`: **4 PASS46.56s**: saved direct refusal, triage refusal, triage→full refusal, transport EOF. UNKNOWN retained, children reaped/turn released, no old-input replay, genuinely new inputs complete.
 - `installed-enrollment-final.txt`: **2 PASS6.96s**: real fresh enrollment→triage→full; existing unreviewed first-source CLI guard refuses before provider input and cannot replay. No safeguard weakened. `installed-fresh.txt` preserves the initial invalid positive expectation for that already-guarded CLI path.
 - `installed-acp-final.txt`: **1 PASS26.34s**: real ACP saved histories, native B reply automatically considered by A, exact reply injection feedback, settled owners and guarded restart. Normal selected production entry path, zero external provider calls.
-- `installed-final-exact-enrollment.txt`: final source enrollment/whole-snapshot-fence recheck.
+- `installed-final-exact-enrollment.txt`: **1 PASS4.81s**, final source enrollment/whole-snapshot-fence recheck.
+- `final-owner-guards.txt`: **18 PASS5.61s**, ownership deletion, enrollment, exact owner revocation and publication fences.
+- `installed-imports.txt` records noneditable import origins and trusted package verification.
 
 ## Focused and failed evidence
 
@@ -33,5 +40,10 @@ Noneditable `.installed/lib/python3.14/site-packages/agent_comms`, using unchang
 - Known main history expectation remains unchanged: cursor includes published response at103 while old assertion expects102; already reported in378, Dalton owns it. No production or assertion workaround here.
 
 ## Integration
+
+**Ready for parent source review/merge.** Source checkpoint `db2b5473`; subsequent
+receipt-only commit does not change tested source. Own disposable baseline and test
+installs (about63MB reported by du, shared package blocks may overlap) removed after
+receipt capture. Source, committed receipts and all predecessor native packages retained.
 
 Parent owns merge/live package/paired install. PR381 branch and canonical package untouched. Parent main now includes381; this PR does not change native pins. No CI gate, no live/shared-root edits, no user input replay. Current whole-plan mapping updated in place; this scope does not claim all Q8/S14/T4 complete.
