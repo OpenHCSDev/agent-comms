@@ -55,7 +55,6 @@ while True: time.sleep(0.01)
         "AGENT_COMMS_THREAD": "worker",
         "PI_AGENT_ID": "worker",
         "PI_WORKTREE": str(tmp_path),
-        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
     }
     child = ParentedProcess.launch((sys.executable, str(script)), env=env)
     comms = Comms(root)

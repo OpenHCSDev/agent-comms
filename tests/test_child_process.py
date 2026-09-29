@@ -455,15 +455,17 @@ async def test_parent_custody_reaps_but_observation_cannot_claim_exit_code():
 
 
 def test_parent_pipe_custody_closes_after_real_exception():
-    with pytest.raises(ValueError, match="caller failed"):
-        with Platform.current().launch(
+    with (
+        pytest.raises(ValueError, match="caller failed"),
+        Platform.current().launch(
             (sys.executable, "-c", "import time; time.sleep(60)"), ()
-        ) as launch:
-            with launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
-                launch.release(child.identity)
-                launch.verify()
-                identity = child.identity
-                stdout, stderr = child.process.stdout, child.process.stderr
-                raise ValueError("caller failed")
+        ) as launch,
+        launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
+    ):
+        launch.release(child.identity)
+        launch.verify()
+        identity = child.identity
+        stdout, stderr = child.process.stdout, child.process.stderr
+        raise ValueError("caller failed")
     assert not identity.alive()
     assert stdout.closed and stderr.closed
