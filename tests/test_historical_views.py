@@ -85,7 +85,7 @@ def test_original_identity_and_no_delivery_authority(migrated):
     assert len(live.bus.incoming_page("bob", after=0).messages) == 2
     assert live.bus.log.latest_sequence() == 4
     assert live.views.attach_history(old.root) == source
-    assert len(live.bus.history_sources()) == 2
+    assert len(live.bus.history.sources()) == 2
 
 
 def test_sparse_historical_ack_does_not_ack_live(migrated):

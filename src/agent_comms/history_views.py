@@ -23,7 +23,6 @@ from .typed_table import SQLiteUserVersion, TypedRow
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
-from .activity import Activity, ActivityState
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -42,7 +41,7 @@ from .exporting import (
 from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMHistory, HistoryView
 from .message_bus import MessageBus
-from .message_page import MessagePage
+from .message_page import MessagePage, MessagePageRequest
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
@@ -55,8 +54,8 @@ from .presentation import (
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock, file_revision
-from .threads import current_thread
 from .thread_presentation import ThreadPresentation
+from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
@@ -275,7 +274,7 @@ class HistoryViews:
 
     def attach_history(self, source_root: Path) -> HistorySource:
         """Attach preserved history without admitting any historical execution."""
-        source = self.bus.attach_history(Path(source_root))
+        source = self.bus.history.attach(Path(source_root))
         catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
         incoming = catalog.read()
         source_threads = source.registry().all_threads()
@@ -290,7 +289,7 @@ class HistoryViews:
 
         return tuple(
             HistoricalThread(source, thread)
-            for source in self.bus.history_sources()
+            for source in self.bus.history.sources()
             for thread in source.registry().snapshot().threads.values()
             if name is None or thread.name == name
         )
@@ -300,9 +299,9 @@ class HistoryViews:
     ):
         from .historical_views import HistoricalDisplay, HistoryCursor
 
-        if not self.bus.history_sources() and not isinstance(before or after, HistoryCursor):
+        if not self.bus.history.sources() and not isinstance(before or after, HistoryCursor):
             return live_page(before=before, after=after, limit=limit, max_bytes=max_bytes)
-        history_revision = file_revision(self.bus.history_manifest)
+        history_revision = file_revision(self.bus.history.path)
         if before is not None and after is not None:
             raise ValueError("Choose one history paging direction")
         cursor = before if before is not None else after
@@ -312,10 +311,10 @@ class HistoryViews:
             if page.messages or after is not None:
                 return replace(
                     page,
-                    has_older=page.has_older or bool(self.bus.history_sources()),
+                    has_older=page.has_older or bool(self.bus.history.sources()),
                     history_revision=history_revision,
                 )
-        history = self.bus.historical_page(
+        history = self.bus.history.page(
             view,
             before=before if historical and before is not None else None,
             after=after if historical and after is not None else None,
@@ -390,7 +389,7 @@ class HistoryViews:
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
-        if not self.bus.history_sources():
+        if not self.bus.history.sources():
             return self._live_channel_display_page(
                 target,
                 worktree=worktree,
@@ -418,7 +417,7 @@ class HistoryViews:
         viewer = self.registry.require(displayed.viewer)
         if viewer.created_at != displayed.viewer_created_at or viewer.role.executable:
             raise ValueError("Historical viewer changed; refresh history")
-        if displayed.source not in self.bus.history_sources():
+        if displayed.source not in self.bus.history.sources():
             raise ValueError("Historical source detached; refresh history")
         displayed.source.validate()
         # The snapshot is a separate bus: reuse its existing ledger owner and
@@ -652,14 +651,13 @@ class HistoryViews:
         viewer = self.messaging.user_identity(worktree).name if worktree is not None else None
         with self._display_snapshot(viewer=viewer, target=target) as (basis, records, _):
             scope = next(item for item in basis[2] if item.channel == target)
-            page = self.bus._collect_history_page(
-                records,
-                scope.includes,
+            page = MessagePageRequest.capture(
+                scope,
                 before=before,
                 after=after,
                 limit=limit,
                 max_bytes=max_bytes,
-            )
+            ).collect(records)
             if viewer is not None:
                 scope = replace(
                     scope,
@@ -1002,7 +1000,7 @@ class HistoryViews:
                     self.registry.store.path,
                     self.channels.catalog.path,
                     self.bus.log.path,
-                    self.bus.history_manifest,
+                    self.bus.history.path,
                     self.agents.activity._path,
                     self.agents.runtime_info.path,
                     self.bus.reads.path,

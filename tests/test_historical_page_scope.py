@@ -8,8 +8,9 @@ import pytest
 from agent_comms.comms import Comms
 from agent_comms.historical_views import ChannelDisplayHistory, HistoryCursor
 from agent_comms.mentions import ThreadMention
+from agent_comms.message_page import MessagePageRequest
 from agent_comms.messages import Message, MessageType
-from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.read_basis import ChannelDisplayScope, MessageDisplayScope
 from agent_comms.threads import Thread
 
 
@@ -109,14 +110,15 @@ def test_cold_and_warm_historical_pages_equal_full_scan(
 ):
     live, source, rows = history
     read = reader(live, kind)
-    expected = live.bus._collect_history_page(
-        ((message, len(raw)) for message, raw in rows),
-        lambda message: selected(kind, message),
-        before=before,
-        after=after,
-        limit=limit,
-        max_bytes=budget,
-    )
+    class SelectedScope(MessageDisplayScope):
+        index_targets = None
+
+        def includes(self, message):
+            return selected(kind, message)
+
+    expected = MessagePageRequest.capture(
+        SelectedScope(), before=before, after=after, limit=limit, max_bytes=budget
+    ).collect((message, len(raw)) for message, raw in rows)
     for _ in range(2):  # cold validation, then the same warm offsets
         page = read(
             before=HistoryCursor(source.key, before) if before is not None else None,
@@ -163,10 +165,10 @@ def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history
 
     monkeypatch.setattr(Message, "from_wire", classmethod(decode))
     monkeypatch.setattr(ChannelDisplayScope, "capture", classmethod(capture))
-    cold = live.bus.historical_page(view, limit=2)
+    cold = live.bus.history.page(view, limit=2)
     cold_decoded = decoded
     decoded = captured = 0
-    warm = live.bus.historical_page(view, limit=2)
+    warm = live.bus.history.page(view, limit=2)
     assert warm == cold
     assert [message.seq for message in warm.messages] == [150, 200]
     assert decoded == 3  # two returned rows and the earlier-match boundary
@@ -176,7 +178,7 @@ def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history
     decoded = 0
     with monkeypatch.context() as patch:
         patch.setattr(ChannelDisplayScope, "index_targets", property(lambda _scope: None))
-        unfiltered = live.bus.historical_page(view, limit=2)
+        unfiltered = live.bus.history.page(view, limit=2)
     assert unfiltered == warm
     assert decoded == 141  # same predicate/page without the target prefilter
     assert narrowed_decodes == 3

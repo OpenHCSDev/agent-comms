@@ -826,7 +826,14 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
         assert cursor is not None and cursor.input_id == outcome.input_id
-        assert cursor.covered_seq == 102 and cursor.injected_seq == _initial.message.seq
+        response = next(
+            message for message in comms.bus.log.full_history()
+            if message.message_id == outcome.response_message_id
+        )
+        # The published own reply is nonbinding for beta, but belongs to the
+        # certified scanned prefix. It cannot become a second injected source.
+        assert cursor.covered_seq == response.seq == 103
+        assert cursor.injected_seq == _initial.message.seq
 
 
 async def test_historical_native_input_view_keeps_exact_triage_and_full_events(

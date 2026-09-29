@@ -14,7 +14,7 @@ from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
 from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits
+from .goal_waits import GoalInputReview, GoalReplyScope, GoalWait, GoalWaits
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal
 from .message_bus import MessageBus
-from .messages import Message
+from .message_page import MessagePageRequest
 from .store_files import _store_lock
 from .threads import Thread
 from .turn_lease import FinishedTurnFence
@@ -205,25 +205,10 @@ class Goals:
             closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
             if not closed:
                 return ()
-            owner_aliases = frozenset(
-                {
-                    canonical,
-                    *(alias for alias, target in snapshot.aliases.items() if target == canonical),
-                }
-            )
             try:
-                reply = self.bus._history_page(
-                    lambda message: (
-                        message.target in owner_aliases
-                        and message.starts_turn_for(canonical, aliases=snapshot.aliases)
-                        and wait.matches(message, snapshot)
-                    ),
-                    before=None,
-                    after=wait.after_seq,
-                    limit=1,
-                    max_bytes=256 * 1024,
-                    targets=owner_aliases,
-                )
+                reply = MessagePageRequest.capture(
+                    GoalReplyScope(canonical, wait, snapshot), after=wait.after_seq, limit=1
+                ).read(self.bus.log)
             except (OSError, ValueError, sqlite3.DatabaseError):
                 # An unavailable read cannot prove that no reply was delivered.
                 return ()
@@ -292,39 +277,10 @@ class Goals:
                     )
                 ):
                     continue
-                owner_aliases = frozenset(
-                    {
-                        owner.name,
-                        *(
-                            alias
-                            for alias, target in snapshot.aliases.items()
-                            if target == owner.name
-                        ),
-                    }
-                )
-
-                def qualifies_direct_reply(
-                    message: Message,
-                    *,
-                    aliases: frozenset[str] = owner_aliases,
-                    owner_name: str = owner.name,
-                    current_wait: GoalWait = wait,
-                ) -> bool:
-                    return (
-                        message.target in aliases
-                        and message.starts_turn_for(owner_name, aliases=snapshot.aliases)
-                        and current_wait.matches(message, snapshot)
-                    )
-
                 try:
-                    reply = self.bus._history_page(
-                        qualifies_direct_reply,
-                        before=None,
-                        after=wait.after_seq,
-                        limit=1,
-                        max_bytes=256 * 1024,
-                        targets=owner_aliases,
-                    )
+                    reply = MessagePageRequest.capture(
+                        GoalReplyScope(owner.name, wait, snapshot), after=wait.after_seq, limit=1
+                    ).read(self.bus.log)
                 except (OSError, ValueError, sqlite3.DatabaseError):
                     # The terminal turn has already committed. An unavailable
                     # optional reply read cannot prove silence or release this

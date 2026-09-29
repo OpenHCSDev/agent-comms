@@ -90,7 +90,7 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     store.close()
     sent = source.messaging.send("alice", "bob", "retained message")
     reader = Comms(tmp_path / "reader")
-    attached = reader.bus.attach_history(source.root)
+    attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()
     assert [message.message_id for message in snapshot.bus.log.full_history()] == [sent]

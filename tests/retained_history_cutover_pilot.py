@@ -42,7 +42,7 @@ def test_current_saved_history_has_no_live_admission_or_delivery(tmp_path):
     comms.messaging.initialize_private_initial_protocol()
     source=comms.views.attach_history(copied)
     live_before=(comms.root/'bus.jsonl').read_bytes()
-    historical=comms.bus.historical_page(ChannelHistory('#comms',frozenset({'#comms'})))
+    historical=comms.bus.history.page(ChannelHistory('#comms',frozenset({'#comms'})))
     assert historical.messages,'Real supplied history must contain #comms messages'
     assert all(not message.starts_turn for message in historical.messages)
     assert all(message.source==source for message in historical.messages)

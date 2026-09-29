@@ -237,11 +237,11 @@ class TestRegistration:
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         expected, admission_generation = registry.live_owner_with_generation("a")
         registry.unregister("a")
-        registry.heartbeat("a")  # legacy lifecycle allows this; a turn CAS must not.
+        registry.heartbeat("a")  # Presence can resume; a stale turn CAS cannot reclaim it.
         assert registry.require("a") == expected
         assert registry.status("a") == RunningThreadStatus()
         assert registry.live_owner_with_generation("a")[1] > admission_generation
-        with pytest.raises(RelationViolationError, match="stopped or changed"):
+        with pytest.raises(RelationViolationError, match="live owner generation changed"):
             registry.lease_live_turn_with_generation(
                 expected, "new-turn", expected_owner_generation=admission_generation
             )
@@ -339,7 +339,9 @@ class TestRegistration:
             assert registry.release_turn(registry.require("a").turn_lease)[0]
         registry.register(leased)
         assert registry.require("a").active_turn.admission_generation is None
-        with pytest.raises(RelationViolationError, match="unavailable"):
+        with pytest.raises(
+            RelationViolationError, match="live owner turn admission is no longer current"
+        ):
             registry.live_owner_with_generation("a")
         if revocation == "stop":
             assert registry.snapshot().owner_generations["a"] > owner_generation
@@ -466,14 +468,12 @@ class TestRegistration:
         comms = Comms(root, private_initial_writes=True)
         comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
         original_fsync = os.fsync
-        directory_calls = 0
-
         def fsync(fd: int) -> None:
-            nonlocal directory_calls
-            if os.readlink(f"/proc/self/fd/{fd}") == str(root):
-                directory_calls += 1
-                if directory_calls == 3:  # after durable guard pending, at marker replace
-                    raise OSError("injected marker directory fsync failure")
+            # Target the actual marker publication rather than an ordinal:
+            # current private sidecars fsync this directory before the guard.
+            if (os.readlink(f"/proc/self/fd/{fd}") == str(root)
+                    and (root / "bus_meta.json").exists()):
+                raise OSError("injected marker directory fsync failure")
             original_fsync(fd)
 
         monkeypatch.setattr(os, "fsync", fsync)

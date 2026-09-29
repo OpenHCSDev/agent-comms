@@ -11,6 +11,7 @@ from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore
 from .messages import Message
+from .read_basis import MessageDisplayScope
 from .registry_document import RegistrySnapshot
 
 
@@ -239,3 +240,22 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             goal.id,
             block_reason=goal.state.reason,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalReplyScope(MessageDisplayScope):
+    """The captured wait owns reply eligibility independently of human display."""
+
+    owner: str
+    wait: GoalWait
+    snapshot: RegistrySnapshot
+
+    @property
+    def index_targets(self) -> frozenset[str]:
+        return frozenset({self.owner, *(alias for alias, target in self.snapshot.aliases.items()
+                                      if target == self.owner)})
+
+    def includes(self, message: Message) -> bool:
+        return (message.target in self.index_targets
+                and message.starts_turn_for(self.owner, aliases=self.snapshot.aliases)
+                and self.wait.matches(message, self.snapshot))
