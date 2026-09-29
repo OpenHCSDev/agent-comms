@@ -58,7 +58,7 @@ class NativeSummary(OwnerSummaryOutcome):
 
     @property
     def completion_event(self) -> CompactionEnd:
-        return CompactionEnd(reason="adaptive")
+        return CompactionEnd(reason="adaptive", summary=self.text)
 
     def commit_options(self) -> dict[str, Any]:
         """Additional owner-commit binding supplied by a selected summary."""

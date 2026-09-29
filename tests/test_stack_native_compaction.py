@@ -18,6 +18,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
@@ -204,7 +205,11 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                                     else (
                                         "FINAL_OWNER_REPLY"
                                         if case == "acp_success" and reasoning_efforts[-1] == "high"
-                                        else "summary"
+                                        else (
+                                            "PR401_COMMITTED_SUMMARY"
+                                            if case == "acp_success"
+                                            else "summary"
+                                        )
                                     )
                                 ),
                             },
@@ -347,12 +352,21 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 for key, value in child_env.items():
                     monkeypatch.setenv(key, value)
                 comms = wire(root / "wire")
+                root_id = comms.messaging.initialize_private_initial_protocol()
+                package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+                assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"
+                package = Path(package_path)
+                monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
+                monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+                monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
                 owner = CommsAgent(
                     comms,
                     agent_bin=native_bin,
                     agent_args=native_args,
                     runtime_enabled=False,
                     auto_wake=False,
+                    private_nk_native_package=package,
+                    private_nk_wire_root_id=root_id,
                 )
                 updates = []
                 resumed_activity = []
@@ -360,13 +374,11 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 class Client:
                     async def session_update(self, session_id, update):
                         updates.append(update)
-                        phase = (
-                            (getattr(update, "field_meta", None) or {})
-                            .get("agentComms", {})
-                            .get("compaction", {})
-                            .get("phase")
-                        )
-                        if phase == "end":
+                        if any(
+                            isinstance(field, CompactionChangedUpdate)
+                            and isinstance(field.event, ae.CompactionEnd)
+                            for field in decode_updates(update.field_meta or {})
+                        ):
                             resumed_activity.append(comms.agents.activity_of("project"))
 
                 owner.on_connect(Client())
@@ -412,27 +424,14 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
             assert reasoning_efforts[-1] == "high"
             assert updates
-            progress = [
-                update.field_meta["agentComms"]["compaction"]["chunkIndex"]
+            compaction_events = [
+                field.event
                 for update in updates
-                if (getattr(update, "field_meta", None) or {})
-                .get("agentComms", {})
-                .get("compaction", {})
-                .get("phase")
-                == "progress"
+                for field in decode_updates(update.field_meta or {})
+                if isinstance(field, CompactionChangedUpdate)
             ]
-            assert progress == sorted(progress)
-            assert set(progress) == set(range(len(calls)))
-            source_progress = [
-                update.field_meta["agentComms"]["compaction"]
-                for update in updates
-                if (getattr(update, "field_meta", None) or {})
-                .get("agentComms", {})
-                .get("compaction", {})
-                .get("sourceBytesTotal")
-            ]
-            assert source_progress[0]["sourceBytesDone"] == 0
-            assert source_progress[-1]["sourceBytesDone"] == source_progress[-1]["sourceBytesTotal"]
+            assert isinstance(compaction_events[0], ae.CompactionStart)
+            assert isinstance(compaction_events[-1], ae.CompactionEnd)
             texts = [
                 getattr(getattr(update, "content", None), "text", "")
                 for update in updates
@@ -440,9 +439,50 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             ]
             assert any("FINAL_OWNER_REPLY" in text for text in texts)
             assert not any("[agent error]" in text for text in texts)
-            assert '"type":"compaction"' in session.read_text()
+            saved_entries = [json.loads(line) for line in session.read_text().splitlines()]
+            committed = [entry["summary"] for entry in saved_entries if entry.get("type") == "compaction"]
+            assert len(committed) == 1
+            assert "PR401_COMMITTED_SUMMARY" in committed[0]
+            completion_updates = [
+                update
+                for update in updates
+                for field in decode_updates(update.field_meta or {})
+                if isinstance(field, CompactionChangedUpdate)
+                and isinstance(field.event, ae.CompactionEnd)
+            ]
+            assert len(completion_updates) == 1
+            completion = completion_updates[0]
+            event = next(
+                field.event
+                for field in decode_updates(completion.field_meta)
+                if isinstance(field, CompactionChangedUpdate)
+            )
+            assert event.publication_summary == committed[0]
+            if capture := os.environ.get("AC_PR401_CAPTURE_PACKET"):
+                publication_updates = [
+                    update
+                    for update in updates
+                    if any(
+                        isinstance(field, CompactionChangedUpdate)
+                        and isinstance(field.event, (ae.CompactionStart, ae.CompactionEnd))
+                        for field in decode_updates(update.field_meta or {})
+                    )
+                ]
+                assert len(publication_updates) == 2
+                Path(capture).write_text(
+                    json.dumps(
+                        [
+                            {
+                                "sessionUpdate": update.session_update,
+                                "content": update.content.model_dump(by_alias=True),
+                                "_meta": update.field_meta,
+                            }
+                            for update in publication_updates
+                        ]
+                    )
+                )
             return
-        assert ae.InputStarted in kinds
+        assert ae.InputStarted in kinds, [(type(event).__name__, getattr(event, "text", None)) for event in events]
         assert isinstance(events[-1], ae.Done)
         if case == "post_compaction_tool_rounds":
             assert events[-1].ok is True
@@ -512,6 +552,8 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             return
         assert kinds.index(ae.InputStarted) < kinds.index(ae.CompactionStart)
         assert kinds.index(ae.CompactionStart) < kinds.index(ae.CompactionEnd)
+        compaction = next(event for event in events if isinstance(event, ae.CompactionEnd))
+        assert compaction.publication_summary == "summary"
         assert events[-1].ok is True
         assert len(calls) > 1
         summary_efforts = (
