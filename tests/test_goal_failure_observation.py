@@ -322,7 +322,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
     activate_empty_source(agent)
     goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
     GoalFixture()._authorize_test_goal(agent, wired, goal)
-    store = agent.turns.goal_store
+    store = agent.turns.goals.goal_store
     admission = wired.registry.snapshot().admission_generations["project"]
     for state in ("unknown", "started"):
         key = f"acp:earlier-{state}"
@@ -398,7 +398,7 @@ async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
             assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
         else:
             assert owner.goal.state.declared_name == "blocked"
-        agent.turns.schedule_goal("project")
+        agent.turns.goals.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
         observations = rows(store, "failed_turn_evidence")
         assert len(observations) == (

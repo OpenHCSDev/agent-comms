@@ -322,7 +322,7 @@ class ConfigOptions:
 
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)
-        await self.effects.turns.sync_goal_execution(session_id, name)
+        await self.effects.turns.goals.sync_goal_execution(session_id, name)
         thread = self.comms.registry.require(name)
         signature = self.signature(thread)
         if self.session_config_signature.get(session_id) == signature:

@@ -202,7 +202,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             goal = comms.goals.update_goal(
                 "parent",
                 SetGoalAction(text="Review @child report"),
-                owner_store=agent.turns.open_goal_store(),
+                owner_store=agent.turns.goals.open_goal_store(),
             )
             goal_id = goal.id
             if review_pending:
@@ -226,7 +226,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                         target="parent",
                         text=f"Uncertain owner input {index}",
                     )
-            agent.turns.schedule_goal("parent")
+            agent.turns.goals.schedule_goal("parent")
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
             assert comms.registry.require("parent").goal.state.active
@@ -234,9 +234,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             assert len(requests) == 2 + offset
             first_proc = agent.turns.persistent_backends["parent"].custody.idle().child.proc
             assert first_proc is not None and first_proc.returncode is None
-            agent.turns.schedule_goal("parent")
+            agent.turns.goals.schedule_goal("parent")
             assert not agent.inputs.pending_turns.get("parent")
-            assert agent.turns.goal_store.snapshot(goal.id).number == 2
+            assert agent.turns.goals.goal_store.snapshot(goal.id).number == 2
             if restart:
                 # Wait intent survives reopening. The new executing owner may
                 # rotate only the unused READY grant at the send boundary.
@@ -245,7 +245,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "parent")
-                agent.turns.schedule_goal("parent")
+                agent.turns.goals.schedule_goal("parent")
                 assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
                 assert not agent.inputs.pending_turns.get("parent") and len(requests) == 2 + offset
             message = comms.messaging.send_message(
@@ -271,7 +271,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 assert row.declared_name == "reserved" and not hasattr(row, "native_id")
                 assert row.reviewed_for_goal(goal.id)
             assert comms.registry.require("parent").goal.state.declared_name == "completed"
-            assert agent.turns.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()
+            assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()
             session = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             users = [row["message"] for row in rows if row.get("message", {}).get("role") == "user"]

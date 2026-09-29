@@ -4,7 +4,6 @@ import os
 
 import pytest
 
-from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
@@ -12,6 +11,7 @@ from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
 
@@ -26,16 +26,17 @@ async def _owner(tmp_path, monkeypatch):
     private = comms.root / "goal-private"
     private.mkdir(mode=0o700)
     GoalAttemptStore.initialize(private)
-    owner = CommsAgent(
+    owner = canonical_agent(
         comms,
         agent_bin="pi",
         agent_args=["--provider", "openrouter", "--model", "fake"],
         runtime_enabled=True,
         auto_wake=False,
     )
+    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
     wakes = []
-    monkeypatch.setattr(owner.turns, "schedule_goal", wakes.append)
+    monkeypatch.setattr(owner.turns.goals, "schedule_goal", wakes.append)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     return comms, owner, proxy, session, wakes
 
@@ -49,7 +50,7 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
         assert comms.registry.require(session).goal.id == goal["id"]
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(goal["id"])
         assert generation is not None and generation.lifecycle == ReadyGeneration()
-        assert owner.turns.goal_store.ready_grant(goal["id"], generation.number)
+        assert owner.turns.goals.goal_store.ready_grant(goal["id"], generation.number)
         assert session in wakes
     finally:
         await owner.shutdown()
