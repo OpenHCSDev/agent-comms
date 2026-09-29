@@ -10,6 +10,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
+from .wire_record import WireRecord
+
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
@@ -109,7 +111,7 @@ def decisions_digest(decisions: list[dict[str, str]]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class CommittedDelivery:
+class CommittedDelivery(WireRecord):
     """Bus-reader delivery, for both an original and a keyed response."""
 
     wire_root_id: str
@@ -122,6 +124,87 @@ class CommittedDelivery:
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
     receipt: KeyedResponseReceipt | None = None
+
+    @classmethod
+    def from_wire(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
+        from .messages import Message
+
+        return cls.attest(Message.from_committed_wire(record), record, wire_root_id)
+
+    @classmethod
+    def attest(
+        cls, message: Message, record: Mapping[str, object], wire_root_id: str
+    ) -> CommittedDelivery:
+        """Validate the declared private policy against the already decoded public message."""
+        from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+
+        from .audience_manifest import freeze_audience
+        from .delivery_policy import DeliveryPolicy
+        from .field_codec import FieldCodec
+
+        if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {
+            PRIVATE_WIRE_FIELD
+        }:
+            raise ValueError("Unknown private bus namespace.")
+        private = record[PRIVATE_WIRE_FIELD]
+        policy = FieldCodec.decode(DeliveryPolicy, private)
+        if _canonical(private) != _canonical(FieldCodec.encode(policy)):
+            raise ValueError("Private publication is not canonical.")
+        raw = policy.initial
+        if raw.wire_root_id != wire_root_id:
+            raise ValueError("Delivery belongs to another wire root.")
+        if raw.manifest_codec != INITIAL_CODEC:
+            raise ValueError("Unsupported delivery manifest codec.")
+        if raw.resolver_version != RESOLVER_VERSION or raw.policy_version != POLICY_VERSION:
+            raise ValueError("Unsupported delivery decision versions.")
+        if not raw.control.supports_initial:
+            raise ValueError("Unsupported delivery control issuer.")
+        audience = raw.audience
+        if _HEX64.fullmatch(audience.source_revision) is None:
+            raise ValueError("Delivery source revision is invalid.")
+        lookups = (audience.sender_lookup, *(r.recipient_lookup for r in audience.recipients))
+        if any(_HEX32.fullmatch(lookup) is None for lookup in lookups):
+            raise ValueError("Delivery creator or recipient lookup is invalid.")
+        candidate = freeze_audience(
+            message,
+            audience.recipients,
+            audience.source_revision,
+            sender_lookup=audience.sender_lookup,
+            sender_name=audience.sender_name,
+        )
+        if audience != candidate:
+            raise ValueError("Delivery audience differs from committed public envelope.")
+        decisions = policy.resolve(message, candidate, raw.control)
+        rows = decisions_wire(decisions)
+        if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
+            raise ValueError("Delivery decisions do not match the full committed N.")
+        receipt = policy.require_receipt(wire_root_id, message)
+        return cls(
+            wire_root_id,
+            message,
+            candidate,
+            decisions,
+            raw.decisions_digest,
+            raw.control.value,
+            RESOLVER_VERSION,
+            POLICY_VERSION,
+            receipt=receipt,
+        )
+
+    def deliveries(self) -> tuple[CommittedDelivery, ...]:
+        return (self,)
+
+    def require_admission(self, metadata) -> None:
+        """Factory already bound root/audience; deliveries need no retained-public exception."""
+
+    def checkpoint_rows(self, offset: int, length: int):
+        from .private_bus_checkpoint import Addressed, DeliverySources, ResponseKeys
+
+        if self.receipt is not None:
+            yield ResponseKeys(self.receipt.publication_key)
+        yield DeliverySources(self.message.seq, self.message.message_id, offset, length)
+        for recipient in self.audience.recipients:
+            yield Addressed(recipient.recipient_lookup, self.message.seq)
 
 
 def initial_sideband(
@@ -150,68 +233,6 @@ def initial_sideband(
         audience,
         rows,
         decisions_digest(rows),
-    )
-
-
-def validate_delivery_record(record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
-    """Decode the tagged declaration once and independently recompute its proof."""
-    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-
-    from .audience_manifest import freeze_audience
-    from .delivery_policy import DeliveryPolicy
-    from .field_codec import FieldCodec
-    from .messages import Message
-
-    if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {PRIVATE_WIRE_FIELD}:
-        raise ValueError("Unknown private bus namespace.")
-    private = record[PRIVATE_WIRE_FIELD]
-    policy = FieldCodec.decode(DeliveryPolicy, private)
-    if _canonical(private) != _canonical(FieldCodec.encode(policy)):
-        raise ValueError("Private publication is not canonical.")
-    raw = policy.initial
-    if raw.wire_root_id != wire_root_id:
-        raise ValueError("Delivery belongs to another wire root.")
-    if raw.manifest_codec != INITIAL_CODEC:
-        raise ValueError("Unsupported delivery manifest codec.")
-    if raw.resolver_version != RESOLVER_VERSION or raw.policy_version != POLICY_VERSION:
-        raise ValueError("Unsupported delivery decision versions.")
-    if not raw.control.supports_initial:
-        raise ValueError("Unsupported delivery control issuer.")
-    audience = raw.audience
-    if _HEX64.fullmatch(audience.source_revision) is None:
-        raise ValueError("Delivery source revision is invalid.")
-    lookups = (audience.sender_lookup, *(r.recipient_lookup for r in audience.recipients))
-    if any(_HEX32.fullmatch(lookup) is None for lookup in lookups):
-        raise ValueError("Delivery creator or recipient lookup is invalid.")
-    public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
-    message = Message.from_wire(public)
-    if _canonical(public) != _canonical(message.to_wire()):
-        raise ValueError("Delivery public envelope is not canonical.")
-    public_envelope_digest(public)
-    candidate = freeze_audience(
-        message,
-        audience.recipients,
-        audience.source_revision,
-        sender_lookup=audience.sender_lookup,
-        sender_name=audience.sender_name,
-    )
-    if audience != candidate:
-        raise ValueError("Delivery audience differs from committed public envelope.")
-    decisions = policy.resolve(message, candidate, raw.control)
-    rows = decisions_wire(decisions)
-    if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
-        raise ValueError("Delivery decisions do not match the full committed N.")
-    receipt = policy.require_receipt(wire_root_id, message)
-    return CommittedDelivery(
-        wire_root_id,
-        message,
-        candidate,
-        decisions,
-        raw.decisions_digest,
-        raw.control.value,
-        RESOLVER_VERSION,
-        POLICY_VERSION,
-        receipt=receipt,
     )
 
 

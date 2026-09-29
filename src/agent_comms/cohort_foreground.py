@@ -91,9 +91,9 @@ def _accept_visible_deliveries(
         after_seq = max(after_seq, marker.admission_after_seq)
         initials = tuple(
             initial
-            for _message, _receipt, initial in bus.log._verified_private_rows_unlocked(marker)
-            if initial is not None
-            and initial.message.seq > after_seq
+            for record in bus.log.verified_records_unlocked(marker)
+            for initial in record.deliveries()
+            if initial.message.seq > after_seq
             and any(
                 r.recipient_lookup == lookup and r.canonical_thread == owner_name
                 for r in initial.audience.recipients

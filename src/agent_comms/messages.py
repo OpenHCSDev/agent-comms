@@ -174,6 +174,29 @@ class Message:
         }
         return FieldCodec.decode(cls, {"ts": 0.0, **public})
 
+    @classmethod
+    def from_committed_wire(cls, record: Mapping) -> Message:
+        """One strict public-envelope boundary for full, indexed and cohort readers."""
+        from .audience_manifest import MAX_WIRE_SEQ
+        from .bus_publication import PRIVATE_WIRE_FIELD, _canonical, public_envelope_digest
+
+        if not isinstance(record, Mapping):
+            raise ValueError("Bus row is not an object.")
+        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
+        message = cls.from_wire(public)
+        if _canonical(public) != _canonical(message.to_wire()):
+            raise ValueError("Noncanonical public bus envelope.")
+        if not 0 < message.seq <= MAX_WIRE_SEQ:
+            raise ValueError("Bus sequence is outside the durable range.")
+        public_envelope_digest(public)
+        return message
+
+    def require_retained_admission(self, admission_after_seq: int) -> None:
+        if self.claim_transition is None and self.seq > admission_after_seq:
+            raise RelationViolationError(
+                "Unattested public initial exceeds the retained history boundary."
+            )
+
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
