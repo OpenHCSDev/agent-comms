@@ -54,3 +54,12 @@ def test_ordinary_admission_preserves_named_rule_dispatch_until_callback():
     assert not any(
         isinstance(node, ast.Name) and node.id in {"owner_ok", "allowed"} for node in ast.walk(tree)
     )
+
+
+def test_new_input_owners_do_not_restore_long_boolean_chains():
+    for owner in (TurnInputSource, TurnInputBinding):
+        path = Path(inspect.getfile(owner))
+        assert not any(
+            isinstance(node, ast.BoolOp) and len(node.values) >= 4
+            for node in ast.walk(ast.parse(path.read_text()))
+        ), path

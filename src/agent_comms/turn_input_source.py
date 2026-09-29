@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .messages import Message
-from .turn_goal_permission import TurnGoalPermission
+from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -90,7 +90,22 @@ class OwnerOriginalInput(OriginalTurnInput):
         return True
 
 
-class RoutedOriginalInput(OriginalTurnInput):
+class RoutedInput(TurnInputSource):
+    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+        return wait is None
+
+    def allows_goal_input(self, goal: Goal | None) -> bool:
+        return not self.keys or InactiveGoalPermission().allows(goal)
+
+
+class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class DependencyOriginalInput(OriginalTurnInput):
+    dependency_wait_id: str
+
     def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
         return wait is None or (
             wait.wait_id == self.dependency_wait_id
@@ -98,12 +113,8 @@ class RoutedOriginalInput(OriginalTurnInput):
         )
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
-        return (
-            not self.keys
-            or goal is None
-            or not goal.state.active
-            or self.dependency_wait_id is not None
-        )
+        # dependency_current and allows_wait prove this exact dependency source.
+        return True
 
 
 class FollowingTurnInput(TurnInputSource):
@@ -130,9 +141,5 @@ class AcceptedFollowingInput(FollowingTurnInput):
         return True
 
 
-class RoutedFollowingInput(FollowingTurnInput):
-    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
-        return wait is None
-
-    def allows_goal_input(self, goal: Goal | None) -> bool:
-        return not self.keys or goal is None or not goal.state.active
+class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
+    pass

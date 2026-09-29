@@ -1,0 +1,31 @@
+changed between a1d24d3a..HEAD (touched files, after minus before)
+
+change in counts (a1d24d3a..HEAD): read these first when code was deleted as well as added
+  type_identity_check           +0
+  long_boolean_chain           -10
+  boolean_chain_terms          -48
+  codec_subclass                +0
+  string_key_subscript          +0
+  literal_key_get               +0
+  string_equality               +0
+  none_identity                -21
+  isinstance_call               +0
+  attribute_by_name             +0
+  getattr_default               +0
+  broad_except                  +0
+  json_loads                    +0
+  long_function                 -1
+  class_definition             +48
+  abstract_base                 +3
+  enum_class                    +0
+  code lines                  +385
+
+(densities omitted: under 500 net code lines, a ratio of changes to net lines is meaningless)
+
+Top 12 files by weighted debt (type_identity_check x3, long_boolean_chain x5, boolean_chain_terms x1, codec_subclass x3, string_key_subscript x1, literal_key_get x1, attribute_by_name x3):
+       0  src/agent_comms/ordinary_admission_rules.py  (code lines +170)
+       0  src/agent_comms/owned_send_admission.py  (code lines +188)
+       0  src/agent_comms/turn_goal_permission.py  (code lines +27)
+       0  src/agent_comms/turn_input_binding.py  (code lines +122)
+       0  src/agent_comms/turn_input_source.py  (code lines +101)
+     -98  src/agent_comms/owned_turn.py  (code lines -223)
