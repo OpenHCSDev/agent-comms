@@ -13,7 +13,7 @@ import shutil
 import stat
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
@@ -23,6 +23,7 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_entries import NativeEntry, SessionEntry
 from .selected_tool_broker import NativeToolMode
+from .typed_table import Column, Index, TypedTable
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
@@ -105,11 +106,17 @@ def main() -> int:
 class NativeContextRecord:
     """Native context facts shared by the journal and located evidence."""
 
-    input_id: str = field(metadata={"wire_name": "inputId"})
+    input_id: str = field(metadata={"wire_name": "inputId", "sql": Column(
+        primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^a-f0-9]*'"
+    )})
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
-    request_generation: int = field(metadata={"wire_name": "requestGeneration"})
-    llm_context_digest: str = field(metadata={"wire_name": "llmContextDigest"})
+    request_generation: int = field(metadata={"wire_name": "requestGeneration", "sql": Column(
+        primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"
+    )})
+    llm_context_digest: str = field(metadata={"wire_name": "llmContextDigest", "sql": Column(
+        check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"
+    )})
 
     def at(self, session_file: Path) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
@@ -124,11 +131,43 @@ class NativeContextRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextJournal(NativeContextRecord):
-    """The unchanged, current native .input-proof journal envelope."""
+class NativeContextJournal(NativeContextRecord, TypedTable):
+    """One proof declaration owns wire facts and the indexed durable journal."""
 
     schema: Literal[1]
     type: Literal["context_committed"]
+
+    without_rowid = True
+    indexes = (Index(("request_generation",)), Index(("session_id",)))
+
+    @classmethod
+    def triggers(cls) -> dict[str, str]:
+        table = cls.declared_name
+        return {
+            f"{table}_append": f"""CREATE TRIGGER {table}_append BEFORE INSERT ON {table}
+            WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
+              OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
+                        AND llm_context_digest != NEW.llm_context_digest)
+              OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
+            BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
+            **{f"{table}_{action.lower()}": f"CREATE TRIGGER {table}_{action.lower()} "
+               f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
+               for action in ("UPDATE", "DELETE")},
+        }
+
+    @classmethod
+    def native_contract(cls) -> dict[str, Any]:
+        """Generate the native writer's SQLite contract from this declaration."""
+        table = cls.declared_name
+        columns = cls.columns()
+        return {
+            "objects": cls.schema_objects(),
+            "columns": [{"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
+                        for item in fields(cls)],
+            "insert": f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+            "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
+            "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
+        }
 
     def __post_init__(self) -> None:
         if (
