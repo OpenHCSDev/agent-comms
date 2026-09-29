@@ -266,7 +266,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         text = self._prompt_text(prompt)
         if (
-            (session_id in self.turns.active_turns or session_id in self.turns.turn_tasks)
+            self.turns.session_busy(session_id)
             and self.inputs.backend_inboxes.get(session_id) is not None
             and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
         ):
@@ -517,15 +517,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if self._comms.registry.status(thread_name).stopped:
             return 0
         if (
-            session_id in self.turns.active_turns
-            or session_id in self.turns.turn_tasks
+            self.turns.session_busy(session_id)
             or session_id in self.inputs.backend_inboxes
         ):
             return 0  # Never overlap the ACP owner session's running turn.
         owner = self._comms.registry.require(thread_name)
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        if owner.active_turn is not None:
+        if owner.turn_state.busy:
             raise StaleFence("private N/K ACP owner is busy")
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True

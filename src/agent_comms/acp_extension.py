@@ -25,6 +25,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .turn_lease import TurnState
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 
 if TYPE_CHECKING:
@@ -43,20 +44,8 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
 
 @dataclass(frozen=True)
-class TurnStartedUpdate(AgentCommsUpdate):
-    turn_id: str
-    started_at: float | None
-    activity: str | None
-    activity_detail: str | None
-
-    def __post_init__(self) -> None:
-        if not self.turn_id or self.started_at is not None and self.started_at <= 0:
-            raise ValueError("A started turn needs its actual ID and optional observed time")
-
-
-@dataclass(frozen=True)
-class TurnSettledUpdate(AgentCommsUpdate):
-    turn_id: str | None
+class TurnChangedUpdate(AgentCommsUpdate):
+    state: TurnState
 
 
 @dataclass(frozen=True)

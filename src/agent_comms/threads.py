@@ -21,7 +21,7 @@ from .thread_identity import (
     TurnId,
     TurnIdentity,
 )
-from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence
+from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState
 
 if TYPE_CHECKING:
     from .owner_compaction_gate import OwnerCompactionAttestation
@@ -70,6 +70,10 @@ class Thread:
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
+
+    @property
+    def turn_state(self) -> TurnState:
+        return TurnState(self.active_turn, self.last_finished_turn_id)
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)

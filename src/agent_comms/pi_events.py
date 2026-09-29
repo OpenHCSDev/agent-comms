@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
+from .compaction_progress import CompactionSourceProgress
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
     CompactionData,
@@ -896,7 +897,7 @@ class AgentCommsCompactionProgress(PiEvent):
     operation_id: str = field(metadata={"wire_name": "operationId"})
     sequence: int
     text: str
-    source: events.CompactionSourceProgress | None
+    source: CompactionSourceProgress | None
 
     def __post_init__(self):
         if type(self.sequence) is not int or self.sequence < 1:

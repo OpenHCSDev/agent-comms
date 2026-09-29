@@ -269,7 +269,7 @@ class InputDrain(FutureInputQueue):
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),
             session_id in self.backend_inboxes,
-            session_id in self.effects.turns.active_turns,
+            self.effects.turns.turn_state(session_id).busy,
             session_id in self.effects.turns.turn_tasks,
             file_revision(self.comms.bus.log.path),
             file_revision(self.comms.registry.store.path),
