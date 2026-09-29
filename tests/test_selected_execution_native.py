@@ -16,6 +16,8 @@ from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_pi import read_tracked_input_digest
+from agent_comms.native_prompt_binding import read_expected_prompt_binding
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
@@ -192,6 +194,20 @@ async def test_native_full_four_tools_publish_and_release(
             assert cursor.injected_seq == initial.message.seq
             assert cursor.covered_seq >= cursor.injected_seq
             assert cursor.input_id == outcome.input_id
+            proofs = read_historical_native_inputs(
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=stable_thread_lookup(owner.created_at),
+                source_seq=initial.message.seq,
+            )
+            assert len(proofs) == 1 and proofs[0].input_id == outcome.input_id
+            assert proofs[0].expected_prompt_equality_established
+            binding = read_expected_prompt_binding(store, outcome.input_id)
+            assert binding is not None
+            assert (
+                read_tracked_input_digest(proofs[0].context.session_file, outcome.input_id)
+                == binding.expected_prompt_digest
+            )
             if after_cutover:
                 assert (
                     read_historical_native_inputs(

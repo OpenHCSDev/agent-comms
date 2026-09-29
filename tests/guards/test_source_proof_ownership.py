@@ -29,7 +29,12 @@ def test_no_retired_cursor_procedures_or_callers():
 
 
 def test_source_proof_owners_stay_within_s7_bounds():
-    for name in ("native_source_cursor", "cursor_owner", "proven_source_coverage"):
+    for name in (
+        "native_source_cursor",
+        "cursor_owner",
+        "proven_source_coverage",
+        "source_proof_requirement",
+    ):
         source = (SOURCE / f"{name}.py").read_text()
         assert len(source.splitlines()) <= 1000
         for node in ast.walk(ast.parse(source)):
