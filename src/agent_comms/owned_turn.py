@@ -11,7 +11,9 @@ from uuid import uuid4
 
 from acp import RequestError
 
+from . import agent_events as events
 from . import backend
+from .acp_failure import PromptFailureReceipt
 from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
 from .messages import Message
@@ -451,15 +453,26 @@ class OwnedTurn:
             await self.prepare_native()
             await self.stream()
             await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
         except asyncio.CancelledError:
             self.progress.cancelled = True
             await backend.terminate_task_process(self.owner_task)
+            with _store_lock(self.runner.comms._wire_lock_path):
+                self.runner.inputs.dispositions.settle_unbound(self.original_keys)
+                state = self.runner.inputs.dispositions.read().shared_state(self.original_keys)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
             raise
         except Exception as error:
             with _store_lock(self.runner.comms._wire_lock_path):
                 self.runner.inputs.dispositions.settle_unbound(self.original_keys)
             await self.progress.report_failure(error)
             await backend.terminate_task_process(self.owner_task)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+                raise PromptFailureReceipt(failure, True).request_error() from error
             raise
         finally:
             await self.finish()

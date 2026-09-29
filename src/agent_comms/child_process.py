@@ -792,6 +792,11 @@ class ChildProcess(ABC):
     def alive(self) -> bool:
         return self.platform.matches(self.identity)
 
+    @property
+    def retired(self) -> bool:
+        """Exact child and its owned group are gone, independent of pipe callbacks."""
+        return not self.alive() and not self.platform.group_members(self.identity)
+
     @abstractmethod
     async def wait(self) -> ChildOutcome: ...
 
