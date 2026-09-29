@@ -26,6 +26,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     fixture = native_backend
     await fixture.run("Parent saved history for cold attachment")
     await fixture.persistent.close()
+    fixture.provider.text = "Cold fork first reply received."
     comms = Comms(fixture.root)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
@@ -102,6 +103,8 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
             await loading
             while not comms.registry.require(child.name).last_finished_turn_id:
                 await asyncio.sleep(0.05)
+            while "Cold fork first reply received." not in json.dumps(updates, default=str):
+                await asyncio.sleep(0.05)
         saved = [json.loads(line) for line in Path(child.session_file).read_text().splitlines()]
         inputs = [
             row["message"]["content"]
@@ -111,7 +114,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         assert len(inputs) == 2
         assert "One new cold fork diagnostic input" in str(inputs[-1])
         assert comms.registry.require(child.name).process_identity == child.process_identity
-        assert updates, "the actual subscribed ACP view received no history or reply"
+        assert fixture.provider.posts == 2  # Parent seed, then exactly one new fork input.
         print(
             "ACTUAL_COLD_FORK: held 5.4s pre-socket; same worker; saved parent + exactly one input; reply complete"
         )
@@ -119,8 +122,9 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         for process in launched:
             if process.alive():
                 Platform.current().send(process.identity, signal.SIGCONT)
-        if loading is not None and not loading.done():
-            loading.cancel()
+        if loading is not None:
+            if not loading.done():
+                loading.cancel()
             await asyncio.gather(loading, return_exceptions=True)
         await client.shutdown()
         for process in launched:
