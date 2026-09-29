@@ -446,32 +446,14 @@ class TurnRunner:
                     if not isinstance(command, dict) or not (input_id := command.get("_input_id")):
                         continue  # No accepted prompt: clear/interrupt controls carry no input.
                     item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
-                    key = self.inputs.steering_input_keys.get(session_id, {}).get(input_id)
                     if item is None:
                         await self.inputs.input_refused(session_id, input_id)
                         continue
                     try:
-                        with _store_lock(self.comms._wire_lock_path):
-                            snapshot = self.comms.registry.snapshot()
-                            name = snapshot.aliases.get(execution.owner_name, execution.owner_name)
-                            row = self.inputs.dispositions.read().lookup(key)
-                            item.require_handoff(
-                                snapshot, name, self.comms.goals.goal_wait(name), row, input_id,
-                            )
+                        await item.dispatch(self, session_id, execution.owner_name)
                     except RelationViolationError:
                         await self.inputs.input_refused(session_id, input_id)
                         continue
-                    await self.run_agent_turn(
-                        session_id,
-                        name,
-                        command["message"],
-                        images=item.images,
-                        original_keys=(key,),
-                        initial_display_text=item.text if item.echo else None,
-                        original_owner_input=True,
-                        original_goal_id=item.context.active_goal_id,
-                        accepted_input_id=input_id,
-                    )
                     break  # The existing native forwarder consumes the remaining live inbox.
                 return result
             finally:

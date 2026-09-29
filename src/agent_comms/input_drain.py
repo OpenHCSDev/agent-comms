@@ -7,9 +7,7 @@ import os
 import sqlite3
 import time
 from contextlib import suppress
-from dataclasses import replace
 from typing import Any
-from uuid import uuid4
 
 from acp import RequestError
 from acp.schema import (
@@ -20,6 +18,7 @@ from acp.schema import (
 
 from .acp_extension import (
     AvailableQueueProjection,
+    PromptRequest,
     InputDeliveryChangedUpdate,
     InputStartedUpdate,
     QueueChangedUpdate,
@@ -34,7 +33,7 @@ from .coordination_errors import CoordinationError
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
 from .input_effects import InputEffects
-from .queued_input import QueuedInput, QueuedInputContext
+from .queued_input import InitialInput, QueuedInput
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
@@ -44,6 +43,7 @@ from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
+from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wake import derive_exact_reply_target
 from .wire_watch import open_wire_watcher
 
@@ -71,13 +71,10 @@ class InputDrain(FutureInputQueue):
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
-        self.forwarded_inputs: dict[str, set[str]] = {}
-        self.steering_input_keys: dict[str, dict[str, str]] = {}
-        self.steering_goal_ids: dict[str, dict[str, str | None]] = {}
+        self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
         self.turn_input_keys: dict[str, set[str]] = {}
-        self.turn_original_input_keys: dict[str, tuple[str, ...]] = {}
+        self.original_sources: dict[str, OriginalTurnInput] = {}
         self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
-        self.turn_input_text: dict[str, str] = {}
         self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
         self.auto_wake = auto_wake
         self.pending_turns: dict[str, list[ScheduledTurn]] = {}
@@ -127,8 +124,7 @@ class InputDrain(FutureInputQueue):
             return tuple(
                 QueueItem(input_id, item.text)
                 for input_id, item in values.items()
-                if item.echo
-                and item.context.owns(scope.owner)
+                if item.echo and item.context.owns(scope.owner)
             )
 
         items = current(self.queued_inputs.get(session_id, {}))
@@ -162,11 +158,7 @@ class InputDrain(FutureInputQueue):
         client: Any = None,
     ) -> None:
         scope = self.queue_binding(session_id)
-        if (
-            queued_item is None
-            or scope is None
-            or not queued_item.context.owns(scope.owner)
-        ):
+        if queued_item is None or scope is None or not queued_item.context.owns(scope.owner):
             scope = None
         revision = None
         if scope is not None:
@@ -244,15 +236,21 @@ class InputDrain(FutureInputQueue):
                     except asyncio.CancelledError:
                         raise
                     except (
-                        OSError, ValueError, sqlite3.Error, CoordinationError, RequestError
+                        OSError,
+                        ValueError,
+                        sqlite3.Error,
+                        CoordinationError,
+                        RequestError,
                     ) as error:
                         self.comms.agents.set_drain_diagnostic(
-                            thread, owner,
+                            thread,
+                            owner,
                             UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
                         )
                     except Exception as error:
                         self.comms.agents.set_drain_diagnostic(
-                            thread, owner,
+                            thread,
+                            owner,
                             StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
                         )
                         raise
@@ -400,77 +398,59 @@ class InputDrain(FutureInputQueue):
     async def drain_count(self, session_id: str) -> int:
         return await self.drain_inbox(session_id)
 
+    def pending_followups(self, session_id: str) -> int:
+        rows = self.dispositions.read()
+        return sum(
+            not rows.all_started(source.keys)
+            for source in self.following_sources.get(session_id, {}).values()
+        )
+
     async def accept_followup(
         self,
         session_id: str,
         *,
         text: str,
         display_text: str,
-        delivery: str,
-        defer_display: bool,
+        request: PromptRequest,
         images: tuple[Any, ...],
     ) -> PromptResponse:
         inbox = self.backend_inboxes[session_id]
-        pending_ids = self.forwarded_inputs.setdefault(session_id, set())
-        if len(pending_ids) >= 32:
-            raise RequestError.invalid_params(
-                {"reason": "Too many follow-up inputs awaiting their own user start."}
-            )
-        input_id = uuid4().hex
-        key = f"acp:{input_id}"
         with _store_lock(self.comms._wire_lock_path):
-            snapshot = self.comms.registry.snapshot()
-            owner = snapshot.aliases.get(
-                self.sessions.require(session_id), self.sessions.require(session_id)
-            )
-            admission = snapshot.admission_generations[owner]
-            admitted_goal = snapshot.threads[owner].goal
-            self.steering_goal_ids.setdefault(session_id, {})[input_id] = (
-                admitted_goal.id
-                if admitted_goal is not None and admitted_goal.state.active
-                else None
-            )
-            self.dispositions.record(
-                key,
-                seq=None,
-                owner=owner,
-                admission=admission,
-                target=owner,
-                text=display_text or text or "[image prompt]",
-            )
-            pending_ids.add(input_id)
-            self.steering_input_keys.setdefault(session_id, {})[input_id] = key
-            self.turn_input_keys.setdefault(session_id, set()).add(key)
-            owner_row = snapshot.threads[owner]
+            if self.pending_followups(session_id) >= 32:
+                raise RequestError.invalid_params(
+                    {"reason": "Too many follow-up inputs awaiting their own user start."}
+                )
             controller = self.runtime.controller.get()
             if controller is UNBOUND_CONTROLLER:
                 controller = self.sessions.client
-            self.queued_inputs.setdefault(session_id, {})[input_id] = QueuedInput(
-                display_text,
-                defer_display,
-                QueuedInputContext.capture(owner_row, admission, self.comms.goals.goal_wait(owner)),
-                self.dispositions.read().rows.get(key) if delivery == "queue" else None,
-                owner_row.active_turn.id if owner_row.active_turn else None,
-                images,
-                controller,
+            item = QueuedInput.capture(
+                self,
+                self.sessions.require(session_id),
+                text=display_text,
+                prompt="User follow-up:\n" + text.removeprefix(AGENT_PREFIX),
+                echo=request.defer_display,
+                images=images,
+                controller=controller,
             )
+            owner = self.comms.registry.require(self.sessions.require(session_id))
+            item = request.accepted(item, self.dispositions.read().lookup(item.key), owner)
+            self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
+            self.turn_input_keys.setdefault(session_id, set()).add(item.key)
+            self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
             inbox.put_nowait(
                 {
                     "type": "prompt",
-                    "message": "User follow-up:\n" + text.removeprefix(AGENT_PREFIX),
+                    "message": item.prompt,
                     "streamingBehavior": "steer",
-                    "_input_id": input_id,
+                    "_input_id": item.input_id,
                     **({"images": [image.to_rpc() for image in images]} if images else {}),
                 }
             )
-            if delivery == "steer":
-                inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
-        if delivery == "queue":
-            await self.emit_queue_state(session_id)
-        # ACP receipt is only local acceptance. The matching inputStarted
-        # update, not this end_turn, is the model-read boundary.
+            request.enqueue_control(inbox, item.input_id)
+        await request.publish_acceptance(self, session_id)
         return PromptResponse(
-            stop_reason="end_turn", field_meta=encode_updates(InputDeliveryChangedUpdate(input_id))
+            stop_reason="end_turn",
+            field_meta=encode_updates(InputDeliveryChangedUpdate(item.input_id)),
         )
 
     def bind_native_turn(
@@ -480,8 +460,9 @@ class InputDrain(FutureInputQueue):
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
         wait = self.comms.goals.goal_wait(owner.name)
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
-            if item.current(owner, admission, wait):
-                self.queued_inputs[session_id][input_id] = replace(item, turn_id=turn_id)
+            self.queued_inputs[session_id][input_id] = item.bind_turn(
+                owner, admission, wait, turn_id
+            )
         return inbox
 
     def future_inputs(
@@ -496,14 +477,16 @@ class InputDrain(FutureInputQueue):
         if owner.pid != os.getpid() or owner.active_turn is None or self.closing:
             return {}
         result = {}
-        for session_id, keys in self.turn_original_input_keys.items():
-            if keys != (pending_input_key,) or self.sessions.bindings.get(session_id) != owner.name:
+        for session_id, original in self.original_sources.items():
+            if (
+                original.notice_keys != (pending_input_key,)
+                or self.sessions.bindings.get(session_id) != owner.name
+            ):
                 continue
             for input_id, item in self.queued_inputs.get(session_id, {}).items():
-                key = self.steering_input_keys.get(session_id, {}).get(input_id)
                 receipt = item.future_receipt(owner)
-                if key is not None and receipt is not None:
-                    result[key] = receipt
+                if receipt is not None:
+                    result[item.key] = receipt
         return result
 
     def send_now(self, session_id: str) -> None:
@@ -512,7 +495,7 @@ class InputDrain(FutureInputQueue):
             queued = self.queued_inputs.get(session_id, {})
             if inbox is not None and queued:
                 for key, item in tuple(queued.items()):
-                    queued[key] = replace(item, receipt=None)
+                    queued[key] = item.immediate()
                 inbox.put_nowait({"type": "interrupt_steering", "_input_ids": list(queued)})
 
     async def stop_wakes(self) -> None:
@@ -537,31 +520,19 @@ class InputDrain(FutureInputQueue):
         original_keys: tuple[str, ...],
         initial_display_text: str | None,
     ) -> None:
-        started_keys = (
-            original_keys
-            if input_id is None
-            else (
-                (steering_key,)
-                if input_id is not None
-                and (steering_key := self.steering_input_keys.get(session_id, {}).get(input_id))
-                else ()
-            )
-        )
+        source = self.following_sources.get(session_id, {}).get(input_id)
+        started_keys = original_keys if input_id is None else source.keys if source else ()
         for key in started_keys:
             row = self.dispositions.read().rows.get(key)
             if row is not None and not row.unresolved:
                 await self.emit_input_disposition(session_id, row)
-        if input_id is not None:
-            self.forwarded_inputs.get(session_id, set()).discard(input_id)
         item = self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
         await self.emit_input_started(
             session_id,
             (
                 item.text
                 if item and item.echo
-                else initial_display_text
-                if input_id is None
-                else None
+                else initial_display_text if input_id is None else None
             ),
             input_id,
             queued_item=item,
@@ -569,17 +540,15 @@ class InputDrain(FutureInputQueue):
         await self.emit_queue_state(session_id)
 
     async def input_refused(self, session_id: str, input_id: str | None) -> None:
-        if input_id is not None:
-            self.forwarded_inputs.get(session_id, set()).discard(input_id)
-            refused_key = self.steering_input_keys.get(session_id, {}).get(input_id)
-            if refused_key is not None:
-                # This input was denied before stdin.write. Keep
-                # its persisted UNKNOWN row visible, but do not
-                # count it as an unstarted sent follow-up.
-                self.turn_input_keys.get(session_id, set()).discard(refused_key)
-                await self.emit_input_delivery_changed(session_id)
-            if self.queued_inputs.get(session_id, {}).pop(input_id, None):
-                await self.emit_queue_state(session_id)
+        if input_id is None:
+            return
+        source = self.following_sources.get(session_id, {}).pop(input_id, None)
+        if source is not None:
+            # Native write was refused; keep the durable notice, never replay it.
+            self.turn_input_keys.get(session_id, set()).difference_update(source.keys)
+            await self.emit_input_delivery_changed(session_id)
+        if self.queued_inputs.get(session_id, {}).pop(input_id, None):
+            await self.emit_queue_state(session_id)
 
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]
@@ -591,12 +560,10 @@ class InputDrain(FutureInputQueue):
             pending = inbox.get_nowait()
             if isinstance(pending, str):
                 self.pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
-        self.forwarded_inputs.pop(session_id, None)
         with _store_lock(self.comms._wire_lock_path):
-            self.dispositions.settle_unbound(self.turn_original_input_keys.pop(session_id, ()))
-        self.turn_input_text.pop(session_id, None)
-        self.steering_input_keys.pop(session_id, None)
-        self.steering_goal_ids.pop(session_id, None)
+            original = self.original_sources.pop(session_id, None)
+            self.dispositions.settle_unbound(original.notice_keys if original else ())
+        self.following_sources.pop(session_id, None)
         self.turn_input_keys.pop(session_id, None)
         admission = self.selected_summary_admissions.pop(session_id, None)
         if admission is not None:
@@ -605,7 +572,7 @@ class InputDrain(FutureInputQueue):
         remaining = self.queued_inputs.pop(session_id, {})
         if remaining:
             self.restored_inputs.setdefault(session_id, {}).update(
-                {key: replace(item, receipt=None) for key, item in remaining.items() if item.echo}
+                {key: item.immediate() for key, item in remaining.items() if item.echo}
             )
             await self.emit_queue_state(session_id)
 
@@ -618,34 +585,15 @@ class InputDrain(FutureInputQueue):
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
     ) -> None:
-        key = f"acp:{uuid4().hex}"
         with _store_lock(self.comms._wire_lock_path):
-            snapshot = self.comms.registry.snapshot()
-            canonical = snapshot.aliases.get(thread_name, thread_name)
-            admitted_goal = snapshot.threads[canonical].goal
-            original_goal_id = (
-                admitted_goal.id
-                if admitted_goal is not None and admitted_goal.state.active
-                else None
+            item = InitialInput.capture(
+                self,
+                thread_name,
+                text=display_text or task,
+                prompt=task,
+                echo=display_text is not None,
+                images=images,
+                controller=self.runtime.controller.get(),
             )
-            self.dispositions.record(
-                key,
-                seq=None,
-                owner=canonical,
-                admission=snapshot.admission_generations[canonical],
-                target=canonical,
-                text=display_text or task or "[image prompt]",
-            )
-        row = self.dispositions.read().rows.get(key)
-        assert row is not None
-        await self.emit_input_disposition(session_id, row)
-        await self.effects.turns.run_agent_turn(
-            session_id,
-            thread_name,
-            task,
-            images=images,
-            original_keys=(key,),
-            initial_display_text=display_text,
-            original_owner_input=True,
-            original_goal_id=original_goal_id,
-        )
+        await self.emit_input_disposition(session_id, self.dispositions.read().lookup(item.key))
+        await item.dispatch(self.effects.turns, session_id, thread_name)

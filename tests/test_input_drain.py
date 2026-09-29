@@ -42,7 +42,9 @@ async def owner(tmp_path, monkeypatch):
     agent.sessions.bindings["owner"] = "owner"
     agent.inputs.backend_inboxes["owner"] = asyncio.Queue()
     agent.turns.active_turns["owner"] = "turn"
-    agent.inputs.turn_original_input_keys["owner"] = ("acp:original",)
+    from input_source_cases import owner_original
+
+    agent.inputs.original_sources["owner"] = owner_original(("acp:original",), "original")
     agent.inputs.dispositions.record(
         "acp:original",
         seq=None,
@@ -82,8 +84,8 @@ async def queue(agent, text="future", delivery="queue"):
         InputDispositions(agent._comms.root / InputDispositions.filename)
         .read()
         .rows.get(key)
-        .native_id
-        is None
+        .has_native_binding
+        is False
     )
     return key
 
@@ -112,7 +114,7 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
         text="foreign input",
     )
     assert capture(owner) == source
-    assert agent.inputs.dispositions.read().rows.get(key).declared_name == "unknown"
+    assert agent.inputs.dispositions.read().rows.get(key).declared_name == "reserved"
     assert not any(
         name in vars(agent) for name in ("_queued_inputs", "_dispositions", "_drain_tasks")
     )
@@ -176,7 +178,7 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
         )
     with pytest.raises(RelationViolationError):
         capture(owner)
-    assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "unknown"
+    assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "reserved"
     assert (
         CompactionJournal(agent._comms.root / "compaction-commits.sqlite3").operations.unresolved(
             str(current.session_file)
