@@ -19,11 +19,11 @@ No feature is complete merely because a draft exists or a PR was merged.
   Full body/mount reuse and final50ms latency stay Tesla follow-up; CI deferred.
   Original/round2/S14/T4/T9 remaining deletion scopes stay active below.
 
-- New live defect: fresh fork /open for openhcs-pr159-viewer-bind-owner fails
+- New live defect: fresh fork opening for openhcs-pr159-viewer-bind-owner fails
   ACP attachment with missing owner socket. Registered PID is dead, Running
   status and no native session; startup cause not yet established. Carver owns
   the production startup/open repair; Dalton extends the existing continuous
-  journey to immediate fork /open before the first answer. No user input replay
+  journey to immediate fork opening before the first answer. No user input replay
   or speculative owner restart. Already verified navigation checkpoint stays live.
 
 - User-confirmed remaining rendering scope: agent-tab return clears warm rendered
