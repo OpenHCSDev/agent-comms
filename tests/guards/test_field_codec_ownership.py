@@ -1,6 +1,7 @@
 """A2 has one implementation owner, including inherited and renamed references."""
 
 import ast
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -105,7 +106,26 @@ def test_no_field_codec_subclasses_outside_its_owner():
         ): path.read_text()
         for path in root.rglob("*.py")
     }
+    companion = importlib.util.find_spec("toad")
+    if companion is not None:
+        for location in companion.submodule_search_locations or ():
+            root = Path(location)
+            sources.update({
+                "toad." + ".".join(path.relative_to(root).with_suffix("").parts).removesuffix(
+                    ".__init__"
+                ): path.read_text()
+                for path in root.rglob("*.py")
+            })
     assert codec_subclasses(sources) == set()
+
+
+def test_codec_owner_rejects_subclasses_even_through_an_alias():
+    from agent_comms.field_codec import FieldCodec
+
+    alias = FieldCodec
+    with pytest.raises(TypeError, match="one implementation"):
+        class ExternalCodec(alias):
+            pass
 
 
 def test_guard_follows_aliases_qualified_imports_and_inherited_reexports():
